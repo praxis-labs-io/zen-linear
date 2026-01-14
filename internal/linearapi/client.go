@@ -63,6 +63,20 @@ func (i IssueUpdateInput) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}(i))
 }
 
+// CommentCreateInput is a custom scalar type for Linear's CommentCreateInput.
+// The Go type name must match the GraphQL type name exactly.
+type CommentCreateInput map[string]interface{}
+
+// GetGraphQLType returns the GraphQL type name for the input.
+func (CommentCreateInput) GetGraphQLType() string {
+	return "CommentCreateInput"
+}
+
+// MarshalJSON implements json.Marshaler for CommentCreateInput.
+func (c CommentCreateInput) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}(c))
+}
+
 // PaginationOrderBy is a custom type for Linear's PaginationOrderBy enum.
 // Valid values are "createdAt" and "updatedAt".
 type PaginationOrderBy string
@@ -1136,7 +1150,7 @@ func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (C
 	}
 
 	// Build input object
-	commentInput := make(map[string]interface{})
+	commentInput := make(CommentCreateInput)
 	commentInput["issueId"] = graphql.ID(input.IssueID)
 	commentInput["body"] = graphql.String(input.Body)
 

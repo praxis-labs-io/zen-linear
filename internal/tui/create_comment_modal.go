@@ -85,7 +85,7 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 		AddItem(tview.NewFlex().
 			SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(modalContent, 12, 0, true).
+			AddItem(modalContent, 18, 0, true).
 			AddItem(nil, 0, 1, false), 75, 0, true).
 		AddItem(nil, 0, 1, false)
 	ccm.modal.SetBackgroundColor(LinearTheme.Background)

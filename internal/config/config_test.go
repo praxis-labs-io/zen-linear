@@ -83,9 +83,9 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 	oldCacheTTL := os.Getenv(CacheTTLEnv)
 	oldLogFile := os.Getenv(LogFileEnv)
 	defer func() {
-		_ = os.Setenv(LinearAPIKeyEnv, oldAPIKey) //nolint:errcheck
+		_ = os.Setenv(LinearAPIKeyEnv, oldAPIKey)     //nolint:errcheck
 		_ = os.Setenv(LinearAPIEndpoint, oldEndpoint) //nolint:errcheck
-		_ = os.Setenv(TimeoutEnv, oldTimeout)        //nolint:errcheck
+		_ = os.Setenv(TimeoutEnv, oldTimeout)         //nolint:errcheck
 		_ = os.Setenv(PageSizeEnv, oldPageSize)       //nolint:errcheck
 		_ = os.Setenv(CacheTTLEnv, oldCacheTTL)       //nolint:errcheck
 		if oldLogFile != "" {
@@ -97,11 +97,11 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 
 	// Clear all optional env vars
 	_ = os.Setenv(LinearAPIKeyEnv, "test-key") //nolint:errcheck
-	_ = os.Unsetenv(LinearAPIEndpoint)          //nolint:errcheck
-	_ = os.Unsetenv(TimeoutEnv)                 //nolint:errcheck
-	_ = os.Unsetenv(PageSizeEnv)                //nolint:errcheck
-	_ = os.Unsetenv(CacheTTLEnv)                //nolint:errcheck
-	_ = os.Unsetenv(LogFileEnv)                  //nolint:errcheck
+	_ = os.Unsetenv(LinearAPIEndpoint)         //nolint:errcheck
+	_ = os.Unsetenv(TimeoutEnv)                //nolint:errcheck
+	_ = os.Unsetenv(PageSizeEnv)               //nolint:errcheck
+	_ = os.Unsetenv(CacheTTLEnv)               //nolint:errcheck
+	_ = os.Unsetenv(LogFileEnv)                //nolint:errcheck
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -144,8 +144,8 @@ func TestLoadFromEnv_CustomValues(t *testing.T) {
 		//nolint:errcheck // os.Setenv rarely fails in test cleanup
 		_ = os.Setenv(LinearAPIKeyEnv, oldAPIKey)     //nolint:errcheck
 		_ = os.Setenv(LinearAPIEndpoint, oldEndpoint) //nolint:errcheck
-		_ = os.Setenv(TimeoutEnv, oldTimeout)          //nolint:errcheck
-		_ = os.Setenv(PageSizeEnv, oldPageSize)        //nolint:errcheck
+		_ = os.Setenv(TimeoutEnv, oldTimeout)         //nolint:errcheck
+		_ = os.Setenv(PageSizeEnv, oldPageSize)       //nolint:errcheck
 		_ = os.Setenv(CacheTTLEnv, oldCacheTTL)       //nolint:errcheck
 	}()
 
