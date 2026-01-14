@@ -74,8 +74,8 @@ func (a *App) buildDetailsView() *tview.Flex {
 	// Both sections are scrollable independently
 	detailsFlex := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(a.detailsDescriptionView, 0, 3, true).  // 60% of space, gets focus by default
-		AddItem(a.detailsCommentsView, 0, 2, false)     // 40% of space, always visible
+		AddItem(a.detailsDescriptionView, 0, 3, true). // 60% of space, gets focus by default
+		AddItem(a.detailsCommentsView, 0, 2, false)    // 40% of space, always visible
 
 	return detailsFlex
 }

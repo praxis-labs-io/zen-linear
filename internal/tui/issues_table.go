@@ -10,8 +10,8 @@ import (
 
 // Tree icons for expand/collapse indicators.
 const (
-	IconExpanded   = "▼"
-	IconCollapsed  = "▶"
+	IconExpanded    = "▼"
+	IconCollapsed   = "▶"
 	IconChildPrefix = "└─"
 )
 
@@ -84,12 +84,12 @@ const (
 func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table {
 	table := tview.NewTable()
 	table.SetBorders(false). // Remove cell borders for cleaner look
-		SetSelectable(true, false).
-		SetBorder(true).
-		SetTitle(title).
-		SetTitleColor(LinearTheme.Foreground).
-		SetBorderColor(LinearTheme.Border).
-		SetBackgroundColor(LinearTheme.Background)
+					SetSelectable(true, false).
+					SetBorder(true).
+					SetTitle(title).
+					SetTitleColor(LinearTheme.Foreground).
+					SetBorderColor(LinearTheme.Border).
+					SetBackgroundColor(LinearTheme.Background)
 
 	table.SetSelectedStyle(tcell.StyleDefault.
 		Foreground(LinearTheme.SelectionText).

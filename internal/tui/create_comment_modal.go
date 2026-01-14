@@ -11,12 +11,12 @@ import (
 
 // CreateCommentModal manages the create comment form overlay.
 type CreateCommentModal struct {
-	app        *App
-	modal      *tview.Flex
-	form       *tview.Form
-	bodyField  *tview.TextArea
-	issueID    string
-	onCreate   func(issueID, body string)
+	app       *App
+	modal     *tview.Flex
+	form      *tview.Form
+	bodyField *tview.TextArea
+	issueID   string
+	onCreate  func(issueID, body string)
 }
 
 // NewCreateCommentModal creates a new create comment modal.

@@ -10,10 +10,10 @@ func TestSplitIssuesByAssignee(t *testing.T) {
 	currentUserID := "user-123"
 
 	tests := []struct {
-		name         string
-		issues       []linearapi.Issue
-		currentUserID string
-		wantMyCount  int
+		name           string
+		issues         []linearapi.Issue
+		currentUserID  string
+		wantMyCount    int
 		wantOtherCount int
 	}{
 		{
@@ -22,8 +22,8 @@ func TestSplitIssuesByAssignee(t *testing.T) {
 				{ID: "1", AssigneeID: "user-123"},
 				{ID: "2", AssigneeID: "user-456"},
 			},
-			currentUserID: "",
-			wantMyCount:   0,
+			currentUserID:  "",
+			wantMyCount:    0,
 			wantOtherCount: 2,
 		},
 		{
@@ -34,8 +34,8 @@ func TestSplitIssuesByAssignee(t *testing.T) {
 				{ID: "3", AssigneeID: "user-123"},
 				{ID: "4", AssigneeID: ""},
 			},
-			currentUserID: currentUserID,
-			wantMyCount:   2,
+			currentUserID:  currentUserID,
+			wantMyCount:    2,
 			wantOtherCount: 2,
 		},
 		{
@@ -45,8 +45,8 @@ func TestSplitIssuesByAssignee(t *testing.T) {
 				{ID: "2", AssigneeID: ""},
 				{ID: "3", AssigneeID: currentUserID},
 			},
-			currentUserID: currentUserID,
-			wantMyCount:   1,
+			currentUserID:  currentUserID,
+			wantMyCount:    1,
 			wantOtherCount: 2,
 		},
 		{
@@ -55,8 +55,8 @@ func TestSplitIssuesByAssignee(t *testing.T) {
 				{ID: "1", AssigneeID: currentUserID},
 				{ID: "2", AssigneeID: currentUserID},
 			},
-			currentUserID: currentUserID,
-			wantMyCount:   2,
+			currentUserID:  currentUserID,
+			wantMyCount:    2,
 			wantOtherCount: 0,
 		},
 		{
@@ -65,15 +65,15 @@ func TestSplitIssuesByAssignee(t *testing.T) {
 				{ID: "1", AssigneeID: "user-456"},
 				{ID: "2", AssigneeID: "user-789"},
 			},
-			currentUserID: currentUserID,
-			wantMyCount:   0,
+			currentUserID:  currentUserID,
+			wantMyCount:    0,
 			wantOtherCount: 2,
 		},
 		{
-			name: "empty issues list",
-			issues: []linearapi.Issue{},
-			currentUserID: currentUserID,
-			wantMyCount:   0,
+			name:           "empty issues list",
+			issues:         []linearapi.Issue{},
+			currentUserID:  currentUserID,
+			wantMyCount:    0,
 			wantOtherCount: 0,
 		},
 		{
@@ -83,8 +83,8 @@ func TestSplitIssuesByAssignee(t *testing.T) {
 				{ID: "child-1", AssigneeID: "", Parent: &linearapi.IssueRef{ID: "parent-1"}},
 				{ID: "child-2", AssigneeID: "", Parent: &linearapi.IssueRef{ID: "parent-1"}},
 			},
-			currentUserID: currentUserID,
-			wantMyCount:   3, // Parent + 2 children
+			currentUserID:  currentUserID,
+			wantMyCount:    3, // Parent + 2 children
 			wantOtherCount: 0,
 		},
 		{
@@ -94,8 +94,8 @@ func TestSplitIssuesByAssignee(t *testing.T) {
 				{ID: "child-3", AssigneeID: currentUserID, Parent: &linearapi.IssueRef{ID: "parent-2"}},
 				{ID: "child-4", AssigneeID: currentUserID, Parent: &linearapi.IssueRef{ID: "parent-2"}},
 			},
-			currentUserID: currentUserID,
-			wantMyCount:   0,
+			currentUserID:  currentUserID,
+			wantMyCount:    0,
 			wantOtherCount: 3, // Parent + 2 children
 		},
 		{
@@ -105,8 +105,8 @@ func TestSplitIssuesByAssignee(t *testing.T) {
 				{ID: "child-5", AssigneeID: "", Parent: &linearapi.IssueRef{ID: "parent-3"}},
 				{ID: "grandchild-1", AssigneeID: "", Parent: &linearapi.IssueRef{ID: "child-5"}},
 			},
-			currentUserID: currentUserID,
-			wantMyCount:   3, // Parent + child + grandchild
+			currentUserID:  currentUserID,
+			wantMyCount:    3, // Parent + child + grandchild
 			wantOtherCount: 0,
 		},
 	}

@@ -24,16 +24,16 @@ type Theme struct {
 
 // LinearTheme is the default dark theme inspired by Linear.
 var LinearTheme = Theme{
-	Background:    tcell.NewRGBColor(18, 18, 18),      // #121212
-	Foreground:    tcell.NewRGBColor(235, 235, 245),   // #EBEBF5
-	Border:        tcell.NewRGBColor(60, 60, 60),      // #3C3C3C
-	BorderFocus:   tcell.NewRGBColor(94, 106, 210),    // #5E6AD2 (Linear Purple-ish)
+	Background:    tcell.NewRGBColor(18, 18, 18),    // #121212
+	Foreground:    tcell.NewRGBColor(235, 235, 245), // #EBEBF5
+	Border:        tcell.NewRGBColor(60, 60, 60),    // #3C3C3C
+	BorderFocus:   tcell.NewRGBColor(94, 106, 210),  // #5E6AD2 (Linear Purple-ish)
 	SelectionText: tcell.ColorWhite,
-	SelectionBg:   tcell.NewRGBColor(40, 40, 50),      // Slight purple tint dark bg
-	HeaderBg:      tcell.NewRGBColor(30, 30, 30),      // #1E1E1E
-	HeaderText:    tcell.NewRGBColor(160, 160, 160),   // #A0A0A0
-	SecondaryText: tcell.NewRGBColor(120, 120, 120),   // #787878
-	Accent:        tcell.NewRGBColor(94, 106, 210),    // #5E6AD2
+	SelectionBg:   tcell.NewRGBColor(40, 40, 50),    // Slight purple tint dark bg
+	HeaderBg:      tcell.NewRGBColor(30, 30, 30),    // #1E1E1E
+	HeaderText:    tcell.NewRGBColor(160, 160, 160), // #A0A0A0
+	SecondaryText: tcell.NewRGBColor(120, 120, 120), // #787878
+	Accent:        tcell.NewRGBColor(94, 106, 210),  // #5E6AD2
 
 	StatusTodo:       tcell.NewRGBColor(140, 140, 140), // Gray
 	StatusInProgress: tcell.NewRGBColor(242, 201, 76),  // Yellow
@@ -43,13 +43,13 @@ var LinearTheme = Theme{
 
 // Icons for various UI elements.
 var Icons = struct {
-	Team      string
-	Project   string
-	List      string
-	Todo      string
+	Team       string
+	Project    string
+	List       string
+	Todo       string
 	InProgress string
-	Done      string
-	Priority  string
+	Done       string
+	Priority   string
 }{
 	Team:       "📁 ",
 	Project:    "📄 ",

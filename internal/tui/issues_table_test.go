@@ -9,10 +9,10 @@ import (
 
 func TestRenderIssueRow(t *testing.T) {
 	tests := []struct {
-		name     string
-		issue    linearapi.Issue
-		wantLen  int
-		wantID   string
+		name      string
+		issue     linearapi.Issue
+		wantLen   int
+		wantID    string
 		wantState string
 	}{
 		{

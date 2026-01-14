@@ -237,7 +237,7 @@ func TestExpandAll(t *testing.T) {
 			Children: []linearapi.IssueChildRef{{ID: "child-1"}},
 		},
 		{
-			ID: "child-1",
+			ID:     "child-1",
 			Parent: &linearapi.IssueRef{ID: "parent-1"},
 		},
 		{

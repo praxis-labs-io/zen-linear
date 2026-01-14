@@ -29,47 +29,47 @@ type App struct {
 	config config.Config
 
 	// UI components
-	pages               *tview.Pages
-	mainLayout          *tview.Flex
-	navigationTree      *tview.TreeView
-	issuesTable         *tview.Table // Legacy - kept for backward compatibility during migration
-	myIssuesTable       *tview.Table
-	otherIssuesTable    *tview.Table
-	issuesColumn        *tview.Flex  // Vertical flex containing My/Other tables
-	detailsView         *tview.Flex  // Flex container for details (description + comments)
+	pages                  *tview.Pages
+	mainLayout             *tview.Flex
+	navigationTree         *tview.TreeView
+	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
+	myIssuesTable          *tview.Table
+	otherIssuesTable       *tview.Table
+	issuesColumn           *tview.Flex     // Vertical flex containing My/Other tables
+	detailsView            *tview.Flex     // Flex container for details (description + comments)
 	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
-	detailsCommentsView   *tview.TextView // Scrollable comments view
-	statusBar           *tview.TextView
-	paletteModal        *tview.Flex
-	paletteInput        *tview.InputField
-	paletteList         *tview.List
-	paletteModalContent *tview.Flex
-	paletteCtrl         *PaletteController
-	pickerModal         *PickerModal
-	createIssueModal    *CreateIssueModal
-	createCommentModal  *CreateCommentModal
-	editTitleModal      *EditTitleModal
-	editLabelsModal     *EditLabelsModal
+	detailsCommentsView    *tview.TextView // Scrollable comments view
+	statusBar              *tview.TextView
+	paletteModal           *tview.Flex
+	paletteInput           *tview.InputField
+	paletteList            *tview.List
+	paletteModalContent    *tview.Flex
+	paletteCtrl            *PaletteController
+	pickerModal            *PickerModal
+	createIssueModal       *CreateIssueModal
+	createCommentModal     *CreateCommentModal
+	editTitleModal         *EditTitleModal
+	editLabelsModal        *EditLabelsModal
 
 	// App state
-	selectedIssue      *linearapi.Issue
-	selectedNavigation *NavigationNode
-	selectedTeam       *linearapi.Team
-	selectedProject    *linearapi.Project
-	issues             []linearapi.Issue
-	focusedPane        FocusTarget
+	selectedIssue       *linearapi.Issue
+	selectedNavigation  *NavigationNode
+	selectedTeam        *linearapi.Team
+	selectedProject     *linearapi.Project
+	issues              []linearapi.Issue
+	focusedPane         FocusTarget
 	activeIssuesSection IssuesSection // Tracks which issues section (My/Other) is currently active
 
 	// Issue tree state (for sub-issue hierarchy)
 	// Legacy fields - kept for backward compatibility during migration
-	issueRows     []IssueRow                  // Flattened rows for table rendering
-	idToIssue     map[string]*linearapi.Issue // Quick lookup by issue ID
+	issueRows []IssueRow                  // Flattened rows for table rendering
+	idToIssue map[string]*linearapi.Issue // Quick lookup by issue ID
 	// Per-section issue tree state
-	myIssueRows     []IssueRow                  // Flattened rows for "My Issues" table
-	myIDToIssue     map[string]*linearapi.Issue // Quick lookup by issue ID for "My Issues"
-	otherIssueRows  []IssueRow                  // Flattened rows for "Other Issues" table
-	otherIDToIssue  map[string]*linearapi.Issue // Quick lookup by issue ID for "Other Issues"
-	expandedState   map[string]bool             // Expanded state for parent issues (shared across sections)
+	myIssueRows    []IssueRow                  // Flattened rows for "My Issues" table
+	myIDToIssue    map[string]*linearapi.Issue // Quick lookup by issue ID for "My Issues"
+	otherIssueRows []IssueRow                  // Flattened rows for "Other Issues" table
+	otherIDToIssue map[string]*linearapi.Issue // Quick lookup by issue ID for "Other Issues"
+	expandedState  map[string]bool             // Expanded state for parent issues (shared across sections)
 
 	// Filter/sort state
 	searchQuery string
@@ -104,17 +104,17 @@ const (
 // NewApp creates a new application instance.
 func NewApp(api *linearapi.Client, cfg config.Config) *App {
 	app := &App{
-		app:              tview.NewApplication(),
-		api:              api,
-		cache:            cache.NewTeamCache(api, cfg.CacheTTL),
-		config:           cfg,
-		pages:            tview.NewPages(),
-		focusedPane:      FocusNavigation,
-		sortField:        SortByUpdatedAt,
-		expandedState:    make(map[string]bool),
-		idToIssue:        make(map[string]*linearapi.Issue),
-		myIDToIssue:      make(map[string]*linearapi.Issue),
-		otherIDToIssue:   make(map[string]*linearapi.Issue),
+		app:                 tview.NewApplication(),
+		api:                 api,
+		cache:               cache.NewTeamCache(api, cfg.CacheTTL),
+		config:              cfg,
+		pages:               tview.NewPages(),
+		focusedPane:         FocusNavigation,
+		sortField:           SortByUpdatedAt,
+		expandedState:       make(map[string]bool),
+		idToIssue:           make(map[string]*linearapi.Issue),
+		myIDToIssue:         make(map[string]*linearapi.Issue),
+		otherIDToIssue:      make(map[string]*linearapi.Issue),
 		activeIssuesSection: IssuesSectionOther, // Default to Other section
 	}
 
@@ -575,7 +575,7 @@ func (a *App) cyclePanesForward() {
 		}
 	case FocusDetails:
 		a.focusedPane = FocusNavigation
-	// FocusPalette is excluded from cycling
+		// FocusPalette is excluded from cycling
 	}
 	a.updateFocus()
 }
@@ -610,7 +610,7 @@ func (a *App) cyclePanesBackward() {
 		} else {
 			a.activeIssuesSection = IssuesSectionMy
 		}
-	// FocusPalette is excluded from cycling
+		// FocusPalette is excluded from cycling
 	}
 	a.updateFocus()
 }

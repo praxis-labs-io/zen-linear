@@ -179,7 +179,7 @@ type Issue struct {
 	Labels      []IssueLabel
 	Parent      *IssueRef       // Parent issue reference (nil if top-level)
 	Children    []IssueChildRef // Child/sub-issue references
-	Comments    []Comment        // Comments on this issue
+	Comments    []Comment       // Comments on this issue
 }
 
 // FetchIssuesParams contains parameters for fetching issues.

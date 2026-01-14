@@ -10,21 +10,21 @@ import (
 
 // CreateIssueModal manages the create issue form overlay.
 type CreateIssueModal struct {
-	app            *App
-	modal          *tview.Flex
-	form           *tview.Form
-	titleField     *tview.InputField
-	descField      *tview.TextArea
-	assigneeField  *tview.DropDown
-	priorityField  *tview.DropDown
-	teamID         string
-	projectID      string
-	assigneeID     string
-	assigneeName   string
-	priority       int
-	priorityLabel  string
-	onCreate       func(title, description, teamID, projectID, assigneeID string, priority int)
-	cachedUsers    []struct{ ID, Name string }
+	app           *App
+	modal         *tview.Flex
+	form          *tview.Form
+	titleField    *tview.InputField
+	descField     *tview.TextArea
+	assigneeField *tview.DropDown
+	priorityField *tview.DropDown
+	teamID        string
+	projectID     string
+	assigneeID    string
+	assigneeName  string
+	priority      int
+	priorityLabel string
+	onCreate      func(title, description, teamID, projectID, assigneeID string, priority int)
+	cachedUsers   []struct{ ID, Name string }
 }
 
 // NewCreateIssueModal creates a new create issue modal.
