@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# GoReleaser configuration for linear-tui
+# Documentation: https://goreleaser.com
+
+version: 2
+
+project_name: linear-tui
+
+before:
+  hooks:
+    # Ensure dependencies are up to date
+    - go mod tidy
+
+builds:
+  - id: linear-tui
+    main: ./cmd/linear-tui
+    binary: linear-tui
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Skip Windows ARM64 (not commonly needed)
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.Commit}}
+      - -X main.Date={{.Date}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    # Use zip for Windows
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: roeyazroel
+    name: linear-tui
+  draft: false
+  prerelease: auto
+  name_template: "{{.ProjectName}} v{{.Version}}"
+
+# Note: brews is deprecated in favor of homebrew_casks, but for CLI tools
+# formulas are still the appropriate distribution method. This will continue
+# to work and can be migrated to homebrew_casks in a future update if needed.
+brews:
+  - name: linear-tui
+    repository:
+      owner: roeyazroel
+      name: homebrew-linear-tui
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/roeyazroel/linear-tui"
+    description: "Terminal user interface for Linear"
+    license: "MIT"
+    install: |
+      bin.install "linear-tui"
+    test: |
+      system "#{bin}/linear-tui", "--version"
