@@ -13,8 +13,6 @@ type CreateIssueModal struct {
 	app           *App
 	modal         *tview.Flex
 	form          *tview.Form
-	titleField    *tview.InputField
-	descField     *tview.TextArea
 	assigneeField *tview.DropDown
 	priorityField *tview.DropDown
 	teamID        string
@@ -50,7 +48,7 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	cm.form.AddTextArea("Description", "", 60, 4, 0, nil)
 
 	// Add assignee dropdown - will be populated when shown
-	cm.form.AddDropDown("Assignee", []string{"Unassigned"}, 0, func(option string, index int) {
+	cm.form.AddDropDown("Assignee", []string{"Unassigned"}, 0, func(_ string, index int) {
 		if index == 0 {
 			cm.assigneeID = ""
 			cm.assigneeName = ""
@@ -222,7 +220,7 @@ func (cm *CreateIssueModal) populateAssigneeDropdown(users []linearapi.User) {
 		assigneeOptions = append(assigneeOptions, displayName)
 		cm.cachedUsers = append(cm.cachedUsers, struct{ ID, Name string }{user.ID, displayName})
 	}
-	cm.assigneeField.SetOptions(assigneeOptions, func(option string, index int) {
+	cm.assigneeField.SetOptions(assigneeOptions, func(_ string, index int) {
 		if index == 0 {
 			cm.assigneeID = ""
 			cm.assigneeName = ""
@@ -243,8 +241,7 @@ func (cm *CreateIssueModal) Hide() {
 
 // HandleKey handles keyboard input for the create issue modal.
 func (cm *CreateIssueModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
-	switch event.Key() {
-	case tcell.KeyEscape:
+	if event.Key() == tcell.KeyEscape {
 		cm.Hide()
 		return nil
 	}

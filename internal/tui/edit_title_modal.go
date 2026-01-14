@@ -114,8 +114,7 @@ func (etm *EditTitleModal) Hide() {
 
 // HandleKey handles keyboard input for the edit title modal.
 func (etm *EditTitleModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
-	switch event.Key() {
-	case tcell.KeyEscape:
+	if event.Key() == tcell.KeyEscape {
 		etm.Hide()
 		return nil
 	}

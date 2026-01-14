@@ -13,7 +13,7 @@ func splitIssuesByAssignee(issues []linearapi.Issue, currentUserID string) (my [
 	// If no current user, all issues go to "other"
 	if currentUserID == "" {
 		other = issues
-		return
+		return my, other
 	}
 
 	// Build a map of issue ID to section assignment
@@ -73,5 +73,5 @@ func splitIssuesByAssignee(issues []linearapi.Issue, currentUserID string) (my [
 		}
 	}
 
-	return
+	return my, other
 }

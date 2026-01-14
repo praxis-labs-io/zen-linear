@@ -54,8 +54,6 @@ type App struct {
 	// App state
 	selectedIssue       *linearapi.Issue
 	selectedNavigation  *NavigationNode
-	selectedTeam        *linearapi.Team
-	selectedProject     *linearapi.Project
 	issues              []linearapi.Issue
 	focusedPane         FocusTarget
 	activeIssuesSection IssuesSection // Tracks which issues section (My/Other) is currently active
@@ -796,7 +794,9 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
 	// Legacy: keep old fields for backward compatibility during migration
-	a.issueRows = append(a.myIssueRows, a.otherIssueRows...)
+	a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
+	a.issueRows = append(a.issueRows, a.myIssueRows...)
+	a.issueRows = append(a.issueRows, a.otherIssueRows...)
 	a.idToIssue = make(map[string]*linearapi.Issue)
 	for k, v := range a.myIDToIssue {
 		a.idToIssue[k] = v
@@ -888,24 +888,23 @@ func (a *App) onIssueSelected(issue linearapi.Issue) {
 }
 
 // toggleIssueExpanded toggles the expand/collapse state of a parent issue.
-// Returns true if the issue had children and was toggled.
-func (a *App) toggleIssueExpanded(issueID string) bool {
+func (a *App) toggleIssueExpanded(issueID string) {
 	// Check both sections for the issue
 	var issue *linearapi.Issue
 	var ok bool
 	if issue, ok = a.myIDToIssue[issueID]; !ok {
 		if issue, ok = a.otherIDToIssue[issueID]; !ok {
-			return false
+			return
 		}
 	}
 
 	if issue == nil {
-		return false
+		return
 	}
 
 	// Only toggle if this issue has children
 	if len(issue.Children) == 0 {
-		return false
+		return
 	}
 
 	ToggleExpanded(a.expandedState, issueID)
@@ -946,8 +945,6 @@ func (a *App) toggleIssueExpanded(issueID string) bool {
 
 	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID)
 	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID)
-
-	return true
 }
 
 // onNavigationSelected handles when a navigation item is selected.

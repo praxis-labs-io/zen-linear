@@ -59,14 +59,15 @@ func (p *PaletteController) Cursor() int {
 
 // SetCursor sets the cursor position, clamping to valid range.
 func (p *PaletteController) SetCursor(pos int) {
-	if pos < 0 {
+	switch {
+	case pos < 0:
 		p.cursor = 0
-	} else if pos >= len(p.filtered) {
+	case pos >= len(p.filtered):
 		p.cursor = len(p.filtered) - 1
 		if p.cursor < 0 {
 			p.cursor = 0
 		}
-	} else {
+	default:
 		p.cursor = pos
 	}
 }

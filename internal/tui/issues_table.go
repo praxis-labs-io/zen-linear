@@ -132,7 +132,7 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 	table.SetFixed(1, 0)
 
 	// Handle selection (Enter to open details or toggle expand)
-	table.SetSelectedFunc(func(row, column int) {
+	table.SetSelectedFunc(func(row, _ int) {
 		issue := a.getIssueFromRowForSection(row, section)
 		if issue == nil {
 			return
@@ -435,8 +435,8 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 
 		// State with color based on state
 		state := issue.State
-		stateColor := LinearTheme.SecondaryText
-		stateIcon := Icons.Todo
+		var stateColor tcell.Color
+		var stateIcon string
 
 		// Color code states
 		lowerState := strings.ToLower(state)
@@ -515,17 +515,6 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			SetSelectable(false))
 		table.SetCell(1, 4, tview.NewTableCell("").SetSelectable(false))
 	}
-}
-
-// updateIssuesTable updates the table with current issues using hierarchical rows.
-// If issueID is provided, that issue will be selected if found in the list.
-// This is kept for backward compatibility but will be replaced by section-specific updates.
-func (a *App) updateIssuesTable(issueID ...string) {
-	var targetIssueID string
-	if len(issueID) > 0 {
-		targetIssueID = issueID[0]
-	}
-	renderIssuesTableModel(a.issuesTable, a.issueRows, a.idToIssue, targetIssueID)
 }
 
 // renderIssueRow formats an issue for display in the table.

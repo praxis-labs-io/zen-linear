@@ -59,7 +59,7 @@ func main() {
 		if closeErr := logger.Close(); closeErr != nil {
 			fmt.Fprintf(os.Stderr, "Error closing logger: %v\n", closeErr)
 		}
-		os.Exit(1)
+		os.Exit(1) //nolint:gocritic // defer cleanup handled explicitly above
 	}
 
 	logger.Info("Application shutdown")

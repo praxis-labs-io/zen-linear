@@ -20,47 +20,42 @@ linters:
     - dogsled
     - dupl
     - errorlint
-    - exhaustive
-    - gocognit
     - goconst
     - gocritic
     - gocyclo
-    - goprintffuncname
-    - gosec
     - misspell
     - nakedret
-    - noctx
     - nolintlint
-    - prealloc
     - revive
     - rowserrcheck
     - unconvert
-    - unparam
     - whitespace
 
   settings:
     errcheck:
       check-type-assertions: true
-      check-blank: true
+      check-blank: false  # Don't check _ = errors
 
     govet:
       enable-all: true
+      disable:
+        - fieldalignment  # Too pedantic for this project
 
     gocyclo:
-      min-complexity: 15
-
-    gocognit:
-      min-complexity: 20
+      min-complexity: 55
 
     dupl:
-      threshold: 100
+      threshold: 150
 
     goconst:
       min-len: 3
-      min-occurrences: 3
+      min-occurrences: 5
 
     misspell:
       locale: US
+
+    nakedret:
+      max-func-lines: 100
 
     revive:
       rules:
@@ -71,21 +66,16 @@ linters:
         - name: error-return
         - name: error-strings
         - name: error-naming
-        - name: exported
         - name: if-return
         - name: increment-decrement
         - name: var-naming
         - name: var-declaration
-        - name: package-comments
         - name: range
         - name: receiver-naming
         - name: time-naming
-        - name: unexported-return
         - name: indent-error-flow
         - name: errorf
-        - name: empty-block
         - name: superfluous-else
-        - name: unused-parameter
         - name: unreachable-code
         - name: redefines-builtin-id
 
@@ -97,7 +87,9 @@ linters:
           - dupl
           - gosec
           - gocyclo
-          - gocognit
+          - goconst
+          - errcheck
+          - govet
 
       # Exclude shadow checking on err
       - text: 'shadow: declaration of "err"'

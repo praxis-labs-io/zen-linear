@@ -23,7 +23,7 @@ func TestLogger(t *testing.T) {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
 	defer func() {
-		_ = Close() //nolint:errcheck // test cleanup
+		_ = Close()
 	}()
 
 	// Write test logs
@@ -82,7 +82,7 @@ func TestLoggerWithMinLevel(t *testing.T) {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
 	defer func() {
-		_ = Close() //nolint:errcheck // test cleanup
+		_ = Close()
 	}()
 
 	// Write test logs
@@ -155,7 +155,7 @@ func TestErrorWithErr(t *testing.T) {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
 	defer func() {
-		_ = Close() //nolint:errcheck // test cleanup
+		_ = Close()
 	}()
 
 	// Write error with context

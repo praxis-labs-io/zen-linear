@@ -103,7 +103,7 @@ func TestAuthTransport(t *testing.T) {
 		t.Fatalf("RoundTrip() error: %v", err)
 	}
 	if resp != nil && resp.Body != nil {
-		_ = resp.Body.Close() //nolint:errcheck // test cleanup
+		_ = resp.Body.Close()
 	}
 }
 
