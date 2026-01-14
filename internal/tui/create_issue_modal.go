@@ -61,7 +61,11 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 		}
 	})
 	// Get the dropdown and style it
-	cm.assigneeField = cm.form.GetFormItemByLabel("Assignee").(*tview.DropDown)
+	if item := cm.form.GetFormItemByLabel("Assignee"); item != nil {
+		if dropdown, ok := item.(*tview.DropDown); ok {
+			cm.assigneeField = dropdown
+		}
+	}
 	cm.assigneeField.SetFieldWidth(50)
 	cm.assigneeField.SetListStyles(
 		tcell.StyleDefault.Background(LinearTheme.HeaderBg).Foreground(tcell.ColorWhite),
@@ -75,7 +79,11 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 		cm.priorityLabel = option
 	})
 	// Get the dropdown and style it
-	cm.priorityField = cm.form.GetFormItemByLabel("Priority").(*tview.DropDown)
+	if item := cm.form.GetFormItemByLabel("Priority"); item != nil {
+		if dropdown, ok := item.(*tview.DropDown); ok {
+			cm.priorityField = dropdown
+		}
+	}
 	cm.priorityField.SetFieldWidth(50)
 	cm.priorityField.SetListStyles(
 		tcell.StyleDefault.Background(LinearTheme.HeaderBg).Foreground(tcell.ColorWhite),
@@ -84,8 +92,17 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 
 	// Add action buttons
 	cm.form.AddButton("Create", func() {
-		title := cm.form.GetFormItemByLabel("Title").(*tview.InputField).GetText()
-		desc := cm.form.GetFormItemByLabel("Description").(*tview.TextArea).GetText()
+		var title, desc string
+		if titleItem := cm.form.GetFormItemByLabel("Title"); titleItem != nil {
+			if inputField, ok := titleItem.(*tview.InputField); ok {
+				title = inputField.GetText()
+			}
+		}
+		if descItem := cm.form.GetFormItemByLabel("Description"); descItem != nil {
+			if textArea, ok := descItem.(*tview.TextArea); ok {
+				desc = textArea.GetText()
+			}
+		}
 		cm.Hide()
 		if cm.onCreate != nil && title != "" {
 			cm.onCreate(title, desc, cm.teamID, cm.projectID, cm.assigneeID, cm.priority)
@@ -142,10 +159,14 @@ func (cm *CreateIssueModal) Show(teamID, projectID string, onCreate func(title, 
 
 	// Reset form fields
 	if titleItem := cm.form.GetFormItemByLabel("Title"); titleItem != nil {
-		titleItem.(*tview.InputField).SetText("")
+		if inputField, ok := titleItem.(*tview.InputField); ok {
+			_ = inputField.SetText("")
+		}
 	}
 	if descItem := cm.form.GetFormItemByLabel("Description"); descItem != nil {
-		descItem.(*tview.TextArea).SetText("", true)
+		if textArea, ok := descItem.(*tview.TextArea); ok {
+			_ = textArea.SetText("", true)
+		}
 	}
 
 	// Reset selections

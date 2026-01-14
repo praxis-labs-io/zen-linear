@@ -157,14 +157,14 @@ func (a *App) updateDetailsView() {
 
 	// Description
 	if issue.Description != "" {
-		fmt.Fprintf(writer, "%sDescription:[-]\n\n", keyColor)
+		_, _ = fmt.Fprintf(writer, "%sDescription:[-]\n\n", keyColor)
 
 		// Render description as markdown and write through ANSIWriter
 		// ANSIWriter translates ANSI escape codes to tview color tags
 		renderedDesc := renderMarkdown(issue.Description)
-		fmt.Fprint(writer, renderedDesc)
+		_, _ = fmt.Fprint(writer, renderedDesc)
 	} else {
-		fmt.Fprintf(writer, "%sNo description available[-]", keyColor)
+		_, _ = fmt.Fprintf(writer, "%sNo description available[-]", keyColor)
 	}
 
 	a.detailsDescriptionView.ScrollToBeginning()
@@ -174,7 +174,7 @@ func (a *App) updateDetailsView() {
 	commentsWriter := tview.ANSIWriter(a.detailsCommentsView)
 
 	if len(issue.Comments) > 0 {
-		fmt.Fprintf(commentsWriter, "%sComments:[-] (%d)\n\n", keyColor, len(issue.Comments))
+		_, _ = fmt.Fprintf(commentsWriter, "%sComments:[-] (%d)\n\n", keyColor, len(issue.Comments))
 
 		for i, comment := range issue.Comments {
 			// Comment header: author and timestamp
@@ -192,22 +192,22 @@ func (a *App) updateDetailsView() {
 				timeStr += " (edited)"
 			}
 
-			fmt.Fprintf(commentsWriter, "%s%s[-] %s%s[-]\n", accentColor, authorDisplay, keyColor, timeStr)
-			fmt.Fprint(commentsWriter, "\n")
+			_, _ = fmt.Fprintf(commentsWriter, "%s%s[-] %s%s[-]\n", accentColor, authorDisplay, keyColor, timeStr)
+			_, _ = fmt.Fprint(commentsWriter, "\n")
 
 			// Render comment body as markdown
 			renderedComment := renderMarkdown(comment.Body)
-			fmt.Fprint(commentsWriter, renderedComment)
+			_, _ = fmt.Fprint(commentsWriter, renderedComment)
 
 			// Add separator between comments (but not after the last one)
 			if i < len(issue.Comments)-1 {
-				fmt.Fprint(commentsWriter, "\n\n")
-				fmt.Fprint(commentsWriter, "[#3C3C3C]────────────────────────────────────────[-]\n\n")
+				_, _ = fmt.Fprint(commentsWriter, "\n\n")
+				_, _ = fmt.Fprint(commentsWriter, "[#3C3C3C]────────────────────────────────────────[-]\n\n")
 			}
 		}
 	} else {
 		// Empty state for comments
-		fmt.Fprintf(commentsWriter, "%sNo comments yet.[-]", keyColor)
+		_, _ = fmt.Fprintf(commentsWriter, "%sNo comments yet.[-]", keyColor)
 	}
 
 	a.detailsCommentsView.ScrollToBeginning()

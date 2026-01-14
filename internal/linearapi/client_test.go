@@ -55,7 +55,7 @@ func TestNewClient_CustomHTTPClient(t *testing.T) {
 		authHeader = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data": {"teams": {"nodes": []}}}`))
+		_, _ = w.Write([]byte(`{"data": {"teams": {"nodes": []}}}`))
 	}))
 	defer server.Close()
 
@@ -84,7 +84,7 @@ func TestAuthTransport(t *testing.T) {
 			t.Errorf("Authorization header = %q, want %q", auth, expected)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data": {"issues": {"nodes": []}}}`))
+		_, _ = w.Write([]byte(`{"data": {"issues": {"nodes": []}}}`))
 	}))
 	defer server.Close()
 
@@ -98,9 +98,12 @@ func TestAuthTransport(t *testing.T) {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 
-	_, err = transport.RoundTrip(req)
+	resp, err := transport.RoundTrip(req)
 	if err != nil {
 		t.Fatalf("RoundTrip() error: %v", err)
+	}
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close() //nolint:errcheck // test cleanup
 	}
 }
 
@@ -147,7 +150,7 @@ func TestFetchIssues_RequestFormat(t *testing.T) {
 		}`
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(response))
+		_, _ = w.Write([]byte(response))
 	}))
 	defer server.Close()
 

@@ -31,7 +31,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error initializing logger: %v\n", err)
 		os.Exit(1)
 	}
-	defer logger.Close()
+	defer func() {
+		if err := logger.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error closing logger: %v\n", err)
+		}
+	}()
 
 	logger.Info("Application starting")
 	logger.Debug("Configuration: APIEndpoint=%s, PageSize=%d, CacheTTL=%s",
@@ -50,6 +54,11 @@ func main() {
 	if err := app.Run(); err != nil {
 		logger.ErrorWithErr(err, "Application error")
 		fmt.Fprintf(os.Stderr, "Error running application: %v\n", err)
+		// Note: logger.Close() will be called by defer, but os.Exit prevents defer execution
+		// So we explicitly close here before exiting
+		if closeErr := logger.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Error closing logger: %v\n", closeErr)
+		}
 		os.Exit(1)
 	}
 

@@ -22,7 +22,9 @@ func TestLogger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer Close()
+	defer func() {
+		_ = Close() //nolint:errcheck // test cleanup
+	}()
 
 	// Write test logs
 	Debug("Debug message: %s", "test debug")
@@ -79,7 +81,9 @@ func TestLoggerWithMinLevel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer Close()
+	defer func() {
+		_ = Close() //nolint:errcheck // test cleanup
+	}()
 
 	// Write test logs
 	Debug("Should not appear")
@@ -150,7 +154,9 @@ func TestErrorWithErr(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
 	}
-	defer Close()
+	defer func() {
+		_ = Close() //nolint:errcheck // test cleanup
+	}()
 
 	// Write error with context
 	testErr := os.ErrNotExist
@@ -205,7 +211,7 @@ func TestLogLevelString(t *testing.T) {
 // resetLogger resets the global logger state for testing.
 func resetLogger() {
 	if defaultLogger != nil && defaultLogger.file != nil && !defaultLogger.closed {
-		defaultLogger.file.Close()
+		_ = defaultLogger.file.Close()
 	}
 	defaultLogger = nil
 	once = sync.Once{}

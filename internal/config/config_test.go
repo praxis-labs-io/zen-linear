@@ -41,12 +41,16 @@ func TestLoadFromEnv(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clean up environment
 			oldValue := os.Getenv(LinearAPIKeyEnv)
-			defer os.Setenv(LinearAPIKeyEnv, oldValue)
+			defer func() {
+				_ = os.Setenv(LinearAPIKeyEnv, oldValue) //nolint:errcheck
+			}()
 
 			if tt.setEnv {
-				os.Setenv(LinearAPIKeyEnv, tt.envValue)
+				//nolint:errcheck // os.Setenv rarely fails in tests
+				_ = os.Setenv(LinearAPIKeyEnv, tt.envValue)
 			} else {
-				os.Unsetenv(LinearAPIKeyEnv)
+				//nolint:errcheck // os.Unsetenv rarely fails in tests
+				_ = os.Unsetenv(LinearAPIKeyEnv)
 			}
 
 			cfg, err := LoadFromEnv()
@@ -79,25 +83,25 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 	oldCacheTTL := os.Getenv(CacheTTLEnv)
 	oldLogFile := os.Getenv(LogFileEnv)
 	defer func() {
-		os.Setenv(LinearAPIKeyEnv, oldAPIKey)
-		os.Setenv(LinearAPIEndpoint, oldEndpoint)
-		os.Setenv(TimeoutEnv, oldTimeout)
-		os.Setenv(PageSizeEnv, oldPageSize)
-		os.Setenv(CacheTTLEnv, oldCacheTTL)
+		_ = os.Setenv(LinearAPIKeyEnv, oldAPIKey) //nolint:errcheck
+		_ = os.Setenv(LinearAPIEndpoint, oldEndpoint) //nolint:errcheck
+		_ = os.Setenv(TimeoutEnv, oldTimeout)        //nolint:errcheck
+		_ = os.Setenv(PageSizeEnv, oldPageSize)       //nolint:errcheck
+		_ = os.Setenv(CacheTTLEnv, oldCacheTTL)       //nolint:errcheck
 		if oldLogFile != "" {
-			os.Setenv(LogFileEnv, oldLogFile)
+			_ = os.Setenv(LogFileEnv, oldLogFile) //nolint:errcheck
 		} else {
-			os.Unsetenv(LogFileEnv)
+			_ = os.Unsetenv(LogFileEnv) //nolint:errcheck
 		}
 	}()
 
 	// Clear all optional env vars
-	os.Setenv(LinearAPIKeyEnv, "test-key")
-	os.Unsetenv(LinearAPIEndpoint)
-	os.Unsetenv(TimeoutEnv)
-	os.Unsetenv(PageSizeEnv)
-	os.Unsetenv(CacheTTLEnv)
-	os.Unsetenv(LogFileEnv)
+	_ = os.Setenv(LinearAPIKeyEnv, "test-key") //nolint:errcheck
+	_ = os.Unsetenv(LinearAPIEndpoint)          //nolint:errcheck
+	_ = os.Unsetenv(TimeoutEnv)                 //nolint:errcheck
+	_ = os.Unsetenv(PageSizeEnv)                //nolint:errcheck
+	_ = os.Unsetenv(CacheTTLEnv)                //nolint:errcheck
+	_ = os.Unsetenv(LogFileEnv)                  //nolint:errcheck
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -123,11 +127,9 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 		if cfg.LogFile != expectedLogFile {
 			t.Errorf("LogFile = %q, want %q", cfg.LogFile, expectedLogFile)
 		}
-	} else {
+	} else if cfg.LogFile != "" {
 		// If home directory cannot be determined, log file should be empty
-		if cfg.LogFile != "" {
-			t.Errorf("LogFile = %q, want empty string (home dir unavailable)", cfg.LogFile)
-		}
+		t.Errorf("LogFile = %q, want empty string (home dir unavailable)", cfg.LogFile)
 	}
 }
 
@@ -139,19 +141,20 @@ func TestLoadFromEnv_CustomValues(t *testing.T) {
 	oldPageSize := os.Getenv(PageSizeEnv)
 	oldCacheTTL := os.Getenv(CacheTTLEnv)
 	defer func() {
-		os.Setenv(LinearAPIKeyEnv, oldAPIKey)
-		os.Setenv(LinearAPIEndpoint, oldEndpoint)
-		os.Setenv(TimeoutEnv, oldTimeout)
-		os.Setenv(PageSizeEnv, oldPageSize)
-		os.Setenv(CacheTTLEnv, oldCacheTTL)
+		//nolint:errcheck // os.Setenv rarely fails in test cleanup
+		_ = os.Setenv(LinearAPIKeyEnv, oldAPIKey)     //nolint:errcheck
+		_ = os.Setenv(LinearAPIEndpoint, oldEndpoint) //nolint:errcheck
+		_ = os.Setenv(TimeoutEnv, oldTimeout)          //nolint:errcheck
+		_ = os.Setenv(PageSizeEnv, oldPageSize)        //nolint:errcheck
+		_ = os.Setenv(CacheTTLEnv, oldCacheTTL)       //nolint:errcheck
 	}()
 
 	// Set custom values
-	os.Setenv(LinearAPIKeyEnv, "test-key")
-	os.Setenv(LinearAPIEndpoint, "http://localhost:8080/graphql")
-	os.Setenv(TimeoutEnv, "15s")
-	os.Setenv(PageSizeEnv, "100")
-	os.Setenv(CacheTTLEnv, "10m")
+	_ = os.Setenv(LinearAPIKeyEnv, "test-key")
+	_ = os.Setenv(LinearAPIEndpoint, "http://localhost:8080/graphql")
+	_ = os.Setenv(TimeoutEnv, "15s")
+	_ = os.Setenv(PageSizeEnv, "100")
+	_ = os.Setenv(CacheTTLEnv, "10m")
 
 	cfg, err := LoadFromEnv()
 	if err != nil {
@@ -211,12 +214,13 @@ func TestLoadFromEnv_InvalidValues(t *testing.T) {
 			oldAPIKey := os.Getenv(LinearAPIKeyEnv)
 			oldEnvValue := os.Getenv(tt.envVar)
 			defer func() {
-				os.Setenv(LinearAPIKeyEnv, oldAPIKey)
-				os.Setenv(tt.envVar, oldEnvValue)
+				//nolint:errcheck // os.Setenv rarely fails in test cleanup
+				_ = os.Setenv(LinearAPIKeyEnv, oldAPIKey) //nolint:errcheck
+				_ = os.Setenv(tt.envVar, oldEnvValue)     //nolint:errcheck
 			}()
 
-			os.Setenv(LinearAPIKeyEnv, "test-key")
-			os.Setenv(tt.envVar, tt.envValue)
+			_ = os.Setenv(LinearAPIKeyEnv, "test-key") //nolint:errcheck
+			_ = os.Setenv(tt.envVar, tt.envValue)      //nolint:errcheck
 
 			_, err := LoadFromEnv()
 			if err == nil {

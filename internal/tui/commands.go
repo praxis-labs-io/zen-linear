@@ -114,7 +114,7 @@ func DefaultCommands(app *App) []Command {
 				if issue == nil || issue.URL == "" {
 					return
 				}
-				openURL(issue.URL)
+				_ = openURL(issue.URL)
 			},
 		},
 		{
@@ -127,7 +127,7 @@ func DefaultCommands(app *App) []Command {
 				if issue == nil {
 					return
 				}
-				copyToClipboard(issue.Identifier)
+				_ = copyToClipboard(issue.Identifier)
 			},
 		},
 		{
@@ -140,7 +140,7 @@ func DefaultCommands(app *App) []Command {
 				if issue == nil || issue.URL == "" {
 					return
 				}
-				copyToClipboard(issue.URL)
+				_ = copyToClipboard(issue.URL)
 			},
 		},
 		{
@@ -377,7 +377,9 @@ func DefaultCommands(app *App) []Command {
 				a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
 				// Legacy: keep old fields for backward compatibility
-				a.issueRows = append(a.myIssueRows, a.otherIssueRows...)
+				a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
+				a.issueRows = append(a.issueRows, a.myIssueRows...)
+				a.issueRows = append(a.issueRows, a.otherIssueRows...)
 				a.idToIssue = make(map[string]*linearapi.Issue)
 				for k, v := range a.myIDToIssue {
 					a.idToIssue[k] = v
@@ -422,7 +424,9 @@ func DefaultCommands(app *App) []Command {
 				a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
 				// Legacy: keep old fields for backward compatibility
-				a.issueRows = append(a.myIssueRows, a.otherIssueRows...)
+				a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
+				a.issueRows = append(a.issueRows, a.myIssueRows...)
+				a.issueRows = append(a.issueRows, a.otherIssueRows...)
 				a.idToIssue = make(map[string]*linearapi.Issue)
 				for k, v := range a.myIDToIssue {
 					a.idToIssue[k] = v
@@ -599,7 +603,7 @@ func copyToClipboard(text string) error {
 		logger.ErrorWithErr(err, "Failed to write to clipboard")
 		return err
 	}
-	stdin.Close()
+	_ = stdin.Close()
 
 	if err := cmd.Wait(); err != nil {
 		logger.ErrorWithErr(err, "Clipboard command failed")

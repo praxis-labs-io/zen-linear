@@ -36,7 +36,11 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 
 	// Add comment body field
 	ccm.form.AddTextArea("Comment", "", 60, 8, 0, nil)
-	ccm.bodyField = ccm.form.GetFormItemByLabel("Comment").(*tview.TextArea)
+	if item := ccm.form.GetFormItemByLabel("Comment"); item != nil {
+		if textArea, ok := item.(*tview.TextArea); ok {
+			ccm.bodyField = textArea
+		}
+	}
 
 	// Add action buttons
 	ccm.form.AddButton("Comment", func() {

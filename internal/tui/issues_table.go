@@ -170,17 +170,15 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 						a.onIssueSelected(*issue)
 						a.activeIssuesSection = section
 					}
-				} else {
+				} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
 					// At bottom of this section - try to move to next section
-					if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
-						// Move to Other Issues table
-						a.activeIssuesSection = IssuesSectionOther
-						a.otherIssuesTable.Select(1, 0)
-						if issue := a.getIssueFromRowForSection(1, IssuesSectionOther); issue != nil {
-							a.onIssueSelected(*issue)
-						}
-						a.updateFocus()
+					// Move to Other Issues table
+					a.activeIssuesSection = IssuesSectionOther
+					a.otherIssuesTable.Select(1, 0)
+					if issue := a.getIssueFromRowForSection(1, IssuesSectionOther); issue != nil {
+						a.onIssueSelected(*issue)
 					}
+					a.updateFocus()
 				}
 				return nil
 			case 'k':
@@ -191,18 +189,16 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 						a.onIssueSelected(*issue)
 						a.activeIssuesSection = section
 					}
-				} else {
+				} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
 					// At top of this section - try to move to previous section
-					if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
-						// Move to My Issues table
-						a.activeIssuesSection = IssuesSectionMy
-						lastRow := len(a.myIssueRows)
-						a.myIssuesTable.Select(lastRow, 0)
-						if issue := a.getIssueFromRowForSection(lastRow, IssuesSectionMy); issue != nil {
-							a.onIssueSelected(*issue)
-						}
-						a.updateFocus()
+					// Move to My Issues table
+					a.activeIssuesSection = IssuesSectionMy
+					lastRow := len(a.myIssueRows)
+					a.myIssuesTable.Select(lastRow, 0)
+					if issue := a.getIssueFromRowForSection(lastRow, IssuesSectionMy); issue != nil {
+						a.onIssueSelected(*issue)
 					}
+					a.updateFocus()
 				}
 				return nil
 			case 'g':
@@ -311,16 +307,14 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					a.onIssueSelected(*issue)
 					a.activeIssuesSection = section
 				}
-			} else {
+			} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
 				// At bottom - try to move to next section
-				if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
-					a.activeIssuesSection = IssuesSectionOther
-					a.otherIssuesTable.Select(1, 0)
-					if issue := a.getIssueFromRowForSection(1, IssuesSectionOther); issue != nil {
-						a.onIssueSelected(*issue)
-					}
-					a.updateFocus()
+				a.activeIssuesSection = IssuesSectionOther
+				a.otherIssuesTable.Select(1, 0)
+				if issue := a.getIssueFromRowForSection(1, IssuesSectionOther); issue != nil {
+					a.onIssueSelected(*issue)
 				}
+				a.updateFocus()
 			}
 			return nil
 		case tcell.KeyUp:
@@ -331,17 +325,15 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					a.onIssueSelected(*issue)
 					a.activeIssuesSection = section
 				}
-			} else {
+			} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
 				// At top - try to move to previous section
-				if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
-					a.activeIssuesSection = IssuesSectionMy
-					lastRow := len(a.myIssueRows)
-					a.myIssuesTable.Select(lastRow, 0)
-					if issue := a.getIssueFromRowForSection(lastRow, IssuesSectionMy); issue != nil {
-						a.onIssueSelected(*issue)
-					}
-					a.updateFocus()
+				a.activeIssuesSection = IssuesSectionMy
+				lastRow := len(a.myIssueRows)
+				a.myIssuesTable.Select(lastRow, 0)
+				if issue := a.getIssueFromRowForSection(lastRow, IssuesSectionMy); issue != nil {
+					a.onIssueSelected(*issue)
 				}
+				a.updateFocus()
 			}
 			return nil
 		}

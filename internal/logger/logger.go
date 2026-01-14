@@ -119,7 +119,7 @@ func (l *Logger) log(level LogLevel, message string) {
 	logLine := fmt.Sprintf("[%s] %s: %s\n", timestamp, level.String(), message)
 
 	if l.file != nil {
-		io.WriteString(l.file, logLine)
+		_, _ = io.WriteString(l.file, logLine)
 	}
 }
 

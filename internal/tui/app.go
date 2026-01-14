@@ -433,8 +433,7 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 		a.updateFocus()
 		return nil
 	case tcell.KeyRune:
-		switch event.Rune() {
-		case 'l':
+		if event.Rune() == 'l' {
 			a.focusedPane = FocusIssues
 			a.updateFocus()
 			return nil
@@ -479,8 +478,7 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 		a.updateFocus()
 		return nil
 	case tcell.KeyRune:
-		switch event.Rune() {
-		case 'h':
+		if event.Rune() == 'h' {
 			a.focusedPane = FocusIssues
 			a.updateFocus()
 			return nil
@@ -922,7 +920,9 @@ func (a *App) toggleIssueExpanded(issueID string) bool {
 	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
 	// Legacy: keep old fields for backward compatibility
-	a.issueRows = append(a.myIssueRows, a.otherIssueRows...)
+	a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
+	a.issueRows = append(a.issueRows, a.myIssueRows...)
+	a.issueRows = append(a.issueRows, a.otherIssueRows...)
 	a.idToIssue = make(map[string]*linearapi.Issue)
 	for k, v := range a.myIDToIssue {
 		a.idToIssue[k] = v

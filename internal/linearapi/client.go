@@ -12,6 +12,15 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
+// parseTime safely parses an RFC3339 time string, returning zero time on error.
+func parseTime(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
 // IssueFilter is a custom scalar type for Linear's IssueFilter input.
 // It allows passing complex filter objects to the GraphQL API.
 type IssueFilter map[string]interface{}
@@ -562,8 +571,8 @@ func (c *Client) FetchIssues(ctx context.Context, params FetchIssuesParams) ([]I
 
 	issues := make([]Issue, 0, len(query.Issues.Nodes))
 	for _, node := range query.Issues.Nodes {
-		updatedAt, _ := time.Parse(time.RFC3339, string(node.UpdatedAt))
-		createdAt, _ := time.Parse(time.RFC3339, string(node.CreatedAt))
+		updatedAt := parseTime(string(node.UpdatedAt))
+		createdAt := parseTime(string(node.CreatedAt))
 
 		assignee := ""
 		assigneeID := ""
@@ -736,8 +745,8 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 		return Issue{}, fmt.Errorf("fetch issue %s: %w", id, err)
 	}
 
-	updatedAt, _ := time.Parse(time.RFC3339, string(query.Issue.UpdatedAt))
-	createdAt, _ := time.Parse(time.RFC3339, string(query.Issue.CreatedAt))
+	updatedAt := parseTime(string(query.Issue.UpdatedAt))
+	createdAt := parseTime(string(query.Issue.CreatedAt))
 
 	assignee := ""
 	assigneeID := ""
@@ -793,8 +802,8 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 	// Parse comments
 	comments := make([]Comment, 0, len(query.Issue.Comments.Nodes))
 	for _, node := range query.Issue.Comments.Nodes {
-		commentCreatedAt, _ := time.Parse(time.RFC3339, string(node.CreatedAt))
-		commentUpdatedAt, _ := time.Parse(time.RFC3339, string(node.UpdatedAt))
+		commentCreatedAt := parseTime(string(node.CreatedAt))
+		commentUpdatedAt := parseTime(string(node.UpdatedAt))
 		comments = append(comments, Comment{
 			ID:        string(node.ID),
 			Body:      string(node.Body),
@@ -912,8 +921,8 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 	}
 
 	node := mutation.IssueCreate.Issue
-	updatedAt, _ := time.Parse(time.RFC3339, string(node.UpdatedAt))
-	createdAt, _ := time.Parse(time.RFC3339, string(node.CreatedAt))
+	updatedAt := parseTime(string(node.UpdatedAt))
+	createdAt := parseTime(string(node.CreatedAt))
 
 	assignee := ""
 	assigneeID := ""
@@ -1056,8 +1065,8 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 	}
 
 	node := mutation.IssueUpdate.Issue
-	updatedAt, _ := time.Parse(time.RFC3339, string(node.UpdatedAt))
-	createdAt, _ := time.Parse(time.RFC3339, string(node.CreatedAt))
+	updatedAt := parseTime(string(node.UpdatedAt))
+	createdAt := parseTime(string(node.CreatedAt))
 
 	assignee := ""
 	assigneeID := ""
@@ -1147,8 +1156,8 @@ func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (C
 	}
 
 	node := mutation.CommentCreate.Comment
-	createdAt, _ := time.Parse(time.RFC3339, string(node.CreatedAt))
-	updatedAt, _ := time.Parse(time.RFC3339, string(node.UpdatedAt))
+	createdAt := parseTime(string(node.CreatedAt))
+	updatedAt := parseTime(string(node.UpdatedAt))
 
 	return Comment{
 		ID:        string(node.ID),
