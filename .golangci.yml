@@ -89,25 +89,26 @@ linters:
         - name: unreachable-code
         - name: redefines-builtin-id
 
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files
+      - path: _test\.go
+        linters:
+          - dupl
+          - gosec
+          - gocyclo
+          - gocognit
+
+      # Exclude shadow checking on err
+      - text: 'shadow: declaration of "err"'
+        linters:
+          - govet
+
 formatters:
   enable:
     - gofmt
     - goimports
 
 issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - dupl
-        - gosec
-        - gocyclo
-        - gocognit
-
-    # Exclude shadow checking on err
-    - text: 'shadow: declaration of "err"'
-      linters:
-        - govet
-
   max-issues-per-linter: 0
   max-same-issues: 0
