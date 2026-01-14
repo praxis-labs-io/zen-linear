@@ -1,0 +1,18 @@
+# Default owners for everything in the repo
+* @roeyazroel
+
+# Core application code
+/cmd/ @roeyazroel
+/internal/ @roeyazroel
+
+# Configuration files
+/.github/ @roeyazroel
+/.golangci.yml @roeyazroel
+/.goreleaser.yml @roeyazroel
+/go.mod @roeyazroel
+/go.sum @roeyazroel
+
+# Documentation
+/README.md @roeyazroel
+/docs/ @roeyazroel
+/LICENSE @roeyazroel
