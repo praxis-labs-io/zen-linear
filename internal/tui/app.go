@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
@@ -54,7 +55,8 @@ type App struct {
 	editTitleModal         *EditTitleModal
 	editLabelsModal        *EditLabelsModal
 
-	// App state
+	// App state (protected by issuesMu)
+	issuesMu            sync.RWMutex
 	selectedIssue       *linearapi.Issue
 	selectedNavigation  *NavigationNode
 	issues              []linearapi.Issue
@@ -92,6 +94,9 @@ type App struct {
 	fetchIssuesPage func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error)
 	fetchIssueByID  func(context.Context, string) (linearapi.Issue, error)
 	queueUpdateDraw func(func())
+
+	// UI update mutex (for test safety when queueUpdateDraw executes immediately)
+	uiUpdateMu sync.Mutex
 
 	// Race-safety for issue detail fetching
 	fetchingIssueID string // Tracks which issue ID we're currently fetching
@@ -884,6 +889,7 @@ func (a *App) updateIssuesColumnLayout() {
 // updateIssuesData updates the UI with new issues data.
 // If issueID is provided, that issue will be selected if found in the list.
 func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
+	a.issuesMu.Lock()
 	a.issues = issues
 	if a.sortField == SortByPriority {
 		sortIssuesByPriority(a.issues)
@@ -896,12 +902,15 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 	} else if a.selectedIssue != nil {
 		targetIssueID = a.selectedIssue.ID
 	}
+	a.issuesMu.Unlock()
 
 	selectedIssue := a.rebuildIssuesTables(targetIssueID)
 	if selectedIssue != nil {
 		a.onIssueSelected(*selectedIssue)
 	} else {
+		a.issuesMu.Lock()
 		a.selectedIssue = nil
+		a.issuesMu.Unlock()
 		a.updateDetailsView()
 	}
 	a.updateStatusBar()
@@ -910,11 +919,15 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 // rebuildIssuesTables rebuilds issue rows and renders tables, returning the selected issue.
 func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	// Split issues by assignee.
+	a.issuesMu.RLock()
+	issues := a.issues
+	a.issuesMu.RUnlock()
+
 	currentUserID := ""
 	if a.currentUser != nil {
 		currentUserID = a.currentUser.ID
 	}
-	myIssues, otherIssues := splitIssuesByAssignee(a.issues, currentUserID)
+	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
 
 	// Build hierarchical tree rows for each section.
 	a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
@@ -985,6 +998,7 @@ func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
 		return
 	}
 
+	a.issuesMu.Lock()
 	existing := make(map[string]bool, len(a.issues))
 	for _, issue := range a.issues {
 		existing[issue.ID] = true
@@ -1005,13 +1019,16 @@ func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
 	if a.selectedIssue != nil {
 		targetIssueID = a.selectedIssue.ID
 	}
+	a.issuesMu.Unlock()
 
 	selectedIssue := a.rebuildIssuesTables(targetIssueID)
+	a.issuesMu.Lock()
 	if selectedIssue != nil {
 		a.selectedIssue = selectedIssue
 	} else {
 		a.selectedIssue = nil
 	}
+	a.issuesMu.Unlock()
 	a.updateDetailsView()
 	a.updateStatusBar()
 }
@@ -1034,7 +1051,9 @@ func sortIssuesByPriority(issues []linearapi.Issue) {
 // onIssueSelected handles when an issue is selected.
 func (a *App) onIssueSelected(issue linearapi.Issue) {
 	// Set selected issue immediately for quick UI feedback
+	a.issuesMu.Lock()
 	a.selectedIssue = &issue
+	a.issuesMu.Unlock()
 	a.updateDetailsView()
 
 	// Fetch full issue details (including comments) in background
@@ -1057,7 +1076,9 @@ func (a *App) onIssueSelected(issue linearapi.Issue) {
 					// Keep the partial issue data we already have
 					return
 				}
+				a.issuesMu.Lock()
 				a.selectedIssue = &fullIssue
+				a.issuesMu.Unlock()
 				a.updateDetailsView()
 			}
 		})
@@ -1091,7 +1112,10 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	if a.currentUser != nil {
 		currentUserID = a.currentUser.ID
 	}
-	myIssues, otherIssues := splitIssuesByAssignee(a.issues, currentUserID)
+	a.issuesMu.RLock()
+	issues := a.issues
+	a.issuesMu.RUnlock()
+	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
 	a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
 	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
@@ -1197,8 +1221,11 @@ func (a *App) updateStatusBar() {
 		searchText = fmt.Sprintf("[#F2C94C]🔍 %s[-]", a.searchQuery)
 	}
 
-	statusText := fmt.Sprintf("[#5E6AD2]%d issues[-]", len(a.issues))
-	if len(a.issues) == 0 {
+	a.issuesMu.RLock()
+	issuesLen := len(a.issues)
+	a.issuesMu.RUnlock()
+	statusText := fmt.Sprintf("[#5E6AD2]%d issues[-]", issuesLen)
+	if issuesLen == 0 {
 		statusText = "[#787878]No issues[-]"
 	}
 
@@ -1238,6 +1265,8 @@ func (a *App) GetCache() *cache.TeamCache {
 
 // GetSelectedIssue returns the currently selected issue.
 func (a *App) GetSelectedIssue() *linearapi.Issue {
+	a.issuesMu.RLock()
+	defer a.issuesMu.RUnlock()
 	return a.selectedIssue
 }
 
@@ -1247,8 +1276,11 @@ func (a *App) GetSelectedTeamID() string {
 		return a.selectedNavigation.TeamID
 	}
 	// If we have a selected issue, use its team
-	if a.selectedIssue != nil {
-		return a.selectedIssue.TeamID
+	a.issuesMu.RLock()
+	selectedIssue := a.selectedIssue
+	a.issuesMu.RUnlock()
+	if selectedIssue != nil {
+		return selectedIssue.TeamID
 	}
 	return ""
 }
@@ -1282,6 +1314,9 @@ func (a *App) GetWorkflowStates() []linearapi.WorkflowState {
 // QueueUpdateDraw queues a UI update function to be run in the main thread.
 func (a *App) QueueUpdateDraw(f func()) {
 	if a.queueUpdateDraw != nil {
+		// Serialize UI updates when test overrides queueUpdateDraw to execute immediately
+		a.uiUpdateMu.Lock()
+		defer a.uiUpdateMu.Unlock()
 		a.queueUpdateDraw(f)
 		return
 	}
@@ -1384,8 +1419,11 @@ func (a *App) showUserPickerWithUsers(users []linearapi.User, onSelect func(user
 // It lists all top-level issues (issues without a parent) from the current list.
 func (a *App) ShowParentIssuePicker(onSelect func(parentID string)) {
 	// Filter to only show issues that could be parents (no parent themselves)
+	a.issuesMu.RLock()
+	issues := a.issues
+	a.issuesMu.RUnlock()
 	items := make([]PickerItem, 0)
-	for _, issue := range a.issues {
+	for _, issue := range issues {
 		if issue.Parent == nil {
 			items = append(items, PickerItem{
 				ID:    issue.ID,

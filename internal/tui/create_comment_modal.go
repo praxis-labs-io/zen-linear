@@ -161,7 +161,10 @@ func (a *App) handleCreateComment(issueID, body string) {
 			logger.Info("Created comment on issue %s", issueID)
 
 			// Refresh the selected issue to show the new comment
-			if a.selectedIssue != nil && a.selectedIssue.ID == issueID {
+			a.issuesMu.RLock()
+			selectedIssue := a.selectedIssue
+			a.issuesMu.RUnlock()
+			if selectedIssue != nil && selectedIssue.ID == issueID {
 				a.fetchingIssueID = issueID
 				go func() {
 					fullIssue, fetchErr := a.api.FetchIssueByID(ctx, issueID)
@@ -171,7 +174,9 @@ func (a *App) handleCreateComment(issueID, body string) {
 								logger.ErrorWithErr(fetchErr, "Failed to refresh issue after comment creation")
 								return
 							}
+							a.issuesMu.Lock()
 							a.selectedIssue = &fullIssue
+							a.issuesMu.Unlock()
 							a.updateDetailsView()
 						}
 					})

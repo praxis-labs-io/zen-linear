@@ -52,8 +52,8 @@ func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
 		if after == nil {
 			return linearapi.IssuePage{
-				Issues:   []linearapi.Issue{issue1},
-				HasNext:  true,
+				Issues:    []linearapi.Issue{issue1},
+				HasNext:   true,
 				EndCursor: stringPtr("cursor-1"),
 			}, nil
 		}
@@ -67,18 +67,28 @@ func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 	app.refreshIssues()
 
 	waitForCondition(t, time.Second, func() bool {
+		app.issuesMu.RLock()
+		defer app.issuesMu.RUnlock()
 		return len(app.issues) == 1
 	})
-	if app.selectedIssue == nil || app.selectedIssue.ID != issue1.ID {
-		t.Fatalf("selectedIssue = %#v, want %s", app.selectedIssue, issue1.ID)
+	app.issuesMu.RLock()
+	selectedIssue := app.selectedIssue
+	app.issuesMu.RUnlock()
+	if selectedIssue == nil || selectedIssue.ID != issue1.ID {
+		t.Fatalf("selectedIssue = %#v, want %s", selectedIssue, issue1.ID)
 	}
 
 	close(blockNext)
 	waitForCondition(t, time.Second, func() bool {
+		app.issuesMu.RLock()
+		defer app.issuesMu.RUnlock()
 		return len(app.issues) == 2
 	})
-	if app.selectedIssue == nil || app.selectedIssue.ID != issue1.ID {
-		t.Fatalf("selectedIssue after append = %#v, want %s", app.selectedIssue, issue1.ID)
+	app.issuesMu.RLock()
+	selectedIssue = app.selectedIssue
+	app.issuesMu.RUnlock()
+	if selectedIssue == nil || selectedIssue.ID != issue1.ID {
+		t.Fatalf("selectedIssue after append = %#v, want %s", selectedIssue, issue1.ID)
 	}
 }
 
@@ -110,8 +120,8 @@ func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 		if mode.Load() == 0 {
 			if after == nil {
 				return linearapi.IssuePage{
-					Issues:   []linearapi.Issue{issue1},
-					HasNext:  true,
+					Issues:    []linearapi.Issue{issue1},
+					HasNext:   true,
 					EndCursor: stringPtr("cursor-1"),
 				}, nil
 			}
@@ -134,6 +144,8 @@ func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 
 	app.refreshIssues()
 	waitForCondition(t, time.Second, func() bool {
+		app.issuesMu.RLock()
+		defer app.issuesMu.RUnlock()
 		return len(app.issues) == 1
 	})
 
@@ -142,9 +154,14 @@ func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 	close(blockNext)
 
 	waitForCondition(t, time.Second, func() bool {
+		app.issuesMu.RLock()
+		defer app.issuesMu.RUnlock()
 		return len(app.issues) == 1 && app.issues[0].ID == issue3.ID
 	})
-	if app.issues[0].ID == issue2.ID {
-		t.Fatalf("stale issue applied, got %s", app.issues[0].ID)
+	app.issuesMu.RLock()
+	issueID := app.issues[0].ID
+	app.issuesMu.RUnlock()
+	if issueID == issue2.ID {
+		t.Fatalf("stale issue applied, got %s", issueID)
 	}
 }

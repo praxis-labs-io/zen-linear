@@ -82,13 +82,16 @@ func (a *App) buildDetailsView() *tview.Flex {
 
 // updateDetailsView updates the details view with the selected issue.
 func (a *App) updateDetailsView() {
-	if a.selectedIssue == nil {
+	a.issuesMu.RLock()
+	selectedIssue := a.selectedIssue
+	a.issuesMu.RUnlock()
+	if selectedIssue == nil {
 		a.detailsDescriptionView.SetText("[gray]No issue selected. Select an issue from the list to view details.[-]")
 		a.detailsCommentsView.SetText("")
 		return
 	}
 
-	issue := a.selectedIssue
+	issue := selectedIssue
 
 	// Helper to colorize keys
 	keyColor := "[#787878]"    // SecondaryText

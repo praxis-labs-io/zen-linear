@@ -215,8 +215,8 @@ type IssueFetchProgress struct {
 
 // IssuePage represents a single page of issues with pagination info.
 type IssuePage struct {
-	Issues   []Issue
-	HasNext  bool
+	Issues    []Issue
+	HasNext   bool
 	EndCursor *string
 }
 
@@ -716,8 +716,8 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 	}
 
 	return IssuePage{
-		Issues:   issues,
-		HasNext:  hasNext,
+		Issues:    issues,
+		HasNext:   hasNext,
 		EndCursor: endCursor,
 	}, nil
 }
@@ -873,8 +873,8 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 	}
 
 	return IssuePage{
-		Issues:   issues,
-		HasNext:  hasNext,
+		Issues:    issues,
+		HasNext:   hasNext,
 		EndCursor: endCursor,
 	}, nil
 }

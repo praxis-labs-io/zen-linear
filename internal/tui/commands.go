@@ -353,13 +353,16 @@ func DefaultCommands(app *App) []Command {
 			Keywords:     []string{"expand", "all", "open"},
 			ShortcutRune: ']',
 			Run: func(a *App) {
-				ExpandAll(a.expandedState, a.issues)
+				a.issuesMu.RLock()
+				issues := a.issues
+				a.issuesMu.RUnlock()
+				ExpandAll(a.expandedState, issues)
 				// Rebuild rows for both sections
 				currentUserID := ""
 				if a.currentUser != nil {
 					currentUserID = a.currentUser.ID
 				}
-				myIssues, otherIssues := splitIssuesByAssignee(a.issues, currentUserID)
+				myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
 				a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
 				a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
@@ -380,12 +383,15 @@ func DefaultCommands(app *App) []Command {
 
 				// Render both tables, preserving selection
 				var selectedMyIssueID, selectedOtherIssueID string
-				if a.selectedIssue != nil {
-					if _, ok := a.myIDToIssue[a.selectedIssue.ID]; ok {
-						selectedMyIssueID = a.selectedIssue.ID
+				a.issuesMu.RLock()
+				selectedIssue := a.selectedIssue
+				a.issuesMu.RUnlock()
+				if selectedIssue != nil {
+					if _, ok := a.myIDToIssue[selectedIssue.ID]; ok {
+						selectedMyIssueID = selectedIssue.ID
 						a.activeIssuesSection = IssuesSectionMy
-					} else if _, ok := a.otherIDToIssue[a.selectedIssue.ID]; ok {
-						selectedOtherIssueID = a.selectedIssue.ID
+					} else if _, ok := a.otherIDToIssue[selectedIssue.ID]; ok {
+						selectedOtherIssueID = selectedIssue.ID
 						a.activeIssuesSection = IssuesSectionOther
 					}
 				}
@@ -406,7 +412,10 @@ func DefaultCommands(app *App) []Command {
 				if a.currentUser != nil {
 					currentUserID = a.currentUser.ID
 				}
-				myIssues, otherIssues := splitIssuesByAssignee(a.issues, currentUserID)
+				a.issuesMu.RLock()
+				issues := a.issues
+				a.issuesMu.RUnlock()
+				myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
 				a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
 				a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
@@ -427,12 +436,15 @@ func DefaultCommands(app *App) []Command {
 
 				// Render both tables, preserving selection
 				var selectedMyIssueID, selectedOtherIssueID string
-				if a.selectedIssue != nil {
-					if _, ok := a.myIDToIssue[a.selectedIssue.ID]; ok {
-						selectedMyIssueID = a.selectedIssue.ID
+				a.issuesMu.RLock()
+				selectedIssue := a.selectedIssue
+				a.issuesMu.RUnlock()
+				if selectedIssue != nil {
+					if _, ok := a.myIDToIssue[selectedIssue.ID]; ok {
+						selectedMyIssueID = selectedIssue.ID
 						a.activeIssuesSection = IssuesSectionMy
-					} else if _, ok := a.otherIDToIssue[a.selectedIssue.ID]; ok {
-						selectedOtherIssueID = a.selectedIssue.ID
+					} else if _, ok := a.otherIDToIssue[selectedIssue.ID]; ok {
+						selectedOtherIssueID = selectedIssue.ID
 						a.activeIssuesSection = IssuesSectionOther
 					}
 				}
