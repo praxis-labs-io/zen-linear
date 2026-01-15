@@ -552,6 +552,8 @@ func (c *Client) FetchIssues(ctx context.Context, params FetchIssuesParams) ([]I
 
 // searchIssues uses Linear's searchIssues query which supports full-text search
 // including identifier, title, description, and comments.
+//
+//nolint:dupl // GraphQL library requires inline struct definitions; duplication with fetchIssuesWithFilter is unavoidable.
 func (c *Client) searchIssues(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
 	first := params.First
 	if first <= 0 {
@@ -676,6 +678,8 @@ func (c *Client) searchIssues(ctx context.Context, params FetchIssuesParams) ([]
 }
 
 // fetchIssuesWithFilter fetches issues using the standard issues query with filters.
+//
+//nolint:dupl // GraphQL library requires inline struct definitions; duplication with searchIssues is unavoidable.
 func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
 	first := params.First
 	if first <= 0 {
@@ -796,56 +800,6 @@ func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesPa
 	}
 
 	return issues, nil
-}
-
-// issueNode is the common structure for issue nodes in GraphQL responses.
-type issueNode struct {
-	ID         graphql.String
-	Identifier graphql.String
-	Title      graphql.String
-	State      struct {
-		ID   graphql.String
-		Name graphql.String
-	}
-	Assignee *struct {
-		ID   graphql.String
-		Name graphql.String
-	}
-	Priority    graphql.Float
-	UpdatedAt   graphql.String
-	CreatedAt   graphql.String
-	Description *graphql.String
-	Team        struct {
-		ID graphql.String
-	}
-	Project *struct {
-		ID graphql.String
-	}
-	Labels struct {
-		Nodes []struct {
-			ID    graphql.String
-			Name  graphql.String
-			Color graphql.String
-		}
-	}
-	URL        graphql.String
-	ArchivedAt *graphql.String
-	Parent     *struct {
-		ID         graphql.String
-		Identifier graphql.String
-		Title      graphql.String
-	}
-	Children struct {
-		Nodes []struct {
-			ID         graphql.String
-			Identifier graphql.String
-			Title      graphql.String
-			State      struct {
-				ID   graphql.String
-				Name graphql.String
-			}
-		}
-	}
 }
 
 // parseIssueNode converts a GraphQL issue node to an Issue struct.
