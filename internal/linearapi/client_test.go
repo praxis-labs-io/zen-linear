@@ -281,6 +281,83 @@ func TestFetchIssues_PaginatesAllPages(t *testing.T) {
 	}
 }
 
+// TestFetchIssuesPage_Defaults verifies page defaults and pagination metadata.
+func TestFetchIssuesPage_Defaults(t *testing.T) {
+	var firstValue interface{}
+	response := issuesPageResponse([]string{
+		issueNodeJSON("issue-1", "ABC-1", "First issue"),
+	}, true, "cursor-1")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		variables, ok := reqBody["variables"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Request body missing variables")
+		}
+		firstValue = variables["first"]
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(response))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	page, err := client.FetchIssuesPage(context.Background(), FetchIssuesParams{}, nil)
+	if err != nil {
+		t.Fatalf("FetchIssuesPage() error: %v", err)
+	}
+
+	if firstValue != float64(50) {
+		t.Errorf("First default = %#v, want 50", firstValue)
+	}
+	if !page.HasNext {
+		t.Error("HasNext = false, want true")
+	}
+	if page.EndCursor == nil || *page.EndCursor != "cursor-1" {
+		t.Errorf("EndCursor = %#v, want cursor-1", page.EndCursor)
+	}
+	if len(page.Issues) != 1 || page.Issues[0].ID != "issue-1" {
+		t.Errorf("Issues = %+v, want single issue-1", page.Issues)
+	}
+}
+
+// TestFetchIssuesPage_NoNextPage verifies end cursor is cleared when pagination ends.
+func TestFetchIssuesPage_NoNextPage(t *testing.T) {
+	response := issuesPageResponse([]string{}, false, "cursor-ignored")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(response))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	page, err := client.FetchIssuesPage(context.Background(), FetchIssuesParams{First: 1}, nil)
+	if err != nil {
+		t.Fatalf("FetchIssuesPage() error: %v", err)
+	}
+
+	if page.HasNext {
+		t.Error("HasNext = true, want false")
+	}
+	if page.EndCursor != nil {
+		t.Errorf("EndCursor = %#v, want nil", page.EndCursor)
+	}
+}
+
 // TestFetchIssues_ProgressCallback verifies progress updates per page.
 func TestFetchIssues_ProgressCallback(t *testing.T) {
 	pageOne := issuesPageResponse([]string{

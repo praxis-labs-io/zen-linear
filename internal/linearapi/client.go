@@ -213,6 +213,13 @@ type IssueFetchProgress struct {
 	Fetched int
 }
 
+// IssuePage represents a single page of issues with pagination info.
+type IssuePage struct {
+	Issues   []Issue
+	HasNext  bool
+	EndCursor *string
+}
+
 // FetchIssuesParams contains parameters for fetching issues.
 type FetchIssuesParams struct {
 	TeamID    string
@@ -537,13 +544,26 @@ func buildSearchOrFilters(term string) []map[string]interface{} {
 	}
 }
 
+// FetchIssuesPage fetches a single page of issues with optional filtering and sorting.
+// It returns pagination metadata to allow callers to continue fetching.
+func (c *Client) FetchIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
+	searchTerm := strings.TrimSpace(params.Search)
+	if searchTerm != "" {
+		params.Search = searchTerm
+		return c.searchIssuesPage(ctx, params, after)
+	}
+
+	return c.fetchIssuesWithFilterPage(ctx, params, after)
+}
+
 // FetchIssues fetches issues with optional filtering and sorting.
 // When a search term is provided, it uses Linear's searchIssues query which
 // supports searching by identifier, title, description, and comments.
 func (c *Client) FetchIssues(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
-	// If search term is provided, use searchIssues query for better identifier matching
+	// If search term is provided, use searchIssues query for better identifier matching.
 	searchTerm := strings.TrimSpace(params.Search)
 	if searchTerm != "" {
+		params.Search = searchTerm
 		return c.searchIssues(ctx, params)
 	}
 
@@ -552,107 +572,19 @@ func (c *Client) FetchIssues(ctx context.Context, params FetchIssuesParams) ([]I
 
 // searchIssues uses Linear's searchIssues query which supports full-text search
 // including identifier, title, description, and comments.
-//
-//nolint:dupl // GraphQL library requires inline struct definitions; duplication with fetchIssuesWithFilter is unavoidable.
 func (c *Client) searchIssues(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
-	first := params.First
-	if first <= 0 {
-		first = 50
-	}
-
-	searchTerm := strings.TrimSpace(params.Search)
-
-	// Build filter for team/project constraints only (search handles the text matching)
-	filter := make(IssueFilter)
-	if params.TeamID != "" {
-		filter["team"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.TeamID}}
-	}
-	if params.ProjectID != "" {
-		filter["project"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.ProjectID}}
-	}
-
-	// Determine if client-side sorting is needed.
 	sortByPriority := params.OrderBy == "priority"
 
-	var after *graphql.String
+	var after *string
 	page := 0
 	issues := make([]Issue, 0)
 	for {
-		var query struct {
-			SearchIssues struct {
-				Nodes []struct {
-					ID         graphql.String
-					Identifier graphql.String
-					Title      graphql.String
-					State      struct {
-						ID   graphql.String
-						Name graphql.String
-					}
-					Assignee *struct {
-						ID   graphql.String
-						Name graphql.String
-					}
-					Priority    graphql.Float
-					UpdatedAt   graphql.String
-					CreatedAt   graphql.String
-					Description *graphql.String
-					Team        struct {
-						ID graphql.String
-					}
-					Project *struct {
-						ID graphql.String
-					}
-					Labels struct {
-						Nodes []struct {
-							ID    graphql.String
-							Name  graphql.String
-							Color graphql.String
-						}
-					}
-					URL        graphql.String
-					ArchivedAt *graphql.String
-					Parent     *struct {
-						ID         graphql.String
-						Identifier graphql.String
-						Title      graphql.String
-					}
-					Children struct {
-						Nodes []struct {
-							ID         graphql.String
-							Identifier graphql.String
-							Title      graphql.String
-							State      struct {
-								ID   graphql.String
-								Name graphql.String
-							}
-						}
-					}
-				}
-				PageInfo struct {
-					HasNextPage graphql.Boolean
-					EndCursor   graphql.String
-				}
-			} `graphql:"searchIssues(term: $term, first: $first, after: $after, filter: $filter)"`
-		}
-
-		variables := map[string]interface{}{
-			"term":   graphql.String(searchTerm),
-			"first":  graphql.Int(first),
-			"filter": filter,
-			"after":  after,
-		}
-
-		err := c.client.Query(ctx, &query, variables)
+		pageResult, err := c.FetchIssuesPage(ctx, params, after)
 		if err != nil {
-			logger.ErrorWithErr(err, "API: searchIssues failed")
-			return nil, fmt.Errorf("search issues: %w", err)
+			return nil, err
 		}
 
-		for _, node := range query.SearchIssues.Nodes {
-			issue := c.parseIssueNode(node)
-			issues = append(issues, issue)
-		}
-
+		issues = append(issues, pageResult.Issues...)
 		page++
 		if params.OnProgress != nil {
 			params.OnProgress(IssueFetchProgress{
@@ -661,12 +593,10 @@ func (c *Client) searchIssues(ctx context.Context, params FetchIssuesParams) ([]
 			})
 		}
 
-		if !bool(query.SearchIssues.PageInfo.HasNextPage) {
+		if !pageResult.HasNext {
 			break
 		}
-
-		nextCursor := query.SearchIssues.PageInfo.EndCursor
-		after = &nextCursor
+		after = pageResult.EndCursor
 	}
 
 	// Sort by priority client-side if requested.
@@ -677,16 +607,170 @@ func (c *Client) searchIssues(ctx context.Context, params FetchIssuesParams) ([]
 	return issues, nil
 }
 
-// fetchIssuesWithFilter fetches issues using the standard issues query with filters.
+// searchIssuesPage fetches a single page of issues using Linear's searchIssues query.
 //
-//nolint:dupl // GraphQL library requires inline struct definitions; duplication with searchIssues is unavoidable.
-func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
+//nolint:dupl // GraphQL library requires inline struct definitions; duplication with fetchIssuesWithFilterPage is unavoidable.
+func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {
 		first = 50
 	}
 
-	// Build filter
+	searchTerm := strings.TrimSpace(params.Search)
+	// Build filter for team/project constraints only (search handles the text matching).
+	filter := make(IssueFilter)
+	if params.TeamID != "" {
+		filter["team"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.TeamID}}
+	}
+	if params.ProjectID != "" {
+		filter["project"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.ProjectID}}
+	}
+
+	var afterCursor *graphql.String
+	if after != nil {
+		cursor := graphql.String(*after)
+		afterCursor = &cursor
+	}
+
+	var query struct {
+		SearchIssues struct {
+			Nodes []struct {
+				ID         graphql.String
+				Identifier graphql.String
+				Title      graphql.String
+				State      struct {
+					ID   graphql.String
+					Name graphql.String
+				}
+				Assignee *struct {
+					ID   graphql.String
+					Name graphql.String
+				}
+				Priority    graphql.Float
+				UpdatedAt   graphql.String
+				CreatedAt   graphql.String
+				Description *graphql.String
+				Team        struct {
+					ID graphql.String
+				}
+				Project *struct {
+					ID graphql.String
+				}
+				Labels struct {
+					Nodes []struct {
+						ID    graphql.String
+						Name  graphql.String
+						Color graphql.String
+					}
+				}
+				URL        graphql.String
+				ArchivedAt *graphql.String
+				Parent     *struct {
+					ID         graphql.String
+					Identifier graphql.String
+					Title      graphql.String
+				}
+				Children struct {
+					Nodes []struct {
+						ID         graphql.String
+						Identifier graphql.String
+						Title      graphql.String
+						State      struct {
+							ID   graphql.String
+							Name graphql.String
+						}
+					}
+				}
+			}
+			PageInfo struct {
+				HasNextPage graphql.Boolean
+				EndCursor   graphql.String
+			}
+		} `graphql:"searchIssues(term: $term, first: $first, after: $after, filter: $filter)"`
+	}
+
+	variables := map[string]interface{}{
+		"term":   graphql.String(searchTerm),
+		"first":  graphql.Int(first),
+		"filter": filter,
+		"after":  afterCursor,
+	}
+
+	err := c.client.Query(ctx, &query, variables)
+	if err != nil {
+		logger.ErrorWithErr(err, "API: searchIssues failed")
+		return IssuePage{}, fmt.Errorf("search issues: %w", err)
+	}
+
+	issues := make([]Issue, 0, len(query.SearchIssues.Nodes))
+	for _, node := range query.SearchIssues.Nodes {
+		issue := c.parseIssueNode(node)
+		issues = append(issues, issue)
+	}
+
+	hasNext := bool(query.SearchIssues.PageInfo.HasNextPage)
+	var endCursor *string
+	if hasNext {
+		cursor := string(query.SearchIssues.PageInfo.EndCursor)
+		endCursor = &cursor
+	}
+
+	return IssuePage{
+		Issues:   issues,
+		HasNext:  hasNext,
+		EndCursor: endCursor,
+	}, nil
+}
+
+// fetchIssuesWithFilter fetches issues using the standard issues query with filters.
+func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
+	// Determine if client-side sorting is needed.
+	// Linear API only supports "createdAt" and "updatedAt" for PaginationOrderBy.
+	// For "priority" sorting, we fetch by updatedAt and sort client-side.
+	sortByPriority := params.OrderBy == "priority"
+
+	var after *string
+	page := 0
+	issues := make([]Issue, 0)
+	for {
+		pageResult, err := c.FetchIssuesPage(ctx, params, after)
+		if err != nil {
+			return nil, err
+		}
+
+		issues = append(issues, pageResult.Issues...)
+		page++
+		if params.OnProgress != nil {
+			params.OnProgress(IssueFetchProgress{
+				Page:    page,
+				Fetched: len(issues),
+			})
+		}
+
+		if !pageResult.HasNext {
+			break
+		}
+		after = pageResult.EndCursor
+	}
+
+	// Sort by priority client-side if requested.
+	if sortByPriority {
+		c.sortByPriority(issues)
+	}
+
+	return issues, nil
+}
+
+// fetchIssuesWithFilterPage fetches a single page of issues using the standard issues query.
+//
+//nolint:dupl // GraphQL library requires inline struct definitions; duplication with searchIssuesPage is unavoidable.
+func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
+	first := params.First
+	if first <= 0 {
+		first = 50
+	}
+
+	// Build filter.
 	filter := buildIssueFilter(params)
 
 	// Determine if client-side sorting is needed.
@@ -699,107 +783,100 @@ func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesPa
 		orderBy = OrderByUpdatedAt
 	}
 
-	var after *graphql.String
-	page := 0
-	issues := make([]Issue, 0)
-	for {
-		var query struct {
-			Issues struct {
-				Nodes []struct {
+	var afterCursor *graphql.String
+	if after != nil {
+		cursor := graphql.String(*after)
+		afterCursor = &cursor
+	}
+
+	var query struct {
+		Issues struct {
+			Nodes []struct {
+				ID         graphql.String
+				Identifier graphql.String
+				Title      graphql.String
+				State      struct {
+					ID   graphql.String
+					Name graphql.String
+				}
+				Assignee *struct {
+					ID   graphql.String
+					Name graphql.String
+				}
+				Priority    graphql.Float
+				UpdatedAt   graphql.String
+				CreatedAt   graphql.String
+				Description *graphql.String
+				Team        struct {
+					ID graphql.String
+				}
+				Project *struct {
+					ID graphql.String
+				}
+				Labels struct {
+					Nodes []struct {
+						ID    graphql.String
+						Name  graphql.String
+						Color graphql.String
+					}
+				}
+				URL        graphql.String
+				ArchivedAt *graphql.String
+				Parent     *struct {
 					ID         graphql.String
 					Identifier graphql.String
 					Title      graphql.String
-					State      struct {
-						ID   graphql.String
-						Name graphql.String
-					}
-					Assignee *struct {
-						ID   graphql.String
-						Name graphql.String
-					}
-					Priority    graphql.Float
-					UpdatedAt   graphql.String
-					CreatedAt   graphql.String
-					Description *graphql.String
-					Team        struct {
-						ID graphql.String
-					}
-					Project *struct {
-						ID graphql.String
-					}
-					Labels struct {
-						Nodes []struct {
-							ID    graphql.String
-							Name  graphql.String
-							Color graphql.String
-						}
-					}
-					URL        graphql.String
-					ArchivedAt *graphql.String
-					Parent     *struct {
+				}
+				Children struct {
+					Nodes []struct {
 						ID         graphql.String
 						Identifier graphql.String
 						Title      graphql.String
-					}
-					Children struct {
-						Nodes []struct {
-							ID         graphql.String
-							Identifier graphql.String
-							Title      graphql.String
-							State      struct {
-								ID   graphql.String
-								Name graphql.String
-							}
+						State      struct {
+							ID   graphql.String
+							Name graphql.String
 						}
 					}
 				}
-				PageInfo struct {
-					HasNextPage graphql.Boolean
-					EndCursor   graphql.String
-				}
-			} `graphql:"issues(first: $first, after: $after, filter: $filter, orderBy: $orderBy)"`
-		}
-
-		variables := map[string]interface{}{
-			"first":   graphql.Int(first),
-			"filter":  filter,
-			"orderBy": orderBy,
-			"after":   after,
-		}
-
-		err := c.client.Query(ctx, &query, variables)
-		if err != nil {
-			logger.ErrorWithErr(err, "API: FetchIssues failed")
-			return nil, fmt.Errorf("fetch issues: %w", err)
-		}
-
-		for _, node := range query.Issues.Nodes {
-			issue := c.parseIssueNode(node)
-			issues = append(issues, issue)
-		}
-
-		page++
-		if params.OnProgress != nil {
-			params.OnProgress(IssueFetchProgress{
-				Page:    page,
-				Fetched: len(issues),
-			})
-		}
-
-		if !bool(query.Issues.PageInfo.HasNextPage) {
-			break
-		}
-
-		nextCursor := query.Issues.PageInfo.EndCursor
-		after = &nextCursor
+			}
+			PageInfo struct {
+				HasNextPage graphql.Boolean
+				EndCursor   graphql.String
+			}
+		} `graphql:"issues(first: $first, after: $after, filter: $filter, orderBy: $orderBy)"`
 	}
 
-	// Sort by priority client-side if requested.
-	if sortByPriority {
-		c.sortByPriority(issues)
+	variables := map[string]interface{}{
+		"first":   graphql.Int(first),
+		"filter":  filter,
+		"orderBy": orderBy,
+		"after":   afterCursor,
 	}
 
-	return issues, nil
+	err := c.client.Query(ctx, &query, variables)
+	if err != nil {
+		logger.ErrorWithErr(err, "API: FetchIssues failed")
+		return IssuePage{}, fmt.Errorf("fetch issues: %w", err)
+	}
+
+	issues := make([]Issue, 0, len(query.Issues.Nodes))
+	for _, node := range query.Issues.Nodes {
+		issue := c.parseIssueNode(node)
+		issues = append(issues, issue)
+	}
+
+	hasNext := bool(query.Issues.PageInfo.HasNextPage)
+	var endCursor *string
+	if hasNext {
+		cursor := string(query.Issues.PageInfo.EndCursor)
+		endCursor = &cursor
+	}
+
+	return IssuePage{
+		Issues:   issues,
+		HasNext:  hasNext,
+		EndCursor: endCursor,
+	}, nil
 }
 
 // parseIssueNode converts a GraphQL issue node to an Issue struct.

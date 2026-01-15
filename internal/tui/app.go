@@ -3,7 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -84,6 +86,12 @@ type App struct {
 	pendingRefresh        bool
 	pendingRefreshIssueID string
 	pickerActive          bool
+	refreshGeneration     atomic.Int64
+
+	// Lazy loading helpers (overridable in tests)
+	fetchIssuesPage func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error)
+	fetchIssueByID  func(context.Context, string) (linearapi.Issue, error)
+	queueUpdateDraw func(func())
 
 	// Race-safety for issue detail fetching
 	fetchingIssueID string // Tracks which issue ID we're currently fetching
@@ -120,6 +128,11 @@ func NewApp(api *linearapi.Client, cfg config.Config) *App {
 	}
 
 	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
+	app.fetchIssuesPage = api.FetchIssuesPage
+	app.fetchIssueByID = api.FetchIssueByID
+	app.queueUpdateDraw = func(f func()) {
+		app.app.QueueUpdateDraw(f)
+	}
 
 	// Apply global theme
 	tview.Styles.PrimitiveBackgroundColor = LinearTheme.Background
@@ -717,6 +730,7 @@ func (a *App) closePaletteUI() {
 // queueIssuesRefresh records a refresh request while a fetch is in progress.
 func (a *App) queueIssuesRefresh(issueID ...string) {
 	a.pendingRefresh = true
+	a.refreshGeneration.Add(1)
 	if len(issueID) > 0 {
 		a.pendingRefreshIssueID = issueID[0]
 		return
@@ -748,6 +762,7 @@ func (a *App) refreshIssues(issueID ...string) {
 	}
 	a.isLoading = true
 
+	generation := a.refreshGeneration.Add(1)
 	var targetIssueID string
 	if len(issueID) > 0 {
 		targetIssueID = issueID[0]
@@ -761,11 +776,6 @@ func (a *App) refreshIssues(issueID ...string) {
 			Search:  a.searchQuery,
 			OrderBy: string(a.sortField),
 		}
-		params.OnProgress = func(progress linearapi.IssueFetchProgress) {
-			a.app.QueueUpdateDraw(func() {
-				a.statusBar.SetText(fmt.Sprintf("[yellow]Loading issues (page %d, fetched %d)...[-]", progress.Page, progress.Fetched))
-			})
-		}
 
 		// Apply team/project filter based on navigation selection
 		if a.selectedNavigation != nil {
@@ -778,26 +788,82 @@ func (a *App) refreshIssues(issueID ...string) {
 			// If "All Issues", no team/project filter
 		}
 
-		issues, err := a.api.FetchIssues(ctx, params)
+		fetchPage := a.fetchIssuesPage
+		if fetchPage == nil {
+			fetchPage = a.api.FetchIssuesPage
+		}
 
-		a.app.QueueUpdateDraw(func() {
-			a.isLoading = false
-			if err != nil {
+		pageCount := 0
+		fetchedCount := 0
+		page, err := fetchPage(ctx, params, nil)
+		if err != nil {
+			a.QueueUpdateDraw(func() {
+				a.isLoading = false
 				logger.ErrorWithErr(err, "Failed to fetch issues")
 				a.updateStatusBarWithError(err)
-			} else {
-				logger.Debug("Fetched %d issues", len(issues))
-				a.updateIssuesData(issues, targetIssueID)
-				// Ensure focus is on issues table after refresh
-				a.focusedPane = FocusIssues
-				a.updateFocus()
+				a.runQueuedIssuesRefresh()
+			})
+			return
+		}
+		if generation != a.refreshGeneration.Load() {
+			a.QueueUpdateDraw(func() {
+				a.isLoading = false
+				a.runQueuedIssuesRefresh()
+			})
+			return
+		}
+
+		pageCount++
+		fetchedCount += len(page.Issues)
+		a.QueueUpdateDraw(func() {
+			logger.Debug("Fetched %d issues (page %d)", len(page.Issues), pageCount)
+			a.updateIssuesData(page.Issues, targetIssueID)
+			// Ensure focus is on issues table after initial load
+			a.focusedPane = FocusIssues
+			a.updateFocus()
+			if page.HasNext {
+				a.statusBar.SetText(fmt.Sprintf("[yellow]Loading more (page %d, fetched %d)...[-]", pageCount, fetchedCount))
 			}
+		})
+
+		after := page.EndCursor
+		for page.HasNext {
+			if generation != a.refreshGeneration.Load() {
+				break
+			}
+			nextPage, err := fetchPage(ctx, params, after)
+			if err != nil {
+				a.QueueUpdateDraw(func() {
+					logger.ErrorWithErr(err, "Failed to fetch more issues")
+					a.updateStatusBarWithError(err)
+				})
+				break
+			}
+			if generation != a.refreshGeneration.Load() {
+				break
+			}
+
+			page = nextPage
+			after = page.EndCursor
+			pageCount++
+			fetchedCount += len(page.Issues)
+			a.QueueUpdateDraw(func() {
+				a.appendIssuesData(page.Issues)
+				if page.HasNext {
+					a.statusBar.SetText(fmt.Sprintf("[yellow]Loading more (page %d, fetched %d)...[-]", pageCount, fetchedCount))
+				}
+			})
+		}
+
+		a.QueueUpdateDraw(func() {
+			a.isLoading = false
+			a.updateStatusBar()
 			a.runQueuedIssuesRefresh()
 		})
 	}()
 
 	// Show loading indicator
-	a.app.QueueUpdateDraw(func() {
+	a.QueueUpdateDraw(func() {
 		a.statusBar.SetText("[yellow]Loading...[-]")
 	})
 }
@@ -819,6 +885,9 @@ func (a *App) updateIssuesColumnLayout() {
 // If issueID is provided, that issue will be selected if found in the list.
 func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 	a.issues = issues
+	if a.sortField == SortByPriority {
+		sortIssuesByPriority(a.issues)
+	}
 
 	// Determine target issue ID
 	var targetIssueID string
@@ -828,18 +897,30 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 		targetIssueID = a.selectedIssue.ID
 	}
 
-	// Split issues by assignee
+	selectedIssue := a.rebuildIssuesTables(targetIssueID)
+	if selectedIssue != nil {
+		a.onIssueSelected(*selectedIssue)
+	} else {
+		a.selectedIssue = nil
+		a.updateDetailsView()
+	}
+	a.updateStatusBar()
+}
+
+// rebuildIssuesTables rebuilds issue rows and renders tables, returning the selected issue.
+func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
+	// Split issues by assignee.
 	currentUserID := ""
 	if a.currentUser != nil {
 		currentUserID = a.currentUser.ID
 	}
-	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
+	myIssues, otherIssues := splitIssuesByAssignee(a.issues, currentUserID)
 
-	// Build hierarchical tree rows for each section
+	// Build hierarchical tree rows for each section.
 	a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
 	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
-	// Legacy: keep old fields for backward compatibility during migration
+	// Legacy: keep old fields for backward compatibility during migration.
 	a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
 	a.issueRows = append(a.issueRows, a.myIssueRows...)
 	a.issueRows = append(a.issueRows, a.otherIssueRows...)
@@ -851,13 +932,13 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 		a.idToIssue[k] = v
 	}
 
-	// Update layout to show/hide My Issues section
+	// Update layout to show/hide My Issues section.
 	a.updateIssuesColumnLayout()
 
-	// Render both tables
+	// Render both tables.
 	var selectedMyIssueID, selectedOtherIssueID string
 	if targetIssueID != "" {
-		// Check which section contains the target issue
+		// Check which section contains the target issue.
 		if _, ok := a.myIDToIssue[targetIssueID]; ok {
 			selectedMyIssueID = targetIssueID
 			a.activeIssuesSection = IssuesSectionMy
@@ -870,7 +951,7 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID)
 	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID)
 
-	// Select issue and update details
+	// Select issue and update details.
 	var selectedIssue *linearapi.Issue
 	if targetIssueID != "" {
 		if issue, ok := a.myIDToIssue[targetIssueID]; ok {
@@ -880,7 +961,7 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 		}
 	}
 
-	// If no target issue, default to first available
+	// If no target issue, default to first available.
 	if selectedIssue == nil {
 		if len(a.myIssueRows) > 0 {
 			if issue, ok := a.myIDToIssue[a.myIssueRows[0].IssueID]; ok {
@@ -895,13 +976,59 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 		}
 	}
 
+	return selectedIssue
+}
+
+// appendIssuesData merges additional issues and updates rendered tables.
+func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
+	if len(newIssues) == 0 {
+		return
+	}
+
+	existing := make(map[string]bool, len(a.issues))
+	for _, issue := range a.issues {
+		existing[issue.ID] = true
+	}
+	for _, issue := range newIssues {
+		if existing[issue.ID] {
+			continue
+		}
+		a.issues = append(a.issues, issue)
+		existing[issue.ID] = true
+	}
+
+	if a.sortField == SortByPriority {
+		sortIssuesByPriority(a.issues)
+	}
+
+	targetIssueID := ""
+	if a.selectedIssue != nil {
+		targetIssueID = a.selectedIssue.ID
+	}
+
+	selectedIssue := a.rebuildIssuesTables(targetIssueID)
 	if selectedIssue != nil {
-		a.onIssueSelected(*selectedIssue)
+		a.selectedIssue = selectedIssue
 	} else {
 		a.selectedIssue = nil
-		a.updateDetailsView()
 	}
+	a.updateDetailsView()
 	a.updateStatusBar()
+}
+
+// sortIssuesByPriority sorts issues by priority using Linear's priority semantics.
+func sortIssuesByPriority(issues []linearapi.Issue) {
+	sort.SliceStable(issues, func(i, j int) bool {
+		pi, pj := issues[i].Priority, issues[j].Priority
+		// Map 0 (no priority) to a high value so it sorts last.
+		if pi == 0 {
+			pi = 5
+		}
+		if pj == 0 {
+			pj = 5
+		}
+		return pi < pj
+	})
 }
 
 // onIssueSelected handles when an issue is selected.
@@ -916,9 +1043,13 @@ func (a *App) onIssueSelected(issue linearapi.Issue) {
 
 	go func() {
 		ctx := context.Background()
-		fullIssue, err := a.api.FetchIssueByID(ctx, issueID)
+		fetchIssue := a.fetchIssueByID
+		if fetchIssue == nil {
+			fetchIssue = a.api.FetchIssueByID
+		}
+		fullIssue, err := fetchIssue(ctx, issueID)
 
-		a.app.QueueUpdateDraw(func() {
+		a.QueueUpdateDraw(func() {
 			// Race-safety: only apply if this is still the issue we're fetching
 			if a.fetchingIssueID == issueID {
 				if err != nil {
@@ -1150,6 +1281,10 @@ func (a *App) GetWorkflowStates() []linearapi.WorkflowState {
 
 // QueueUpdateDraw queues a UI update function to be run in the main thread.
 func (a *App) QueueUpdateDraw(f func()) {
+	if a.queueUpdateDraw != nil {
+		a.queueUpdateDraw(f)
+		return
+	}
 	a.app.QueueUpdateDraw(f)
 }
 

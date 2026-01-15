@@ -38,3 +38,4 @@ go.work.sum
 .cursor/
 dist/
 .docs
+.gocache/
