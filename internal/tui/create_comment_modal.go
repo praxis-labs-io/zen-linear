@@ -120,10 +120,9 @@ func (ccm *CreateCommentModal) HandleKey(event *tcell.EventKey) *tcell.EventKey 
 		ccm.Hide()
 		return nil
 	case tcell.KeyEnter:
-		// Check for Ctrl+Enter or Cmd+Enter
+		// Check for Ctrl+Enter or Cmd+Enter to submit
 		mod := event.Modifiers()
-		platformMod := GetPlatformModifier()
-		if mod&platformMod != 0 {
+		if mod&tcell.ModCtrl != 0 || mod&tcell.ModMeta != 0 {
 			// Submit comment
 			body := ccm.bodyField.GetText()
 			if body != "" {

@@ -7,39 +7,26 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
 	"github.com/roeyazroel/linear-tui/internal/logger"
 )
 
-// GetPlatformModifier returns the appropriate modifier mask for the current OS.
-// On macOS, it returns ModMeta (Cmd key), on other platforms it returns ModCtrl.
-func GetPlatformModifier() tcell.ModMask {
-	if runtime.GOOS == "darwin" {
-		return tcell.ModMeta
-	}
-	return tcell.ModCtrl
-}
-
 // FormatShortcut returns a human-readable string for a shortcut.
-// On macOS it uses ⌘+, on other platforms it uses Ctrl+.
 func FormatShortcut(r rune) string {
 	if r == 0 {
 		return ""
 	}
-	if runtime.GOOS == "darwin" {
-		return fmt.Sprintf("⌘ + %s", strings.ToUpper(string(r)))
-	}
-	return fmt.Sprintf("Ctrl + %s", strings.ToUpper(string(r)))
+	return strings.ToUpper(string(r))
 }
 
 // Command represents a command that can be executed from the palette.
 type Command struct {
-	ID           string
-	Title        string
-	Keywords     []string
-	ShortcutRune rune // The rune for the keyboard shortcut (e.g., 'r' for Cmd+R/Ctrl+R)
-	Run          func(a *App)
+	ID              string
+	Title           string
+	Keywords        []string
+	ShortcutRune    rune   // The rune for the keyboard shortcut (e.g., 'r' for refresh)
+	ShortcutDisplay string // Custom display text for shortcut (e.g., "/" or "Esc"), overrides ShortcutRune display
+	Run             func(a *App)
 }
 
 // CommandContext provides context for command execution.
@@ -60,20 +47,19 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:       "search",
-			Title:    "Search issues",
-			Keywords: []string{"search", "find", "s", "/"},
-			// No shortcut - use '/' key directly instead (⌘+F conflicts with terminal find)
+			ID:              "search",
+			Title:           "Search issues",
+			Keywords:        []string{"search", "find", "s", "/"},
+			ShortcutDisplay: "/", // Handled globally, not via ShortcutRune
 			Run: func(a *App) {
 				a.openSearchPalette()
 			},
 		},
 		{
-			ID:       "clear_search",
-			Title:    "Clear search",
-			Keywords: []string{"clear", "reset"},
-			// No shortcut - ⌘+K conflicts with Warp terminal's "Clear Blocks" command
-			// Use command palette (:) or search palette (/) to clear search
+			ID:              "clear_search",
+			Title:           "Clear search",
+			Keywords:        []string{"clear", "reset"},
+			ShortcutDisplay: "Esc", // Handled globally via Escape key
 			Run: func(a *App) {
 				a.setSearchQuery("")
 			},
@@ -132,10 +118,10 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:       "copy_url",
-			Title:    "Copy issue URL",
-			Keywords: []string{"copy", "url", "link"},
-			// No shortcut - ⌘+W conflicts with close tab
+			ID:           "copy_url",
+			Title:        "Copy issue URL",
+			Keywords:     []string{"copy", "url", "link"},
+			ShortcutRune: 'w', // 'w' for web URL
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil || issue.URL == "" {
@@ -318,8 +304,8 @@ func DefaultCommands(app *App) []Command {
 		{
 			ID:           "edit_labels",
 			Title:        "Edit issue labels",
-			Keywords:     []string{"labels", "label", "tag", "tags", "l"},
-			ShortcutRune: 'l',
+			Keywords:     []string{"labels", "label", "tag", "tags"},
+			ShortcutRune: 'g', // 'g' for tags (since 'l' is used for vim navigation)
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {

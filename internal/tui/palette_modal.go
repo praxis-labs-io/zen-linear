@@ -90,9 +90,15 @@ func (a *App) updatePaletteList() {
 	// Add all filtered commands to the list with shortcut hints
 	// Format: [shortcut] Command Title - with shortcut right-aligned in a fixed column
 	for _, cmd := range filtered {
+		var shortcutHint string
+		if cmd.ShortcutDisplay != "" {
+			// Use custom display text (e.g., "/" or "Esc")
+			shortcutHint = cmd.ShortcutDisplay
+		} else if cmd.ShortcutRune != 0 {
+			shortcutHint = FormatShortcut(cmd.ShortcutRune)
+		}
 		var displayText string
-		if cmd.ShortcutRune != 0 {
-			shortcutHint := FormatShortcut(cmd.ShortcutRune)
+		if shortcutHint != "" {
 			// Use fixed width shortcut column (8 chars) followed by command title
 			displayText = fmt.Sprintf("[#787878]%8s[-]  %s", shortcutHint, cmd.Title)
 		} else {

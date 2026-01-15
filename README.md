@@ -124,35 +124,35 @@ export LINEAR_LOG_FILE=""
 - `Tab` / `Shift+Tab` - Cycle between panes
 - `Space` - Toggle expand/collapse sub-issues
 - `Enter` - Select issue / Execute command
-- `Esc` - Close palette / Cancel
+- `Esc` - Close palette / Cancel / Clear search
 - `q` - Quit
 
 ### Command Palette
 
 - `:` - Open command palette
 - `/` - Open search palette
-- `Esc` - Clear search (when search is active)
 
-### Command Shortcuts (⌘+key on macOS, Ctrl+key on Linux/Windows)
+### Quick Commands
 
-- `⌘+R` / `Ctrl+R` - Refresh issues
-- `⌘+N` / `Ctrl+N` - Create new issue
-- `⌘+E` / `Ctrl+E` - Edit issue title
-- `⌘+L` / `Ctrl+L` - Edit issue labels
-- `⌘+S` / `Ctrl+S` - Change status
-- `⌘+A` / `Ctrl+A` - Assign to user
-- `⌘+M` / `Ctrl+M` - Assign to me
-- `⌘+U` / `Ctrl+U` - Unassign issue
-- `⌘+T` / `Ctrl+T` - Add comment
-- `⌘+O` / `Ctrl+O` - Open in browser
-- `⌘+Y` / `Ctrl+Y` - Copy issue ID
-- `⌘+X` / `Ctrl+X` - Archive issue
-- `⌘+B` / `Ctrl+B` - Create sub-issue
-- `⌘+P` / `Ctrl+P` - View parent issue
-- `⌘+I` / `Ctrl+I` - Set parent issue
-- `⌘+D` / `Ctrl+D` - Remove parent
-- `⌘+]` / `Ctrl+]` - Expand all sub-issues
-- `⌘+[` / `Ctrl+[` - Collapse all sub-issues
+- `r` - Refresh issues
+- `n` - Create new issue
+- `e` - Edit issue title
+- `g` - Edit issue labels
+- `s` - Change status
+- `a` - Assign to user
+- `m` - Assign to me
+- `u` - Unassign issue
+- `t` - Add comment
+- `o` - Open in browser
+- `y` - Copy issue ID
+- `w` - Copy issue URL
+- `x` - Archive issue
+- `b` - Create sub-issue
+- `p` - View parent issue
+- `i` - Set parent issue
+- `d` - Remove parent
+- `]` - Expand all sub-issues
+- `[` - Collapse all sub-issues
 
 ## Development
 

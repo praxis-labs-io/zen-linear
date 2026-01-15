@@ -382,7 +382,7 @@ func TestBuildIssueFilter_SearchTerms(t *testing.T) {
 		want   IssueFilter
 	}{
 		{
-			name:   "single term includes identifier",
+			name:   "single term searches title and description",
 			params: FetchIssuesParams{Search: "ABC-123"},
 			want: IssueFilter{
 				"or": []map[string]interface{}{

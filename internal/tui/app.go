@@ -341,19 +341,6 @@ func (a *App) bindGlobalKeys() {
 			return a.handlePaletteKey(event)
 		}
 
-		// Handle command shortcuts (Cmd/Ctrl + key) - only in main panes
-		platformMod := GetPlatformModifier()
-		if event.Modifiers()&platformMod != 0 && event.Key() == tcell.KeyRune {
-			r := event.Rune()
-			// Check all commands for matching shortcut
-			for _, cmd := range a.paletteCtrl.commands {
-				if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r {
-					cmd.Run(a)
-					return nil
-				}
-			}
-		}
-
 		// Global shortcuts (only when not in palette)
 		switch event.Key() {
 		case tcell.KeyEscape:
@@ -462,7 +449,9 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 		a.updateFocus()
 		return nil
 	case tcell.KeyRune:
-		switch event.Rune() {
+		r := event.Rune()
+		// Handle vim-style navigation first
+		switch r {
 		case 'h':
 			a.focusedPane = FocusNavigation
 			a.updateFocus()
@@ -472,6 +461,15 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 			a.focusedDetailsView = false // Start with description
 			a.updateFocus()
 			return nil
+		}
+		// Handle command shortcuts (plain letters) - skip navigation keys
+		if r != 'j' && r != 'k' { // j/k are handled by table for up/down
+			for _, cmd := range a.paletteCtrl.commands {
+				if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r {
+					cmd.Run(a)
+					return nil
+				}
+			}
 		}
 	}
 	return event
