@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
+	"github.com/roeyazroel/linear-tui/internal/logger"
 )
 
 // TeamCache provides TTL-based caching for team-scoped metadata.
@@ -64,6 +65,7 @@ func (c *TeamCache) GetTeams(ctx context.Context) ([]linearapi.Team, error) {
 	c.mu.RUnlock()
 
 	// Fetch from API
+	logger.Debug("cache.team: cache miss for teams, fetching from API")
 	teams, err := c.client.ListTeams(ctx)
 	if err != nil {
 		return nil, err
@@ -74,6 +76,7 @@ func (c *TeamCache) GetTeams(ctx context.Context) ([]linearapi.Team, error) {
 	c.teamsExpiry = time.Now().Add(c.ttl)
 	c.mu.Unlock()
 
+	logger.Debug("cache.team: cached teams count=%d ttl=%s", len(teams), c.ttl)
 	return teams, nil
 }
 
@@ -88,6 +91,7 @@ func (c *TeamCache) GetCurrentUser(ctx context.Context) (linearapi.User, error) 
 	c.mu.RUnlock()
 
 	// Fetch from API
+	logger.Debug("cache.team: cache miss for current user, fetching from API")
 	user, err := c.client.GetCurrentUser(ctx)
 	if err != nil {
 		return linearapi.User{}, err
@@ -98,6 +102,7 @@ func (c *TeamCache) GetCurrentUser(ctx context.Context) (linearapi.User, error) 
 	c.currentUserExp = time.Now().Add(c.ttl)
 	c.mu.Unlock()
 
+	logger.Debug("cache.team: cached current user user=%s", user.DisplayName)
 	return user, nil
 }
 
@@ -119,6 +124,7 @@ func getCachedOrFetch[T any](
 	c.mu.RUnlock()
 
 	// Fetch from API
+	logger.Debug("cache.team: cache miss team_id=%s, fetching from API", teamID)
 	data, err := fetchFunc(ctx, teamID)
 	if err != nil {
 		return nil, err
@@ -129,6 +135,7 @@ func getCachedOrFetch[T any](
 	expiryMap[teamID] = time.Now().Add(c.ttl)
 	c.mu.Unlock()
 
+	logger.Debug("cache.team: cached data team_id=%s count=%d ttl=%s", teamID, len(data), c.ttl)
 	return data, nil
 }
 

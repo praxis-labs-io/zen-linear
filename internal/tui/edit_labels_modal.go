@@ -31,23 +31,23 @@ func NewEditLabelsModal(app *App) *EditLabelsModal {
 	// Create list for labels
 	elm.list = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextColor(tcell.ColorWhite).
-		SetSelectedBackgroundColor(LinearTheme.Accent).
-		SetSelectedTextColor(tcell.ColorWhite).
+		SetMainTextColor(app.theme.Foreground).
+		SetSelectedBackgroundColor(app.theme.Accent).
+		SetSelectedTextColor(app.theme.SelectionText).
 		SetHighlightFullLine(true)
-	elm.list.SetBackgroundColor(LinearTheme.HeaderBg)
+	elm.list.SetBackgroundColor(app.theme.HeaderBg)
 
 	// Create title
 	elm.titleView = tview.NewTextView()
 	elm.titleView.SetText("Edit Labels")
-	elm.titleView.SetTextColor(tcell.ColorYellow)
-	elm.titleView.SetBackgroundColor(LinearTheme.HeaderBg)
+	elm.titleView.SetTextColor(app.theme.Accent)
+	elm.titleView.SetBackgroundColor(app.theme.HeaderBg)
 
 	// Create help text
 	elm.helpView = tview.NewTextView()
 	elm.helpView.SetText("Space: toggle | Enter: save | Esc: cancel")
-	elm.helpView.SetTextColor(tcell.ColorGray)
-	elm.helpView.SetBackgroundColor(LinearTheme.HeaderBg)
+	elm.helpView.SetTextColor(app.theme.SecondaryText)
+	elm.helpView.SetBackgroundColor(app.theme.HeaderBg)
 	elm.helpView.SetTextAlign(tview.AlignCenter)
 
 	// Build modal content
@@ -56,11 +56,14 @@ func NewEditLabelsModal(app *App) *EditLabelsModal {
 		AddItem(elm.titleView, 1, 0, false).
 		AddItem(elm.list, 0, 1, true).
 		AddItem(elm.helpView, 1, 0, false)
-	modalContent.SetBackgroundColor(LinearTheme.HeaderBg).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
+	modalContent.SetBackgroundColor(app.theme.HeaderBg).
 		SetBorder(true).
-		SetBorderColor(LinearTheme.Accent).
+		SetBorderColor(app.theme.Accent).
 		SetTitle(" Edit Labels ").
-		SetTitleColor(tcell.ColorWhite)
+		SetTitleColor(app.theme.Foreground)
+	padding := app.density.ModalPadding
+	modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
 	// Center the modal on screen
 	elm.modal = tview.NewFlex().
@@ -71,7 +74,7 @@ func NewEditLabelsModal(app *App) *EditLabelsModal {
 			AddItem(modalContent, 20, 0, true).
 			AddItem(nil, 0, 1, false), 60, 0, true).
 		AddItem(nil, 0, 1, false)
-	elm.modal.SetBackgroundColor(LinearTheme.Background)
+	elm.modal.SetBackgroundColor(app.theme.Background)
 
 	return elm
 }

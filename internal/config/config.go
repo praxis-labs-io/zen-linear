@@ -21,11 +21,20 @@ const (
 
 // Default configuration values.
 const (
-	DefaultTimeout     = 30 * time.Second
-	DefaultPageSize    = 50
-	DefaultCacheTTL    = 5 * time.Minute
-	DefaultAPIEndpoint = "https://api.linear.app/graphql"
-	DefaultLogLevel    = "warning" // debug, info, warning, error
+	DefaultTimeout       = 30 * time.Second
+	DefaultPageSize      = 50
+	DefaultCacheTTL      = 5 * time.Minute
+	DefaultAPIEndpoint   = "https://api.linear.app/graphql"
+	DefaultLogLevel      = "warning" // debug, info, warning, error
+	ThemeLinear          = "linear"
+	ThemeHighContrast    = "high_contrast"
+	ThemeColorBlind      = "color_blind"
+	DefaultTheme         = ThemeLinear
+	DensityComfortable   = "comfortable"
+	DensityCompact       = "compact"
+	DefaultDensity       = DensityComfortable
+	DefaultAgentProvider = "cursor"
+	DefaultAgentSandbox  = "enabled"
 )
 
 // getDefaultLogFile returns the default log file path: $HOME/.linear-tui/app.log
@@ -60,6 +69,24 @@ type Config struct {
 
 	// LogLevel is the minimum log level (debug, info, warning, error).
 	LogLevel string
+
+	// Theme controls the active UI theme.
+	Theme string
+
+	// Density controls the UI spacing density.
+	Density string
+
+	// AgentProvider selects the agent CLI provider (cursor or claude).
+	AgentProvider string
+
+	// AgentSandbox configures sandboxing for the agent CLI (enabled or disabled).
+	AgentSandbox string
+
+	// AgentModel selects the agent model when supported by the provider.
+	AgentModel string
+
+	// AgentWorkspace is the default workspace path for agent runs.
+	AgentWorkspace string
 }
 
 // LoadFromEnv loads configuration from environment variables.
@@ -72,13 +99,19 @@ func LoadFromEnv() (Config, error) {
 	}
 
 	cfg := Config{
-		LinearAPIKey: apiKey,
-		APIEndpoint:  DefaultAPIEndpoint,
-		Timeout:      DefaultTimeout,
-		PageSize:     DefaultPageSize,
-		CacheTTL:     DefaultCacheTTL,
-		LogFile:      getDefaultLogFile(), // Default: $HOME/.linear-tui/app.log
-		LogLevel:     DefaultLogLevel,
+		LinearAPIKey:   apiKey,
+		APIEndpoint:    DefaultAPIEndpoint,
+		Timeout:        DefaultTimeout,
+		PageSize:       DefaultPageSize,
+		CacheTTL:       DefaultCacheTTL,
+		LogFile:        getDefaultLogFile(), // Default: $HOME/.linear-tui/app.log
+		LogLevel:       DefaultLogLevel,
+		Theme:          DefaultTheme,
+		Density:        DefaultDensity,
+		AgentProvider:  DefaultAgentProvider,
+		AgentSandbox:   DefaultAgentSandbox,
+		AgentModel:     "",
+		AgentWorkspace: "",
 	}
 
 	// Parse optional API endpoint override.
@@ -88,9 +121,9 @@ func LoadFromEnv() (Config, error) {
 
 	// Parse optional timeout.
 	if timeoutStr := os.Getenv(TimeoutEnv); timeoutStr != "" {
-		timeout, err := time.ParseDuration(timeoutStr)
+		timeout, err := parseDuration(timeoutStr, TimeoutEnv)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid %s value %q: %w", TimeoutEnv, timeoutStr, err)
+			return Config{}, err
 		}
 		cfg.Timeout = timeout
 	}
@@ -101,17 +134,17 @@ func LoadFromEnv() (Config, error) {
 		if err != nil {
 			return Config{}, fmt.Errorf("invalid %s value %q: %w", PageSizeEnv, pageSizeStr, err)
 		}
-		if pageSize < 1 || pageSize > 250 {
-			return Config{}, fmt.Errorf("%s must be between 1 and 250, got %d", PageSizeEnv, pageSize)
+		if err := validatePageSize(pageSize, PageSizeEnv); err != nil {
+			return Config{}, err
 		}
 		cfg.PageSize = pageSize
 	}
 
 	// Parse optional cache TTL.
 	if cacheTTLStr := os.Getenv(CacheTTLEnv); cacheTTLStr != "" {
-		cacheTTL, err := time.ParseDuration(cacheTTLStr)
+		cacheTTL, err := parseDuration(cacheTTLStr, CacheTTLEnv)
 		if err != nil {
-			return Config{}, fmt.Errorf("invalid %s value %q: %w", CacheTTLEnv, cacheTTLStr, err)
+			return Config{}, err
 		}
 		cfg.CacheTTL = cacheTTL
 	}
@@ -130,13 +163,10 @@ func LoadFromEnv() (Config, error) {
 
 	// Parse optional log level.
 	if logLevel := os.Getenv(LogLevelEnv); logLevel != "" {
-		// Validate log level
-		switch logLevel {
-		case "debug", "info", "warning", "error":
-			cfg.LogLevel = logLevel
-		default:
-			return Config{}, fmt.Errorf("invalid %s value %q: must be debug, info, warning, or error", LogLevelEnv, logLevel)
+		if err := validateLogLevel(logLevel, LogLevelEnv); err != nil {
+			return Config{}, err
 		}
+		cfg.LogLevel = logLevel
 	}
 
 	return cfg, nil

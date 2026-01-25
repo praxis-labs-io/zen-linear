@@ -23,12 +23,12 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 
 	// Create form
 	etm.form = tview.NewForm()
-	etm.form.SetBackgroundColor(LinearTheme.HeaderBg)
-	etm.form.SetFieldBackgroundColor(tcell.ColorDarkGray)
-	etm.form.SetFieldTextColor(tcell.ColorWhite)
-	etm.form.SetButtonBackgroundColor(LinearTheme.Accent)
-	etm.form.SetButtonTextColor(tcell.ColorWhite)
-	etm.form.SetLabelColor(LinearTheme.Foreground)
+	etm.form.SetBackgroundColor(app.theme.HeaderBg)
+	etm.form.SetFieldBackgroundColor(app.theme.InputBg)
+	etm.form.SetFieldTextColor(app.theme.Foreground)
+	etm.form.SetButtonBackgroundColor(app.theme.Accent)
+	etm.form.SetButtonTextColor(app.theme.SelectionText)
+	etm.form.SetLabelColor(app.theme.Foreground)
 	etm.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape {
 			etm.Hide()
@@ -65,19 +65,22 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 	// Create title
 	titleView := tview.NewTextView()
 	titleView.SetText("Edit Issue Title")
-	titleView.SetTextColor(tcell.ColorYellow)
-	titleView.SetBackgroundColor(LinearTheme.HeaderBg)
+	titleView.SetTextColor(app.theme.Accent)
+	titleView.SetBackgroundColor(app.theme.HeaderBg)
 
 	// Build modal content
 	modalContent := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(titleView, 1, 0, false).
 		AddItem(etm.form, 0, 1, true)
-	modalContent.SetBackgroundColor(LinearTheme.HeaderBg).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
+	modalContent.SetBackgroundColor(app.theme.HeaderBg).
 		SetBorder(true).
-		SetBorderColor(LinearTheme.Accent).
+		SetBorderColor(app.theme.Accent).
 		SetTitle(" Edit Title ").
-		SetTitleColor(tcell.ColorWhite)
+		SetTitleColor(app.theme.Foreground)
+	padding := app.density.ModalPadding
+	modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
 	// Center the modal on screen
 	etm.modal = tview.NewFlex().
@@ -88,7 +91,7 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 			AddItem(modalContent, 8, 0, true).
 			AddItem(nil, 0, 1, false), 60, 0, true).
 		AddItem(nil, 0, 1, false)
-	etm.modal.SetBackgroundColor(LinearTheme.Background)
+	etm.modal.SetBackgroundColor(app.theme.Background)
 
 	return etm
 }

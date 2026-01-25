@@ -6,6 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
+	"github.com/roeyazroel/linear-tui/internal/logger"
 )
 
 // CreateIssueModal manages the create issue form overlay.
@@ -34,12 +35,12 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 
 	// Create form
 	cm.form = tview.NewForm()
-	cm.form.SetBackgroundColor(LinearTheme.HeaderBg)
-	cm.form.SetFieldBackgroundColor(tcell.ColorDarkGray)
-	cm.form.SetFieldTextColor(tcell.ColorWhite)
-	cm.form.SetButtonBackgroundColor(LinearTheme.Accent)
-	cm.form.SetButtonTextColor(tcell.ColorWhite)
-	cm.form.SetLabelColor(LinearTheme.Foreground)
+	cm.form.SetBackgroundColor(app.theme.HeaderBg)
+	cm.form.SetFieldBackgroundColor(app.theme.InputBg)
+	cm.form.SetFieldTextColor(app.theme.Foreground)
+	cm.form.SetButtonBackgroundColor(app.theme.Accent)
+	cm.form.SetButtonTextColor(app.theme.SelectionText)
+	cm.form.SetLabelColor(app.theme.Foreground)
 
 	// Add title field
 	cm.form.AddInputField("Title", "", 60, nil, nil)
@@ -66,8 +67,8 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	}
 	cm.assigneeField.SetFieldWidth(50)
 	cm.assigneeField.SetListStyles(
-		tcell.StyleDefault.Background(LinearTheme.HeaderBg).Foreground(tcell.ColorWhite),
-		tcell.StyleDefault.Background(LinearTheme.Accent).Foreground(tcell.ColorWhite),
+		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 
 	// Add priority dropdown with all options
@@ -84,8 +85,8 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	}
 	cm.priorityField.SetFieldWidth(50)
 	cm.priorityField.SetListStyles(
-		tcell.StyleDefault.Background(LinearTheme.HeaderBg).Foreground(tcell.ColorWhite),
-		tcell.StyleDefault.Background(LinearTheme.Accent).Foreground(tcell.ColorWhite),
+		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 
 	// Add action buttons
@@ -113,14 +114,14 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	// Create header with instructions
 	headerView := tview.NewTextView()
 	headerView.SetText("Create New Issue")
-	headerView.SetTextColor(tcell.ColorYellow)
-	headerView.SetBackgroundColor(LinearTheme.HeaderBg)
+	headerView.SetTextColor(app.theme.Accent)
+	headerView.SetBackgroundColor(app.theme.HeaderBg)
 
 	// Create help text
 	helpView := tview.NewTextView()
 	helpView.SetText("Tab: next field • Enter: open dropdown • Esc: cancel")
-	helpView.SetTextColor(tcell.ColorGray)
-	helpView.SetBackgroundColor(LinearTheme.HeaderBg)
+	helpView.SetTextColor(app.theme.SecondaryText)
+	helpView.SetBackgroundColor(app.theme.HeaderBg)
 	helpView.SetTextAlign(tview.AlignCenter)
 
 	// Build modal content
@@ -129,11 +130,14 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 		AddItem(headerView, 1, 0, false).
 		AddItem(cm.form, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
-	modalContent.SetBackgroundColor(LinearTheme.HeaderBg).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
+	modalContent.SetBackgroundColor(app.theme.HeaderBg).
 		SetBorder(true).
-		SetBorderColor(LinearTheme.Accent).
+		SetBorderColor(app.theme.Accent).
 		SetTitle(" New Issue ").
-		SetTitleColor(tcell.ColorWhite)
+		SetTitleColor(app.theme.Foreground)
+	padding := app.density.ModalPadding
+	modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
 	// Center the modal on screen
 	cm.modal = tview.NewFlex().
@@ -144,13 +148,14 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 			AddItem(modalContent, 18, 0, true).
 			AddItem(nil, 0, 1, false), 75, 0, true).
 		AddItem(nil, 0, 1, false)
-	cm.modal.SetBackgroundColor(LinearTheme.Background)
+	cm.modal.SetBackgroundColor(app.theme.Background)
 
 	return cm
 }
 
 // Show displays the create issue modal.
 func (cm *CreateIssueModal) Show(teamID, projectID string, onCreate func(title, description, teamID, projectID, assigneeID string, priority int)) {
+	logger.Debug("tui.create_issue: showing create issue modal team_id=%s project_id=%s", teamID, projectID)
 	cm.teamID = teamID
 	cm.projectID = projectID
 	cm.onCreate = onCreate

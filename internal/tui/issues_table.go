@@ -17,18 +17,18 @@ const (
 
 // formatPriority formats a priority value into a display string with icon and label.
 // Linear priority: 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low.
-func formatPriority(priority int) (string, tcell.Color) {
+func formatPriority(priority int, theme Theme) (string, tcell.Color) {
 	switch priority {
 	case 1:
-		return Icons.Priority + " Urgent", LinearTheme.StatusCanceled // Red for urgent
+		return Icons.Priority + " Urgent", theme.StatusCanceled // Red for urgent
 	case 2:
-		return Icons.Priority + " High", LinearTheme.StatusInProgress // Yellow for high
+		return Icons.Priority + " High", theme.StatusInProgress // Yellow for high
 	case 3:
-		return Icons.Priority + " Normal", LinearTheme.Foreground // Default for normal
+		return Icons.Priority + " Normal", theme.Foreground // Default for normal
 	case 4:
-		return Icons.Priority + " Low", LinearTheme.SecondaryText // Gray for low
+		return Icons.Priority + " Low", theme.SecondaryText // Gray for low
 	default:
-		return "-", LinearTheme.SecondaryText // No priority
+		return "-", theme.SecondaryText // No priority
 	}
 }
 
@@ -87,19 +87,19 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 					SetSelectable(true, false).
 					SetBorder(true).
 					SetTitle(title).
-					SetTitleColor(LinearTheme.Foreground).
-					SetBorderColor(LinearTheme.Border).
-					SetBackgroundColor(LinearTheme.Background)
+					SetTitleColor(a.theme.Foreground).
+					SetBorderColor(a.theme.Border).
+					SetBackgroundColor(a.theme.Background)
 
 	table.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(LinearTheme.SelectionText).
-		Background(LinearTheme.SelectionBg).
+		Foreground(a.theme.SelectionText).
+		Background(a.theme.SelectionBg).
 		Bold(true))
 
 	// Set column headers with better styling
 	headerStyle := tcell.StyleDefault.
-		Foreground(LinearTheme.HeaderText).
-		Background(LinearTheme.HeaderBg).
+		Foreground(a.theme.HeaderText).
+		Background(a.theme.HeaderBg).
 		Bold(true)
 
 	table.SetCell(0, 0, tview.NewTableCell(" ID").
@@ -369,13 +369,13 @@ func (a *App) getRowForIssueInSection(issueID string, section IssuesSection) int
 }
 
 // renderIssuesTableModel renders a table with the given rows and issue lookup map.
-func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[string]*linearapi.Issue, selectedIssueID string) {
+func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[string]*linearapi.Issue, selectedIssueID string, theme Theme) {
 	table.Clear()
 
 	// Set column headers with better styling
 	headerStyle := tcell.StyleDefault.
-		Foreground(LinearTheme.HeaderText).
-		Background(LinearTheme.HeaderBg).
+		Foreground(theme.HeaderText).
+		Background(theme.HeaderBg).
 		Bold(true)
 
 	table.SetCell(0, 0, tview.NewTableCell(" ID").
@@ -430,7 +430,7 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		}
 
 		table.SetCell(row, 0, tview.NewTableCell(identifierPrefix+identifier).
-			SetTextColor(LinearTheme.SecondaryText).
+			SetTextColor(theme.SecondaryText).
 			SetAlign(tview.AlignLeft))
 
 		// State with color based on state
@@ -442,16 +442,16 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		lowerState := strings.ToLower(state)
 		switch {
 		case strings.Contains(lowerState, "done") || strings.Contains(lowerState, "complete"):
-			stateColor = LinearTheme.StatusDone
+			stateColor = theme.StatusDone
 			stateIcon = Icons.Done
 		case strings.Contains(lowerState, "progress"):
-			stateColor = LinearTheme.StatusInProgress
+			stateColor = theme.StatusInProgress
 			stateIcon = Icons.InProgress
 		case strings.Contains(lowerState, "cancel"):
-			stateColor = LinearTheme.StatusCanceled
+			stateColor = theme.StatusCanceled
 			stateIcon = Icons.Done
 		default:
-			stateColor = LinearTheme.StatusTodo
+			stateColor = theme.StatusTodo
 			stateIcon = Icons.Todo
 		}
 
@@ -464,17 +464,17 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			SetAlign(tview.AlignLeft))
 
 		// Priority
-		priorityText, priorityColor := formatPriority(issue.Priority)
+		priorityText, priorityColor := formatPriority(issue.Priority, theme)
 		table.SetCell(row, 2, tview.NewTableCell(priorityText).
 			SetTextColor(priorityColor).
 			SetAlign(tview.AlignLeft))
 
 		// Assignee
 		assignee := issue.Assignee
-		assigneeColor := LinearTheme.Foreground
+		assigneeColor := theme.Foreground
 		if assignee == "" {
 			assignee = "Unassigned"
-			assigneeColor = LinearTheme.SecondaryText
+			assigneeColor = theme.SecondaryText
 		}
 		if len(assignee) > 15 {
 			assignee = assignee[:15]
@@ -487,7 +487,7 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		// Title
 		title := issue.Title
 		table.SetCell(row, 4, tview.NewTableCell(title).
-			SetTextColor(LinearTheme.Foreground).
+			SetTextColor(theme.Foreground).
 			SetAlign(tview.AlignLeft))
 	}
 
@@ -510,7 +510,7 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		table.SetCell(1, 1, tview.NewTableCell("").SetSelectable(false))
 		table.SetCell(1, 2, tview.NewTableCell("").SetSelectable(false))
 		table.SetCell(1, 3, tview.NewTableCell("No issues").
-			SetTextColor(LinearTheme.SecondaryText).
+			SetTextColor(theme.SecondaryText).
 			SetAlign(tview.AlignCenter).
 			SetSelectable(false))
 		table.SetCell(1, 4, tview.NewTableCell("").SetSelectable(false))
@@ -530,7 +530,7 @@ func renderIssueRow(issue linearapi.Issue) []string {
 		state = state[:10]
 	}
 
-	priorityText, _ := formatPriority(issue.Priority)
+	priorityText, _ := formatPriority(issue.Priority, LinearTheme)
 
 	assignee := issue.Assignee
 	if assignee == "" {

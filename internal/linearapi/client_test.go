@@ -451,6 +451,44 @@ func TestFetchIssuesParams_Defaults(t *testing.T) {
 	}
 }
 
+func TestBuildBaseIssueFilter(t *testing.T) {
+	tests := []struct {
+		name   string
+		params FetchIssuesParams
+		want   IssueFilter
+	}{
+		{
+			name:   "state only filter",
+			params: FetchIssuesParams{StateID: "state-1"},
+			want: IssueFilter{
+				"state": map[string]interface{}{"id": map[string]interface{}{"eq": "state-1"}},
+			},
+		},
+		{
+			name: "team project state filters",
+			params: FetchIssuesParams{
+				TeamID:    "team-1",
+				ProjectID: "project-1",
+				StateID:   "state-2",
+			},
+			want: IssueFilter{
+				"team":    map[string]interface{}{"id": map[string]interface{}{"eq": "team-1"}},
+				"project": map[string]interface{}{"id": map[string]interface{}{"eq": "project-1"}},
+				"state":   map[string]interface{}{"id": map[string]interface{}{"eq": "state-2"}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildBaseIssueFilter(tt.params)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("buildBaseIssueFilter() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestBuildIssueFilter_SearchTerms verifies search term filtering behavior.
 func TestBuildIssueFilter_SearchTerms(t *testing.T) {
 	tests := []struct {
@@ -497,6 +535,29 @@ func TestBuildIssueFilter_SearchTerms(t *testing.T) {
 				"or": []map[string]interface{}{
 					{"title": map[string]interface{}{"containsIgnoreCase": "issue"}},
 					{"description": map[string]interface{}{"containsIgnoreCase": "issue"}},
+				},
+			},
+		},
+		{
+			name:   "state filter without search",
+			params: FetchIssuesParams{StateID: "state-2"},
+			want: IssueFilter{
+				"state": map[string]interface{}{"id": map[string]interface{}{"eq": "state-2"}},
+			},
+		},
+		{
+			name: "state filter with search and team",
+			params: FetchIssuesParams{
+				TeamID:  "team-1",
+				StateID: "state-3",
+				Search:  "fix",
+			},
+			want: IssueFilter{
+				"team":  map[string]interface{}{"id": map[string]interface{}{"eq": "team-1"}},
+				"state": map[string]interface{}{"id": map[string]interface{}{"eq": "state-3"}},
+				"or": []map[string]interface{}{
+					{"title": map[string]interface{}{"containsIgnoreCase": "fix"}},
+					{"description": map[string]interface{}{"containsIgnoreCase": "fix"}},
 				},
 			},
 		},

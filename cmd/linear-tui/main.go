@@ -17,11 +17,26 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Load configuration from environment
-	cfg, err := config.LoadFromEnv()
+	// Load configuration from settings file + API key
+	settingsPath, err := config.ConfigFilePath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error determining settings path: %v\n", err)
+		os.Exit(1)
+	}
+
+	settings, err := config.EnsureSettingsFile(settingsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading settings file: %v\n", err)
+		os.Exit(1)
+	}
+
+	apiKey := os.Getenv(config.LinearAPIKeyEnv)
+	cfg, err := config.ConfigFromSettings(apiKey, settings)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Please set the %s environment variable.\n", config.LinearAPIKeyEnv)
+		if apiKey == "" {
+			fmt.Fprintf(os.Stderr, "Please set the %s environment variable.\n", config.LinearAPIKeyEnv)
+		}
 		os.Exit(1)
 	}
 
@@ -37,8 +52,8 @@ func main() {
 		}
 	}()
 
-	logger.Info("Application starting")
-	logger.Debug("Configuration: APIEndpoint=%s, PageSize=%d, CacheTTL=%s",
+	logger.Info("app.main: application starting")
+	logger.Debug("app.main: configuration endpoint=%s page_size=%d cache_ttl=%s",
 		cfg.APIEndpoint, cfg.PageSize, cfg.CacheTTL)
 
 	// Create Linear API client with full configuration
@@ -48,11 +63,24 @@ func main() {
 		Timeout:  cfg.Timeout,
 	})
 
+	promptTemplates := config.DefaultAgentPromptTemplates()
+	promptsPath, err := config.PromptTemplatesFilePath()
+	if err != nil {
+		logger.Warning("app.main: failed to resolve prompts file path: %v", err)
+	} else {
+		templates, err := config.EnsurePromptTemplatesFile(promptsPath)
+		if err != nil {
+			logger.Warning("app.main: failed to load prompts file path=%s error=%v", promptsPath, err)
+		} else {
+			promptTemplates = templates
+		}
+	}
+
 	// Create and run tview application
-	app := tui.NewApp(apiClient, cfg)
+	app := tui.NewApp(apiClient, cfg, promptTemplates)
 
 	if err := app.Run(); err != nil {
-		logger.ErrorWithErr(err, "Application error")
+		logger.ErrorWithErr(err, "app.main: application error")
 		fmt.Fprintf(os.Stderr, "Error running application: %v\n", err)
 		// Note: logger.Close() will be called by defer, but os.Exit prevents defer execution
 		// So we explicitly close here before exiting
@@ -62,7 +90,7 @@ func main() {
 		os.Exit(1) //nolint:gocritic // defer cleanup handled explicitly above
 	}
 
-	logger.Info("Application shutdown")
+	logger.Info("app.main: application shutdown")
 }
 
 // parseLogLevel converts a string log level to a logger.LogLevel.

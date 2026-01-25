@@ -27,12 +27,12 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 
 	// Create form
 	ccm.form = tview.NewForm()
-	ccm.form.SetBackgroundColor(LinearTheme.HeaderBg)
-	ccm.form.SetFieldBackgroundColor(tcell.ColorDarkGray)
-	ccm.form.SetFieldTextColor(tcell.ColorWhite)
-	ccm.form.SetButtonBackgroundColor(LinearTheme.Accent)
-	ccm.form.SetButtonTextColor(tcell.ColorWhite)
-	ccm.form.SetLabelColor(LinearTheme.Foreground)
+	ccm.form.SetBackgroundColor(app.theme.HeaderBg)
+	ccm.form.SetFieldBackgroundColor(app.theme.InputBg)
+	ccm.form.SetFieldTextColor(app.theme.Foreground)
+	ccm.form.SetButtonBackgroundColor(app.theme.Accent)
+	ccm.form.SetButtonTextColor(app.theme.SelectionText)
+	ccm.form.SetLabelColor(app.theme.Foreground)
 
 	// Add comment body field
 	ccm.form.AddTextArea("Comment", "", 60, 8, 0, nil)
@@ -57,14 +57,14 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 	// Create header with instructions
 	headerView := tview.NewTextView()
 	headerView.SetText("Add Comment")
-	headerView.SetTextColor(tcell.ColorYellow)
-	headerView.SetBackgroundColor(LinearTheme.HeaderBg)
+	headerView.SetTextColor(app.theme.Accent)
+	headerView.SetBackgroundColor(app.theme.HeaderBg)
 
 	// Create help text
 	helpView := tview.NewTextView()
 	helpView.SetText("Esc: cancel • Ctrl+Enter / Cmd+Enter: submit")
-	helpView.SetTextColor(tcell.ColorGray)
-	helpView.SetBackgroundColor(LinearTheme.HeaderBg)
+	helpView.SetTextColor(app.theme.SecondaryText)
+	helpView.SetBackgroundColor(app.theme.HeaderBg)
 	helpView.SetTextAlign(tview.AlignCenter)
 
 	// Build modal content
@@ -73,11 +73,14 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 		AddItem(headerView, 1, 0, false).
 		AddItem(ccm.form, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
-	modalContent.SetBackgroundColor(LinearTheme.HeaderBg).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
+	modalContent.SetBackgroundColor(app.theme.HeaderBg).
 		SetBorder(true).
-		SetBorderColor(LinearTheme.Accent).
+		SetBorderColor(app.theme.Accent).
 		SetTitle(" New Comment ").
-		SetTitleColor(tcell.ColorWhite)
+		SetTitleColor(app.theme.Foreground)
+	padding := app.density.ModalPadding
+	modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
 	// Center the modal on screen
 	ccm.modal = tview.NewFlex().
@@ -88,7 +91,7 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 			AddItem(modalContent, 18, 0, true).
 			AddItem(nil, 0, 1, false), 75, 0, true).
 		AddItem(nil, 0, 1, false)
-	ccm.modal.SetBackgroundColor(LinearTheme.Background)
+	ccm.modal.SetBackgroundColor(app.theme.Background)
 
 	return ccm
 }
@@ -153,12 +156,12 @@ func (a *App) handleCreateComment(issueID, body string) {
 
 		a.app.QueueUpdateDraw(func() {
 			if err != nil {
-				logger.ErrorWithErr(err, "Failed to create comment on issue %s", issueID)
+				logger.ErrorWithErr(err, "tui.app: failed to create comment issue=%s", issueID)
 				a.updateStatusBarWithError(err)
 				return
 			}
 
-			logger.Info("Created comment on issue %s", issueID)
+			logger.Info("tui.app: created comment issue=%s", issueID)
 
 			// Refresh the selected issue to show the new comment
 			a.issuesMu.RLock()
@@ -171,7 +174,7 @@ func (a *App) handleCreateComment(issueID, body string) {
 					a.app.QueueUpdateDraw(func() {
 						if a.fetchingIssueID == issueID {
 							if fetchErr != nil {
-								logger.ErrorWithErr(fetchErr, "Failed to refresh issue after comment creation")
+								logger.ErrorWithErr(fetchErr, "tui.app: failed to refresh issue after comment creation issue=%s", issueID)
 								return
 							}
 							a.issuesMu.Lock()

@@ -14,7 +14,7 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 
 - 3-pane layout (navigation tree + issues list + details view)
 - Command palette for quick actions with keyboard shortcuts
-- Vim-style keyboard navigation (j/k, h/l, gg/G)
+- Vim-style keyboard navigation (j/k, h/l, g/G)
 - Mouse support (click to focus, scroll to navigate)
 - Issue descriptions with markdown rendering
 - Sub-issues support (expand/collapse, create, view parent)
@@ -24,29 +24,50 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 - Search and filtering
 - Sorting (by updated, created, or priority)
 - My Issues vs Other Issues sections
+- Agent runs via command palette (Claude or Cursor Agent)
+- Agent prompt templates and streaming output with copy/resume
 - Real-time issue fetching from Linear API
 - Comprehensive logging system for debugging
+- Settings modal with live config updates
+- Themes (linear, high_contrast, color_blind) and density modes
+- Status bar with context and search info
+- Clipboard actions (issue ID, issue URL, agent output)
 
 ## Requirements
 
 - Linear API key (set as `LINEAR_API_KEY` environment variable)
+- Agent CLI for the agent command:
+  - Claude provider: `claude`
+  - Cursor provider: `cursor-agent` (preferred) or `agent`
 
 ## Configuration
 
-All configuration is done via environment variables:
+- `LINEAR_API_KEY` is required (the API key is not stored on disk).
+- Settings are stored in `~/.linear-tui/config.json` and created on first start.
+- Use the Settings modal from the command palette (`:` -> `Settings`) to edit and apply settings immediately.
+- UI settings in `config.json`: `theme` (`linear`, `high_contrast`, `color_blind`) and `density` (`comfortable`, `compact`).
+- Agent settings live in `config.json`: `agent_provider` (`cursor` or `claude`), `agent_sandbox` (`enabled` or `disabled`), `agent_model` (optional), and `agent_workspace` (optional).
+- Prompt templates are stored in `~/.linear-tui/prompts.json` and edited via the "Edit agent prompt templates" command.
+- `agent_workspace` is the default workspace for agent runs and can be overridden per run in the Ask Agent modal (overrides are not persisted).
 
-### Required
+Example `~/.linear-tui/config.json`:
 
-- `LINEAR_API_KEY` - Your Linear API key (required)
-
-### Optional
-
-- `LINEAR_API_ENDPOINT` - Linear GraphQL API endpoint (default: `https://api.linear.app/graphql`)
-- `LINEAR_TIMEOUT` - HTTP request timeout (default: `30s`, format: Go duration like `30s`, `1m`, `5m`)
-- `LINEAR_PAGE_SIZE` - Number of issues to fetch per page (default: `50`, range: 1-250)
-- `LINEAR_CACHE_TTL` - Time-to-live for cached team metadata (default: `5m`, format: Go duration)
-- `LINEAR_LOG_FILE` - Path to log file (default: `$HOME/.linear-tui/app.log`, set to empty string to disable logging)
-- `LINEAR_LOG_LEVEL` - Minimum log level (default: `warning`, options: `debug`, `info`, `warning`, `error`)
+```json
+{
+  "api_endpoint": "https://api.linear.app/graphql",
+  "timeout": "30s",
+  "page_size": 50,
+  "cache_ttl": "5m",
+  "log_file": "/Users/you/.linear-tui/app.log",
+  "log_level": "warning",
+  "theme": "linear",
+  "density": "comfortable",
+  "agent_provider": "cursor",
+  "agent_sandbox": "enabled",
+  "agent_model": "",
+  "agent_workspace": ""
+}
+```
 
 ## Installation
 
@@ -89,26 +110,33 @@ export LINEAR_API_KEY="your-api-key-here"
 
 ### Advanced Configuration
 
-Example with all optional environment variables:
+Example `~/.linear-tui/config.json`:
 
-```bash
-export LINEAR_API_KEY="your-api-key-here"
-export LINEAR_API_ENDPOINT="https://api.linear.app/graphql"
-export LINEAR_TIMEOUT="30s"
-export LINEAR_PAGE_SIZE="50"
-export LINEAR_CACHE_TTL="5m"
-export LINEAR_LOG_FILE="$HOME/.linear-tui/app.log"
-export LINEAR_LOG_LEVEL="warning"  # Options: debug, info, warning, error
-./linear-tui
+```json
+{
+  "api_endpoint": "https://api.linear.app/graphql",
+  "timeout": "30s",
+  "page_size": 50,
+  "cache_ttl": "5m",
+  "log_file": "/Users/you/.linear-tui/app.log",
+  "log_level": "warning",
+  "theme": "linear",
+  "density": "comfortable",
+  "agent_provider": "cursor",
+  "agent_sandbox": "enabled",
+  "agent_model": "",
+  "agent_workspace": ""
+}
 ```
 
 ### Disable Logging
 
-To disable logging, set `LINEAR_LOG_FILE` to an empty string:
+To disable logging, set `log_file` to an empty string in the settings file or via the Settings modal:
 
-```bash
-export LINEAR_LOG_FILE=""
-./linear-tui
+```json
+{
+  "log_file": ""
+}
 ```
 
 ## Keyboard Shortcuts
@@ -119,7 +147,7 @@ export LINEAR_LOG_FILE=""
 - `k` / `↑` - Move up
 - `h` / `←` - Focus left pane
 - `l` / `→` - Focus right pane
-- `gg` - Jump to top
+- `g` - Jump to top
 - `G` - Jump to bottom
 - `Tab` / `Shift+Tab` - Cycle between panes
 - `Space` - Toggle expand/collapse sub-issues
@@ -131,6 +159,7 @@ export LINEAR_LOG_FILE=""
 
 - `:` - Open command palette
 - `/` - Open search palette
+- `ask agent` - Run a terminal agent on the selected issue
 
 ### Quick Commands
 

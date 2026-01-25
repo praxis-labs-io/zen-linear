@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -53,10 +54,11 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetWordWrap(true).
 		SetBorder(true).
 		SetTitle(" Details ").
-		SetTitleColor(LinearTheme.Foreground).
-		SetBorderColor(LinearTheme.Border).
-		SetBackgroundColor(LinearTheme.Background)
-	a.detailsDescriptionView.SetBorderPadding(1, 1, 2, 2)
+		SetTitleColor(a.theme.Foreground).
+		SetBorderColor(a.theme.Border).
+		SetBackgroundColor(tcell.ColorDefault)
+	padding := a.density.DetailsPadding
+	a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
 	// Create comments view (bottom section, scrollable, fixed height)
 	a.detailsCommentsView = tview.NewTextView()
@@ -65,19 +67,38 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetWordWrap(true).
 		SetBorder(true).
 		SetTitle(" Comments ").
-		SetTitleColor(LinearTheme.Foreground).
-		SetBorderColor(LinearTheme.Border).
-		SetBackgroundColor(LinearTheme.Background)
-	a.detailsCommentsView.SetBorderPadding(1, 1, 2, 2)
+		SetTitleColor(a.theme.Foreground).
+		SetBorderColor(a.theme.Border).
+		SetBackgroundColor(tcell.ColorDefault)
+	a.detailsCommentsView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
-	// Create flex layout: description (flexible, ~60%) + comments (flexible, ~40%)
-	// Both sections are scrollable independently
-	detailsFlex := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(a.detailsDescriptionView, 0, 3, true). // 60% of space, gets focus by default
-		AddItem(a.detailsCommentsView, 0, 2, false)    // 40% of space, always visible
+	// Create flex layout; comments are added conditionally after issue selection.
+	detailsFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	a.detailsView = detailsFlex
+	a.setDetailsCommentsVisibility(false)
 
-	return detailsFlex
+	return a.detailsView
+}
+
+// setDetailsCommentsVisibility rebuilds the details layout to show or hide comments.
+func (a *App) setDetailsCommentsVisibility(showComments bool) {
+	if a.detailsView == nil || a.detailsDescriptionView == nil || a.detailsCommentsView == nil {
+		return
+	}
+	if a.detailsCommentsVisible == showComments && a.detailsView.GetItemCount() > 0 {
+		return
+	}
+
+	a.detailsView.Clear().
+		AddItem(a.detailsDescriptionView, 0, 3, true)
+	if showComments {
+		a.detailsView.AddItem(a.detailsCommentsView, 0, 2, false)
+	}
+
+	a.detailsCommentsVisible = showComments
+	if !showComments {
+		a.focusedDetailsView = false
+	}
 }
 
 // updateDetailsView updates the details view with the selected issue.
@@ -85,18 +106,25 @@ func (a *App) updateDetailsView() {
 	a.issuesMu.RLock()
 	selectedIssue := a.selectedIssue
 	a.issuesMu.RUnlock()
+	hasComments := selectedIssue != nil && len(selectedIssue.Comments) > 0
+	a.setDetailsCommentsVisibility(hasComments)
 	if selectedIssue == nil {
-		a.detailsDescriptionView.SetText("[gray]No issue selected. Select an issue from the list to view details.[-]")
+		a.detailsDescriptionView.SetText(fmt.Sprintf("%sNo issue selected. Select an issue from the list to view details.[-]", a.themeTags.SecondaryText))
 		a.detailsCommentsView.SetText("")
+		if a.focusedPane == FocusDetails && !a.detailsCommentsVisible {
+			a.updateFocus()
+		}
 		return
 	}
 
 	issue := selectedIssue
 
 	// Helper to colorize keys
-	keyColor := "[#787878]"    // SecondaryText
-	valColor := "[#EBEBF5]"    // Foreground
-	accentColor := "[#5E6AD2]" // Accent
+	keyColor := a.themeTags.SecondaryText
+	valColor := a.themeTags.Foreground
+	accentColor := a.themeTags.Accent
+	dividerColor := a.themeTags.Border
+	sectionGap := a.density.DetailsSectionGap
 
 	// ===== Update Description/Metadata View =====
 	var headerLines []string
@@ -104,7 +132,9 @@ func (a *App) updateDetailsView() {
 	// Issue header info with styling
 	headerLines = append(headerLines, fmt.Sprintf("%s%s[-]", accentColor, issue.Identifier))
 	headerLines = append(headerLines, fmt.Sprintf("[b]%s%s[-]", valColor, issue.Title))
-	headerLines = append(headerLines, "")
+	for i := 0; i < sectionGap; i++ {
+		headerLines = append(headerLines, "")
+	}
 
 	// Metadata grid simulation
 	headerLines = append(headerLines, fmt.Sprintf("%sState:[-]      %s%s[-]", keyColor, valColor, issue.State))
@@ -136,7 +166,9 @@ func (a *App) updateDetailsView() {
 
 	// Sub-issues (if this is a parent issue)
 	if len(issue.Children) > 0 {
-		headerLines = append(headerLines, "")
+		for i := 0; i < sectionGap; i++ {
+			headerLines = append(headerLines, "")
+		}
 		headerLines = append(headerLines, fmt.Sprintf("%sSub-issues:[-] %s%d items[-]", keyColor, valColor, len(issue.Children)))
 		for _, child := range issue.Children {
 			// Show child identifier, state, and title
@@ -149,9 +181,13 @@ func (a *App) updateDetailsView() {
 		}
 	}
 
-	headerLines = append(headerLines, "")
-	headerLines = append(headerLines, "[#3C3C3C]────────────────────────────────────────[-]")
-	headerLines = append(headerLines, "")
+	for i := 0; i < sectionGap; i++ {
+		headerLines = append(headerLines, "")
+	}
+	headerLines = append(headerLines, fmt.Sprintf("%s────────────────────────────────────────[-]", dividerColor))
+	for i := 0; i < sectionGap; i++ {
+		headerLines = append(headerLines, "")
+	}
 
 	// Set header first, then append description via ANSIWriter
 	a.detailsDescriptionView.Clear()
@@ -205,7 +241,7 @@ func (a *App) updateDetailsView() {
 			// Add separator between comments (but not after the last one)
 			if i < len(issue.Comments)-1 {
 				_, _ = fmt.Fprint(commentsWriter, "\n\n")
-				_, _ = fmt.Fprint(commentsWriter, "[#3C3C3C]────────────────────────────────────────[-]\n\n")
+				_, _ = fmt.Fprintf(commentsWriter, "%s────────────────────────────────────────[-]\n\n", dividerColor)
 			}
 		}
 	} else {
@@ -214,4 +250,7 @@ func (a *App) updateDetailsView() {
 	}
 
 	a.detailsCommentsView.ScrollToBeginning()
+	if a.focusedPane == FocusDetails && !a.detailsCommentsVisible {
+		a.updateFocus()
+	}
 }

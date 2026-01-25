@@ -8,10 +8,13 @@ import (
 type NavigationNode struct {
 	ID        string
 	Text      string
-	TeamID    string // For team and project nodes
+	TeamID    string // For team, project, and status nodes
 	Children  []*NavigationNode
 	IsTeam    bool
 	IsProject bool
+	IsStatus  bool
+	StateID   string
+	StateName string
 }
 
 // buildNavigationTree creates and configures the navigation tree widget.
@@ -20,19 +23,19 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 
 	// Create initial root with "Loading..." placeholder
 	root := tview.NewTreeNode("Linear").
-		SetColor(LinearTheme.Accent).
+		SetColor(a.theme.Accent).
 		SetSelectable(false)
 
 	loadingNode := tview.NewTreeNode("Loading teams...").
-		SetColor(LinearTheme.SecondaryText).
+		SetColor(a.theme.SecondaryText).
 		SetSelectable(false)
 	root.AddChild(loadingNode)
 
 	tree.SetBorder(true).
 		SetTitle(" Navigation ").
-		SetTitleColor(LinearTheme.Foreground).
-		SetBorderColor(LinearTheme.Border)
-	tree.SetBackgroundColor(LinearTheme.Background)
+		SetTitleColor(a.theme.Foreground).
+		SetBorderColor(a.theme.Border)
+	tree.SetBackgroundColor(a.theme.Background)
 	tree.SetRoot(root)
 	tree.SetCurrentNode(root)
 

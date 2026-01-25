@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/roeyazroel/linear-tui/internal/agents"
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
 	"github.com/roeyazroel/linear-tui/internal/logger"
 )
@@ -36,7 +37,13 @@ type CommandContext struct {
 
 // DefaultCommands returns the default set of commands for the palette.
 func DefaultCommands(app *App) []Command {
-	return []Command{
+	lookPath := exec.LookPath
+	if app != nil && app.agentRunner != nil && app.agentRunner.LookPath != nil {
+		lookPath = app.agentRunner.LookPath
+	}
+	availableProviders := agents.AvailableProviderKeys(lookPath)
+
+	commands := []Command{
 		{
 			ID:           "refresh",
 			Title:        "Refresh issues",
@@ -62,6 +69,22 @@ func DefaultCommands(app *App) []Command {
 			ShortcutDisplay: "Esc", // Handled globally via Escape key
 			Run: func(a *App) {
 				a.setSearchQuery("")
+			},
+		},
+		{
+			ID:       "settings",
+			Title:    "Settings",
+			Keywords: []string{"settings", "config", "preferences"},
+			Run: func(a *App) {
+				a.ShowSettingsModal()
+			},
+		},
+		{
+			ID:       "edit_prompt_templates",
+			Title:    "Edit agent prompt templates",
+			Keywords: []string{"agent", "prompt", "prompts", "template", "templates"},
+			Run: func(a *App) {
+				a.ShowPromptTemplatesModal()
 			},
 		},
 		{
@@ -131,6 +154,105 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:       "ask_agent",
+			Title:    "Ask agent about selected issue",
+			Keywords: []string{"agent", "ai", "claude", "cursor", "assistant"},
+			Run: func(a *App) {
+				issue := a.GetSelectedIssue()
+				if issue == nil {
+					a.updateStatusBarWithError(fmt.Errorf("no issue selected"))
+					return
+				}
+
+				if a.agentPromptModal == nil {
+					a.agentPromptModal = NewAgentPromptModal(a)
+				}
+				if a.agentOutputModal == nil {
+					a.agentOutputModal = NewAgentOutputModal(a)
+				}
+				if a.agentRunner == nil {
+					a.agentRunner = agents.NewRunner()
+				}
+
+				issueID := issue.ID
+				a.agentPromptModal.Show(func(prompt string, workspace string) {
+					prompt = strings.TrimSpace(prompt)
+					if prompt == "" {
+						return
+					}
+					workspace = strings.TrimSpace(workspace)
+
+					go func() {
+						fetchIssue := a.fetchIssueByID
+						if fetchIssue == nil {
+							fetchIssue = a.api.FetchIssueByID
+						}
+
+						fullIssue, err := fetchIssue(context.Background(), issueID)
+						if err != nil {
+							logger.ErrorWithErr(err, "tui.commands: failed to fetch issue for agent issue_id=%s", issueID)
+							a.QueueUpdateDraw(func() {
+								a.updateStatusBarWithError(err)
+							})
+							return
+						}
+
+						issueContext := agents.BuildIssueContext(fullIssue)
+						runner := a.agentRunner
+
+						selected, err := agents.ProviderForKey(a.config.AgentProvider, runner.LookPath)
+						if err != nil {
+							logger.Error("tui.commands: invalid agent provider provider=%s", a.config.AgentProvider)
+							a.QueueUpdateDraw(func() {
+								a.updateStatusBarWithError(err)
+							})
+							return
+						}
+
+						if _, ok := selected.ResolveBinary(); !ok {
+							logger.Error("tui.commands: agent binary not found provider=%s", selected.Name())
+							a.QueueUpdateDraw(func() {
+								a.updateStatusBarWithError(fmt.Errorf("agent binary not found for %s", selected.Name()))
+							})
+							return
+						}
+
+						options := agents.AgentRunOptions{
+							Workspace: workspace,
+							Model:     strings.TrimSpace(a.config.AgentModel),
+							Sandbox:   strings.TrimSpace(a.config.AgentSandbox),
+						}
+
+						ctx, cancel := context.WithCancel(context.Background())
+						a.QueueUpdateDraw(func() {
+							title := fmt.Sprintf(" %s Output ", selected.Name())
+							a.agentOutputModal.Show(title, cancel)
+							a.agentOutputModal.AppendLine(fmt.Sprintf("Starting %s agent run...", selected.Name()))
+						})
+
+						runErr := runner.Run(ctx, selected, prompt, issueContext, options, func(event agents.AgentEvent) {
+							a.agentOutputModal.AppendEvent(event)
+						}, func(line string) {
+							a.agentOutputModal.AppendRawLine(line)
+						}, func(runErr error) {
+							a.agentOutputModal.AppendLine(fmt.Sprintf("error: %v", runErr))
+						})
+
+						a.agentOutputModal.StopSpinner()
+
+						if runErr != nil {
+							a.QueueUpdateDraw(func() {
+								a.agentOutputModal.AppendLine(fmt.Sprintf("error: %v", runErr))
+							})
+							return
+						}
+
+						a.agentOutputModal.AppendLine("Agent run completed.")
+					}()
+				})
+			},
+		},
+		{
 			ID:           "assign_me",
 			Title:        "Assign to me",
 			Keywords:     []string{"assign", "me", "self", "take"},
@@ -149,11 +271,11 @@ func DefaultCommands(app *App) []Command {
 					})
 					a.QueueUpdateDraw(func() {
 						if err != nil {
-							logger.ErrorWithErr(err, "Failed to assign issue %s to user %s", issue.Identifier, user.DisplayName)
+							logger.ErrorWithErr(err, "tui.commands: failed to assign issue issue=%s user=%s", issue.Identifier, user.DisplayName)
 							a.updateStatusBarWithError(err)
 							return
 						}
-						logger.Info("Assigned issue %s to %s", issue.Identifier, user.DisplayName)
+						logger.Info("tui.commands: assigned issue issue=%s user=%s", issue.Identifier, user.DisplayName)
 						go a.refreshIssues(issue.ID)
 					})
 				}()
@@ -178,11 +300,11 @@ func DefaultCommands(app *App) []Command {
 					})
 					a.QueueUpdateDraw(func() {
 						if err != nil {
-							logger.ErrorWithErr(err, "Failed to unassign issue %s", issue.Identifier)
+							logger.ErrorWithErr(err, "tui.commands: failed to unassign issue issue=%s", issue.Identifier)
 							a.updateStatusBarWithError(err)
 							return
 						}
-						logger.Info("Unassigned issue %s", issue.Identifier)
+						logger.Info("tui.commands: unassigned issue issue=%s", issue.Identifier)
 						go a.refreshIssues(issue.ID)
 					})
 				}()
@@ -203,11 +325,11 @@ func DefaultCommands(app *App) []Command {
 					err := a.GetAPI().ArchiveIssue(ctx, issue.ID)
 					a.QueueUpdateDraw(func() {
 						if err != nil {
-							logger.ErrorWithErr(err, "Failed to archive issue %s", issue.Identifier)
+							logger.ErrorWithErr(err, "tui.commands: failed to archive issue issue=%s", issue.Identifier)
 							a.updateStatusBarWithError(err)
 							return
 						}
-						logger.Info("Archived issue %s", issue.Identifier)
+						logger.Info("tui.commands: archived issue issue=%s", issue.Identifier)
 						// After archiving, the issue won't be in the list, so just refresh without ID
 						go a.refreshIssues()
 					})
@@ -233,11 +355,11 @@ func DefaultCommands(app *App) []Command {
 						})
 						a.QueueUpdateDraw(func() {
 							if err != nil {
-								logger.ErrorWithErr(err, "Failed to change status for issue %s", issue.Identifier)
+								logger.ErrorWithErr(err, "tui.commands: failed to change status issue=%s", issue.Identifier)
 								a.updateStatusBarWithError(err)
 								return
 							}
-							logger.Info("Changed status for issue %s", issue.Identifier)
+							logger.Info("tui.commands: changed status issue=%s", issue.Identifier)
 							go a.refreshIssues(issue.ID)
 						})
 					}()
@@ -263,11 +385,11 @@ func DefaultCommands(app *App) []Command {
 						})
 						a.QueueUpdateDraw(func() {
 							if err != nil {
-								logger.ErrorWithErr(err, "Failed to assign issue %s to user", issue.Identifier)
+								logger.ErrorWithErr(err, "tui.commands: failed to assign issue to user issue=%s", issue.Identifier)
 								a.updateStatusBarWithError(err)
 								return
 							}
-							logger.Info("Assigned issue %s to user", issue.Identifier)
+							logger.Info("tui.commands: assigned issue to user issue=%s", issue.Identifier)
 							go a.refreshIssues(issue.ID)
 						})
 					}()
@@ -396,8 +518,8 @@ func DefaultCommands(app *App) []Command {
 					}
 				}
 
-				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID)
-				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID)
+				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
+				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
 			},
 		},
 		{
@@ -449,8 +571,8 @@ func DefaultCommands(app *App) []Command {
 					}
 				}
 
-				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID)
-				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID)
+				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
+				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
 			},
 		},
 		{
@@ -479,7 +601,7 @@ func DefaultCommands(app *App) []Command {
 				}
 				// Cannot set parent if this issue has children
 				if len(issue.Children) > 0 {
-					logger.Warning("Cannot set parent on issue %s that has sub-issues", issue.Identifier)
+					logger.Warning("tui.commands: cannot set parent on issue with sub-issues issue=%s", issue.Identifier)
 					return
 				}
 				a.ShowParentIssuePicker(func(parentID string) {
@@ -491,11 +613,11 @@ func DefaultCommands(app *App) []Command {
 						})
 						a.QueueUpdateDraw(func() {
 							if err != nil {
-								logger.ErrorWithErr(err, "Failed to set parent for issue %s", issue.Identifier)
+								logger.ErrorWithErr(err, "tui.commands: failed to set parent issue=%s", issue.Identifier)
 								a.updateStatusBarWithError(err)
 								return
 							}
-							logger.Info("Set parent for issue %s", issue.Identifier)
+							logger.Info("tui.commands: set parent issue=%s", issue.Identifier)
 							go a.refreshIssues(issue.ID)
 						})
 					}()
@@ -521,11 +643,11 @@ func DefaultCommands(app *App) []Command {
 					})
 					a.QueueUpdateDraw(func() {
 						if err != nil {
-							logger.ErrorWithErr(err, "Failed to remove parent for issue %s", issue.Identifier)
+							logger.ErrorWithErr(err, "tui.commands: failed to remove parent issue=%s", issue.Identifier)
 							a.updateStatusBarWithError(err)
 							return
 						}
-						logger.Info("Removed parent for issue %s", issue.Identifier)
+						logger.Info("tui.commands: removed parent issue=%s", issue.Identifier)
 						go a.refreshIssues(issue.ID)
 					})
 				}()
@@ -545,6 +667,17 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 	}
+	if len(availableProviders) == 0 {
+		filtered := make([]Command, 0, len(commands))
+		for _, command := range commands {
+			if command.ID == "ask_agent" {
+				continue
+			}
+			filtered = append(filtered, command)
+		}
+		commands = filtered
+	}
+	return commands
 }
 
 // openURL opens a URL in the default browser.
@@ -558,16 +691,16 @@ func openURL(url string) error {
 	case "windows":
 		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	default:
-		logger.Warning("Unsupported OS for opening URLs: %s", runtime.GOOS)
+		logger.Warning("tui.commands: unsupported OS for opening URLs os=%s", runtime.GOOS)
 		return nil
 	}
 
 	if err := cmd.Start(); err != nil {
-		logger.ErrorWithErr(err, "Failed to open URL: %s", url)
+		logger.ErrorWithErr(err, "tui.commands: failed to open URL url=%s", url)
 		return err
 	}
 
-	logger.Debug("Opened URL in browser: %s", url)
+	logger.Debug("tui.commands: opened URL in browser url=%s", url)
 	return nil
 }
 
@@ -582,33 +715,33 @@ func copyToClipboard(text string) error {
 	case "windows":
 		cmd = exec.Command("clip")
 	default:
-		logger.Warning("Unsupported OS for clipboard operations: %s", runtime.GOOS)
+		logger.Warning("tui.commands: unsupported OS for clipboard operations os=%s", runtime.GOOS)
 		return nil
 	}
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		logger.ErrorWithErr(err, "Failed to get stdin pipe for clipboard command")
+		logger.ErrorWithErr(err, "tui.commands: failed to get stdin pipe for clipboard command")
 		return err
 	}
 
 	if err := cmd.Start(); err != nil {
-		logger.ErrorWithErr(err, "Failed to start clipboard command")
+		logger.ErrorWithErr(err, "tui.commands: failed to start clipboard command")
 		return err
 	}
 
 	_, err = stdin.Write([]byte(text))
 	if err != nil {
-		logger.ErrorWithErr(err, "Failed to write to clipboard")
+		logger.ErrorWithErr(err, "tui.commands: failed to write to clipboard")
 		return err
 	}
 	_ = stdin.Close()
 
 	if err := cmd.Wait(); err != nil {
-		logger.ErrorWithErr(err, "Clipboard command failed")
+		logger.ErrorWithErr(err, "tui.commands: clipboard command failed")
 		return err
 	}
 
-	logger.Debug("Copied to clipboard: %s", text)
+	logger.Debug("tui.commands: copied to clipboard text_length=%d", len(text))
 	return nil
 }

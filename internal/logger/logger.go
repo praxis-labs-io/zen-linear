@@ -96,6 +96,18 @@ func Init(logPath string, minLevel LogLevel) error {
 	return initErr
 }
 
+// Reinit closes the current logger and reinitializes it with new settings.
+func Reinit(logPath string, minLevel LogLevel) error {
+	if err := Close(); err != nil {
+		return err
+	}
+
+	defaultLogger = nil
+	once = sync.Once{}
+
+	return Init(logPath, minLevel)
+}
+
 // Close closes the log file. Should be called when the application exits.
 func Close() error {
 	if defaultLogger != nil && defaultLogger.enabled && defaultLogger.file != nil && !defaultLogger.closed {

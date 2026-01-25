@@ -118,6 +118,12 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 	if cfg.CacheTTL != DefaultCacheTTL {
 		t.Errorf("CacheTTL = %v, want %v", cfg.CacheTTL, DefaultCacheTTL)
 	}
+	if cfg.Theme != DefaultTheme {
+		t.Errorf("Theme = %q, want %q", cfg.Theme, DefaultTheme)
+	}
+	if cfg.Density != DefaultDensity {
+		t.Errorf("Density = %q, want %q", cfg.Density, DefaultDensity)
+	}
 	// Verify default log file path
 	homeDir, err := os.UserHomeDir()
 	if err == nil {

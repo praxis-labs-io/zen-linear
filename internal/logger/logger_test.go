@@ -119,6 +119,59 @@ func TestLoggerWithMinLevel(t *testing.T) {
 	}
 }
 
+// TestReinitLogger verifies logging switches to the new file after reinit.
+func TestReinitLogger(t *testing.T) {
+	// Reset global state
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	firstPath := filepath.Join(tmpDir, "first.log")
+	secondPath := filepath.Join(tmpDir, "second.log")
+
+	if err := Init(firstPath, LevelInfo); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+
+	Info("First log entry")
+
+	if err := Reinit(secondPath, LevelError); err != nil {
+		t.Fatalf("Reinit() error: %v", err)
+	}
+
+	Info("Should be filtered")
+	Error("Second log entry")
+
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	firstContent, err := os.ReadFile(firstPath)
+	if err != nil {
+		t.Fatalf("read first log file: %v", err)
+	}
+
+	secondContent, err := os.ReadFile(secondPath)
+	if err != nil {
+		t.Fatalf("read second log file: %v", err)
+	}
+
+	firstLog := string(firstContent)
+	if !strings.Contains(firstLog, "INFO: First log entry") {
+		t.Error("First log file should contain initial entry")
+	}
+	if strings.Contains(firstLog, "Second log entry") {
+		t.Error("First log file should not contain entries after reinit")
+	}
+
+	secondLog := string(secondContent)
+	if !strings.Contains(secondLog, "ERROR: Second log entry") {
+		t.Error("Second log file should contain new entry")
+	}
+	if strings.Contains(secondLog, "INFO: Should be filtered") {
+		t.Error("Second log file should honor the new minimum level")
+	}
+}
+
 func TestLoggerDisabled(t *testing.T) {
 	// Reset global state
 	resetLogger()

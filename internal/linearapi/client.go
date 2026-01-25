@@ -224,6 +224,7 @@ type IssuePage struct {
 type FetchIssuesParams struct {
 	TeamID    string
 	ProjectID string
+	StateID   string
 	Search    string
 	// OrderBy specifies the sort order. Valid API values are "updatedAt" and "createdAt".
 	// "priority" is also supported and will be sorted client-side after fetching.
@@ -346,7 +347,7 @@ func (c *Client) ListTeams(ctx context.Context) ([]Team, error) {
 
 	err := c.client.Query(ctx, &query, nil)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: ListTeams failed")
+		logger.ErrorWithErr(err, "linearapi.client: ListTeams failed")
 		return nil, fmt.Errorf("list teams: %w", err)
 	}
 
@@ -381,7 +382,7 @@ func (c *Client) ListProjects(ctx context.Context, teamID string) ([]Project, er
 
 	err := c.client.Query(ctx, &query, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: ListProjects failed for team %s", teamID)
+		logger.ErrorWithErr(err, "linearapi.client: ListProjects failed team_id=%s", teamID)
 		return nil, fmt.Errorf("list projects for team %s: %w", teamID, err)
 	}
 
@@ -419,7 +420,7 @@ func (c *Client) ListUsers(ctx context.Context, teamID string) ([]User, error) {
 
 	err := c.client.Query(ctx, &query, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: ListUsers failed for team %s", teamID)
+		logger.ErrorWithErr(err, "linearapi.client: ListUsers failed team_id=%s", teamID)
 		return nil, fmt.Errorf("list users for team %s: %w", teamID, err)
 	}
 
@@ -450,7 +451,7 @@ func (c *Client) GetCurrentUser(ctx context.Context) (User, error) {
 
 	err := c.client.Query(ctx, &query, nil)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: GetCurrentUser failed")
+		logger.ErrorWithErr(err, "linearapi.client: GetCurrentUser failed")
 		return User{}, fmt.Errorf("get current user: %w", err)
 	}
 
@@ -484,7 +485,7 @@ func (c *Client) ListWorkflowStates(ctx context.Context, teamID string) ([]Workf
 
 	err := c.client.Query(ctx, &query, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: ListWorkflowStates failed for team %s", teamID)
+		logger.ErrorWithErr(err, "linearapi.client: ListWorkflowStates failed team_id=%s", teamID)
 		return nil, fmt.Errorf("list workflow states for team %s: %w", teamID, err)
 	}
 
@@ -502,8 +503,8 @@ func (c *Client) ListWorkflowStates(ctx context.Context, teamID string) ([]Workf
 	return states, nil
 }
 
-// buildIssueFilter builds the GraphQL issue filter for the given params.
-func buildIssueFilter(params FetchIssuesParams) IssueFilter {
+// buildBaseIssueFilter builds the base issue filter without search terms.
+func buildBaseIssueFilter(params FetchIssuesParams) IssueFilter {
 	filter := make(IssueFilter)
 	if params.TeamID != "" {
 		filter["team"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.TeamID}}
@@ -511,6 +512,15 @@ func buildIssueFilter(params FetchIssuesParams) IssueFilter {
 	if params.ProjectID != "" {
 		filter["project"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.ProjectID}}
 	}
+	if params.StateID != "" {
+		filter["state"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.StateID}}
+	}
+	return filter
+}
+
+// buildIssueFilter builds the GraphQL issue filter for the given params.
+func buildIssueFilter(params FetchIssuesParams) IssueFilter {
+	filter := buildBaseIssueFilter(params)
 
 	searchTerm := strings.TrimSpace(params.Search)
 	if searchTerm == "" {
@@ -617,14 +627,8 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 	}
 
 	searchTerm := strings.TrimSpace(params.Search)
-	// Build filter for team/project constraints only (search handles the text matching).
-	filter := make(IssueFilter)
-	if params.TeamID != "" {
-		filter["team"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.TeamID}}
-	}
-	if params.ProjectID != "" {
-		filter["project"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.ProjectID}}
-	}
+	// Build filter for team/project/state constraints only (search handles the text matching).
+	filter := buildBaseIssueFilter(params)
 
 	var afterCursor *graphql.String
 	if after != nil {
@@ -698,7 +702,7 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 
 	err := c.client.Query(ctx, &query, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: searchIssues failed")
+		logger.ErrorWithErr(err, "linearapi.client: searchIssues failed")
 		return IssuePage{}, fmt.Errorf("search issues: %w", err)
 	}
 
@@ -855,7 +859,7 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 
 	err := c.client.Query(ctx, &query, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: FetchIssues failed")
+		logger.ErrorWithErr(err, "linearapi.client: FetchIssues failed")
 		return IssuePage{}, fmt.Errorf("fetch issues: %w", err)
 	}
 
@@ -1075,7 +1079,7 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 
 	err := c.client.Query(ctx, &query, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: FetchIssueByID failed for issue %s", id)
+		logger.ErrorWithErr(err, "linearapi.client: FetchIssueByID failed issue_id=%s", id)
 		return Issue{}, fmt.Errorf("fetch issue %s: %w", id, err)
 	}
 
@@ -1245,12 +1249,12 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 
 	err := c.client.Mutate(ctx, &mutation, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: CreateIssue failed")
+		logger.ErrorWithErr(err, "linearapi.client: CreateIssue failed")
 		return Issue{}, fmt.Errorf("create issue: %w", err)
 	}
 
 	if !bool(mutation.IssueCreate.Success) {
-		logger.Error("API: CreateIssue operation failed (success=false)")
+		logger.Error("linearapi.client: CreateIssue operation failed success=false")
 		return Issue{}, fmt.Errorf("create issue: operation failed")
 	}
 
@@ -1389,12 +1393,12 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 
 	err := c.client.Mutate(ctx, &mutation, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: UpdateIssue failed for issue %s", input.ID)
+		logger.ErrorWithErr(err, "linearapi.client: UpdateIssue failed issue_id=%s", input.ID)
 		return Issue{}, fmt.Errorf("update issue %s: %w", input.ID, err)
 	}
 
 	if !bool(mutation.IssueUpdate.Success) {
-		logger.Error("API: UpdateIssue operation failed (success=false) for issue %s", input.ID)
+		logger.Error("linearapi.client: UpdateIssue operation failed success=false issue_id=%s", input.ID)
 		return Issue{}, fmt.Errorf("update issue %s: operation failed", input.ID)
 	}
 
@@ -1480,12 +1484,12 @@ func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (C
 
 	err := c.client.Mutate(ctx, &mutation, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: CreateComment failed for issue %s", input.IssueID)
+		logger.ErrorWithErr(err, "linearapi.client: CreateComment failed issue_id=%s", input.IssueID)
 		return Comment{}, fmt.Errorf("create comment: %w", err)
 	}
 
 	if !bool(mutation.CommentCreate.Success) {
-		logger.Error("API: CreateComment operation failed (success=false) for issue %s", input.IssueID)
+		logger.Error("linearapi.client: CreateComment operation failed success=false issue_id=%s", input.IssueID)
 		return Comment{}, fmt.Errorf("create comment: operation failed")
 	}
 
@@ -1523,12 +1527,12 @@ func (c *Client) ArchiveIssue(ctx context.Context, issueID string) error {
 
 	err := c.client.Mutate(ctx, &mutation, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: ArchiveIssue failed for issue %s", issueID)
+		logger.ErrorWithErr(err, "linearapi.client: ArchiveIssue failed issue_id=%s", issueID)
 		return fmt.Errorf("archive issue %s: %w", issueID, err)
 	}
 
 	if !bool(mutation.IssueArchive.Success) {
-		logger.Error("API: ArchiveIssue operation failed (success=false) for issue %s", issueID)
+		logger.Error("linearapi.client: ArchiveIssue operation failed success=false issue_id=%s", issueID)
 		return fmt.Errorf("archive issue %s: operation failed", issueID)
 	}
 
@@ -1549,12 +1553,12 @@ func (c *Client) UnarchiveIssue(ctx context.Context, issueID string) error {
 
 	err := c.client.Mutate(ctx, &mutation, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: UnarchiveIssue failed for issue %s", issueID)
+		logger.ErrorWithErr(err, "linearapi.client: UnarchiveIssue failed issue_id=%s", issueID)
 		return fmt.Errorf("unarchive issue %s: %w", issueID, err)
 	}
 
 	if !bool(mutation.IssueUnarchive.Success) {
-		logger.Error("API: UnarchiveIssue operation failed (success=false) for issue %s", issueID)
+		logger.Error("linearapi.client: UnarchiveIssue operation failed success=false issue_id=%s", issueID)
 		return fmt.Errorf("unarchive issue %s: operation failed", issueID)
 	}
 
@@ -1575,7 +1579,7 @@ func (c *Client) ListWorkspaceLabels(ctx context.Context) ([]IssueLabel, error) 
 
 	err := c.client.Query(ctx, &query, nil)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: ListWorkspaceLabels failed")
+		logger.ErrorWithErr(err, "linearapi.client: ListWorkspaceLabels failed")
 		return nil, fmt.Errorf("list workspace labels: %w", err)
 	}
 
@@ -1611,7 +1615,7 @@ func (c *Client) ListTeamLabels(ctx context.Context, teamID string) ([]IssueLabe
 
 	err := c.client.Query(ctx, &query, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "API: ListTeamLabels failed for team %s", teamID)
+		logger.ErrorWithErr(err, "linearapi.client: ListTeamLabels failed team_id=%s", teamID)
 		return nil, fmt.Errorf("list team labels for team %s: %w", teamID, err)
 	}
 

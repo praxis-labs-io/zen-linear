@@ -10,10 +10,11 @@ func (a *App) buildStatusBar() *tview.TextView {
 	statusBar.SetDynamicColors(true).
 		SetWrap(false).
 		SetBorder(false).
-		SetBackgroundColor(LinearTheme.HeaderBg) // Use header bg for status bar
+		SetBackgroundColor(a.theme.HeaderBg) // Use header bg for status bar
 
 	// Add padding
-	statusBar.SetBorderPadding(0, 0, 1, 1)
+	padding := a.density.StatusBarPadding
+	statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
 	return statusBar
 }

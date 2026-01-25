@@ -34,7 +34,7 @@ func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 		PageSize: 2,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg)
+	app := NewApp(&linearapi.Client{}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	issue1 := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
@@ -98,7 +98,7 @@ func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 		PageSize: 2,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg)
+	app := NewApp(&linearapi.Client{}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	issue1 := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
@@ -163,5 +163,79 @@ func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 	app.issuesMu.RUnlock()
 	if issueID == issue2.ID {
 		t.Fatalf("stale issue applied, got %s", issueID)
+	}
+}
+
+func TestRefreshIssues_PreservesNavigationFocus(t *testing.T) {
+	cfg := config.Config{
+		PageSize: 1,
+		CacheTTL: time.Minute,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
+	app.fetchIssueByID = func(ctx context.Context, id string) (linearapi.Issue, error) {
+		return issue, nil
+	}
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		return linearapi.IssuePage{
+			Issues:  []linearapi.Issue{issue},
+			HasNext: false,
+		}, nil
+	}
+
+	app.focusedPane = FocusNavigation
+	app.refreshIssuesWithFocusChange(false)
+
+	waitForCondition(t, time.Second, func() bool {
+		app.issuesMu.RLock()
+		defer app.issuesMu.RUnlock()
+		return len(app.issues) == 1
+	})
+
+	if app.focusedPane != FocusNavigation {
+		t.Fatalf("focusedPane = %v, want %v", app.focusedPane, FocusNavigation)
+	}
+}
+
+func TestRefreshIssues_IncludesStateID(t *testing.T) {
+	cfg := config.Config{
+		PageSize: 1,
+		CacheTTL: time.Minute,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	called := make(chan linearapi.FetchIssuesParams, 1)
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		select {
+		case called <- params:
+		default:
+		}
+		return linearapi.IssuePage{Issues: []linearapi.Issue{}, HasNext: false}, nil
+	}
+
+	app.selectedNavigation = &NavigationNode{
+		ID:        "state-123",
+		Text:      "In Progress",
+		TeamID:    "team-1",
+		IsStatus:  true,
+		StateID:   "state-123",
+		StateName: "In Progress",
+	}
+
+	app.refreshIssues()
+
+	select {
+	case params := <-called:
+		if params.StateID != "state-123" {
+			t.Fatalf("StateID = %q, want %q", params.StateID, "state-123")
+		}
+		if params.TeamID != "team-1" {
+			t.Fatalf("TeamID = %q, want %q", params.TeamID, "team-1")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for fetchIssuesPage")
 	}
 }

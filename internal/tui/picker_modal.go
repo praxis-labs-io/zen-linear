@@ -30,22 +30,22 @@ func NewPickerModal(app *App) *PickerModal {
 	// Create list
 	pm.list = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextColor(tcell.ColorWhite).
-		SetSelectedBackgroundColor(LinearTheme.Accent).
-		SetSelectedTextColor(tcell.ColorWhite).
+		SetMainTextColor(app.theme.Foreground).
+		SetSelectedBackgroundColor(app.theme.Accent).
+		SetSelectedTextColor(app.theme.SelectionText).
 		SetHighlightFullLine(true)
-	pm.list.SetBackgroundColor(LinearTheme.HeaderBg)
+	pm.list.SetBackgroundColor(app.theme.HeaderBg)
 
 	// Create title
 	pm.titleView = tview.NewTextView()
-	pm.titleView.SetTextColor(tcell.ColorYellow)
-	pm.titleView.SetBackgroundColor(LinearTheme.HeaderBg)
+	pm.titleView.SetTextColor(app.theme.Accent)
+	pm.titleView.SetBackgroundColor(app.theme.HeaderBg)
 
 	// Create help text
 	helpText := tview.NewTextView()
 	helpText.SetText("↑↓/j/k: navigate | Enter: select | Esc: cancel")
-	helpText.SetTextColor(tcell.ColorGray)
-	helpText.SetBackgroundColor(LinearTheme.HeaderBg)
+	helpText.SetTextColor(app.theme.SecondaryText)
+	helpText.SetBackgroundColor(app.theme.HeaderBg)
 
 	// Build modal content
 	modalContent := tview.NewFlex().
@@ -53,10 +53,13 @@ func NewPickerModal(app *App) *PickerModal {
 		AddItem(pm.titleView, 1, 0, false).
 		AddItem(pm.list, 0, 1, true).
 		AddItem(helpText, 1, 0, false)
-	modalContent.SetBackgroundColor(LinearTheme.HeaderBg).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
+	modalContent.SetBackgroundColor(app.theme.HeaderBg).
 		SetBorder(true).
-		SetBorderColor(LinearTheme.Accent).
-		SetTitleColor(tcell.ColorWhite)
+		SetBorderColor(app.theme.Accent).
+		SetTitleColor(app.theme.Foreground)
+	padding := app.density.ModalPadding
+	modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
 	// Center the modal on screen
 	pm.modal = tview.NewFlex().
@@ -67,7 +70,7 @@ func NewPickerModal(app *App) *PickerModal {
 			AddItem(modalContent, 15, 0, true).
 			AddItem(nil, 0, 1, false), 50, 0, true).
 		AddItem(nil, 0, 1, false)
-	pm.modal.SetBackgroundColor(LinearTheme.Background)
+	pm.modal.SetBackgroundColor(app.theme.Background)
 
 	return pm
 }

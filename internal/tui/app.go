@@ -10,6 +10,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/roeyazroel/linear-tui/internal/agents"
 	"github.com/roeyazroel/linear-tui/internal/cache"
 	"github.com/roeyazroel/linear-tui/internal/config"
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
@@ -27,10 +28,13 @@ const (
 
 // App is the main application controller that manages all UI components.
 type App struct {
-	app    *tview.Application
-	api    *linearapi.Client
-	cache  *cache.TeamCache
-	config config.Config
+	app       *tview.Application
+	api       *linearapi.Client
+	cache     *cache.TeamCache
+	config    config.Config
+	theme     Theme
+	themeTags ThemeTags
+	density   DensityProfile
 
 	// UI components
 	pages                  *tview.Pages
@@ -54,6 +58,12 @@ type App struct {
 	createCommentModal     *CreateCommentModal
 	editTitleModal         *EditTitleModal
 	editLabelsModal        *EditLabelsModal
+	settingsModal          *SettingsModal
+	promptTemplatesModal   *AgentPromptTemplatesModal
+	agentPromptModal       *AgentPromptModal
+	agentOutputModal       *AgentOutputModal
+	agentRunner            *agents.Runner
+	agentPromptTemplates   []config.AgentPromptTemplate
 
 	// App state (protected by issuesMu)
 	issuesMu            sync.RWMutex
@@ -87,6 +97,7 @@ type App struct {
 	isLoading             bool
 	pendingRefresh        bool
 	pendingRefreshIssueID string
+	pendingRefreshAllowFocusChange bool
 	pickerActive          bool
 	refreshGeneration     atomic.Int64
 
@@ -102,7 +113,8 @@ type App struct {
 	fetchingIssueID string // Tracks which issue ID we're currently fetching
 
 	// Details pane sub-view focus
-	focusedDetailsView bool // false = description, true = comments
+	focusedDetailsView     bool // false = description, true = comments
+	detailsCommentsVisible bool // Tracks whether comments view is shown
 }
 
 // FocusTarget indicates which pane has focus.
@@ -116,20 +128,30 @@ const (
 )
 
 // NewApp creates a new application instance.
-func NewApp(api *linearapi.Client, cfg config.Config) *App {
+func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPromptTemplate) *App {
+	if len(templates) == 0 {
+		templates = config.DefaultAgentPromptTemplates()
+	}
+	theme := ResolveTheme(cfg.Theme)
+	density := ResolveDensity(cfg.Density)
+
 	app := &App{
-		app:                 tview.NewApplication(),
-		api:                 api,
-		cache:               cache.NewTeamCache(api, cfg.CacheTTL),
-		config:              cfg,
-		pages:               tview.NewPages(),
-		focusedPane:         FocusNavigation,
-		sortField:           SortByUpdatedAt,
-		expandedState:       make(map[string]bool),
-		idToIssue:           make(map[string]*linearapi.Issue),
-		myIDToIssue:         make(map[string]*linearapi.Issue),
-		otherIDToIssue:      make(map[string]*linearapi.Issue),
-		activeIssuesSection: IssuesSectionOther, // Default to Other section
+		app:                  tview.NewApplication(),
+		api:                  api,
+		cache:                cache.NewTeamCache(api, cfg.CacheTTL),
+		config:               cfg,
+		theme:                theme,
+		themeTags:            NewThemeTags(theme),
+		density:              density,
+		pages:                tview.NewPages(),
+		focusedPane:          FocusNavigation,
+		sortField:            SortByUpdatedAt,
+		expandedState:        make(map[string]bool),
+		idToIssue:            make(map[string]*linearapi.Issue),
+		myIDToIssue:          make(map[string]*linearapi.Issue),
+		otherIDToIssue:       make(map[string]*linearapi.Issue),
+		activeIssuesSection:  IssuesSectionOther, // Default to Other section
+		agentPromptTemplates: templates,
 	}
 
 	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
@@ -139,18 +161,7 @@ func NewApp(api *linearapi.Client, cfg config.Config) *App {
 		app.app.QueueUpdateDraw(f)
 	}
 
-	// Apply global theme
-	tview.Styles.PrimitiveBackgroundColor = LinearTheme.Background
-	tview.Styles.ContrastBackgroundColor = LinearTheme.Background
-	tview.Styles.MoreContrastBackgroundColor = LinearTheme.HeaderBg
-	tview.Styles.BorderColor = LinearTheme.Border
-	tview.Styles.TitleColor = LinearTheme.Foreground
-	tview.Styles.GraphicsColor = LinearTheme.Border
-	tview.Styles.PrimaryTextColor = LinearTheme.Foreground
-	tview.Styles.SecondaryTextColor = LinearTheme.SecondaryText
-	tview.Styles.TertiaryTextColor = LinearTheme.SecondaryText
-	tview.Styles.InverseTextColor = LinearTheme.Background
-	tview.Styles.ContrastSecondaryTextColor = LinearTheme.SecondaryText
+	app.applyThemeStyles()
 
 	app.buildLayout()
 	app.bindGlobalKeys()
@@ -163,6 +174,14 @@ func (a *App) Run() error {
 	a.app.SetRoot(a.pages, true).EnableMouse(true)
 
 	// Load initial data asynchronously
+	a.loadInitialData()
+
+	// Start the application event loop
+	return a.app.Run()
+}
+
+// loadInitialData fetches user, navigation, and issues in a background goroutine.
+func (a *App) loadInitialData() {
 	go func() {
 		ctx := context.Background()
 
@@ -170,9 +189,9 @@ func (a *App) Run() error {
 		user, err := a.cache.GetCurrentUser(ctx)
 		if err == nil {
 			a.currentUser = &user
-			logger.Debug("Current user loaded: %s", user.DisplayName)
+			logger.Debug("tui.app: current user loaded user=%s", user.DisplayName)
 		} else {
-			logger.Warning("Failed to load current user: %v", err)
+			logger.Warning("tui.app: failed to load current user error=%v", err)
 		}
 
 		// Fetch teams and build navigation
@@ -181,23 +200,263 @@ func (a *App) Run() error {
 		// Load issues for initial view
 		a.refreshIssues()
 	}()
+}
 
-	// Start the application event loop
-	return a.app.Run()
+// applySettings updates runtime dependencies to match a new configuration.
+func (a *App) applySettings(newCfg config.Config) {
+	a.config = newCfg
+	a.applyThemeAndDensity()
+
+	logLevel := parseLogLevel(newCfg.LogLevel)
+	if err := logger.Reinit(newCfg.LogFile, logLevel); err != nil {
+		logger.ErrorWithErr(err, "tui.app: failed to reinitialize logger")
+		a.QueueUpdateDraw(func() {
+			a.updateStatusBarWithError(err)
+		})
+		return
+	}
+	logger.Debug("tui.app: settings applied log_file=%s log_level=%s", newCfg.LogFile, newCfg.LogLevel)
+
+	a.api = linearapi.NewClient(linearapi.ClientConfig{
+		Token:    newCfg.LinearAPIKey,
+		Endpoint: newCfg.APIEndpoint,
+		Timeout:  newCfg.Timeout,
+	})
+	a.cache = cache.NewTeamCache(a.api, newCfg.CacheTTL)
+	a.fetchIssuesPage = a.api.FetchIssuesPage
+	a.fetchIssueByID = a.api.FetchIssueByID
+
+	logger.Debug("tui.app: resetting cached state after settings change")
+	a.resetCachedState()
+	a.loadInitialData()
+}
+
+func (a *App) applyThemeAndDensity() {
+	a.theme = ResolveTheme(a.config.Theme)
+	a.themeTags = NewThemeTags(a.theme)
+	a.density = ResolveDensity(a.config.Density)
+
+	a.applyThemeStyles()
+	a.applyThemeToComponents()
+	a.applyDensityToComponents()
+	a.rebuildModals()
+	a.updateStatusBar()
+	a.updateDetailsView()
+	a.updatePaletteList()
+}
+
+func (a *App) applyThemeStyles() {
+	tview.Styles.PrimitiveBackgroundColor = a.theme.Background
+	tview.Styles.ContrastBackgroundColor = a.theme.Background
+	tview.Styles.MoreContrastBackgroundColor = a.theme.HeaderBg
+	tview.Styles.BorderColor = a.theme.Border
+	tview.Styles.TitleColor = a.theme.Foreground
+	tview.Styles.GraphicsColor = a.theme.Border
+	tview.Styles.PrimaryTextColor = a.theme.Foreground
+	tview.Styles.SecondaryTextColor = a.theme.SecondaryText
+	tview.Styles.TertiaryTextColor = a.theme.SecondaryText
+	tview.Styles.InverseTextColor = a.theme.Background
+	tview.Styles.ContrastSecondaryTextColor = a.theme.SecondaryText
+}
+
+func (a *App) applyThemeToComponents() {
+	if a.navigationTree != nil {
+		a.navigationTree.SetBackgroundColor(a.theme.Background).
+			SetBorderColor(a.theme.Border).
+			SetTitleColor(a.theme.Foreground)
+		a.recolorNavigationTree()
+	}
+
+	if a.myIssuesTable != nil {
+		a.applyIssuesTableTheme(a.myIssuesTable)
+		renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, a.selectedIssueID(IssuesSectionMy), a.theme)
+	}
+	if a.otherIssuesTable != nil {
+		a.applyIssuesTableTheme(a.otherIssuesTable)
+		renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, a.selectedIssueID(IssuesSectionOther), a.theme)
+	}
+
+	if a.detailsDescriptionView != nil {
+		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground).
+			SetBorderColor(a.theme.Border).
+			SetBackgroundColor(a.theme.Background)
+	}
+	if a.detailsCommentsView != nil {
+		a.detailsCommentsView.SetTitleColor(a.theme.Foreground).
+			SetBorderColor(a.theme.Border).
+			SetBackgroundColor(a.theme.Background)
+	}
+
+	if a.statusBar != nil {
+		a.statusBar.SetBackgroundColor(a.theme.HeaderBg)
+	}
+}
+
+func (a *App) applyDensityToComponents() {
+	if a.detailsDescriptionView != nil {
+		padding := a.density.DetailsPadding
+		a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	}
+	if a.detailsCommentsView != nil {
+		padding := a.density.DetailsPadding
+		a.detailsCommentsView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	}
+	if a.statusBar != nil {
+		padding := a.density.StatusBarPadding
+		a.statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	}
+	if a.agentOutputModal != nil {
+		a.agentOutputModal.ApplyDensity(a.density)
+	}
+}
+
+func (a *App) rebuildModals() {
+	if a.pages != nil {
+		a.pages.RemovePage("palette")
+	}
+	a.paletteModal = a.buildPaletteModal()
+	if a.pages != nil {
+		a.pages.AddPage("palette", a.paletteModal, true, false)
+	}
+
+	a.pickerModal = NewPickerModal(a)
+	a.createIssueModal = NewCreateIssueModal(a)
+	a.createCommentModal = NewCreateCommentModal(a)
+	a.editTitleModal = NewEditTitleModal(a)
+	a.editLabelsModal = NewEditLabelsModal(a)
+	a.settingsModal = NewSettingsModal(a)
+	a.promptTemplatesModal = NewAgentPromptTemplatesModal(a)
+	a.agentPromptModal = NewAgentPromptModal(a)
+	if a.pages == nil || !a.pages.HasPage("agent_output") {
+		a.agentOutputModal = NewAgentOutputModal(a)
+	} else {
+		a.agentOutputModal.ApplyTheme(a.theme)
+		a.agentOutputModal.ApplyDensity(a.density)
+	}
+}
+
+func (a *App) applyIssuesTableTheme(table *tview.Table) {
+	if table == nil {
+		return
+	}
+	table.SetTitleColor(a.theme.Foreground).
+		SetBorderColor(a.theme.Border).
+		SetBackgroundColor(a.theme.Background)
+	table.SetSelectedStyle(tcell.StyleDefault.
+		Foreground(a.theme.SelectionText).
+		Background(a.theme.SelectionBg).
+		Bold(true))
+}
+
+func (a *App) recolorNavigationTree() {
+	if a.navigationTree == nil {
+		return
+	}
+	root := a.navigationTree.GetRoot()
+	if root == nil {
+		return
+	}
+	a.applyNavigationNodeColors(root)
+}
+
+func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
+	if node == nil {
+		return
+	}
+	ref := node.GetReference()
+	if ref == nil {
+		node.SetColor(a.theme.Accent)
+	} else if navNode, ok := ref.(*NavigationNode); ok {
+		if navNode.IsProject || navNode.IsStatus {
+			node.SetColor(a.theme.SecondaryText)
+		} else {
+			node.SetColor(a.theme.Foreground)
+		}
+	}
+	for _, child := range node.GetChildren() {
+		a.applyNavigationNodeColors(child)
+	}
+}
+
+func (a *App) selectedIssueID(section IssuesSection) string {
+	var table *tview.Table
+	switch section {
+	case IssuesSectionMy:
+		table = a.myIssuesTable
+	case IssuesSectionOther:
+		table = a.otherIssuesTable
+	}
+	if table == nil {
+		return ""
+	}
+	row, _ := table.GetSelection()
+	if row <= 0 {
+		return ""
+	}
+	issue := a.getIssueFromRowForSection(row, section)
+	if issue == nil {
+		return ""
+	}
+	return issue.ID
+}
+
+// resetCachedState clears cached user and issue data after config changes.
+func (a *App) resetCachedState() {
+	a.issuesMu.Lock()
+	a.selectedIssue = nil
+	a.issues = nil
+	a.issueRows = nil
+	a.idToIssue = make(map[string]*linearapi.Issue)
+	a.myIssueRows = nil
+	a.myIDToIssue = make(map[string]*linearapi.Issue)
+	a.otherIssueRows = nil
+	a.otherIDToIssue = make(map[string]*linearapi.Issue)
+	a.issuesMu.Unlock()
+
+	a.selectedNavigation = nil
+	a.currentUser = nil
+	a.teamUsers = nil
+	a.workflowStates = nil
+	a.activeIssuesSection = IssuesSectionOther
+	a.expandedState = make(map[string]bool)
+
+	a.isLoading = false
+	a.pendingRefresh = false
+	a.pendingRefreshIssueID = ""
+	a.pendingRefreshAllowFocusChange = true
+	// Bump generation to prevent in-flight refreshes from updating UI.
+	a.refreshGeneration.Add(1)
+	a.fetchingIssueID = ""
+}
+
+// parseLogLevel converts a string log level to a logger.LogLevel.
+func parseLogLevel(level string) logger.LogLevel {
+	switch level {
+	case "debug":
+		return logger.LevelDebug
+	case "info":
+		return logger.LevelInfo
+	case "warning":
+		return logger.LevelWarning
+	case "error":
+		return logger.LevelError
+	default:
+		return logger.LevelWarning
+	}
 }
 
 // loadNavigationData fetches teams and projects from the API and updates the navigation tree.
 func (a *App) loadNavigationData(ctx context.Context) {
 	teams, err := a.cache.GetTeams(ctx)
 	if err != nil {
-		logger.ErrorWithErr(err, "Failed to load teams")
+		logger.ErrorWithErr(err, "tui.app: failed to load teams")
 		a.app.QueueUpdateDraw(func() {
 			a.updateStatusBarWithError(err)
 		})
 		return
 	}
 
-	logger.Debug("Loaded %d teams", len(teams))
+	logger.Debug("tui.app: loaded teams count=%d", len(teams))
 	a.app.QueueUpdateDraw(func() {
 		a.rebuildNavigationTree(teams)
 	})
@@ -206,12 +465,12 @@ func (a *App) loadNavigationData(ctx context.Context) {
 // rebuildNavigationTree rebuilds the navigation tree with real data.
 func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
 	root := tview.NewTreeNode("Linear").
-		SetColor(LinearTheme.Accent).
+		SetColor(a.theme.Accent).
 		SetSelectable(false)
 
 	// Add "All Issues" at the top
 	allIssues := tview.NewTreeNode("All Issues").
-		SetColor(LinearTheme.Foreground).
+		SetColor(a.theme.Foreground).
 		SetReference(&NavigationNode{ID: "all", Text: "All Issues"}).
 		SetExpanded(true)
 	root.AddChild(allIssues)
@@ -219,7 +478,7 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
 	// Add teams
 	for _, team := range teams {
 		teamNode := tview.NewTreeNode(team.Name).
-			SetColor(LinearTheme.Foreground).
+			SetColor(a.theme.Foreground).
 			SetReference(&NavigationNode{
 				ID:     team.ID,
 				Text:   team.Name,
@@ -247,16 +506,39 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 		return
 	}
 
-	// Load projects asynchronously
+	// Load projects and workflow states asynchronously
 	go func() {
+		logger.Debug("tui.app: loading navigation children team_id=%s", teamID)
 		ctx := context.Background()
-		projects, err := a.cache.GetProjects(ctx, teamID)
-		if err != nil {
+		var projects []linearapi.Project
+		var states []linearapi.WorkflowState
+		var projectsErr, statesErr error
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			projects, projectsErr = a.cache.GetProjects(ctx, teamID)
+		}()
+		go func() {
+			defer wg.Done()
+			states, statesErr = a.cache.GetWorkflowStates(ctx, teamID)
+		}()
+		wg.Wait()
+		if projectsErr != nil {
+			logger.ErrorWithErr(projectsErr, "tui.app: failed to load projects team_id=%s", teamID)
 			a.app.QueueUpdateDraw(func() {
-				a.updateStatusBarWithError(err)
+				a.updateStatusBarWithError(projectsErr)
 			})
 			return
 		}
+		if statesErr != nil {
+			logger.ErrorWithErr(statesErr, "tui.app: failed to load workflow states team_id=%s", teamID)
+			a.app.QueueUpdateDraw(func() {
+				a.updateStatusBarWithError(statesErr)
+			})
+			return
+		}
+		logger.Debug("tui.app: loaded navigation children team_id=%s projects=%d states=%d", teamID, len(projects), len(states))
 
 		a.app.QueueUpdateDraw(func() {
 			// Double-check children haven't been added by another goroutine
@@ -264,9 +546,37 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 				teamNode.SetExpanded(true)
 				return
 			}
+			if len(states) > 0 {
+				sort.Slice(states, func(i, j int) bool {
+					return states[i].Position < states[j].Position
+				})
+				statusGroup := tview.NewTreeNode("  Status").
+					SetColor(a.theme.SecondaryText).
+					SetSelectable(false).
+					SetReference(&NavigationNode{
+						ID:       fmt.Sprintf("%s-status", teamID),
+						Text:     "Status",
+						TeamID:   teamID,
+						IsStatus: true,
+					})
+				for _, state := range states {
+					stateNode := tview.NewTreeNode("    " + state.Name).
+						SetColor(a.theme.SecondaryText).
+						SetReference(&NavigationNode{
+							ID:        state.ID,
+							Text:      state.Name,
+							TeamID:    teamID,
+							IsStatus:  true,
+							StateID:   state.ID,
+							StateName: state.Name,
+						})
+					statusGroup.AddChild(stateNode)
+				}
+				teamNode.AddChild(statusGroup)
+			}
 			for _, proj := range projects {
 				projNode := tview.NewTreeNode("  " + proj.Name).
-					SetColor(LinearTheme.SecondaryText).
+					SetColor(a.theme.SecondaryText).
 					SetReference(&NavigationNode{
 						ID:        proj.ID,
 						Text:      proj.Name,
@@ -317,6 +627,11 @@ func (a *App) buildLayout() {
 	a.createCommentModal = NewCreateCommentModal(a)
 	a.editTitleModal = NewEditTitleModal(a)
 	a.editLabelsModal = NewEditLabelsModal(a)
+	a.settingsModal = NewSettingsModal(a)
+	a.promptTemplatesModal = NewAgentPromptTemplatesModal(a)
+	a.agentPromptModal = NewAgentPromptModal(a)
+	a.agentOutputModal = NewAgentOutputModal(a)
+	a.agentRunner = agents.NewRunner()
 
 	// Add main layout to pages
 	a.pages.AddPage("main", a.mainLayout, true, true)
@@ -354,6 +669,26 @@ func (a *App) bindGlobalKeys() {
 			return a.editLabelsModal.HandleKey(event)
 		}
 
+		// Check if settings modal is visible and handle its keys
+		if a.pages.HasPage("settings") && a.settingsModal != nil {
+			return a.settingsModal.HandleKey(event)
+		}
+
+		// Check if prompt templates modal is visible and handle its keys
+		if a.pages.HasPage("prompt_templates") && a.promptTemplatesModal != nil {
+			return a.promptTemplatesModal.HandleKey(event)
+		}
+
+		// Check if agent prompt modal is visible and handle its keys
+		if a.pages.HasPage("agent_prompt") && a.agentPromptModal != nil {
+			return a.agentPromptModal.HandleKey(event)
+		}
+
+		// Check if agent output modal is visible and handle its keys
+		if a.pages.HasPage("agent_output") && a.agentOutputModal != nil {
+			return a.agentOutputModal.HandleKey(event)
+		}
+
 		// Handle palette first if it's open
 		if a.focusedPane == FocusPalette {
 			return a.handlePaletteKey(event)
@@ -370,14 +705,23 @@ func (a *App) bindGlobalKeys() {
 		case tcell.KeyCtrlC:
 			a.app.Stop()
 			return nil
-		case tcell.KeyTab:
+		case tcell.KeyTab, tcell.KeyBacktab:
 			// Tab cycles forward through panes (Navigation -> Issues -> Details)
 			// When in Details pane, first cycle between description and comments
 			// Only cycle when not in palette or modals
+			isBackward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
 			if a.focusedPane != FocusPalette {
 				if a.focusedPane == FocusDetails {
+					if !a.detailsCommentsVisible {
+						if isBackward {
+							a.cyclePanesBackward()
+						} else {
+							a.cyclePanesForward()
+						}
+						return nil
+					}
 					// Cycle between description and comments within details pane
-					if event.Modifiers()&tcell.ModShift == 0 {
+					if !isBackward {
 						// Tab: description -> comments -> next pane
 						if a.focusedDetailsView {
 							// Currently on comments, move to next pane
@@ -400,11 +744,11 @@ func (a *App) bindGlobalKeys() {
 						}
 					}
 				} else {
-					if event.Modifiers()&tcell.ModShift == 0 {
-						a.cyclePanesForward()
-					} else {
+					if isBackward {
 						// Shift+Tab cycles backward
 						a.cyclePanesBackward()
+					} else {
+						a.cyclePanesForward()
 					}
 				}
 			}
@@ -609,7 +953,7 @@ func (a *App) cyclePanesForward() {
 
 // cyclePanesBackward cycles focus backward through panes.
 // When in Issues pane, cycles: Other Issues -> My Issues -> Navigation
-// Otherwise cycles: Details -> Issues -> Navigation -> Details
+// Otherwise cycles: Details -> Issues (My Issues preferred) -> Navigation -> Details
 func (a *App) cyclePanesBackward() {
 	switch a.focusedPane {
 	case FocusNavigation:
@@ -631,11 +975,11 @@ func (a *App) cyclePanesBackward() {
 		}
 	case FocusDetails:
 		a.focusedPane = FocusIssues
-		// Set to Other Issues if available, otherwise My Issues
-		if len(a.otherIssueRows) > 0 {
-			a.activeIssuesSection = IssuesSectionOther
-		} else {
+		// Set to My Issues if available, otherwise Other Issues (consistent with forward cycle)
+		if len(a.myIssueRows) > 0 {
 			a.activeIssuesSection = IssuesSectionMy
+		} else {
+			a.activeIssuesSection = IssuesSectionOther
 		}
 		// FocusPalette is excluded from cycling
 	}
@@ -647,49 +991,146 @@ func (a *App) updateFocus() {
 	switch a.focusedPane {
 	case FocusNavigation:
 		a.app.SetFocus(a.navigationTree)
-		a.navigationTree.SetBorderColor(LinearTheme.BorderFocus)
-		a.myIssuesTable.SetBorderColor(LinearTheme.Border)
-		a.otherIssuesTable.SetBorderColor(LinearTheme.Border)
-		a.detailsDescriptionView.SetBorderColor(LinearTheme.Border)
-		a.detailsCommentsView.SetBorderColor(LinearTheme.Border)
+		a.navigationTree.SetBorderColor(a.theme.BorderFocus)
+		a.myIssuesTable.SetBorderColor(a.theme.Border)
+		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
+		a.detailsCommentsView.SetBorderColor(a.theme.Border)
+		// Update all pane titles
+		a.updateAllPaneTitles()
 	case FocusIssues:
 		// Focus the active issues section
 		if a.activeIssuesSection == IssuesSectionMy && len(a.myIssueRows) > 0 {
 			a.app.SetFocus(a.myIssuesTable)
-			a.myIssuesTable.SetBorderColor(LinearTheme.BorderFocus)
-			a.otherIssuesTable.SetBorderColor(LinearTheme.Border)
+			a.myIssuesTable.SetBorderColor(a.theme.BorderFocus)
+			a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		} else {
 			a.app.SetFocus(a.otherIssuesTable)
-			a.myIssuesTable.SetBorderColor(LinearTheme.Border)
-			a.otherIssuesTable.SetBorderColor(LinearTheme.BorderFocus)
+			a.myIssuesTable.SetBorderColor(a.theme.Border)
+			a.otherIssuesTable.SetBorderColor(a.theme.BorderFocus)
 			a.activeIssuesSection = IssuesSectionOther
 		}
-		a.navigationTree.SetBorderColor(LinearTheme.Border)
-		a.detailsDescriptionView.SetBorderColor(LinearTheme.Border)
-		a.detailsCommentsView.SetBorderColor(LinearTheme.Border)
+		// Update all pane titles
+		a.updateAllPaneTitles()
+		a.navigationTree.SetBorderColor(a.theme.Border)
+		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
+		a.detailsCommentsView.SetBorderColor(a.theme.Border)
 	case FocusDetails:
 		// Focus the appropriate sub-view based on state
-		if a.focusedDetailsView {
+		if !a.detailsCommentsVisible {
+			a.focusedDetailsView = false
+		}
+		if a.focusedDetailsView && a.detailsCommentsVisible {
 			a.app.SetFocus(a.detailsCommentsView)
-			a.detailsDescriptionView.SetBorderColor(LinearTheme.Border)
-			a.detailsCommentsView.SetBorderColor(LinearTheme.BorderFocus)
+			a.detailsDescriptionView.SetBorderColor(a.theme.Border)
+			a.detailsCommentsView.SetBorderColor(a.theme.BorderFocus)
 		} else {
 			a.app.SetFocus(a.detailsDescriptionView)
-			a.detailsDescriptionView.SetBorderColor(LinearTheme.BorderFocus)
-			a.detailsCommentsView.SetBorderColor(LinearTheme.Border)
+			a.detailsDescriptionView.SetBorderColor(a.theme.BorderFocus)
+			a.detailsCommentsView.SetBorderColor(a.theme.Border)
 		}
-		a.navigationTree.SetBorderColor(LinearTheme.Border)
-		a.myIssuesTable.SetBorderColor(LinearTheme.Border)
-		a.otherIssuesTable.SetBorderColor(LinearTheme.Border)
+		a.navigationTree.SetBorderColor(a.theme.Border)
+		a.myIssuesTable.SetBorderColor(a.theme.Border)
+		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		// Update all pane titles
+		a.updateAllPaneTitles()
 	case FocusPalette:
 		a.app.SetFocus(a.paletteInput)
-		a.navigationTree.SetBorderColor(LinearTheme.Border)
-		a.myIssuesTable.SetBorderColor(LinearTheme.Border)
-		a.otherIssuesTable.SetBorderColor(LinearTheme.Border)
-		a.detailsDescriptionView.SetBorderColor(LinearTheme.Border)
-		a.detailsCommentsView.SetBorderColor(LinearTheme.Border)
+		a.navigationTree.SetBorderColor(a.theme.Border)
+		a.myIssuesTable.SetBorderColor(a.theme.Border)
+		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
+		a.detailsCommentsView.SetBorderColor(a.theme.Border)
+		// Update all pane titles
+		a.updateAllPaneTitles()
 	}
 	a.updateStatusBar()
+}
+
+// updateAllPaneTitles updates all pane titles with visual indicators for the active pane.
+func (a *App) updateAllPaneTitles() {
+	// Update Navigation pane title
+	if a.focusedPane == FocusNavigation {
+		a.navigationTree.SetTitle(" ▶ Navigation ")
+		a.navigationTree.SetTitleColor(a.theme.Accent)
+	} else {
+		a.navigationTree.SetTitle(" Navigation ")
+		a.navigationTree.SetTitleColor(a.theme.Foreground)
+	}
+
+	// Update Issues pane titles
+	isIssuesFocused := a.focusedPane == FocusIssues
+
+	// Update My Issues table title
+	if len(a.myIssueRows) > 0 {
+		if isIssuesFocused && a.activeIssuesSection == IssuesSectionMy {
+			// Active section: add visual indicator and accent color
+			a.myIssuesTable.SetTitle(" ▶ My Issues ")
+			a.myIssuesTable.SetTitleColor(a.theme.Accent)
+		} else {
+			// Inactive section: normal title
+			a.myIssuesTable.SetTitle(" My Issues ")
+			a.myIssuesTable.SetTitleColor(a.theme.Foreground)
+		}
+	} else {
+		// No issues in this section
+		a.myIssuesTable.SetTitle(" My Issues ")
+		a.myIssuesTable.SetTitleColor(a.theme.Foreground)
+	}
+
+	// Update Other Issues table title
+	if len(a.otherIssueRows) > 0 {
+		if isIssuesFocused && a.activeIssuesSection == IssuesSectionOther {
+			// Active section: add visual indicator and accent color
+			a.otherIssuesTable.SetTitle(" ▶ Other Issues ")
+			a.otherIssuesTable.SetTitleColor(a.theme.Accent)
+		} else {
+			// Inactive section: normal title
+			a.otherIssuesTable.SetTitle(" Other Issues ")
+			a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
+		}
+	} else {
+		// No issues in this section
+		a.otherIssuesTable.SetTitle(" Other Issues ")
+		a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
+	}
+
+	// Update Details pane titles
+	isDetailsFocused := a.focusedPane == FocusDetails
+	if a.detailsDescriptionView != nil {
+		if isDetailsFocused {
+			// Details pane is focused - show indicator on active sub-view
+			if a.focusedDetailsView && a.detailsCommentsVisible && a.detailsCommentsView != nil {
+				// Comments view is active
+				a.detailsDescriptionView.SetTitle(" Details ")
+				a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
+				a.detailsCommentsView.SetTitle(" ▶ Comments ")
+				a.detailsCommentsView.SetTitleColor(a.theme.Accent)
+			} else {
+				// Description view is active
+				a.detailsDescriptionView.SetTitle(" ▶ Details ")
+				a.detailsDescriptionView.SetTitleColor(a.theme.Accent)
+				if a.detailsCommentsVisible && a.detailsCommentsView != nil {
+					a.detailsCommentsView.SetTitle(" Comments ")
+					a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
+				}
+			}
+		} else {
+			// Details pane is not focused - reset both titles
+			a.detailsDescriptionView.SetTitle(" Details ")
+			a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
+			if a.detailsCommentsView != nil {
+				a.detailsCommentsView.SetTitle(" Comments ")
+				a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
+			}
+		}
+	}
+}
+
+// updateIssuesTableTitles updates the table titles with visual indicators for the active section.
+// Deprecated: Use updateAllPaneTitles() instead.
+func (a *App) updateIssuesTableTitles() {
+	a.updateAllPaneTitles()
 }
 
 // openPalette opens the command palette overlay.
@@ -733,8 +1174,10 @@ func (a *App) closePaletteUI() {
 }
 
 // queueIssuesRefresh records a refresh request while a fetch is in progress.
-func (a *App) queueIssuesRefresh(issueID ...string) {
+func (a *App) queueIssuesRefresh(allowFocusChange bool, issueID ...string) {
+	logger.Debug("tui.app: queueing issues refresh issue_id=%v", issueID)
 	a.pendingRefresh = true
+	a.pendingRefreshAllowFocusChange = allowFocusChange
 	a.refreshGeneration.Add(1)
 	if len(issueID) > 0 {
 		a.pendingRefreshIssueID = issueID[0]
@@ -749,30 +1192,44 @@ func (a *App) runQueuedIssuesRefresh() {
 		return
 	}
 	issueID := a.pendingRefreshIssueID
+	allowFocusChange := a.pendingRefreshAllowFocusChange
+	logger.Debug("tui.app: running queued refresh issue_id=%s", issueID)
 	a.pendingRefresh = false
 	a.pendingRefreshIssueID = ""
+	a.pendingRefreshAllowFocusChange = true
 	if issueID != "" {
-		go a.refreshIssues(issueID)
+		go a.refreshIssuesWithFocusChange(allowFocusChange, issueID)
 		return
 	}
-	go a.refreshIssues()
+	go a.refreshIssuesWithFocusChange(allowFocusChange)
 }
 
 // refreshIssues fetches issues from the API and updates the UI.
 // If issueID is provided, that issue will be selected after refresh.
 func (a *App) refreshIssues(issueID ...string) {
+	a.refreshIssuesWithFocusChange(true, issueID...)
+}
+
+// refreshIssuesWithFocusChange fetches issues and optionally shifts focus to the issues pane.
+func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...string) {
 	if a.isLoading {
-		a.queueIssuesRefresh(issueID...)
+		a.queueIssuesRefresh(allowFocusChange, issueID...)
 		return
 	}
 	a.isLoading = true
 
+	targetID := ""
+	if len(issueID) > 0 {
+		targetID = issueID[0]
+	}
+	logger.Debug("tui.app: starting issues refresh target_issue_id=%s", targetID)
 	generation := a.refreshGeneration.Add(1)
 	var targetIssueID string
 	if len(issueID) > 0 {
 		targetIssueID = issueID[0]
 	}
 
+	allowFocus := allowFocusChange
 	go func() {
 		ctx := context.Background()
 
@@ -782,9 +1239,12 @@ func (a *App) refreshIssues(issueID ...string) {
 			OrderBy: string(a.sortField),
 		}
 
-		// Apply team/project filter based on navigation selection
+		// Apply team/project/state filter based on navigation selection
 		if a.selectedNavigation != nil {
-			if a.selectedNavigation.IsTeam {
+			if a.selectedNavigation.IsStatus {
+				params.TeamID = a.selectedNavigation.TeamID
+				params.StateID = a.selectedNavigation.StateID
+			} else if a.selectedNavigation.IsTeam {
 				params.TeamID = a.selectedNavigation.TeamID
 			} else if a.selectedNavigation.IsProject {
 				params.TeamID = a.selectedNavigation.TeamID
@@ -800,11 +1260,12 @@ func (a *App) refreshIssues(issueID ...string) {
 
 		pageCount := 0
 		fetchedCount := 0
+		logger.Debug("tui.app: refreshing issues team_id=%s project_id=%s state_id=%s search=%s", params.TeamID, params.ProjectID, params.StateID, params.Search)
 		page, err := fetchPage(ctx, params, nil)
 		if err != nil {
 			a.QueueUpdateDraw(func() {
 				a.isLoading = false
-				logger.ErrorWithErr(err, "Failed to fetch issues")
+				logger.ErrorWithErr(err, "tui.app: failed to fetch issues")
 				a.updateStatusBarWithError(err)
 				a.runQueuedIssuesRefresh()
 			})
@@ -821,13 +1282,15 @@ func (a *App) refreshIssues(issueID ...string) {
 		pageCount++
 		fetchedCount += len(page.Issues)
 		a.QueueUpdateDraw(func() {
-			logger.Debug("Fetched %d issues (page %d)", len(page.Issues), pageCount)
+			logger.Debug("tui.app: fetched issues page=%d count=%d", pageCount, len(page.Issues))
 			a.updateIssuesData(page.Issues, targetIssueID)
-			// Ensure focus is on issues table after initial load
-			a.focusedPane = FocusIssues
-			a.updateFocus()
+			if allowFocus {
+				// Ensure focus is on issues table after initial load
+				a.focusedPane = FocusIssues
+				a.updateFocus()
+			}
 			if page.HasNext {
-				a.statusBar.SetText(fmt.Sprintf("[yellow]Loading more (page %d, fetched %d)...[-]", pageCount, fetchedCount))
+				a.statusBar.SetText(fmt.Sprintf("%sLoading more (page %d, fetched %d)...[-]", a.themeTags.Warning, pageCount, fetchedCount))
 			}
 		})
 
@@ -839,7 +1302,7 @@ func (a *App) refreshIssues(issueID ...string) {
 			nextPage, err := fetchPage(ctx, params, after)
 			if err != nil {
 				a.QueueUpdateDraw(func() {
-					logger.ErrorWithErr(err, "Failed to fetch more issues")
+					logger.ErrorWithErr(err, "tui.app: failed to fetch more issues page=%d", pageCount+1)
 					a.updateStatusBarWithError(err)
 				})
 				break
@@ -855,13 +1318,14 @@ func (a *App) refreshIssues(issueID ...string) {
 			a.QueueUpdateDraw(func() {
 				a.appendIssuesData(page.Issues)
 				if page.HasNext {
-					a.statusBar.SetText(fmt.Sprintf("[yellow]Loading more (page %d, fetched %d)...[-]", pageCount, fetchedCount))
+					a.statusBar.SetText(fmt.Sprintf("%sLoading more (page %d, fetched %d)...[-]", a.themeTags.Warning, pageCount, fetchedCount))
 				}
 			})
 		}
 
 		a.QueueUpdateDraw(func() {
 			a.isLoading = false
+			logger.Debug("tui.app: refresh completed pages=%d total_fetched=%d", pageCount, fetchedCount)
 			a.updateStatusBar()
 			a.runQueuedIssuesRefresh()
 		})
@@ -869,7 +1333,7 @@ func (a *App) refreshIssues(issueID ...string) {
 
 	// Show loading indicator
 	a.QueueUpdateDraw(func() {
-		a.statusBar.SetText("[yellow]Loading...[-]")
+		a.statusBar.SetText(fmt.Sprintf("%sLoading...[-]", a.themeTags.Warning))
 	})
 }
 
@@ -884,6 +1348,9 @@ func (a *App) updateIssuesColumnLayout() {
 
 	// Always add Other Issues table
 	a.issuesColumn.AddItem(a.otherIssuesTable, 0, 1, false)
+
+	// Update all pane titles to reflect current state
+	a.updateAllPaneTitles()
 }
 
 // updateIssuesData updates the UI with new issues data.
@@ -961,8 +1428,8 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 		}
 	}
 
-	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID)
-	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID)
+	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
+	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
 
 	// Select issue and update details.
 	var selectedIssue *linearapi.Issue
@@ -1050,6 +1517,7 @@ func sortIssuesByPriority(issues []linearapi.Issue) {
 
 // onIssueSelected handles when an issue is selected.
 func (a *App) onIssueSelected(issue linearapi.Issue) {
+	logger.Debug("tui.app: issue selected issue=%s", issue.Identifier)
 	// Set selected issue immediately for quick UI feedback
 	a.issuesMu.Lock()
 	a.selectedIssue = &issue
@@ -1061,6 +1529,7 @@ func (a *App) onIssueSelected(issue linearapi.Issue) {
 	a.fetchingIssueID = issueID
 
 	go func() {
+		logger.Debug("tui.app: fetching full issue details issue=%s", issue.Identifier)
 		ctx := context.Background()
 		fetchIssue := a.fetchIssueByID
 		if fetchIssue == nil {
@@ -1072,7 +1541,7 @@ func (a *App) onIssueSelected(issue linearapi.Issue) {
 			// Race-safety: only apply if this is still the issue we're fetching
 			if a.fetchingIssueID == issueID {
 				if err != nil {
-					logger.ErrorWithErr(err, "Failed to fetch full issue details for %s", issue.Identifier)
+					logger.ErrorWithErr(err, "tui.app: failed to fetch full issue details issue=%s", issue.Identifier)
 					// Keep the partial issue data we already have
 					return
 				}
@@ -1092,6 +1561,7 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	var ok bool
 	if issue, ok = a.myIDToIssue[issueID]; !ok {
 		if issue, ok = a.otherIDToIssue[issueID]; !ok {
+			logger.Debug("tui.app: issue not found for toggle issue_id=%s", issueID)
 			return
 		}
 	}
@@ -1104,6 +1574,9 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	if len(issue.Children) == 0 {
 		return
 	}
+
+	wasExpanded := a.expandedState[issueID]
+	logger.Debug("tui.app: toggling issue expanded issue=%s was_expanded=%v", issue.Identifier, wasExpanded)
 
 	ToggleExpanded(a.expandedState, issueID)
 
@@ -1144,18 +1617,20 @@ func (a *App) toggleIssueExpanded(issueID string) {
 		a.activeIssuesSection = IssuesSectionOther
 	}
 
-	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID)
-	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID)
+	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
+	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
 }
 
 // onNavigationSelected handles when a navigation item is selected.
 func (a *App) onNavigationSelected(node *NavigationNode) {
+	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v", node.ID, node.Text, node.IsTeam, node.IsProject)
 	a.selectedNavigation = node
 
 	// Update selected team/project
 	if node.IsTeam {
 		// Load team metadata (users, workflow states) in background
 		go func() {
+			logger.Debug("tui.app: preloading team metadata team_id=%s", node.TeamID)
 			ctx := context.Background()
 			_ = a.cache.PreloadTeamMetadata(ctx, node.TeamID)
 
@@ -1163,6 +1638,7 @@ func (a *App) onNavigationSelected(node *NavigationNode) {
 			users, _ := a.cache.GetUsers(ctx, node.TeamID)
 			states, _ := a.cache.GetWorkflowStates(ctx, node.TeamID)
 
+			logger.Debug("tui.app: loaded team metadata team_id=%s users_count=%d states_count=%d", node.TeamID, len(users), len(states))
 			a.app.QueueUpdateDraw(func() {
 				a.teamUsers = users
 				a.workflowStates = states
@@ -1172,12 +1648,13 @@ func (a *App) onNavigationSelected(node *NavigationNode) {
 
 	// Refresh issues for the new selection - run in goroutine to avoid blocking
 	// the tview callback (QueueUpdateDraw deadlocks if called from within a callback)
-	go a.refreshIssues()
+	go a.refreshIssuesWithFocusChange(false)
 }
 
 // setSearchQuery sets the search query and refreshes issues.
 func (a *App) setSearchQuery(query string) {
 	trimmedQuery := strings.TrimSpace(query)
+	logger.Debug("tui.app: setting search query query=%s", trimmedQuery)
 	a.searchQuery = trimmedQuery
 	// Set focus to issues pane when searching
 	a.focusedPane = FocusIssues
@@ -1188,6 +1665,7 @@ func (a *App) setSearchQuery(query string) {
 
 // setSortField sets the sort field and refreshes issues.
 func (a *App) setSortField(field SortField) {
+	logger.Debug("tui.app: setting sort field field=%s", field)
 	a.sortField = field
 	// Run in goroutine to avoid deadlock when called from tview callbacks
 	go a.refreshIssues()
@@ -1196,7 +1674,7 @@ func (a *App) setSortField(field SortField) {
 // updateStatusBar updates the status bar with current information.
 func (a *App) updateStatusBar() {
 	var helpText string
-	keyColor := "[#A0A0A0]"
+	keyColor := a.themeTags.SecondaryText
 
 	switch a.focusedPane {
 	case FocusNavigation:
@@ -1213,23 +1691,31 @@ func (a *App) updateStatusBar() {
 
 	navText := ""
 	if a.selectedNavigation != nil {
-		navText = fmt.Sprintf("[#5E6AD2]%s[-]", a.selectedNavigation.Text)
+		label := a.selectedNavigation.Text
+		if a.selectedNavigation.IsStatus {
+			if a.selectedNavigation.StateName != "" {
+				label = fmt.Sprintf("Status: %s", a.selectedNavigation.StateName)
+			} else {
+				label = "Status"
+			}
+		}
+		navText = fmt.Sprintf("%s%s[-]", a.themeTags.Accent, label)
 	}
 
 	searchText := ""
 	if a.searchQuery != "" {
-		searchText = fmt.Sprintf("[#F2C94C]🔍 %s[-]", a.searchQuery)
+		searchText = fmt.Sprintf("%s🔍 %s[-]", a.themeTags.Warning, a.searchQuery)
 	}
 
 	a.issuesMu.RLock()
 	issuesLen := len(a.issues)
 	a.issuesMu.RUnlock()
-	statusText := fmt.Sprintf("[#5E6AD2]%d issues[-]", issuesLen)
+	statusText := fmt.Sprintf("%s%d issues[-]", a.themeTags.Accent, issuesLen)
 	if issuesLen == 0 {
-		statusText = "[#787878]No issues[-]"
+		statusText = fmt.Sprintf("%sNo issues[-]", a.themeTags.SecondaryText)
 	}
 
-	sep := "[#3C3C3C] | [-]"
+	sep := fmt.Sprintf("%s | [-]", a.themeTags.Border)
 
 	parts := []string{helpText}
 	if navText != "" {
@@ -1250,7 +1736,7 @@ func (a *App) updateStatusBar() {
 
 // updateStatusBarWithError updates the status bar with an error message.
 func (a *App) updateStatusBarWithError(err error) {
-	a.statusBar.SetText(fmt.Sprintf("[red]Error: %v[-]", err))
+	a.statusBar.SetText(fmt.Sprintf("%sError: %v[-]", a.themeTags.Error, err))
 }
 
 // GetAPI returns the Linear API client (used by commands).
@@ -1325,22 +1811,27 @@ func (a *App) QueueUpdateDraw(f func()) {
 
 // ShowStatusPicker shows a picker for workflow states.
 func (a *App) ShowStatusPicker(onSelect func(stateID string)) {
+	logger.Debug("tui.app: showing status picker")
 	states := a.workflowStates
 	if len(states) == 0 {
 		// Try to load states for current team
 		teamID := a.GetSelectedTeamID()
 		if teamID == "" {
+			logger.Warning("tui.app: cannot show status picker, no team selected")
 			return
 		}
 		go func() {
+			logger.Debug("tui.app: loading workflow states team_id=%s", teamID)
 			ctx := context.Background()
 			loadedStates, err := a.cache.GetWorkflowStates(ctx, teamID)
 			if err != nil {
+				logger.ErrorWithErr(err, "tui.app: failed to load workflow states team_id=%s", teamID)
 				a.QueueUpdateDraw(func() {
 					a.updateStatusBarWithError(err)
 				})
 				return
 			}
+			logger.Debug("tui.app: loaded workflow states team_id=%s count=%d", teamID, len(loadedStates))
 			a.QueueUpdateDraw(func() {
 				a.workflowStates = loadedStates
 				a.showStatusPickerWithStates(loadedStates, onSelect)
@@ -1369,22 +1860,27 @@ func (a *App) showStatusPickerWithStates(states []linearapi.WorkflowState, onSel
 
 // ShowUserPicker shows a picker for team users.
 func (a *App) ShowUserPicker(onSelect func(userID string)) {
+	logger.Debug("tui.app: showing user picker")
 	users := a.teamUsers
 	if len(users) == 0 {
 		// Try to load users for current team
 		teamID := a.GetSelectedTeamID()
 		if teamID == "" {
+			logger.Warning("tui.app: cannot show user picker, no team selected")
 			return
 		}
 		go func() {
+			logger.Debug("tui.app: loading users for picker team_id=%s", teamID)
 			ctx := context.Background()
 			loadedUsers, err := a.cache.GetUsers(ctx, teamID)
 			if err != nil {
+				logger.ErrorWithErr(err, "tui.app: failed to load users for picker team_id=%s", teamID)
 				a.QueueUpdateDraw(func() {
 					a.updateStatusBarWithError(err)
 				})
 				return
 			}
+			logger.Debug("tui.app: loaded users for picker team_id=%s count=%d", teamID, len(loadedUsers))
 			a.QueueUpdateDraw(func() {
 				a.teamUsers = loadedUsers
 				a.showUserPickerWithUsers(loadedUsers, onSelect)
@@ -1433,9 +1929,11 @@ func (a *App) ShowParentIssuePicker(onSelect func(parentID string)) {
 	}
 
 	if len(items) == 0 {
+		logger.Warning("tui.app: no parent issues available for picker")
 		a.updateStatusBarWithError(fmt.Errorf("no parent issues available"))
 		return
 	}
+	logger.Debug("tui.app: parent issue picker items count=%d", len(items))
 
 	a.pickerActive = true
 	a.pickerModal.Show("Select Parent Issue", items, func(item PickerItem) {
@@ -1488,14 +1986,14 @@ func (a *App) showCreateIssueModalWithParent(parentID string) {
 			issue, err := a.api.CreateIssue(ctx, input)
 			a.QueueUpdateDraw(func() {
 				if err != nil {
-					logger.ErrorWithErr(err, "Failed to create issue: %s", title)
+					logger.ErrorWithErr(err, "tui.app: failed to create issue title=%s", title)
 					a.updateStatusBarWithError(err)
 					return
 				}
 				if parentID != "" {
-					logger.Info("Created sub-issue %s: %s", issue.Identifier, title)
+					logger.Info("tui.app: created sub-issue issue=%s title=%s", issue.Identifier, title)
 				} else {
-					logger.Info("Created issue %s: %s", issue.Identifier, title)
+					logger.Info("tui.app: created issue issue=%s title=%s", issue.Identifier, title)
 				}
 				go a.refreshIssues(issue.ID)
 			})
@@ -1519,11 +2017,11 @@ func (a *App) ShowEditTitleModal() {
 			})
 			a.QueueUpdateDraw(func() {
 				if err != nil {
-					logger.ErrorWithErr(err, "Failed to update issue title for %s", issue.Identifier)
+					logger.ErrorWithErr(err, "tui.app: failed to update issue title issue=%s", issue.Identifier)
 					a.updateStatusBarWithError(err)
 					return
 				}
-				logger.Info("Updated title for issue %s", issue.Identifier)
+				logger.Info("tui.app: updated issue title issue=%s", issue.Identifier)
 				go a.refreshIssues(issueID)
 			})
 		}()
@@ -1542,6 +2040,7 @@ func (a *App) ShowEditLabelsModal() {
 		teamID = a.GetSelectedTeamID()
 	}
 	if teamID == "" {
+		logger.Warning("tui.app: cannot edit labels, no team context issue=%s", issue.Identifier)
 		a.updateStatusBarWithError(fmt.Errorf("cannot edit labels: no team context"))
 		return
 	}
@@ -1554,14 +2053,17 @@ func (a *App) ShowEditLabelsModal() {
 
 	// Load available labels asynchronously
 	go func() {
+		logger.Debug("tui.app: loading labels for edit modal issue=%s team_id=%s", issue.Identifier, teamID)
 		ctx := context.Background()
 		availableLabels, err := a.cache.GetIssueLabels(ctx, teamID)
 		if err != nil {
+			logger.ErrorWithErr(err, "tui.app: failed to load labels issue=%s team_id=%s", issue.Identifier, teamID)
 			a.QueueUpdateDraw(func() {
 				a.updateStatusBarWithError(err)
 			})
 			return
 		}
+		logger.Debug("tui.app: loaded labels issue=%s count=%d", issue.Identifier, len(availableLabels))
 
 		a.QueueUpdateDraw(func() {
 			a.editLabelsModal.Show(issue.ID, currentLabelIDs, availableLabels, func(issueID string, labelIDs []string) {
@@ -1573,15 +2075,57 @@ func (a *App) ShowEditLabelsModal() {
 					})
 					a.QueueUpdateDraw(func() {
 						if err != nil {
-							logger.ErrorWithErr(err, "Failed to update labels for issue %s", issue.Identifier)
+							logger.ErrorWithErr(err, "tui.app: failed to update labels issue=%s", issue.Identifier)
 							a.updateStatusBarWithError(err)
 							return
 						}
-						logger.Info("Updated labels for issue %s", issue.Identifier)
+						logger.Info("tui.app: updated labels issue=%s", issue.Identifier)
 						go a.refreshIssues(issueID)
 					})
 				}()
 			})
 		})
 	}()
+}
+
+// ShowSettingsModal shows the settings modal.
+func (a *App) ShowSettingsModal() {
+	if a.settingsModal == nil {
+		return
+	}
+
+	a.settingsModal.Show()
+}
+
+// ShowPromptTemplatesModal shows the prompt templates modal.
+func (a *App) ShowPromptTemplatesModal() {
+	if a.promptTemplatesModal == nil {
+		return
+	}
+
+	promptsPath, err := config.PromptTemplatesFilePath()
+	if err != nil {
+		a.updateStatusBarWithError(err)
+		return
+	}
+
+	templates, err := config.EnsurePromptTemplatesFile(promptsPath)
+	if err != nil {
+		a.updateStatusBarWithError(err)
+		templates = a.agentPromptTemplates
+		if len(templates) == 0 {
+			templates = config.DefaultAgentPromptTemplates()
+		}
+	} else {
+		a.agentPromptTemplates = templates
+	}
+
+	a.promptTemplatesModal.Show(templates, func(updated []config.AgentPromptTemplate) error {
+		if err := config.SavePromptTemplates(promptsPath, updated); err != nil {
+			return err
+		}
+		a.agentPromptTemplates = updated
+		a.agentPromptModal = NewAgentPromptModal(a)
+		return nil
+	})
 }
