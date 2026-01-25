@@ -10,6 +10,10 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 
 ![Assign issue](docs/assign.png)
 
+## Demo
+
+<video src="docs/agent-demo.mp4" controls width="100%"></video>
+
 ## Features
 
 - 3-pane layout (navigation tree + issues list + details view)
