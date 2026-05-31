@@ -16,6 +16,7 @@ type SettingsFile struct {
 	Timeout        *string `json:"timeout"`
 	PageSize       *int    `json:"page_size"`
 	CacheTTL       *string `json:"cache_ttl"`
+	SearchDebounce *string `json:"search_debounce"`
 	LogFile        *string `json:"log_file"`
 	LogLevel       *string `json:"log_level"`
 	Theme          *string `json:"theme"`
@@ -32,6 +33,7 @@ type Settings struct {
 	Timeout        string `json:"timeout"`
 	PageSize       int    `json:"page_size"`
 	CacheTTL       string `json:"cache_ttl"`
+	SearchDebounce string `json:"search_debounce"`
 	LogFile        string `json:"log_file"`
 	LogLevel       string `json:"log_level"`
 	Theme          string `json:"theme"`
@@ -49,6 +51,7 @@ func DefaultSettings() Settings {
 		Timeout:        DefaultTimeout.String(),
 		PageSize:       DefaultPageSize,
 		CacheTTL:       DefaultCacheTTL.String(),
+		SearchDebounce: DefaultSearchDebounce.String(),
 		LogFile:        getDefaultLogFile(),
 		LogLevel:       DefaultLogLevel,
 		Theme:          DefaultTheme,
@@ -67,6 +70,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		Timeout:        cfg.Timeout.String(),
 		PageSize:       cfg.PageSize,
 		CacheTTL:       cfg.CacheTTL.String(),
+		SearchDebounce: cfg.SearchDebounce.String(),
 		LogFile:        cfg.LogFile,
 		LogLevel:       cfg.LogLevel,
 		Theme:          cfg.Theme,
@@ -90,6 +94,11 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 	}
 
 	cacheTTL, err := parseDuration(settings.CacheTTL, "cache_ttl")
+	if err != nil {
+		return Config{}, err
+	}
+
+	searchDebounce, err := parsePositiveDuration(settings.SearchDebounce, "search_debounce")
 	if err != nil {
 		return Config{}, err
 	}
@@ -132,6 +141,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		Timeout:        timeout,
 		PageSize:       settings.PageSize,
 		CacheTTL:       cacheTTL,
+		SearchDebounce: searchDebounce,
 		LogFile:        settings.LogFile,
 		LogLevel:       settings.LogLevel,
 		Theme:          theme,
@@ -202,6 +212,9 @@ func LoadSettings(path string) (Settings, error) {
 	if file.CacheTTL != nil {
 		settings.CacheTTL = *file.CacheTTL
 	}
+	if file.SearchDebounce != nil {
+		settings.SearchDebounce = *file.SearchDebounce
+	}
 	if file.LogFile != nil {
 		settings.LogFile = *file.LogFile
 	}
@@ -261,6 +274,17 @@ func parseDuration(value string, label string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid %s value %q: %w", label, value, err)
 	}
 
+	return duration, nil
+}
+
+func parsePositiveDuration(value string, label string) (time.Duration, error) {
+	duration, err := parseDuration(value, label)
+	if err != nil {
+		return 0, err
+	}
+	if duration <= 0 {
+		return 0, fmt.Errorf("%s must be greater than 0, got %s", label, duration)
+	}
 	return duration, nil
 }
 

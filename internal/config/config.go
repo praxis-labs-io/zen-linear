@@ -21,20 +21,21 @@ const (
 
 // Default configuration values.
 const (
-	DefaultTimeout       = 30 * time.Second
-	DefaultPageSize      = 50
-	DefaultCacheTTL      = 5 * time.Minute
-	DefaultAPIEndpoint   = "https://api.linear.app/graphql"
-	DefaultLogLevel      = "warning" // debug, info, warning, error
-	ThemeLinear          = "linear"
-	ThemeHighContrast    = "high_contrast"
-	ThemeColorBlind      = "color_blind"
-	DefaultTheme         = ThemeLinear
-	DensityComfortable   = "comfortable"
-	DensityCompact       = "compact"
-	DefaultDensity       = DensityComfortable
-	DefaultAgentProvider = "cursor"
-	DefaultAgentSandbox  = "enabled"
+	DefaultTimeout        = 30 * time.Second
+	DefaultPageSize       = 50
+	DefaultCacheTTL       = 5 * time.Minute
+	DefaultSearchDebounce = 300 * time.Millisecond
+	DefaultAPIEndpoint    = "https://api.linear.app/graphql"
+	DefaultLogLevel       = "warning" // debug, info, warning, error
+	ThemeLinear           = "linear"
+	ThemeHighContrast     = "high_contrast"
+	ThemeColorBlind       = "color_blind"
+	DefaultTheme          = ThemeLinear
+	DensityComfortable    = "comfortable"
+	DensityCompact        = "compact"
+	DefaultDensity        = DensityComfortable
+	DefaultAgentProvider  = "cursor"
+	DefaultAgentSandbox   = "enabled"
 )
 
 // getDefaultLogFile returns the default log file path: $HOME/.linear-tui/app.log
@@ -63,6 +64,9 @@ type Config struct {
 
 	// CacheTTL is the time-to-live for cached team metadata.
 	CacheTTL time.Duration
+
+	// SearchDebounce is the delay before live search refreshes issue results.
+	SearchDebounce time.Duration
 
 	// LogFile is the path to the log file (empty to disable logging).
 	LogFile string
@@ -104,6 +108,7 @@ func LoadFromEnv() (Config, error) {
 		Timeout:        DefaultTimeout,
 		PageSize:       DefaultPageSize,
 		CacheTTL:       DefaultCacheTTL,
+		SearchDebounce: DefaultSearchDebounce,
 		LogFile:        getDefaultLogFile(), // Default: $HOME/.linear-tui/app.log
 		LogLevel:       DefaultLogLevel,
 		Theme:          DefaultTheme,

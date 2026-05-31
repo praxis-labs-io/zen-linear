@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
 
 // markdownRenderer is a shared glamour renderer for markdown content.
@@ -43,6 +44,26 @@ func renderMarkdown(content string) string {
 
 	// Trim extra whitespace that glamour may add
 	return strings.TrimSpace(rendered)
+}
+
+func formatIssueReference(ref linearapi.IssueRef) string {
+	if ref.Identifier == "" {
+		return ref.ID
+	}
+	if ref.Title == "" {
+		return ref.Identifier
+	}
+	return fmt.Sprintf("%s - %s", ref.Identifier, ref.Title)
+}
+
+func formatUserDisplayName(user linearapi.User) string {
+	if user.DisplayName != "" {
+		return user.DisplayName
+	}
+	if user.Name != "" {
+		return user.Name
+	}
+	return user.ID
 }
 
 // buildDetailsView creates and configures the details view with separate description and comments sections.
@@ -147,6 +168,16 @@ func (a *App) updateDetailsView() {
 
 	headerLines = append(headerLines, fmt.Sprintf("%sPriority:[-]   %s%d[-]", keyColor, valColor, issue.Priority))
 
+	cycle := "No cycle"
+	if issue.Cycle != nil {
+		cycle = issue.Cycle.DisplayName()
+	}
+	headerLines = append(headerLines, fmt.Sprintf("%sCycle:[-]      %s%s[-]", keyColor, valColor, cycle))
+
+	headerLines = append(headerLines, fmt.Sprintf("%sDue date:[-]   %s%s[-]", keyColor, valColor, formatDueDate(issue.DueDate)))
+	headerLines = append(headerLines, fmt.Sprintf("%sEstimate:[-]   %s%s[-]", keyColor, valColor, formatEstimate(issue.Estimate)))
+	headerLines = append(headerLines, fmt.Sprintf("%sMilestone:[-]  %s%s[-]", keyColor, valColor, formatMilestoneName(issue.ProjectMilestone)))
+
 	// Labels
 	labelsText := "No labels"
 	if len(issue.Labels) > 0 {
@@ -178,6 +209,49 @@ func (a *App) updateDetailsView() {
 				keyColor, child.State,
 				valColor, child.Title)
 			headerLines = append(headerLines, childLine)
+		}
+	}
+
+	if len(issue.Relations) > 0 {
+		for i := 0; i < sectionGap; i++ {
+			headerLines = append(headerLines, "")
+		}
+		headerLines = append(headerLines, fmt.Sprintf("%sRelations:[-] %s%d items[-]", keyColor, valColor, len(issue.Relations)))
+		for _, relation := range issue.Relations {
+			ref := relation.RelatedIssue
+			if relation.Inverse {
+				ref = relation.Issue
+			}
+			headerLines = append(headerLines, fmt.Sprintf("  %s%s[-] %s%s[-]", keyColor, relation.DisplayType(), accentColor, formatIssueReference(ref)))
+		}
+	}
+
+	if len(issue.Subscribers) > 0 {
+		for i := 0; i < sectionGap; i++ {
+			headerLines = append(headerLines, "")
+		}
+		subscribers := make([]string, 0, len(issue.Subscribers))
+		for _, subscriber := range issue.Subscribers {
+			subscribers = append(subscribers, formatUserDisplayName(subscriber))
+		}
+		headerLines = append(headerLines, fmt.Sprintf("%sSubscribers:[-] %s%s[-]", keyColor, valColor, strings.Join(subscribers, ", ")))
+	}
+
+	if len(issue.Attachments) > 0 {
+		for i := 0; i < sectionGap; i++ {
+			headerLines = append(headerLines, "")
+		}
+		headerLines = append(headerLines, fmt.Sprintf("%sAttachments:[-] %s%d items[-]", keyColor, valColor, len(issue.Attachments)))
+		for _, attachment := range issue.Attachments {
+			title := attachment.Title
+			if title == "" {
+				title = attachment.URL
+			}
+			source := attachment.SourceType
+			if source != "" {
+				source = " (" + source + ")"
+			}
+			headerLines = append(headerLines, fmt.Sprintf("  %s%s%s[-] %s%s[-]", accentColor, title, source, keyColor, attachment.URL))
 		}
 	}
 

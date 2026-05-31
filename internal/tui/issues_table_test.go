@@ -14,6 +14,7 @@ func TestRenderIssueRow(t *testing.T) {
 		wantLen   int
 		wantID    string
 		wantState string
+		wantCycle string
 	}{
 		{
 			name: "normal issue",
@@ -24,10 +25,12 @@ func TestRenderIssueRow(t *testing.T) {
 				State:      "Todo",
 				Assignee:   "John Doe",
 				Priority:   3, // Normal priority
+				Cycle:      &linearapi.CycleRef{ID: "cycle-1", Name: "Launch", Number: 12},
 			},
-			wantLen:   5,
+			wantLen:   9,
 			wantID:    "LIN-1",
 			wantState: "Todo",
+			wantCycle: "Launch",
 		},
 		{
 			name: "unassigned issue",
@@ -39,9 +42,10 @@ func TestRenderIssueRow(t *testing.T) {
 				Assignee:   "",
 				Priority:   2, // High priority
 			},
-			wantLen:   5,
+			wantLen:   9,
 			wantID:    "LIN-2",
 			wantState: "In Progres", // truncated to 10 chars
+			wantCycle: "-",
 		},
 		{
 			name: "long identifier truncated",
@@ -52,10 +56,12 @@ func TestRenderIssueRow(t *testing.T) {
 				State:      "Done",
 				Assignee:   "Jane",
 				Priority:   1, // Urgent priority
+				Cycle:      &linearapi.CycleRef{ID: "cycle-13", Number: 13},
 			},
-			wantLen:   5,
+			wantLen:   9,
 			wantID:    "VERY-LONG-", // truncated to 10 chars
 			wantState: "Done",
+			wantCycle: "Cycle 13",
 		},
 	}
 
@@ -75,6 +81,9 @@ func TestRenderIssueRow(t *testing.T) {
 			if len(row) > 3 && tt.issue.Assignee == "" && row[3] != "Unassigned" {
 				t.Errorf("renderIssueRow()[3] = %q, want %q", row[3], "Unassigned")
 			}
+			if len(row) > 4 && row[4] != tt.wantCycle {
+				t.Errorf("renderIssueRow()[4] = %q, want %q", row[4], tt.wantCycle)
+			}
 		})
 	}
 }
@@ -87,6 +96,7 @@ func TestRenderIssueRow_Truncation(t *testing.T) {
 		State:      "ABCDEFGHIJKLMNOP", // 16 chars
 		Assignee:   "ABCDEFGHIJKLMNOP", // 16 chars
 		Priority:   1,
+		Cycle:      &linearapi.CycleRef{ID: "cycle-1", Name: "ABCDEFGHIJKLMNOP", Number: 1},
 		UpdatedAt:  time.Now(),
 	}
 
@@ -106,5 +116,10 @@ func TestRenderIssueRow_Truncation(t *testing.T) {
 	// Assignee should be truncated to 10 chars (now column 3)
 	if len(row[3]) > 10 {
 		t.Errorf("Assignee length = %d, want <= 10", len(row[3]))
+	}
+
+	// Cycle should be truncated to 10 chars (now column 4)
+	if len(row[4]) > 10 {
+		t.Errorf("Cycle length = %d, want <= 10", len(row[4]))
 	}
 }

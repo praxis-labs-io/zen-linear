@@ -2,10 +2,12 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/roeyazroel/linear-tui/internal/config"
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
@@ -28,6 +30,33 @@ func waitForCondition(t *testing.T, timeout time.Duration, check func() bool) {
 	t.Fatalf("condition not met within %s", timeout)
 }
 
+func installRefreshCompletionHook(app *App) <-chan struct{} {
+	done := make(chan struct{}, 8)
+	app.refreshCompleted = func() {
+		select {
+		case done <- struct{}{}:
+		default:
+		}
+	}
+	return done
+}
+
+func waitForRefreshCompletions(t *testing.T, done <-chan struct{}, count int) {
+	t.Helper()
+	for i := 0; i < count; i++ {
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for refresh completion %d of %d", i+1, count)
+		}
+	}
+}
+
+func waitForRefreshCompletion(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	waitForRefreshCompletions(t, done, 1)
+}
+
 // TestRefreshIssues_LazyLoadsPages verifies first page renders before background pages.
 func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 	cfg := config.Config{
@@ -36,6 +65,7 @@ func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
+	refreshDone := installRefreshCompletionHook(app)
 
 	issue1 := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
 	issue2 := linearapi.Issue{ID: "issue-2", Identifier: "ABC-2", Title: "Second", State: "Todo"}
@@ -84,6 +114,7 @@ func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 		defer app.issuesMu.RUnlock()
 		return len(app.issues) == 2
 	})
+	waitForRefreshCompletion(t, refreshDone)
 	app.issuesMu.RLock()
 	selectedIssue = app.selectedIssue
 	app.issuesMu.RUnlock()
@@ -100,6 +131,7 @@ func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
+	refreshDone := installRefreshCompletionHook(app)
 
 	issue1 := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
 	issue2 := linearapi.Issue{ID: "issue-2", Identifier: "ABC-2", Title: "Second", State: "Todo"}
@@ -153,6 +185,7 @@ func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 	app.refreshIssues()
 	close(blockNext)
 
+	waitForRefreshCompletions(t, refreshDone, 2)
 	waitForCondition(t, time.Second, func() bool {
 		app.issuesMu.RLock()
 		defer app.issuesMu.RUnlock()
@@ -173,6 +206,7 @@ func TestRefreshIssues_PreservesNavigationFocus(t *testing.T) {
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
+	refreshDone := installRefreshCompletionHook(app)
 
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
 	app.fetchIssueByID = func(ctx context.Context, id string) (linearapi.Issue, error) {
@@ -193,6 +227,7 @@ func TestRefreshIssues_PreservesNavigationFocus(t *testing.T) {
 		defer app.issuesMu.RUnlock()
 		return len(app.issues) == 1
 	})
+	waitForRefreshCompletion(t, refreshDone)
 
 	if app.focusedPane != FocusNavigation {
 		t.Fatalf("focusedPane = %v, want %v", app.focusedPane, FocusNavigation)
@@ -206,6 +241,7 @@ func TestRefreshIssues_IncludesStateID(t *testing.T) {
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
+	refreshDone := installRefreshCompletionHook(app)
 
 	called := make(chan linearapi.FetchIssuesParams, 1)
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
@@ -237,5 +273,190 @@ func TestRefreshIssues_IncludesStateID(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for fetchIssuesPage")
+	}
+	waitForRefreshCompletion(t, refreshDone)
+}
+
+func TestRefreshIssues_IncludesCycleID(t *testing.T) {
+	cfg := config.Config{
+		PageSize: 1,
+		CacheTTL: time.Minute,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+	refreshDone := installRefreshCompletionHook(app)
+
+	called := make(chan linearapi.FetchIssuesParams, 1)
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		select {
+		case called <- params:
+		default:
+		}
+		return linearapi.IssuePage{Issues: []linearapi.Issue{}, HasNext: false}, nil
+	}
+
+	app.selectedNavigation = &NavigationNode{
+		ID:        "cycle-123",
+		Text:      "Cycle 12",
+		TeamID:    "team-1",
+		IsCycle:   true,
+		CycleID:   "cycle-123",
+		CycleName: "Cycle 12",
+	}
+
+	app.refreshIssues()
+
+	select {
+	case params := <-called:
+		if params.CycleID != "cycle-123" {
+			t.Fatalf("CycleID = %q, want %q", params.CycleID, "cycle-123")
+		}
+		if params.TeamID != "team-1" {
+			t.Fatalf("TeamID = %q, want %q", params.TeamID, "team-1")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for fetchIssuesPage")
+	}
+	waitForRefreshCompletion(t, refreshDone)
+}
+
+func TestSearchPaletteTypingDebouncesLatestQuery(t *testing.T) {
+	cfg := config.Config{
+		PageSize:       1,
+		CacheTTL:       time.Minute,
+		SearchDebounce: 80 * time.Millisecond,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+	refreshDone := installRefreshCompletionHook(app)
+
+	called := make(chan linearapi.FetchIssuesParams, 4)
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		select {
+		case called <- params:
+		default:
+		}
+		return linearapi.IssuePage{Issues: []linearapi.Issue{}, HasNext: false}, nil
+	}
+
+	app.openSearchPalette()
+	app.handlePaletteKey(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone))
+	app.handlePaletteKey(tcell.NewEventKey(tcell.KeyRune, 'b', tcell.ModNone))
+
+	select {
+	case params := <-called:
+		t.Fatalf("fetch fired before debounce elapsed with search %q", params.Search)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	var params linearapi.FetchIssuesParams
+	select {
+	case params = <-called:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for debounced search fetch")
+	}
+	if params.Search != "ab" {
+		t.Fatalf("Search = %q, want latest query %q", params.Search, "ab")
+	}
+	waitForRefreshCompletion(t, refreshDone)
+
+	if app.focusedPane != FocusPalette {
+		t.Fatalf("focusedPane = %v, want FocusPalette", app.focusedPane)
+	}
+	if !app.paletteCtrl.IsSearchMode() {
+		t.Fatal("palette search mode cleared during live search")
+	}
+
+	select {
+	case params := <-called:
+		t.Fatalf("unexpected extra fetch after debounce fired with search %q", params.Search)
+	case <-time.After(120 * time.Millisecond):
+	}
+}
+
+func TestSearchPaletteEnterFlushesPendingDebounce(t *testing.T) {
+	cfg := config.Config{
+		PageSize:       1,
+		CacheTTL:       time.Minute,
+		SearchDebounce: 250 * time.Millisecond,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+	refreshDone := installRefreshCompletionHook(app)
+
+	called := make(chan linearapi.FetchIssuesParams, 4)
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		select {
+		case called <- params:
+		default:
+		}
+		return linearapi.IssuePage{Issues: []linearapi.Issue{}, HasNext: false}, nil
+	}
+
+	app.openSearchPalette()
+	app.handlePaletteKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
+	app.handlePaletteKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+
+	var params linearapi.FetchIssuesParams
+	select {
+	case params = <-called:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timed out waiting for immediate enter search fetch")
+	}
+	if params.Search != "x" {
+		t.Fatalf("Search = %q, want %q", params.Search, "x")
+	}
+	waitForRefreshCompletion(t, refreshDone)
+
+	if app.focusedPane != FocusIssues {
+		t.Fatalf("focusedPane = %v, want FocusIssues", app.focusedPane)
+	}
+	if app.paletteCtrl.IsSearchMode() {
+		t.Fatal("palette search mode still active after enter submit")
+	}
+
+	select {
+	case params := <-called:
+		t.Fatalf("pending debounce was not canceled; extra search %q", params.Search)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+func TestUpdateDetailsView_IncludesCycle(t *testing.T) {
+	cfg := config.Config{
+		PageSize: 1,
+		CacheTTL: time.Minute,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{
+		ID:         "issue-1",
+		Identifier: "ABC-1",
+		Title:      "Issue with cycle",
+		State:      "Todo",
+		Cycle:      &linearapi.CycleRef{ID: "cycle-1", Name: "Launch", Number: 12},
+	}
+	app.issuesMu.Unlock()
+
+	app.updateDetailsView()
+	text := app.detailsDescriptionView.GetText(true)
+	if !strings.Contains(text, "Cycle:") || !strings.Contains(text, "Launch") {
+		t.Fatalf("details text = %q, want Cycle: Launch", text)
+	}
+}
+
+func TestDefaultCommands_IncludesCycleCommands(t *testing.T) {
+	commands := DefaultCommands(nil)
+	ids := make(map[string]bool, len(commands))
+	for _, command := range commands {
+		ids[command.ID] = true
+	}
+
+	for _, id := range []string{"set_cycle", "clear_cycle"} {
+		if !ids[id] {
+			t.Fatalf("command %q missing from DefaultCommands", id)
+		}
 	}
 }

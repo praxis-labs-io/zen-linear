@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 // TestEnsureSettingsFileCreatesDefaults verifies missing settings are created with defaults.
@@ -48,6 +49,39 @@ func TestLoadSettingsAppliesDefaults(t *testing.T) {
 	assertSettingsEqual(t, settings, expected)
 }
 
+func TestLoadSettingsAppliesDefaultSearchDebounce(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "config.json")
+
+	data := []byte(`{"page_size":123}`)
+	if err := os.WriteFile(settingsPath, data, 0644); err != nil {
+		t.Fatalf("write settings file: %v", err)
+	}
+
+	settings, err := LoadSettings(settingsPath)
+	if err != nil {
+		t.Fatalf("LoadSettings() error: %v", err)
+	}
+
+	if settings.SearchDebounce != DefaultSearchDebounce.String() {
+		t.Fatalf("SearchDebounce = %q, want %q", settings.SearchDebounce, DefaultSearchDebounce.String())
+	}
+}
+
+func TestConfigFromSettingsParsesSearchDebounce(t *testing.T) {
+	settings := DefaultSettings()
+	settings.SearchDebounce = "450ms"
+
+	cfg, err := ConfigFromSettings("test-key", settings)
+	if err != nil {
+		t.Fatalf("ConfigFromSettings() error: %v", err)
+	}
+
+	if cfg.SearchDebounce != 450*time.Millisecond {
+		t.Fatalf("SearchDebounce = %s, want 450ms", cfg.SearchDebounce)
+	}
+}
+
 // TestLoadSettingsPreservesEmptyLogFile ensures an empty log file disables logging.
 func TestLoadSettingsPreservesEmptyLogFile(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -87,6 +121,27 @@ func TestConfigFromSettingsValidation(t *testing.T) {
 			name: "invalid cache ttl",
 			mutate: func(settings Settings) Settings {
 				settings.CacheTTL = "bad-duration"
+				return settings
+			},
+		},
+		{
+			name: "invalid search debounce",
+			mutate: func(settings Settings) Settings {
+				settings.SearchDebounce = "bad-duration"
+				return settings
+			},
+		},
+		{
+			name: "zero search debounce",
+			mutate: func(settings Settings) Settings {
+				settings.SearchDebounce = "0s"
+				return settings
+			},
+		},
+		{
+			name: "negative search debounce",
+			mutate: func(settings Settings) Settings {
+				settings.SearchDebounce = "-1ms"
 				return settings
 			},
 		},

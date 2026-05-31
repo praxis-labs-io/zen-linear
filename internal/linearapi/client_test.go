@@ -33,6 +33,37 @@ func issueNodeJSON(id, identifier, title string) string {
 	}`, id, identifier, title, identifier)
 }
 
+func issueNodeWithCycleJSON(id, identifier, title string) string {
+	node := issueNodeJSON(id, identifier, title)
+	return strings.Replace(node, `"children": {"nodes": []}`, `"cycle": {
+			"id": "cycle-1",
+			"name": "Launch",
+			"number": 12,
+			"startsAt": "2025-01-01T00:00:00Z",
+			"endsAt": "2025-01-15T00:00:00Z",
+			"isActive": true,
+			"isFuture": false,
+			"isPast": false,
+			"isNext": false,
+			"isPrevious": false
+		},
+		"children": {"nodes": []}`, 1)
+}
+
+func issueNodeWithPlanningFieldsJSON(id, identifier, title string) string {
+	node := issueNodeWithCycleJSON(id, identifier, title)
+	return strings.Replace(node, `"children": {"nodes": []}`, `"dueDate": "2026-06-15",
+		"estimate": 5,
+		"projectMilestone": {
+			"id": "milestone-1",
+			"name": "Beta",
+			"targetDate": "2026-06-30",
+			"status": "next",
+			"project": {"id": "project-1"}
+		},
+		"children": {"nodes": []}`, 1)
+}
+
 // issuesPageResponse builds a GraphQL response with issue nodes and page info.
 func issuesPageResponse(nodes []string, hasNextPage bool, endCursor string) string {
 	return fmt.Sprintf(`{
@@ -46,6 +77,122 @@ func issuesPageResponse(nodes []string, hasNextPage bool, endCursor string) stri
 			}
 		}
 	}`, strings.Join(nodes, ","), hasNextPage, endCursor)
+}
+
+func cyclesPageResponse(nodes []string, hasNextPage bool, endCursor string) string {
+	return fmt.Sprintf(`{
+		"data": {
+			"team": {
+				"cycles": {
+					"nodes": [%s],
+					"pageInfo": {
+						"hasNextPage": %t,
+						"endCursor": %q
+					}
+				}
+			}
+		}
+	}`, strings.Join(nodes, ","), hasNextPage, endCursor)
+}
+
+func cycleNodeJSON(id, name string, number int, isActive bool) string {
+	return fmt.Sprintf(`{
+		"id": %q,
+		"name": %q,
+		"number": %d,
+		"description": null,
+		"startsAt": "2025-01-01T00:00:00Z",
+		"endsAt": "2025-01-15T00:00:00Z",
+		"isActive": %t,
+		"isFuture": false,
+		"isPast": false,
+		"isNext": false,
+		"isPrevious": false,
+		"team": {"id": "team-1"}
+	}`, id, name, number, isActive)
+}
+
+func projectMilestonesPageResponse(nodes []string, hasNextPage bool, endCursor string) string {
+	return fmt.Sprintf(`{
+		"data": {
+			"projectMilestones": {
+				"nodes": [%s],
+				"pageInfo": {
+					"hasNextPage": %t,
+					"endCursor": %q
+				}
+			}
+		}
+	}`, strings.Join(nodes, ","), hasNextPage, endCursor)
+}
+
+func projectMilestoneNodeJSON(id, name, targetDate, status, projectID string) string {
+	target := "null"
+	if targetDate != "" {
+		target = fmt.Sprintf("%q", targetDate)
+	}
+	return fmt.Sprintf(`{
+		"id": %q,
+		"name": %q,
+		"targetDate": %s,
+		"status": %q,
+		"sortOrder": 10,
+		"progress": 0.25,
+		"project": {"id": %q}
+	}`, id, name, target, status, projectID)
+}
+
+func mutationIssueResponse(root string) string {
+	return fmt.Sprintf(`{
+		"data": {
+			"%s": {
+				"success": true,
+				"issue": {
+					"id": "issue-1",
+					"identifier": "ABC-1",
+					"title": "Issue with cycle",
+					"state": {"id": "state-1", "name": "Todo"},
+					"assignee": null,
+					"priority": 1,
+					"updatedAt": "2025-01-01T00:00:00Z",
+					"createdAt": "2025-01-01T00:00:00Z",
+					"description": null,
+					"team": {"id": "team-1"},
+					"project": null,
+					"cycle": {
+						"id": "cycle-1",
+						"name": "Launch",
+						"number": 12,
+						"startsAt": "2025-01-01T00:00:00Z",
+						"endsAt": "2025-01-15T00:00:00Z",
+						"isActive": true,
+						"isFuture": false,
+						"isPast": false,
+						"isNext": false,
+						"isPrevious": false
+					},
+					"labels": {"nodes": []},
+					"url": "https://linear.app/issue/ABC-1"
+				}
+			}
+		}
+	}`, root)
+}
+
+func issueRelationMutationResponse(root string) string {
+	return fmt.Sprintf(`{
+		"data": {
+			"%s": {
+				"success": true,
+				"issueRelation": {
+					"id": "rel-1",
+					"type": "blocks",
+					"issue": {"id": "issue-1", "identifier": "ABC-1", "title": "Source"},
+					"relatedIssue": {"id": "issue-2", "identifier": "ABC-2", "title": "Target"}
+				}
+			}
+		}
+	}`, root)
 }
 
 func TestNewClient(t *testing.T) {
@@ -281,6 +428,72 @@ func TestFetchIssues_PaginatesAllPages(t *testing.T) {
 	}
 }
 
+func TestListCycles_PaginatesAndParses(t *testing.T) {
+	var afterValues []interface{}
+	requestCount := 0
+
+	pageOne := cyclesPageResponse([]string{
+		cycleNodeJSON("cycle-1", "Launch", 12, true),
+	}, true, "cycle-cursor-1")
+	pageTwo := cyclesPageResponse([]string{
+		cycleNodeJSON("cycle-2", "", 13, false),
+	}, false, "")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		query, _ := reqBody["query"].(string)
+		if !strings.Contains(query, "cycles") {
+			t.Fatalf("query does not request cycles: %s", query)
+		}
+		variables, ok := reqBody["variables"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Request body missing variables")
+		}
+		if variables["teamId"] != "team-1" {
+			t.Fatalf("teamId = %#v, want team-1", variables["teamId"])
+		}
+		afterValues = append(afterValues, variables["after"])
+
+		w.Header().Set("Content-Type", "application/json")
+		if requestCount == 0 {
+			_, _ = w.Write([]byte(pageOne))
+		} else {
+			_, _ = w.Write([]byte(pageTwo))
+		}
+		requestCount++
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	cycles, err := client.ListCycles(context.Background(), "team-1")
+	if err != nil {
+		t.Fatalf("ListCycles() error: %v", err)
+	}
+
+	if requestCount != 2 {
+		t.Fatalf("requestCount = %d, want 2", requestCount)
+	}
+	if afterValues[0] != nil || afterValues[1] != "cycle-cursor-1" {
+		t.Fatalf("afterValues = %#v, want [nil cycle-cursor-1]", afterValues)
+	}
+	if len(cycles) != 2 {
+		t.Fatalf("cycles length = %d, want 2", len(cycles))
+	}
+	if cycles[0].ID != "cycle-1" || cycles[0].Name != "Launch" || cycles[0].Number != 12 || !cycles[0].IsActive {
+		t.Fatalf("cycles[0] = %+v, want active Launch cycle 12", cycles[0])
+	}
+	if cycles[1].DisplayName() != "Cycle 13" {
+		t.Fatalf("cycles[1].DisplayName() = %q, want Cycle 13", cycles[1].DisplayName())
+	}
+}
+
 // TestFetchIssuesPage_Defaults verifies page defaults and pagination metadata.
 func TestFetchIssuesPage_Defaults(t *testing.T) {
 	var firstValue interface{}
@@ -326,6 +539,168 @@ func TestFetchIssuesPage_Defaults(t *testing.T) {
 	}
 	if len(page.Issues) != 1 || page.Issues[0].ID != "issue-1" {
 		t.Errorf("Issues = %+v, want single issue-1", page.Issues)
+	}
+}
+
+func TestFetchIssues_ParsesCycle(t *testing.T) {
+	response := issuesPageResponse([]string{
+		issueNodeWithCycleJSON("issue-1", "ABC-1", "Issue with cycle"),
+	}, false, "")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(response))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	issues, err := client.FetchIssues(context.Background(), FetchIssuesParams{First: 1})
+	if err != nil {
+		t.Fatalf("FetchIssues() error: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("issues length = %d, want 1", len(issues))
+	}
+	if issues[0].Cycle == nil {
+		t.Fatal("Cycle should be populated")
+	}
+	if issues[0].Cycle.ID != "cycle-1" || issues[0].Cycle.DisplayName() != "Launch" || !issues[0].Cycle.IsActive {
+		t.Fatalf("Cycle = %+v, want active Launch cycle", issues[0].Cycle)
+	}
+}
+
+func TestFetchIssues_ParsesPlanningFields(t *testing.T) {
+	response := issuesPageResponse([]string{
+		issueNodeWithPlanningFieldsJSON("issue-1", "ABC-1", "Planning issue"),
+	}, false, "")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(response))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	issues, err := client.FetchIssues(context.Background(), FetchIssuesParams{TeamID: "team-1"})
+	if err != nil {
+		t.Fatalf("FetchIssues() error: %v", err)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("FetchIssues() returned %d issues, want 1", len(issues))
+	}
+	if issues[0].DueDate == nil || *issues[0].DueDate != "2026-06-15" {
+		t.Fatalf("DueDate = %#v, want 2026-06-15", issues[0].DueDate)
+	}
+	if issues[0].Estimate == nil || *issues[0].Estimate != 5 {
+		t.Fatalf("Estimate = %#v, want 5", issues[0].Estimate)
+	}
+	if issues[0].ProjectMilestone == nil {
+		t.Fatal("ProjectMilestone should be populated")
+	}
+	if issues[0].ProjectMilestone.ID != "milestone-1" || issues[0].ProjectMilestone.Name != "Beta" || issues[0].ProjectMilestone.ProjectID != "project-1" {
+		t.Fatalf("ProjectMilestone = %+v, want milestone-1 Beta project-1", issues[0].ProjectMilestone)
+	}
+}
+
+func TestFetchIssueByID_ParsesRelationsSubscribersAndAttachments(t *testing.T) {
+	response := `{
+		"data": {
+			"issue": {
+				"id": "issue-1",
+				"identifier": "ABC-1",
+				"title": "Full issue",
+				"state": {"id": "state-1", "name": "Todo"},
+				"assignee": null,
+				"priority": 1,
+				"updatedAt": "2025-01-01T00:00:00Z",
+				"createdAt": "2025-01-01T00:00:00Z",
+				"description": null,
+				"team": {"id": "team-1"},
+				"project": {"id": "project-1"},
+				"cycle": null,
+				"dueDate": "2026-06-15",
+				"estimate": 3,
+				"projectMilestone": {
+					"id": "milestone-1",
+					"name": "Beta",
+					"targetDate": "2026-06-30",
+					"status": "next",
+					"project": {"id": "project-1"}
+				},
+				"labels": {"nodes": []},
+				"url": "https://linear.app/issue/ABC-1",
+				"archivedAt": null,
+				"parent": null,
+				"children": {"nodes": []},
+				"relations": {"nodes": [{
+					"id": "rel-1",
+					"type": "blocks",
+					"issue": {"id": "issue-1", "identifier": "ABC-1", "title": "Full issue"},
+					"relatedIssue": {"id": "issue-2", "identifier": "ABC-2", "title": "Blocked target"}
+				}]},
+				"inverseRelations": {"nodes": [{
+					"id": "rel-2",
+					"type": "blocks",
+					"issue": {"id": "issue-3", "identifier": "ABC-3", "title": "Blocking source"},
+					"relatedIssue": {"id": "issue-1", "identifier": "ABC-1", "title": "Full issue"}
+				}]},
+				"subscribers": {"nodes": [{
+					"id": "user-1",
+					"name": "Ada",
+					"displayName": "Ada Lovelace",
+					"email": "ada@example.com",
+					"isMe": true
+				}]},
+				"attachments": {"nodes": [{
+					"id": "attachment-1",
+					"title": "Pull request",
+					"subtitle": "GitHub",
+					"url": "https://github.com/acme/repo/pull/1",
+					"sourceType": "github",
+					"createdAt": "2025-01-02T00:00:00Z",
+					"updatedAt": "2025-01-03T00:00:00Z"
+				}]},
+				"comments": {"nodes": []}
+			}
+		}
+	}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(response))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	issue, err := client.FetchIssueByID(context.Background(), "issue-1")
+	if err != nil {
+		t.Fatalf("FetchIssueByID() error: %v", err)
+	}
+	if len(issue.Relations) != 2 {
+		t.Fatalf("Relations length = %d, want 2", len(issue.Relations))
+	}
+	if issue.Relations[0].DisplayType() != "blocking" {
+		t.Fatalf("Relations[0].DisplayType() = %q, want blocking", issue.Relations[0].DisplayType())
+	}
+	if issue.Relations[1].DisplayType() != "blocked by" {
+		t.Fatalf("Relations[1].DisplayType() = %q, want blocked by", issue.Relations[1].DisplayType())
+	}
+	if len(issue.Subscribers) != 1 || !issue.Subscribers[0].IsMe {
+		t.Fatalf("Subscribers = %+v, want one current user", issue.Subscribers)
+	}
+	if len(issue.Attachments) != 1 || issue.Attachments[0].SourceType != "github" || issue.Attachments[0].URL == "" {
+		t.Fatalf("Attachments = %+v, want one GitHub attachment", issue.Attachments)
 	}
 }
 
@@ -470,11 +845,13 @@ func TestBuildBaseIssueFilter(t *testing.T) {
 				TeamID:    "team-1",
 				ProjectID: "project-1",
 				StateID:   "state-2",
+				CycleID:   "cycle-1",
 			},
 			want: IssueFilter{
 				"team":    map[string]interface{}{"id": map[string]interface{}{"eq": "team-1"}},
 				"project": map[string]interface{}{"id": map[string]interface{}{"eq": "project-1"}},
 				"state":   map[string]interface{}{"id": map[string]interface{}{"eq": "state-2"}},
+				"cycle":   map[string]interface{}{"id": map[string]interface{}{"eq": "cycle-1"}},
 			},
 		},
 	}
@@ -608,6 +985,113 @@ func TestUpdateIssueInput(t *testing.T) {
 	}
 	if input.Description != nil {
 		t.Error("Description should be nil when not set")
+	}
+}
+
+func TestBuildIssueFilter_CombinesRichFilters(t *testing.T) {
+	nullFalse := false
+	estimate := 5.0
+	got := buildIssueFilter(FetchIssuesParams{
+		TeamID:             "team-1",
+		ProjectID:          "project-1",
+		StateID:            "state-1",
+		CycleID:            "cycle-1",
+		AssigneeID:         "user-1",
+		LabelIDs:           []string{"label-1", "label-2"},
+		ProjectMilestoneID: "milestone-1",
+		DueDate: DateFilter{
+			GTE: "2026-06-01",
+			LTE: "2026-06-30",
+		},
+		Estimate: NumberFilter{
+			Eq: &estimate,
+		},
+		Search: "login bug",
+	})
+
+	want := IssueFilter{
+		"team":             map[string]interface{}{"id": map[string]interface{}{"eq": "team-1"}},
+		"project":          map[string]interface{}{"id": map[string]interface{}{"eq": "project-1"}},
+		"state":            map[string]interface{}{"id": map[string]interface{}{"eq": "state-1"}},
+		"cycle":            map[string]interface{}{"id": map[string]interface{}{"eq": "cycle-1"}},
+		"assignee":         map[string]interface{}{"id": map[string]interface{}{"eq": "user-1"}},
+		"projectMilestone": map[string]interface{}{"id": map[string]interface{}{"eq": "milestone-1"}},
+		"dueDate":          map[string]interface{}{"gte": "2026-06-01", "lte": "2026-06-30"},
+		"estimate":         map[string]interface{}{"eq": estimate},
+		"and": []map[string]interface{}{
+			{"labels": map[string]interface{}{"some": map[string]interface{}{"id": map[string]interface{}{"eq": "label-1"}}}},
+			{"labels": map[string]interface{}{"some": map[string]interface{}{"id": map[string]interface{}{"eq": "label-2"}}}},
+			{
+				"or": []map[string]interface{}{
+					{"title": map[string]interface{}{"containsIgnoreCase": "login"}},
+					{"description": map[string]interface{}{"containsIgnoreCase": "login"}},
+				},
+			},
+			{
+				"or": []map[string]interface{}{
+					{"title": map[string]interface{}{"containsIgnoreCase": "bug"}},
+					{"description": map[string]interface{}{"containsIgnoreCase": "bug"}},
+				},
+			},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("buildIssueFilter() = %#v, want %#v", got, want)
+	}
+
+	got = buildStructuredIssueFilter(FetchIssuesParams{
+		DueDate: DateFilter{Null: &nullFalse},
+	})
+	want = IssueFilter{
+		"dueDate": map[string]interface{}{"null": false},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("buildStructuredIssueFilter(null due date) = %#v, want %#v", got, want)
+	}
+}
+
+func TestSearchIssuesPage_UsesStructuredFilterWithSearchTerm(t *testing.T) {
+	var filterValue map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		variables, ok := reqBody["variables"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Request body missing variables")
+		}
+		var okFilter bool
+		filterValue, okFilter = variables["filter"].(map[string]interface{})
+		if !okFilter {
+			t.Fatalf("variables.filter = %#v, want object", variables["filter"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"searchIssues":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	if _, err := client.FetchIssuesPage(context.Background(), FetchIssuesParams{
+		Search:     "ABC-1",
+		AssigneeID: "user-1",
+		LabelIDs:   []string{"label-1"},
+	}, nil); err != nil {
+		t.Fatalf("FetchIssuesPage() error: %v", err)
+	}
+
+	if _, hasTextOr := filterValue["or"]; hasTextOr {
+		t.Fatalf("searchIssues filter includes text OR filters: %#v", filterValue)
+	}
+	if _, ok := filterValue["assignee"]; !ok {
+		t.Fatalf("searchIssues filter missing assignee: %#v", filterValue)
+	}
+	if andFilters, ok := filterValue["and"].([]interface{}); !ok || len(andFilters) != 1 {
+		t.Fatalf("searchIssues filter and = %#v, want one label condition", filterValue["and"])
 	}
 }
 
@@ -817,6 +1301,44 @@ func TestCreateIssueInput_ParentID(t *testing.T) {
 	})
 }
 
+func TestCreateIssue_SendsCycleID(t *testing.T) {
+	var input map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		variables, ok := reqBody["variables"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Request body missing variables")
+		}
+		input, ok = variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("variables.input = %#v, want object", variables["input"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mutationIssueResponse("issueCreate")))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	_, err := client.CreateIssue(context.Background(), CreateIssueInput{
+		TeamID:  "team-1",
+		Title:   "Issue in cycle",
+		CycleID: "cycle-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateIssue() error: %v", err)
+	}
+	if input["cycleId"] != "cycle-1" {
+		t.Fatalf("cycleId = %#v, want cycle-1", input["cycleId"])
+	}
+}
+
 func TestUpdateIssueInput_ParentID(t *testing.T) {
 	t.Run("nil ParentID means no change", func(t *testing.T) {
 		input := UpdateIssueInput{
@@ -855,4 +1377,232 @@ func TestUpdateIssueInput_ParentID(t *testing.T) {
 			t.Errorf("ParentID = %q, want %q", *input.ParentID, "parent-456")
 		}
 	})
+}
+
+func TestUpdateIssue_SetsAndClearsCycleID(t *testing.T) {
+	var inputs []map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		variables, ok := reqBody["variables"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Request body missing variables")
+		}
+		input, ok := variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("variables.input = %#v, want object", variables["input"])
+		}
+		inputs = append(inputs, input)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mutationIssueResponse("issueUpdate")))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	cycleID := "cycle-1"
+	if _, err := client.UpdateIssue(context.Background(), UpdateIssueInput{ID: "issue-1", CycleID: &cycleID}); err != nil {
+		t.Fatalf("UpdateIssue(set cycle) error: %v", err)
+	}
+
+	clearCycleID := ""
+	if _, err := client.UpdateIssue(context.Background(), UpdateIssueInput{ID: "issue-1", CycleID: &clearCycleID}); err != nil {
+		t.Fatalf("UpdateIssue(clear cycle) error: %v", err)
+	}
+
+	if len(inputs) != 2 {
+		t.Fatalf("inputs length = %d, want 2", len(inputs))
+	}
+	if inputs[0]["cycleId"] != "cycle-1" {
+		t.Fatalf("set cycleId = %#v, want cycle-1", inputs[0]["cycleId"])
+	}
+	if value, ok := inputs[1]["cycleId"]; !ok || value != nil {
+		t.Fatalf("clear cycleId = %#v (present=%v), want present null", value, ok)
+	}
+}
+
+func TestUpdateIssue_SetsAndClearsPlanningFields(t *testing.T) {
+	var inputs []map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		variables, ok := reqBody["variables"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Request body missing variables")
+		}
+		input, ok := variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("variables.input = %#v, want object", variables["input"])
+		}
+		inputs = append(inputs, input)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mutationIssueResponse("issueUpdate")))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	dueDate := "2026-06-15"
+	estimate := 5.0
+	milestoneID := "milestone-1"
+	if _, err := client.UpdateIssue(context.Background(), UpdateIssueInput{
+		ID:                 "issue-1",
+		DueDate:            &dueDate,
+		Estimate:           &estimate,
+		ProjectMilestoneID: &milestoneID,
+	}); err != nil {
+		t.Fatalf("UpdateIssue(set planning fields) error: %v", err)
+	}
+
+	clearDueDate := ""
+	clearMilestone := ""
+	if _, err := client.UpdateIssue(context.Background(), UpdateIssueInput{
+		ID:                 "issue-1",
+		DueDate:            &clearDueDate,
+		ClearEstimate:      true,
+		ProjectMilestoneID: &clearMilestone,
+	}); err != nil {
+		t.Fatalf("UpdateIssue(clear planning fields) error: %v", err)
+	}
+
+	if len(inputs) != 2 {
+		t.Fatalf("inputs length = %d, want 2", len(inputs))
+	}
+	if inputs[0]["dueDate"] != "2026-06-15" || inputs[0]["estimate"] != float64(5) || inputs[0]["projectMilestoneId"] != "milestone-1" {
+		t.Fatalf("set input = %#v, want dueDate estimate projectMilestoneId", inputs[0])
+	}
+	if value, ok := inputs[1]["dueDate"]; !ok || value != nil {
+		t.Fatalf("clear dueDate = %#v (present=%v), want present null", value, ok)
+	}
+	if value, ok := inputs[1]["estimate"]; !ok || value != nil {
+		t.Fatalf("clear estimate = %#v (present=%v), want present null", value, ok)
+	}
+	if value, ok := inputs[1]["projectMilestoneId"]; !ok || value != nil {
+		t.Fatalf("clear projectMilestoneId = %#v (present=%v), want present null", value, ok)
+	}
+}
+
+func TestListProjectMilestones_PaginatesAndParses(t *testing.T) {
+	requestCount := 0
+	var afterValues []interface{}
+	pageOne := projectMilestonesPageResponse([]string{
+		projectMilestoneNodeJSON("milestone-1", "Beta", "2026-06-30", "next", "project-1"),
+	}, true, "cursor-1")
+	pageTwo := projectMilestonesPageResponse([]string{
+		projectMilestoneNodeJSON("milestone-2", "GA", "", "unstarted", "project-1"),
+	}, false, "")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		variables := reqBody["variables"].(map[string]interface{})
+		afterValues = append(afterValues, variables["after"])
+		w.Header().Set("Content-Type", "application/json")
+		if requestCount == 0 {
+			_, _ = w.Write([]byte(pageOne))
+		} else {
+			_, _ = w.Write([]byte(pageTwo))
+		}
+		requestCount++
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	milestones, err := client.ListProjectMilestones(context.Background(), "project-1")
+	if err != nil {
+		t.Fatalf("ListProjectMilestones() error: %v", err)
+	}
+	if requestCount != 2 {
+		t.Fatalf("requestCount = %d, want 2", requestCount)
+	}
+	if afterValues[0] != nil || afterValues[1] != "cursor-1" {
+		t.Fatalf("afterValues = %#v, want [nil cursor-1]", afterValues)
+	}
+	if len(milestones) != 2 {
+		t.Fatalf("milestones length = %d, want 2", len(milestones))
+	}
+	if milestones[0].ID != "milestone-1" || milestones[0].TargetDate == nil || *milestones[0].TargetDate != "2026-06-30" {
+		t.Fatalf("milestones[0] = %+v, want Beta with target date", milestones[0])
+	}
+}
+
+func TestIssueRelationMutationsAndSubscriptions(t *testing.T) {
+	var operations []string
+	var inputs []map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		query, _ := reqBody["query"].(string)
+		switch {
+		case strings.Contains(query, "issueRelationCreate"):
+			operations = append(operations, "issueRelationCreate")
+			variables := reqBody["variables"].(map[string]interface{})
+			inputs = append(inputs, variables["input"].(map[string]interface{}))
+			_, _ = w.Write([]byte(issueRelationMutationResponse("issueRelationCreate")))
+		case strings.Contains(query, "issueRelationDelete"):
+			operations = append(operations, "issueRelationDelete")
+			_, _ = w.Write([]byte(`{"data":{"issueRelationDelete":{"success":true}}}`))
+		case strings.Contains(query, "issueSubscribe"):
+			operations = append(operations, "issueSubscribe")
+			_, _ = w.Write([]byte(mutationIssueResponse("issueSubscribe")))
+		case strings.Contains(query, "issueUnsubscribe"):
+			operations = append(operations, "issueUnsubscribe")
+			_, _ = w.Write([]byte(mutationIssueResponse("issueUnsubscribe")))
+		default:
+			t.Fatalf("unexpected query: %s", query)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	relation, err := client.CreateIssueRelation(context.Background(), CreateIssueRelationInput{
+		IssueID:        "issue-1",
+		RelatedIssueID: "issue-2",
+		Type:           IssueRelationBlocks,
+	})
+	if err != nil {
+		t.Fatalf("CreateIssueRelation() error: %v", err)
+	}
+	if relation.ID != "rel-1" || relation.Type != string(IssueRelationBlocks) {
+		t.Fatalf("relation = %+v, want rel-1 blocks", relation)
+	}
+	if err := client.DeleteIssueRelation(context.Background(), "rel-1"); err != nil {
+		t.Fatalf("DeleteIssueRelation() error: %v", err)
+	}
+	if _, err := client.SubscribeToIssue(context.Background(), "issue-1"); err != nil {
+		t.Fatalf("SubscribeToIssue() error: %v", err)
+	}
+	if _, err := client.UnsubscribeFromIssue(context.Background(), "issue-1"); err != nil {
+		t.Fatalf("UnsubscribeFromIssue() error: %v", err)
+	}
+
+	wantOperations := []string{"issueRelationCreate", "issueRelationDelete", "issueSubscribe", "issueUnsubscribe"}
+	if !reflect.DeepEqual(operations, wantOperations) {
+		t.Fatalf("operations = %#v, want %#v", operations, wantOperations)
+	}
+	if len(inputs) != 1 || inputs[0]["issueId"] != "issue-1" || inputs[0]["relatedIssueId"] != "issue-2" || inputs[0]["type"] != "blocks" {
+		t.Fatalf("issueRelationCreate input = %#v, want issue relation input", inputs)
+	}
 }

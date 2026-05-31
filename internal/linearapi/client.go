@@ -51,6 +51,19 @@ func (i IssueCreateInput) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}(i))
 }
 
+// ProjectMilestoneFilter is a custom scalar type for Linear's ProjectMilestoneFilter input.
+type ProjectMilestoneFilter map[string]interface{}
+
+// GetGraphQLType returns the GraphQL type name for the filter.
+func (ProjectMilestoneFilter) GetGraphQLType() string {
+	return "ProjectMilestoneFilter"
+}
+
+// MarshalJSON implements json.Marshaler for ProjectMilestoneFilter.
+func (f ProjectMilestoneFilter) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}(f))
+}
+
 // IssueUpdateInput is a custom scalar type for Linear's IssueUpdateInput.
 // The Go type name must match the GraphQL type name exactly.
 type IssueUpdateInput map[string]interface{}
@@ -78,6 +91,34 @@ func (CommentCreateInput) GetGraphQLType() string {
 func (c CommentCreateInput) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}(c))
 }
+
+// IssueRelationCreateInput is a custom scalar type for Linear's IssueRelationCreateInput.
+type IssueRelationCreateInput map[string]interface{}
+
+// GetGraphQLType returns the GraphQL type name for the input.
+func (IssueRelationCreateInput) GetGraphQLType() string {
+	return "IssueRelationCreateInput"
+}
+
+// MarshalJSON implements json.Marshaler for IssueRelationCreateInput.
+func (i IssueRelationCreateInput) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}(i))
+}
+
+// IssueRelationType is Linear's issue relation enum.
+type IssueRelationType string
+
+// GetGraphQLType returns the GraphQL type name for the enum.
+func (IssueRelationType) GetGraphQLType() string {
+	return "IssueRelationType"
+}
+
+const (
+	IssueRelationBlocks    IssueRelationType = "blocks"
+	IssueRelationRelated   IssueRelationType = "related"
+	IssueRelationDuplicate IssueRelationType = "duplicate"
+	IssueRelationSimilar   IssueRelationType = "similar"
+)
 
 // PaginationOrderBy is a custom type for Linear's PaginationOrderBy enum.
 // Valid values are "createdAt" and "updatedAt".
@@ -133,6 +174,68 @@ type Project struct {
 	TeamID string
 }
 
+// ProjectMilestoneRef represents a lightweight reference to a Linear project milestone.
+type ProjectMilestoneRef struct {
+	ID         string
+	Name       string
+	ProjectID  string
+	TargetDate *string
+	Status     string
+	SortOrder  float64
+	Progress   float64
+}
+
+// ProjectMilestone represents a Linear project milestone.
+type ProjectMilestone = ProjectMilestoneRef
+
+// CycleRef represents a lightweight reference to a Linear cycle.
+type CycleRef struct {
+	ID         string
+	Name       string
+	Number     int
+	StartsAt   time.Time
+	EndsAt     time.Time
+	IsActive   bool
+	IsFuture   bool
+	IsPast     bool
+	IsNext     bool
+	IsPrevious bool
+}
+
+// DisplayName returns the user-facing cycle name, falling back to the cycle number.
+func (c CycleRef) DisplayName() string {
+	if strings.TrimSpace(c.Name) != "" {
+		return c.Name
+	}
+	if c.Number > 0 {
+		return fmt.Sprintf("Cycle %d", c.Number)
+	}
+	return "Cycle"
+}
+
+// Cycle represents a Linear cycle.
+type Cycle struct {
+	ID          string
+	Name        string
+	Number      int
+	StartsAt    time.Time
+	EndsAt      time.Time
+	IsActive    bool
+	IsFuture    bool
+	IsPast      bool
+	IsNext      bool
+	IsPrevious  bool
+	Description string
+	TeamID      string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// DisplayName returns the user-facing cycle name, falling back to the cycle number.
+func (c Cycle) DisplayName() string {
+	return CycleRef{Name: c.Name, Number: c.Number}.DisplayName()
+}
+
 // User represents a Linear user.
 type User struct {
 	ID          string
@@ -184,27 +287,79 @@ type Comment struct {
 	IssueID   string
 }
 
+// IssueRelation represents a Linear issue relation.
+type IssueRelation struct {
+	ID           string
+	Type         string
+	Issue        IssueRef
+	RelatedIssue IssueRef
+	Inverse      bool
+}
+
+// DisplayType returns the relation label from the selected issue's perspective.
+func (r IssueRelation) DisplayType() string {
+	switch r.Type {
+	case string(IssueRelationBlocks):
+		if r.Inverse {
+			return "blocked by"
+		}
+		return "blocking"
+	case string(IssueRelationDuplicate):
+		if r.Inverse {
+			return "duplicate of"
+		}
+		return "duplicate"
+	case string(IssueRelationRelated):
+		return "related"
+	case string(IssueRelationSimilar):
+		return "similar"
+	default:
+		if r.Inverse {
+			return r.Type + " by"
+		}
+		return r.Type
+	}
+}
+
+// Attachment represents an external resource linked to a Linear issue.
+type Attachment struct {
+	ID         string
+	Title      string
+	Subtitle   string
+	URL        string
+	SourceType string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 // Issue represents a Linear issue.
 type Issue struct {
-	ID          string
-	Identifier  string
-	Title       string
-	Description string
-	State       string
-	StateID     string
-	Assignee    string
-	AssigneeID  string
-	Priority    int
-	UpdatedAt   time.Time
-	CreatedAt   time.Time
-	TeamID      string
-	ProjectID   string
-	URL         string
-	Archived    bool
-	Labels      []IssueLabel
-	Parent      *IssueRef       // Parent issue reference (nil if top-level)
-	Children    []IssueChildRef // Child/sub-issue references
-	Comments    []Comment       // Comments on this issue
+	ID               string
+	Identifier       string
+	Title            string
+	Description      string
+	State            string
+	StateID          string
+	Assignee         string
+	AssigneeID       string
+	Priority         int
+	UpdatedAt        time.Time
+	CreatedAt        time.Time
+	TeamID           string
+	ProjectID        string
+	Cycle            *CycleRef
+	DueDate          *string
+	Estimate         *float64
+	ProjectMilestone *ProjectMilestoneRef
+	URL              string
+	Archived         bool
+	Labels           []IssueLabel
+	Parent           *IssueRef       // Parent issue reference (nil if top-level)
+	Children         []IssueChildRef // Child/sub-issue references
+	Comments         []Comment       // Comments on this issue
+	Relations        []IssueRelation
+	Subscribers      []User
+	Attachments      []Attachment
 }
 
 // IssueFetchProgress describes progress for a paginated issue fetch.
@@ -222,16 +377,52 @@ type IssuePage struct {
 
 // FetchIssuesParams contains parameters for fetching issues.
 type FetchIssuesParams struct {
-	TeamID    string
-	ProjectID string
-	StateID   string
-	Search    string
+	TeamID             string
+	ProjectID          string
+	StateID            string
+	CycleID            string
+	AssigneeID         string
+	LabelIDs           []string
+	ProjectMilestoneID string
+	DueDate            DateFilter
+	Estimate           NumberFilter
+	Search             string
 	// OrderBy specifies the sort order. Valid API values are "updatedAt" and "createdAt".
 	// "priority" is also supported and will be sorted client-side after fetching.
 	OrderBy string
 	First   int
 	// OnProgress is an optional callback invoked after each page is fetched.
 	OnProgress func(IssueFetchProgress)
+}
+
+// DateFilter describes a Linear timeless date filter.
+type DateFilter struct {
+	Eq   string
+	GT   string
+	GTE  string
+	LT   string
+	LTE  string
+	Null *bool
+}
+
+// Empty returns whether no date filter fields are set.
+func (f DateFilter) Empty() bool {
+	return f.Eq == "" && f.GT == "" && f.GTE == "" && f.LT == "" && f.LTE == "" && f.Null == nil
+}
+
+// NumberFilter describes a Linear numeric filter.
+type NumberFilter struct {
+	Eq   *float64
+	GT   *float64
+	GTE  *float64
+	LT   *float64
+	LTE  *float64
+	Null *bool
+}
+
+// Empty returns whether no numeric filter fields are set.
+func (f NumberFilter) Empty() bool {
+	return f.Eq == nil && f.GT == nil && f.GTE == nil && f.LT == nil && f.LTE == nil && f.Null == nil
 }
 
 // CreateIssueInput contains input for creating a new issue.
@@ -241,6 +432,7 @@ type CreateIssueInput struct {
 	Description string
 	ProjectID   string
 	StateID     string
+	CycleID     string
 	AssigneeID  string
 	Priority    int
 	ParentID    string // Parent issue ID (empty for top-level issues)
@@ -248,20 +440,76 @@ type CreateIssueInput struct {
 
 // UpdateIssueInput contains input for updating an issue.
 type UpdateIssueInput struct {
-	ID          string
-	Title       *string
-	Description *string
-	StateID     *string
-	AssigneeID  *string
-	Priority    *int
-	LabelIDs    *[]string // nil = no change, empty slice = clear all, non-empty = set labels
-	ParentID    *string   // nil = no change, empty string = clear parent, non-empty = set parent
+	ID                 string
+	Title              *string
+	Description        *string
+	StateID            *string
+	CycleID            *string // nil = no change, empty string = clear cycle, non-empty = set cycle
+	AssigneeID         *string
+	Priority           *int
+	LabelIDs           *[]string // nil = no change, empty slice = clear all, non-empty = set labels
+	ParentID           *string   // nil = no change, empty string = clear parent, non-empty = set parent
+	DueDate            *string   // nil = no change, empty string = clear due date, non-empty = set YYYY-MM-DD date
+	Estimate           *float64  // nil = no change, non-nil = set estimate
+	ClearEstimate      bool      // true = clear estimate
+	ProjectMilestoneID *string   // nil = no change, empty string = clear milestone, non-empty = set milestone
 }
 
 // CreateCommentInput contains input for creating a new comment.
 type CreateCommentInput struct {
 	IssueID string
 	Body    string
+}
+
+// CreateIssueRelationInput contains input for creating an issue relation.
+type CreateIssueRelationInput struct {
+	IssueID        string
+	RelatedIssueID string
+	Type           IssueRelationType
+}
+
+type issueMutationNode struct {
+	ID         graphql.String
+	Identifier graphql.String
+	Title      graphql.String
+	State      struct {
+		ID   graphql.String
+		Name graphql.String
+	}
+	Assignee *struct {
+		ID   graphql.String
+		Name graphql.String
+	}
+	Priority    graphql.Float
+	UpdatedAt   graphql.String
+	CreatedAt   graphql.String
+	Description *graphql.String
+	Team        struct {
+		ID graphql.String
+	}
+	Project *struct {
+		ID graphql.String
+	}
+	Cycle *struct {
+		ID         graphql.String
+		Name       *graphql.String
+		Number     graphql.Float
+		StartsAt   graphql.String
+		EndsAt     graphql.String
+		IsActive   graphql.Boolean
+		IsFuture   graphql.Boolean
+		IsPast     graphql.Boolean
+		IsNext     graphql.Boolean
+		IsPrevious graphql.Boolean
+	}
+	Labels struct {
+		Nodes []struct {
+			ID    graphql.String
+			Name  graphql.String
+			Color graphql.String
+		}
+	}
+	URL graphql.String
 }
 
 // NewClient creates a new Linear API client with the provided configuration.
@@ -398,6 +646,170 @@ func (c *Client) ListProjects(ctx context.Context, teamID string) ([]Project, er
 	return projects, nil
 }
 
+// ListProjectMilestones fetches all non-archived milestones for a project.
+func (c *Client) ListProjectMilestones(ctx context.Context, projectID string) ([]ProjectMilestone, error) {
+	var after *string
+	milestones := make([]ProjectMilestone, 0)
+
+	for {
+		var query struct {
+			ProjectMilestones struct {
+				Nodes []struct {
+					ID         graphql.String
+					Name       graphql.String
+					TargetDate *graphql.String
+					Status     graphql.String
+					SortOrder  graphql.Float
+					Progress   graphql.Float
+					Project    struct {
+						ID graphql.String
+					}
+				}
+				PageInfo struct {
+					HasNextPage graphql.Boolean
+					EndCursor   graphql.String
+				}
+			} `graphql:"projectMilestones(first: $first, after: $after, filter: $filter, includeArchived: $includeArchived)"`
+		}
+
+		var afterCursor *graphql.String
+		if after != nil {
+			cursor := graphql.String(*after)
+			afterCursor = &cursor
+		}
+
+		filter := ProjectMilestoneFilter{
+			"project": map[string]interface{}{"id": map[string]interface{}{"eq": projectID}},
+		}
+		variables := map[string]interface{}{
+			"first":           graphql.Int(50),
+			"after":           afterCursor,
+			"filter":          filter,
+			"includeArchived": graphql.Boolean(false),
+		}
+
+		if err := c.client.Query(ctx, &query, variables); err != nil {
+			logger.ErrorWithErr(err, "linearapi.client: ListProjectMilestones failed project_id=%s", projectID)
+			return nil, fmt.Errorf("list project milestones for project %s: %w", projectID, err)
+		}
+
+		for _, node := range query.ProjectMilestones.Nodes {
+			var targetDate *string
+			if node.TargetDate != nil {
+				value := string(*node.TargetDate)
+				targetDate = &value
+			}
+			milestones = append(milestones, ProjectMilestone{
+				ID:         string(node.ID),
+				Name:       string(node.Name),
+				ProjectID:  string(node.Project.ID),
+				TargetDate: targetDate,
+				Status:     string(node.Status),
+				SortOrder:  float64(node.SortOrder),
+				Progress:   float64(node.Progress),
+			})
+		}
+
+		if !bool(query.ProjectMilestones.PageInfo.HasNextPage) {
+			break
+		}
+		cursor := string(query.ProjectMilestones.PageInfo.EndCursor)
+		after = &cursor
+	}
+
+	return milestones, nil
+}
+
+// ListCycles fetches all non-archived cycles for a team.
+func (c *Client) ListCycles(ctx context.Context, teamID string) ([]Cycle, error) {
+	var after *string
+	cycles := make([]Cycle, 0)
+
+	for {
+		var query struct {
+			Team struct {
+				Cycles struct {
+					Nodes []struct {
+						ID          graphql.String
+						Name        *graphql.String
+						Number      graphql.Float
+						Description *graphql.String
+						StartsAt    graphql.String
+						EndsAt      graphql.String
+						IsActive    graphql.Boolean
+						IsFuture    graphql.Boolean
+						IsPast      graphql.Boolean
+						IsNext      graphql.Boolean
+						IsPrevious  graphql.Boolean
+						CreatedAt   graphql.String
+						UpdatedAt   graphql.String
+						Team        struct {
+							ID graphql.String
+						}
+					}
+					PageInfo struct {
+						HasNextPage graphql.Boolean
+						EndCursor   graphql.String
+					}
+				} `graphql:"cycles(first: $first, after: $after, includeArchived: $includeArchived)"`
+			} `graphql:"team(id: $teamId)"`
+		}
+
+		var afterCursor *graphql.String
+		if after != nil {
+			cursor := graphql.String(*after)
+			afterCursor = &cursor
+		}
+
+		variables := map[string]interface{}{
+			"teamId":          graphql.String(teamID),
+			"first":           graphql.Int(50),
+			"after":           afterCursor,
+			"includeArchived": graphql.Boolean(false),
+		}
+
+		if err := c.client.Query(ctx, &query, variables); err != nil {
+			logger.ErrorWithErr(err, "linearapi.client: ListCycles failed team_id=%s", teamID)
+			return nil, fmt.Errorf("list cycles for team %s: %w", teamID, err)
+		}
+
+		for _, node := range query.Team.Cycles.Nodes {
+			name := ""
+			if node.Name != nil {
+				name = string(*node.Name)
+			}
+			description := ""
+			if node.Description != nil {
+				description = string(*node.Description)
+			}
+			cycles = append(cycles, Cycle{
+				ID:          string(node.ID),
+				Name:        name,
+				Number:      int(node.Number),
+				StartsAt:    parseTime(string(node.StartsAt)),
+				EndsAt:      parseTime(string(node.EndsAt)),
+				IsActive:    bool(node.IsActive),
+				IsFuture:    bool(node.IsFuture),
+				IsPast:      bool(node.IsPast),
+				IsNext:      bool(node.IsNext),
+				IsPrevious:  bool(node.IsPrevious),
+				Description: description,
+				TeamID:      string(node.Team.ID),
+				CreatedAt:   parseTime(string(node.CreatedAt)),
+				UpdatedAt:   parseTime(string(node.UpdatedAt)),
+			})
+		}
+
+		if !bool(query.Team.Cycles.PageInfo.HasNextPage) {
+			break
+		}
+		cursor := string(query.Team.Cycles.PageInfo.EndCursor)
+		after = &cursor
+	}
+
+	return cycles, nil
+}
+
 // ListUsers fetches all users in a team.
 func (c *Client) ListUsers(ctx context.Context, teamID string) ([]User, error) {
 	var query struct {
@@ -515,12 +927,106 @@ func buildBaseIssueFilter(params FetchIssuesParams) IssueFilter {
 	if params.StateID != "" {
 		filter["state"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.StateID}}
 	}
+	if params.CycleID != "" {
+		filter["cycle"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.CycleID}}
+	}
 	return filter
+}
+
+// buildStructuredIssueFilter builds issue filters that can be passed alongside
+// Linear's full-text search term.
+func buildStructuredIssueFilter(params FetchIssuesParams) IssueFilter {
+	filter := buildBaseIssueFilter(params)
+	if params.AssigneeID != "" {
+		filter["assignee"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.AssigneeID}}
+	}
+	if params.ProjectMilestoneID != "" {
+		filter["projectMilestone"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.ProjectMilestoneID}}
+	}
+	if !params.DueDate.Empty() {
+		filter["dueDate"] = buildDateComparator(params.DueDate)
+	}
+	if !params.Estimate.Empty() {
+		filter["estimate"] = buildNumberComparator(params.Estimate)
+	}
+	if len(params.LabelIDs) > 0 {
+		andFilters := make([]map[string]interface{}, 0, len(params.LabelIDs))
+		for _, labelID := range params.LabelIDs {
+			labelID = strings.TrimSpace(labelID)
+			if labelID == "" {
+				continue
+			}
+			andFilters = append(andFilters, map[string]interface{}{
+				"labels": map[string]interface{}{
+					"some": map[string]interface{}{
+						"id": map[string]interface{}{"eq": labelID},
+					},
+				},
+			})
+		}
+		appendIssueAndFilters(filter, andFilters...)
+	}
+	return filter
+}
+
+func buildDateComparator(dateFilter DateFilter) map[string]interface{} {
+	comparator := make(map[string]interface{})
+	if dateFilter.Eq != "" {
+		comparator["eq"] = dateFilter.Eq
+	}
+	if dateFilter.GT != "" {
+		comparator["gt"] = dateFilter.GT
+	}
+	if dateFilter.GTE != "" {
+		comparator["gte"] = dateFilter.GTE
+	}
+	if dateFilter.LT != "" {
+		comparator["lt"] = dateFilter.LT
+	}
+	if dateFilter.LTE != "" {
+		comparator["lte"] = dateFilter.LTE
+	}
+	if dateFilter.Null != nil {
+		comparator["null"] = *dateFilter.Null
+	}
+	return comparator
+}
+
+func buildNumberComparator(numberFilter NumberFilter) map[string]interface{} {
+	comparator := make(map[string]interface{})
+	if numberFilter.Eq != nil {
+		comparator["eq"] = *numberFilter.Eq
+	}
+	if numberFilter.GT != nil {
+		comparator["gt"] = *numberFilter.GT
+	}
+	if numberFilter.GTE != nil {
+		comparator["gte"] = *numberFilter.GTE
+	}
+	if numberFilter.LT != nil {
+		comparator["lt"] = *numberFilter.LT
+	}
+	if numberFilter.LTE != nil {
+		comparator["lte"] = *numberFilter.LTE
+	}
+	if numberFilter.Null != nil {
+		comparator["null"] = *numberFilter.Null
+	}
+	return comparator
+}
+
+func appendIssueAndFilters(filter IssueFilter, filters ...map[string]interface{}) {
+	if len(filters) == 0 {
+		return
+	}
+	existing, _ := filter["and"].([]map[string]interface{})
+	existing = append(existing, filters...)
+	filter["and"] = existing
 }
 
 // buildIssueFilter builds the GraphQL issue filter for the given params.
 func buildIssueFilter(params FetchIssuesParams) IssueFilter {
-	filter := buildBaseIssueFilter(params)
+	filter := buildStructuredIssueFilter(params)
 
 	searchTerm := strings.TrimSpace(params.Search)
 	if searchTerm == "" {
@@ -540,7 +1046,7 @@ func buildIssueFilter(params FetchIssuesParams) IssueFilter {
 			"or": buildSearchOrFilters(term),
 		})
 	}
-	filter["and"] = andFilters
+	appendIssueAndFilters(filter, andFilters...)
 	return filter
 }
 
@@ -628,7 +1134,7 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 
 	searchTerm := strings.TrimSpace(params.Search)
 	// Build filter for team/project/state constraints only (search handles the text matching).
-	filter := buildBaseIssueFilter(params)
+	filter := buildStructuredIssueFilter(params)
 
 	var afterCursor *graphql.String
 	if after != nil {
@@ -659,6 +1165,29 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 				}
 				Project *struct {
 					ID graphql.String
+				}
+				Cycle *struct {
+					ID         graphql.String
+					Name       *graphql.String
+					Number     graphql.Float
+					StartsAt   graphql.String
+					EndsAt     graphql.String
+					IsActive   graphql.Boolean
+					IsFuture   graphql.Boolean
+					IsPast     graphql.Boolean
+					IsNext     graphql.Boolean
+					IsPrevious graphql.Boolean
+				}
+				DueDate          *graphql.String
+				Estimate         *graphql.Float
+				ProjectMilestone *struct {
+					ID         graphql.String
+					Name       graphql.String
+					TargetDate *graphql.String
+					Status     graphql.String
+					Project    struct {
+						ID graphql.String
+					}
 				}
 				Labels struct {
 					Nodes []struct {
@@ -817,6 +1346,29 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 				Project *struct {
 					ID graphql.String
 				}
+				Cycle *struct {
+					ID         graphql.String
+					Name       *graphql.String
+					Number     graphql.Float
+					StartsAt   graphql.String
+					EndsAt     graphql.String
+					IsActive   graphql.Boolean
+					IsFuture   graphql.Boolean
+					IsPast     graphql.Boolean
+					IsNext     graphql.Boolean
+					IsPrevious graphql.Boolean
+				}
+				DueDate          *graphql.String
+				Estimate         *graphql.Float
+				ProjectMilestone *struct {
+					ID         graphql.String
+					Name       graphql.String
+					TargetDate *graphql.String
+					Status     graphql.String
+					Project    struct {
+						ID graphql.String
+					}
+				}
 				Labels struct {
 					Nodes []struct {
 						ID    graphql.String
@@ -883,6 +1435,275 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 	}, nil
 }
 
+func parseCycleRefValue(v reflect.Value) *CycleRef {
+	if !v.IsValid() {
+		return nil
+	}
+	if v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+
+	id := reflectStringField(v, "ID")
+	if id == "" {
+		return nil
+	}
+
+	return &CycleRef{
+		ID:         id,
+		Name:       reflectStringField(v, "Name"),
+		Number:     reflectIntField(v, "Number"),
+		StartsAt:   parseTime(reflectStringField(v, "StartsAt")),
+		EndsAt:     parseTime(reflectStringField(v, "EndsAt")),
+		IsActive:   reflectBoolField(v, "IsActive"),
+		IsFuture:   reflectBoolField(v, "IsFuture"),
+		IsPast:     reflectBoolField(v, "IsPast"),
+		IsNext:     reflectBoolField(v, "IsNext"),
+		IsPrevious: reflectBoolField(v, "IsPrevious"),
+	}
+}
+
+func parseProjectMilestoneRefValue(v reflect.Value) *ProjectMilestoneRef {
+	if !v.IsValid() {
+		return nil
+	}
+	if v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return nil
+		}
+		v = v.Elem()
+	}
+
+	id := reflectStringField(v, "ID")
+	if id == "" {
+		return nil
+	}
+
+	var targetDate *string
+	if value := reflectStringField(v, "TargetDate"); value != "" {
+		targetDate = &value
+	}
+	projectID := ""
+	projectField := v.FieldByName("Project")
+	if projectField.IsValid() {
+		projectID = reflectStringField(projectField, "ID")
+	}
+
+	return &ProjectMilestoneRef{
+		ID:         id,
+		Name:       reflectStringField(v, "Name"),
+		ProjectID:  projectID,
+		TargetDate: targetDate,
+		Status:     reflectStringField(v, "Status"),
+		SortOrder:  reflectFloatField(v, "SortOrder"),
+		Progress:   reflectFloatField(v, "Progress"),
+	}
+}
+
+func reflectStringField(v reflect.Value, name string) string {
+	if !v.IsValid() {
+		return ""
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() {
+		return ""
+	}
+	if field.Kind() == reflect.Pointer {
+		if field.IsNil() {
+			return ""
+		}
+		field = field.Elem()
+	}
+	if field.Kind() == reflect.String {
+		return field.String()
+	}
+	return ""
+}
+
+func reflectStringPointerField(v reflect.Value, name string) *string {
+	value := reflectStringField(v, name)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func reflectIntField(v reflect.Value, name string) int {
+	if !v.IsValid() {
+		return 0
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() {
+		return 0
+	}
+	switch field.Kind() {
+	case reflect.Float32, reflect.Float64:
+		return int(field.Float())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(field.Int())
+	default:
+		return 0
+	}
+}
+
+func reflectFloatField(v reflect.Value, name string) float64 {
+	if !v.IsValid() {
+		return 0
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() {
+		return 0
+	}
+	if field.Kind() == reflect.Pointer {
+		if field.IsNil() {
+			return 0
+		}
+		field = field.Elem()
+	}
+	switch field.Kind() {
+	case reflect.Float32, reflect.Float64:
+		return field.Float()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(field.Int())
+	default:
+		return 0
+	}
+}
+
+func reflectFloatPointerField(v reflect.Value, name string) *float64 {
+	if !v.IsValid() {
+		return nil
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() {
+		return nil
+	}
+	if field.Kind() == reflect.Pointer {
+		if field.IsNil() {
+			return nil
+		}
+		field = field.Elem()
+	}
+	switch field.Kind() {
+	case reflect.Float32, reflect.Float64:
+		value := field.Float()
+		return &value
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		value := float64(field.Int())
+		return &value
+	default:
+		return nil
+	}
+}
+
+func reflectBoolField(v reflect.Value, name string) bool {
+	if !v.IsValid() {
+		return false
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() {
+		return false
+	}
+	if field.Kind() == reflect.Bool {
+		return field.Bool()
+	}
+	return false
+}
+
+func parseCycleRef(node interface{}) *CycleRef {
+	return parseCycleRefValue(reflect.ValueOf(node))
+}
+
+func parseIssueRefValue(v reflect.Value) IssueRef {
+	return IssueRef{
+		ID:         reflectStringField(v, "ID"),
+		Identifier: reflectStringField(v, "Identifier"),
+		Title:      reflectStringField(v, "Title"),
+	}
+}
+
+func parseIssueRelationNodes(v reflect.Value, inverse bool) []IssueRelation {
+	if !v.IsValid() {
+		return nil
+	}
+	nodesField := v.FieldByName("Nodes")
+	if !nodesField.IsValid() {
+		return nil
+	}
+	relations := make([]IssueRelation, 0, nodesField.Len())
+	for i := 0; i < nodesField.Len(); i++ {
+		node := nodesField.Index(i)
+		relations = append(relations, IssueRelation{
+			ID:           reflectStringField(node, "ID"),
+			Type:         reflectStringField(node, "Type"),
+			Issue:        parseIssueRefValue(node.FieldByName("Issue")),
+			RelatedIssue: parseIssueRefValue(node.FieldByName("RelatedIssue")),
+			Inverse:      inverse,
+		})
+	}
+	return relations
+}
+
+func parseUserNodes(v reflect.Value) []User {
+	if !v.IsValid() {
+		return nil
+	}
+	nodesField := v.FieldByName("Nodes")
+	if !nodesField.IsValid() {
+		return nil
+	}
+	users := make([]User, 0, nodesField.Len())
+	for i := 0; i < nodesField.Len(); i++ {
+		node := nodesField.Index(i)
+		users = append(users, User{
+			ID:          reflectStringField(node, "ID"),
+			Name:        reflectStringField(node, "Name"),
+			DisplayName: reflectStringField(node, "DisplayName"),
+			Email:       reflectStringField(node, "Email"),
+			IsMe:        reflectBoolField(node, "IsMe"),
+		})
+	}
+	return users
+}
+
+func parseAttachmentNodes(v reflect.Value) []Attachment {
+	if !v.IsValid() {
+		return nil
+	}
+	nodesField := v.FieldByName("Nodes")
+	if !nodesField.IsValid() {
+		return nil
+	}
+	attachments := make([]Attachment, 0, nodesField.Len())
+	for i := 0; i < nodesField.Len(); i++ {
+		node := nodesField.Index(i)
+		attachments = append(attachments, Attachment{
+			ID:         reflectStringField(node, "ID"),
+			Title:      reflectStringField(node, "Title"),
+			Subtitle:   reflectStringField(node, "Subtitle"),
+			URL:        reflectStringField(node, "URL"),
+			SourceType: reflectStringField(node, "SourceType"),
+			CreatedAt:  parseTime(reflectStringField(node, "CreatedAt")),
+			UpdatedAt:  parseTime(reflectStringField(node, "UpdatedAt")),
+		})
+	}
+	return attachments
+}
+
 // parseIssueNode converts a GraphQL issue node to an Issue struct.
 func (c *Client) parseIssueNode(node interface{}) Issue {
 	// Use type assertion to handle the node
@@ -905,14 +1726,14 @@ func (c *Client) parseIssueNode(node interface{}) Issue {
 	assignee := ""
 	assigneeID := ""
 	assigneeField := v.FieldByName("Assignee")
-	if !assigneeField.IsNil() {
+	if assigneeField.IsValid() && assigneeField.Kind() == reflect.Pointer && !assigneeField.IsNil() {
 		assigneeID = assigneeField.Elem().FieldByName("ID").String()
 		assignee = assigneeField.Elem().FieldByName("Name").String()
 	}
 
 	description := ""
 	descField := v.FieldByName("Description")
-	if !descField.IsNil() {
+	if descField.IsValid() && descField.Kind() == reflect.Pointer && !descField.IsNil() {
 		description = descField.Elem().String()
 	}
 
@@ -920,31 +1741,40 @@ func (c *Client) parseIssueNode(node interface{}) Issue {
 
 	projectID := ""
 	projectField := v.FieldByName("Project")
-	if !projectField.IsNil() {
+	if projectField.IsValid() && projectField.Kind() == reflect.Pointer && !projectField.IsNil() {
 		projectID = projectField.Elem().FieldByName("ID").String()
 	}
+
+	cycle := parseCycleRefValue(v.FieldByName("Cycle"))
+	dueDate := reflectStringPointerField(v, "DueDate")
+	estimate := reflectFloatPointerField(v, "Estimate")
+	projectMilestone := parseProjectMilestoneRefValue(v.FieldByName("ProjectMilestone"))
 
 	url := v.FieldByName("URL").String()
 
 	archivedField := v.FieldByName("ArchivedAt")
-	archived := !archivedField.IsNil()
+	archived := archivedField.IsValid() && archivedField.Kind() == reflect.Pointer && !archivedField.IsNil()
 
 	// Parse labels
-	labelsField := v.FieldByName("Labels").FieldByName("Nodes")
-	labels := make([]IssueLabel, 0, labelsField.Len())
-	for i := 0; i < labelsField.Len(); i++ {
-		lbl := labelsField.Index(i)
-		labels = append(labels, IssueLabel{
-			ID:    lbl.FieldByName("ID").String(),
-			Name:  lbl.FieldByName("Name").String(),
-			Color: lbl.FieldByName("Color").String(),
-		})
+	labels := make([]IssueLabel, 0)
+	labelsConn := v.FieldByName("Labels")
+	if labelsConn.IsValid() {
+		labelsField := labelsConn.FieldByName("Nodes")
+		labels = make([]IssueLabel, 0, labelsField.Len())
+		for i := 0; i < labelsField.Len(); i++ {
+			lbl := labelsField.Index(i)
+			labels = append(labels, IssueLabel{
+				ID:    lbl.FieldByName("ID").String(),
+				Name:  lbl.FieldByName("Name").String(),
+				Color: lbl.FieldByName("Color").String(),
+			})
+		}
 	}
 
 	// Parse parent
 	var parent *IssueRef
 	parentField := v.FieldByName("Parent")
-	if !parentField.IsNil() {
+	if parentField.IsValid() && parentField.Kind() == reflect.Pointer && !parentField.IsNil() {
 		parent = &IssueRef{
 			ID:         parentField.Elem().FieldByName("ID").String(),
 			Identifier: parentField.Elem().FieldByName("Identifier").String(),
@@ -953,38 +1783,55 @@ func (c *Client) parseIssueNode(node interface{}) Issue {
 	}
 
 	// Parse children
-	childrenField := v.FieldByName("Children").FieldByName("Nodes")
-	children := make([]IssueChildRef, 0, childrenField.Len())
-	for i := 0; i < childrenField.Len(); i++ {
-		child := childrenField.Index(i)
-		children = append(children, IssueChildRef{
-			ID:         child.FieldByName("ID").String(),
-			Identifier: child.FieldByName("Identifier").String(),
-			Title:      child.FieldByName("Title").String(),
-			State:      child.FieldByName("State").FieldByName("Name").String(),
-			StateID:    child.FieldByName("State").FieldByName("ID").String(),
-		})
+	children := make([]IssueChildRef, 0)
+	childrenConn := v.FieldByName("Children")
+	if childrenConn.IsValid() {
+		childrenField := childrenConn.FieldByName("Nodes")
+		children = make([]IssueChildRef, 0, childrenField.Len())
+		for i := 0; i < childrenField.Len(); i++ {
+			child := childrenField.Index(i)
+			children = append(children, IssueChildRef{
+				ID:         child.FieldByName("ID").String(),
+				Identifier: child.FieldByName("Identifier").String(),
+				Title:      child.FieldByName("Title").String(),
+				State:      child.FieldByName("State").FieldByName("Name").String(),
+				StateID:    child.FieldByName("State").FieldByName("ID").String(),
+			})
+		}
 	}
 
+	relations := make([]IssueRelation, 0)
+	relations = append(relations, parseIssueRelationNodes(v.FieldByName("Relations"), false)...)
+	relations = append(relations, parseIssueRelationNodes(v.FieldByName("InverseRelations"), true)...)
+	subscribers := parseUserNodes(v.FieldByName("Subscribers"))
+	attachments := parseAttachmentNodes(v.FieldByName("Attachments"))
+
 	return Issue{
-		ID:          id,
-		Identifier:  identifier,
-		Title:       title,
-		State:       stateName,
-		StateID:     stateID,
-		Assignee:    assignee,
-		AssigneeID:  assigneeID,
-		Priority:    priority,
-		UpdatedAt:   updatedAt,
-		CreatedAt:   createdAt,
-		Description: description,
-		TeamID:      teamID,
-		ProjectID:   projectID,
-		URL:         url,
-		Archived:    archived,
-		Labels:      labels,
-		Parent:      parent,
-		Children:    children,
+		ID:               id,
+		Identifier:       identifier,
+		Title:            title,
+		State:            stateName,
+		StateID:          stateID,
+		Assignee:         assignee,
+		AssigneeID:       assigneeID,
+		Priority:         priority,
+		UpdatedAt:        updatedAt,
+		CreatedAt:        createdAt,
+		Description:      description,
+		TeamID:           teamID,
+		ProjectID:        projectID,
+		Cycle:            cycle,
+		DueDate:          dueDate,
+		Estimate:         estimate,
+		ProjectMilestone: projectMilestone,
+		URL:              url,
+		Archived:         archived,
+		Labels:           labels,
+		Parent:           parent,
+		Children:         children,
+		Relations:        relations,
+		Subscribers:      subscribers,
+		Attachments:      attachments,
 	}
 }
 
@@ -1030,6 +1877,29 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 			Project *struct {
 				ID graphql.String
 			}
+			Cycle *struct {
+				ID         graphql.String
+				Name       *graphql.String
+				Number     graphql.Float
+				StartsAt   graphql.String
+				EndsAt     graphql.String
+				IsActive   graphql.Boolean
+				IsFuture   graphql.Boolean
+				IsPast     graphql.Boolean
+				IsNext     graphql.Boolean
+				IsPrevious graphql.Boolean
+			}
+			DueDate          *graphql.String
+			Estimate         *graphql.Float
+			ProjectMilestone *struct {
+				ID         graphql.String
+				Name       graphql.String
+				TargetDate *graphql.String
+				Status     graphql.String
+				Project    struct {
+					ID graphql.String
+				}
+			}
 			Labels struct {
 				Nodes []struct {
 					ID    graphql.String
@@ -1055,6 +1925,58 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 					}
 				}
 			}
+			Relations struct {
+				Nodes []struct {
+					ID    graphql.String
+					Type  graphql.String
+					Issue struct {
+						ID         graphql.String
+						Identifier graphql.String
+						Title      graphql.String
+					}
+					RelatedIssue struct {
+						ID         graphql.String
+						Identifier graphql.String
+						Title      graphql.String
+					}
+				}
+			} `graphql:"relations(first: 50)"`
+			InverseRelations struct {
+				Nodes []struct {
+					ID    graphql.String
+					Type  graphql.String
+					Issue struct {
+						ID         graphql.String
+						Identifier graphql.String
+						Title      graphql.String
+					}
+					RelatedIssue struct {
+						ID         graphql.String
+						Identifier graphql.String
+						Title      graphql.String
+					}
+				}
+			} `graphql:"inverseRelations(first: 50)"`
+			Subscribers struct {
+				Nodes []struct {
+					ID          graphql.String
+					Name        graphql.String
+					DisplayName graphql.String
+					Email       graphql.String
+					IsMe        graphql.Boolean
+				}
+			} `graphql:"subscribers(first: 50)"`
+			Attachments struct {
+				Nodes []struct {
+					ID         graphql.String
+					Title      graphql.String
+					Subtitle   *graphql.String
+					URL        graphql.String
+					SourceType *graphql.String
+					CreatedAt  graphql.String
+					UpdatedAt  graphql.String
+				}
+			} `graphql:"attachments(first: 50)"`
 			Comments struct {
 				Nodes []struct {
 					ID        graphql.String
@@ -1083,59 +2005,7 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 		return Issue{}, fmt.Errorf("fetch issue %s: %w", id, err)
 	}
 
-	updatedAt := parseTime(string(query.Issue.UpdatedAt))
-	createdAt := parseTime(string(query.Issue.CreatedAt))
-
-	assignee := ""
-	assigneeID := ""
-	if query.Issue.Assignee != nil {
-		assignee = string(query.Issue.Assignee.Name)
-		assigneeID = string(query.Issue.Assignee.ID)
-	}
-
-	description := ""
-	if query.Issue.Description != nil {
-		description = string(*query.Issue.Description)
-	}
-
-	projectID := ""
-	if query.Issue.Project != nil {
-		projectID = string(query.Issue.Project.ID)
-	}
-
-	archived := query.Issue.ArchivedAt != nil
-
-	// Parse labels
-	labels := make([]IssueLabel, 0, len(query.Issue.Labels.Nodes))
-	for _, lbl := range query.Issue.Labels.Nodes {
-		labels = append(labels, IssueLabel{
-			ID:    string(lbl.ID),
-			Name:  string(lbl.Name),
-			Color: string(lbl.Color),
-		})
-	}
-
-	// Parse parent
-	var parent *IssueRef
-	if query.Issue.Parent != nil {
-		parent = &IssueRef{
-			ID:         string(query.Issue.Parent.ID),
-			Identifier: string(query.Issue.Parent.Identifier),
-			Title:      string(query.Issue.Parent.Title),
-		}
-	}
-
-	// Parse children
-	children := make([]IssueChildRef, 0, len(query.Issue.Children.Nodes))
-	for _, child := range query.Issue.Children.Nodes {
-		children = append(children, IssueChildRef{
-			ID:         string(child.ID),
-			Identifier: string(child.Identifier),
-			Title:      string(child.Title),
-			State:      string(child.State.Name),
-			StateID:    string(child.State.ID),
-		})
-	}
+	issue := c.parseIssueNode(query.Issue)
 
 	// Parse comments
 	comments := make([]Comment, 0, len(query.Issue.Comments.Nodes))
@@ -1158,27 +2028,8 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 		})
 	}
 
-	return Issue{
-		ID:          string(query.Issue.ID),
-		Identifier:  string(query.Issue.Identifier),
-		Title:       string(query.Issue.Title),
-		State:       string(query.Issue.State.Name),
-		StateID:     string(query.Issue.State.ID),
-		Assignee:    assignee,
-		AssigneeID:  assigneeID,
-		Priority:    int(query.Issue.Priority),
-		UpdatedAt:   updatedAt,
-		CreatedAt:   createdAt,
-		Description: description,
-		TeamID:      string(query.Issue.Team.ID),
-		ProjectID:   projectID,
-		URL:         string(query.Issue.URL),
-		Archived:    archived,
-		Labels:      labels,
-		Parent:      parent,
-		Children:    children,
-		Comments:    comments,
-	}, nil
+	issue.Comments = comments
+	return issue, nil
 }
 
 // CreateIssue creates a new issue.
@@ -1208,6 +2059,29 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 				Project *struct {
 					ID graphql.String
 				}
+				Cycle *struct {
+					ID         graphql.String
+					Name       *graphql.String
+					Number     graphql.Float
+					StartsAt   graphql.String
+					EndsAt     graphql.String
+					IsActive   graphql.Boolean
+					IsFuture   graphql.Boolean
+					IsPast     graphql.Boolean
+					IsNext     graphql.Boolean
+					IsPrevious graphql.Boolean
+				}
+				DueDate          *graphql.String
+				Estimate         *graphql.Float
+				ProjectMilestone *struct {
+					ID         graphql.String
+					Name       graphql.String
+					TargetDate *graphql.String
+					Status     graphql.String
+					Project    struct {
+						ID graphql.String
+					}
+				}
 				Labels struct {
 					Nodes []struct {
 						ID    graphql.String
@@ -1232,6 +2106,9 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 	}
 	if input.StateID != "" {
 		issueInput["stateId"] = graphql.ID(input.StateID)
+	}
+	if input.CycleID != "" {
+		issueInput["cycleId"] = graphql.ID(input.CycleID)
 	}
 	if input.AssigneeID != "" {
 		issueInput["assigneeId"] = graphql.ID(input.AssigneeID)
@@ -1279,6 +2156,8 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 		projectID = string(node.Project.ID)
 	}
 
+	cycle := parseCycleRef(node.Cycle)
+
 	// Parse labels
 	labels := make([]IssueLabel, 0, len(node.Labels.Nodes))
 	for _, lbl := range node.Labels.Nodes {
@@ -1303,6 +2182,7 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 		Description: description,
 		TeamID:      string(node.Team.ID),
 		ProjectID:   projectID,
+		Cycle:       cycle,
 		URL:         string(node.URL),
 		Labels:      labels,
 	}, nil
@@ -1313,37 +2193,7 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 	var mutation struct {
 		IssueUpdate struct {
 			Success graphql.Boolean
-			Issue   struct {
-				ID         graphql.String
-				Identifier graphql.String
-				Title      graphql.String
-				State      struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Assignee *struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Priority    graphql.Float
-				UpdatedAt   graphql.String
-				CreatedAt   graphql.String
-				Description *graphql.String
-				Team        struct {
-					ID graphql.String
-				}
-				Project *struct {
-					ID graphql.String
-				}
-				Labels struct {
-					Nodes []struct {
-						ID    graphql.String
-						Name  graphql.String
-						Color graphql.String
-					}
-				}
-				URL graphql.String
-			}
+			Issue   issueMutationNode
 		} `graphql:"issueUpdate(id: $id, input: $input)"`
 	}
 
@@ -1357,6 +2207,13 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 	}
 	if input.StateID != nil {
 		issueInput["stateId"] = graphql.ID(*input.StateID)
+	}
+	if input.CycleID != nil {
+		if *input.CycleID == "" {
+			issueInput["cycleId"] = (*graphql.ID)(nil)
+		} else {
+			issueInput["cycleId"] = graphql.ID(*input.CycleID)
+		}
 	}
 	if input.AssigneeID != nil {
 		if *input.AssigneeID == "" {
@@ -1385,6 +2242,25 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 			issueInput["parentId"] = graphql.ID(*input.ParentID)
 		}
 	}
+	if input.DueDate != nil {
+		if *input.DueDate == "" {
+			issueInput["dueDate"] = (*graphql.String)(nil)
+		} else {
+			issueInput["dueDate"] = graphql.String(*input.DueDate)
+		}
+	}
+	if input.ClearEstimate {
+		issueInput["estimate"] = (*graphql.Float)(nil)
+	} else if input.Estimate != nil {
+		issueInput["estimate"] = graphql.Float(*input.Estimate)
+	}
+	if input.ProjectMilestoneID != nil {
+		if *input.ProjectMilestoneID == "" {
+			issueInput["projectMilestoneId"] = (*graphql.ID)(nil)
+		} else {
+			issueInput["projectMilestoneId"] = graphql.ID(*input.ProjectMilestoneID)
+		}
+	}
 
 	variables := map[string]interface{}{
 		"id":    graphql.String(input.ID),
@@ -1402,54 +2278,128 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 		return Issue{}, fmt.Errorf("update issue %s: operation failed", input.ID)
 	}
 
-	node := mutation.IssueUpdate.Issue
-	updatedAt := parseTime(string(node.UpdatedAt))
-	createdAt := parseTime(string(node.CreatedAt))
+	return c.parseIssueNode(mutation.IssueUpdate.Issue), nil
+}
 
-	assignee := ""
-	assigneeID := ""
-	if node.Assignee != nil {
-		assignee = string(node.Assignee.Name)
-		assigneeID = string(node.Assignee.ID)
+// CreateIssueRelation creates a relation between two issues.
+func (c *Client) CreateIssueRelation(ctx context.Context, input CreateIssueRelationInput) (IssueRelation, error) {
+	var mutation struct {
+		IssueRelationCreate struct {
+			Success       graphql.Boolean
+			IssueRelation struct {
+				ID    graphql.String
+				Type  graphql.String
+				Issue struct {
+					ID         graphql.String
+					Identifier graphql.String
+					Title      graphql.String
+				}
+				RelatedIssue struct {
+					ID         graphql.String
+					Identifier graphql.String
+					Title      graphql.String
+				}
+			}
+		} `graphql:"issueRelationCreate(input: $input)"`
 	}
 
-	description := ""
-	if node.Description != nil {
-		description = string(*node.Description)
+	relationInput := IssueRelationCreateInput{
+		"issueId":        graphql.String(input.IssueID),
+		"relatedIssueId": graphql.String(input.RelatedIssueID),
+		"type":           string(input.Type),
+	}
+	variables := map[string]interface{}{
+		"input": relationInput,
 	}
 
-	projectID := ""
-	if node.Project != nil {
-		projectID = string(node.Project.ID)
+	if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+		logger.ErrorWithErr(err, "linearapi.client: CreateIssueRelation failed issue_id=%s related_issue_id=%s", input.IssueID, input.RelatedIssueID)
+		return IssueRelation{}, fmt.Errorf("create issue relation: %w", err)
+	}
+	if !bool(mutation.IssueRelationCreate.Success) {
+		return IssueRelation{}, fmt.Errorf("create issue relation: operation failed")
 	}
 
-	// Parse labels
-	labels := make([]IssueLabel, 0, len(node.Labels.Nodes))
-	for _, lbl := range node.Labels.Nodes {
-		labels = append(labels, IssueLabel{
-			ID:    string(lbl.ID),
-			Name:  string(lbl.Name),
-			Color: string(lbl.Color),
-		})
-	}
-
-	return Issue{
-		ID:          string(node.ID),
-		Identifier:  string(node.Identifier),
-		Title:       string(node.Title),
-		State:       string(node.State.Name),
-		StateID:     string(node.State.ID),
-		Assignee:    assignee,
-		AssigneeID:  assigneeID,
-		Priority:    int(node.Priority),
-		UpdatedAt:   updatedAt,
-		CreatedAt:   createdAt,
-		Description: description,
-		TeamID:      string(node.Team.ID),
-		ProjectID:   projectID,
-		URL:         string(node.URL),
-		Labels:      labels,
+	node := mutation.IssueRelationCreate.IssueRelation
+	return IssueRelation{
+		ID:   string(node.ID),
+		Type: string(node.Type),
+		Issue: IssueRef{
+			ID:         string(node.Issue.ID),
+			Identifier: string(node.Issue.Identifier),
+			Title:      string(node.Issue.Title),
+		},
+		RelatedIssue: IssueRef{
+			ID:         string(node.RelatedIssue.ID),
+			Identifier: string(node.RelatedIssue.Identifier),
+			Title:      string(node.RelatedIssue.Title),
+		},
 	}, nil
+}
+
+// DeleteIssueRelation deletes an issue relation.
+func (c *Client) DeleteIssueRelation(ctx context.Context, relationID string) error {
+	var mutation struct {
+		IssueRelationDelete struct {
+			Success graphql.Boolean
+		} `graphql:"issueRelationDelete(id: $id)"`
+	}
+
+	variables := map[string]interface{}{
+		"id": graphql.String(relationID),
+	}
+	if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+		logger.ErrorWithErr(err, "linearapi.client: DeleteIssueRelation failed relation_id=%s", relationID)
+		return fmt.Errorf("delete issue relation %s: %w", relationID, err)
+	}
+	if !bool(mutation.IssueRelationDelete.Success) {
+		return fmt.Errorf("delete issue relation %s: operation failed", relationID)
+	}
+	return nil
+}
+
+// SubscribeToIssue subscribes the current user to an issue.
+func (c *Client) SubscribeToIssue(ctx context.Context, issueID string) (Issue, error) {
+	return c.setIssueSubscription(ctx, issueID, true)
+}
+
+// UnsubscribeFromIssue unsubscribes the current user from an issue.
+func (c *Client) UnsubscribeFromIssue(ctx context.Context, issueID string) (Issue, error) {
+	return c.setIssueSubscription(ctx, issueID, false)
+}
+
+func (c *Client) setIssueSubscription(ctx context.Context, issueID string, subscribe bool) (Issue, error) {
+	if subscribe {
+		var mutation struct {
+			IssueSubscribe struct {
+				Success graphql.Boolean
+				Issue   issueMutationNode
+			} `graphql:"issueSubscribe(id: $id)"`
+		}
+		variables := map[string]interface{}{"id": graphql.String(issueID)}
+		if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+			return Issue{}, fmt.Errorf("subscribe to issue %s: %w", issueID, err)
+		}
+		if !bool(mutation.IssueSubscribe.Success) {
+			return Issue{}, fmt.Errorf("subscribe to issue %s: operation failed", issueID)
+		}
+		return c.parseIssueNode(mutation.IssueSubscribe.Issue), nil
+	}
+
+	var mutation struct {
+		IssueUnsubscribe struct {
+			Success graphql.Boolean
+			Issue   issueMutationNode
+		} `graphql:"issueUnsubscribe(id: $id)"`
+	}
+	variables := map[string]interface{}{"id": graphql.String(issueID)}
+	if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+		return Issue{}, fmt.Errorf("unsubscribe from issue %s: %w", issueID, err)
+	}
+	if !bool(mutation.IssueUnsubscribe.Success) {
+		return Issue{}, fmt.Errorf("unsubscribe from issue %s: operation failed", issueID)
+	}
+	return c.parseIssueNode(mutation.IssueUnsubscribe.Issue), nil
 }
 
 // CreateComment creates a new comment on an issue.

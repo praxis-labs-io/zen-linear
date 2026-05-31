@@ -14,16 +14,30 @@ type CreateIssueModal struct {
 	app           *App
 	modal         *tview.Flex
 	form          *tview.Form
+	headerView    *tview.TextView
+	parentView    *tview.TextView
 	assigneeField *tview.DropDown
+	cycleField    *tview.DropDown
 	priorityField *tview.DropDown
 	teamID        string
 	projectID     string
 	assigneeID    string
 	assigneeName  string
+	cycleID       string
+	cycleName     string
+	selectedCycle string
 	priority      int
 	priorityLabel string
-	onCreate      func(title, description, teamID, projectID, assigneeID string, priority int)
+	onCreate      func(title, description, teamID, projectID, assigneeID, cycleID string, priority int)
 	cachedUsers   []struct{ ID, Name string }
+	cachedCycles  []struct{ ID, Name string }
+}
+
+type CreateIssueModalOptions struct {
+	TeamID    string
+	ProjectID string
+	Parent    *linearapi.IssueRef
+	CycleID   string
 }
 
 // NewCreateIssueModal creates a new create issue modal.
@@ -71,6 +85,27 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 
+	cm.form.AddDropDown("Cycle", []string{"No cycle"}, 0, func(_ string, index int) {
+		if index == 0 {
+			cm.cycleID = ""
+			cm.cycleName = ""
+		} else if index > 0 && index <= len(cm.cachedCycles) {
+			cycle := cm.cachedCycles[index-1]
+			cm.cycleID = cycle.ID
+			cm.cycleName = cycle.Name
+		}
+	})
+	if item := cm.form.GetFormItemByLabel("Cycle"); item != nil {
+		if dropdown, ok := item.(*tview.DropDown); ok {
+			cm.cycleField = dropdown
+		}
+	}
+	cm.cycleField.SetFieldWidth(50)
+	cm.cycleField.SetListStyles(
+		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
+	)
+
 	// Add priority dropdown with all options
 	priorities := []string{"No priority", "Urgent", "High", "Normal", "Low"}
 	cm.form.AddDropDown("Priority", priorities, 3, func(option string, index int) {
@@ -104,7 +139,7 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 		}
 		cm.Hide()
 		if cm.onCreate != nil && title != "" {
-			cm.onCreate(title, desc, cm.teamID, cm.projectID, cm.assigneeID, cm.priority)
+			cm.onCreate(title, desc, cm.teamID, cm.projectID, cm.assigneeID, cm.cycleID, cm.priority)
 		}
 	})
 	cm.form.AddButton("Cancel", func() {
@@ -112,10 +147,15 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	})
 
 	// Create header with instructions
-	headerView := tview.NewTextView()
-	headerView.SetText("Create New Issue")
-	headerView.SetTextColor(app.theme.Accent)
-	headerView.SetBackgroundColor(app.theme.HeaderBg)
+	cm.headerView = tview.NewTextView()
+	cm.headerView.SetText("Create New Issue")
+	cm.headerView.SetTextColor(app.theme.Accent)
+	cm.headerView.SetBackgroundColor(app.theme.HeaderBg)
+
+	cm.parentView = tview.NewTextView()
+	cm.parentView.SetText("")
+	cm.parentView.SetTextColor(app.theme.SecondaryText)
+	cm.parentView.SetBackgroundColor(app.theme.HeaderBg)
 
 	// Create help text
 	helpView := tview.NewTextView()
@@ -127,7 +167,8 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	// Build modal content
 	modalContent := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(headerView, 1, 0, false).
+		AddItem(cm.headerView, 1, 0, false).
+		AddItem(cm.parentView, 1, 0, false).
 		AddItem(cm.form, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
 	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
@@ -145,7 +186,7 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 		AddItem(tview.NewFlex().
 			SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(modalContent, 18, 0, true).
+			AddItem(modalContent, 20, 0, true).
 			AddItem(nil, 0, 1, false), 75, 0, true).
 		AddItem(nil, 0, 1, false)
 	cm.modal.SetBackgroundColor(app.theme.Background)
@@ -154,11 +195,23 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 }
 
 // Show displays the create issue modal.
-func (cm *CreateIssueModal) Show(teamID, projectID string, onCreate func(title, description, teamID, projectID, assigneeID string, priority int)) {
-	logger.Debug("tui.create_issue: showing create issue modal team_id=%s project_id=%s", teamID, projectID)
-	cm.teamID = teamID
-	cm.projectID = projectID
+func (cm *CreateIssueModal) Show(teamID, projectID string, onCreate func(title, description, teamID, projectID, assigneeID, cycleID string, priority int)) {
+	cm.ShowWithOptions(CreateIssueModalOptions{TeamID: teamID, ProjectID: projectID}, onCreate)
+}
+
+func (cm *CreateIssueModal) ShowWithOptions(options CreateIssueModalOptions, onCreate func(title, description, teamID, projectID, assigneeID, cycleID string, priority int)) {
+	logger.Debug("tui.create_issue: showing create issue modal team_id=%s project_id=%s", options.TeamID, options.ProjectID)
+	cm.teamID = options.TeamID
+	cm.projectID = options.ProjectID
 	cm.onCreate = onCreate
+	cm.selectedCycle = options.CycleID
+	if options.Parent != nil {
+		cm.headerView.SetText("Create Sub-Issue")
+		cm.parentView.SetText(fmt.Sprintf("Parent: %s - %s", options.Parent.Identifier, options.Parent.Title))
+	} else {
+		cm.headerView.SetText("Create New Issue")
+		cm.parentView.SetText("")
+	}
 
 	// Reset form fields
 	if titleItem := cm.form.GetFormItemByLabel("Title"); titleItem != nil {
@@ -176,18 +229,24 @@ func (cm *CreateIssueModal) Show(teamID, projectID string, onCreate func(title, 
 	cm.assigneeID = ""
 	cm.assigneeName = ""
 	cm.assigneeField.SetCurrentOption(0)
+	cm.cycleID = ""
+	cm.cycleName = ""
+	cm.cycleField.SetCurrentOption(0)
 	cm.priority = 3 // Default to Normal
 	cm.priorityLabel = "Normal"
 	cm.priorityField.SetCurrentOption(3)
 
-	// Show modal first with loading state for assignee
+	// Show modal first with loading state for async fields.
 	cm.assigneeField.SetOptions([]string{"Loading..."}, nil)
+	cm.cycleField.SetOptions([]string{"Loading..."}, nil)
+	cm.form.SetFocus(0)
 	cm.app.pages.AddPage("create_issue", cm.modal, true, true)
 	cm.app.pages.SendToFront("create_issue")
 	cm.app.app.SetFocus(cm.form)
 
 	// Load users asynchronously
 	cm.loadUsers()
+	cm.loadCycles()
 }
 
 // loadUsers fetches team users and populates the assignee dropdown.
@@ -238,6 +297,68 @@ func (cm *CreateIssueModal) populateAssigneeDropdown(users []linearapi.User) {
 	cm.assigneeField.SetCurrentOption(0)
 }
 
+func (cm *CreateIssueModal) loadCycles() {
+	cycles := cm.app.GetTeamCycles()
+	if len(cycles) > 0 {
+		cm.populateCycleDropdown(cycles)
+		return
+	}
+
+	go func() {
+		loadedCycles, err := cm.app.FetchTeamCycles(cm.teamID)
+		if err != nil {
+			cm.app.app.QueueUpdateDraw(func() {
+				cm.cycleField.SetOptions([]string{"No cycle", "(Failed to load cycles)"}, nil)
+			})
+			return
+		}
+		cm.app.app.QueueUpdateDraw(func() {
+			cm.populateCycleDropdown(loadedCycles)
+		})
+	}()
+}
+
+func (cm *CreateIssueModal) populateCycleDropdown(cycles []linearapi.Cycle) {
+	cycleOptions := []string{"No cycle"}
+	cm.cachedCycles = make([]struct{ ID, Name string }, 0, len(cycles))
+	selectedIndex := 0
+	for _, cycle := range cycles {
+		displayName := cycle.DisplayName()
+		switch {
+		case cycle.IsActive:
+			displayName += " (active)"
+		case cycle.IsNext:
+			displayName += " (next)"
+		case cycle.IsPrevious:
+			displayName += " (previous)"
+		}
+		cycleOptions = append(cycleOptions, displayName)
+		cm.cachedCycles = append(cm.cachedCycles, struct{ ID, Name string }{cycle.ID, displayName})
+		if cycle.ID == cm.selectedCycle {
+			selectedIndex = len(cycleOptions) - 1
+		}
+	}
+	cm.cycleField.SetOptions(cycleOptions, func(_ string, index int) {
+		if index == 0 {
+			cm.cycleID = ""
+			cm.cycleName = ""
+		} else if index > 0 && index <= len(cm.cachedCycles) {
+			cycle := cm.cachedCycles[index-1]
+			cm.cycleID = cycle.ID
+			cm.cycleName = cycle.Name
+		}
+	})
+	cm.cycleField.SetCurrentOption(selectedIndex)
+	if selectedIndex == 0 {
+		cm.cycleID = ""
+		cm.cycleName = ""
+	} else {
+		cycle := cm.cachedCycles[selectedIndex-1]
+		cm.cycleID = cycle.ID
+		cm.cycleName = cycle.Name
+	}
+}
+
 // Hide hides the create issue modal.
 func (cm *CreateIssueModal) Hide() {
 	cm.app.pages.RemovePage("create_issue")
@@ -247,10 +368,28 @@ func (cm *CreateIssueModal) Hide() {
 // HandleKey handles keyboard input for the create issue modal.
 func (cm *CreateIssueModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
+		if cm.closeOpenDropdown(event) {
+			return nil
+		}
 		cm.Hide()
 		return nil
 	}
 	return event
+}
+
+func (cm *CreateIssueModal) closeOpenDropdown(event *tcell.EventKey) bool {
+	for _, dropdown := range []*tview.DropDown{cm.assigneeField, cm.cycleField, cm.priorityField} {
+		if dropdown == nil || !dropdown.IsOpen() {
+			continue
+		}
+		if handler := dropdown.InputHandler(); handler != nil {
+			handler(event, func(p tview.Primitive) {
+				cm.app.app.SetFocus(p)
+			})
+		}
+		return true
+	}
+	return false
 }
 
 // GetModal returns the modal flex for adding to pages.

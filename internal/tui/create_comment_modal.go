@@ -162,6 +162,7 @@ func (a *App) handleCreateComment(issueID, body string) {
 			}
 
 			logger.Info("tui.app: created comment issue=%s", issueID)
+			a.flashStatus("Comment added")
 
 			// Refresh the selected issue to show the new comment
 			a.issuesMu.RLock()

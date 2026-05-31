@@ -32,6 +32,12 @@ func TestNewTeamCache(t *testing.T) {
 	if cache.states == nil {
 		t.Error("states map should be initialized")
 	}
+	if cache.cycles == nil {
+		t.Error("cycles map should be initialized")
+	}
+	if cache.projectMilestones == nil {
+		t.Error("projectMilestones map should be initialized")
+	}
 }
 
 func TestTeamCache_InvalidateAll(t *testing.T) {
@@ -48,6 +54,10 @@ func TestTeamCache_InvalidateAll(t *testing.T) {
 	cache.statesExpiry["team-1"] = time.Now().Add(time.Hour)
 	cache.labels["team-1"] = []linearapi.IssueLabel{{ID: "lbl-1", Name: "Bug"}}
 	cache.labelsExpiry["team-1"] = time.Now().Add(time.Hour)
+	cache.cycles["team-1"] = []linearapi.Cycle{{ID: "cycle-1", Name: "Cycle 1"}}
+	cache.cyclesExpiry["team-1"] = time.Now().Add(time.Hour)
+	cache.projectMilestones["project-1"] = []linearapi.ProjectMilestone{{ID: "milestone-1", Name: "Beta"}}
+	cache.projectMilestonesExpiry["project-1"] = time.Now().Add(time.Hour)
 
 	cache.InvalidateAll()
 
@@ -65,6 +75,12 @@ func TestTeamCache_InvalidateAll(t *testing.T) {
 	}
 	if len(cache.labels) != 0 {
 		t.Error("labels should be cleared after InvalidateAll")
+	}
+	if len(cache.cycles) != 0 {
+		t.Error("cycles should be cleared after InvalidateAll")
+	}
+	if len(cache.projectMilestones) != 0 {
+		t.Error("project milestones should be cleared after InvalidateAll")
 	}
 }
 
@@ -225,6 +241,87 @@ func TestTeamCache_GetWorkflowStates_CacheHit(t *testing.T) {
 	}
 }
 
+func TestTeamCache_InvalidateCycles(t *testing.T) {
+	cache := NewTeamCache(nil, 5*time.Minute)
+	cache.cycles["team-1"] = []linearapi.Cycle{{ID: "cycle-1", Name: "Cycle 1"}}
+	cache.cyclesExpiry["team-1"] = time.Now().Add(time.Hour)
+	cache.cycles["team-2"] = []linearapi.Cycle{{ID: "cycle-2", Name: "Cycle 2"}}
+	cache.cyclesExpiry["team-2"] = time.Now().Add(time.Hour)
+
+	cache.InvalidateCycles("team-1")
+
+	if _, ok := cache.cycles["team-1"]; ok {
+		t.Error("team-1 cycles should be removed")
+	}
+	if _, ok := cache.cycles["team-2"]; !ok {
+		t.Error("team-2 cycles should still exist")
+	}
+}
+
+func TestTeamCache_GetCycles_CacheHit(t *testing.T) {
+	cache := NewTeamCache(nil, 5*time.Minute)
+
+	teamID := "team-1"
+	expectedCycles := []linearapi.Cycle{
+		{ID: "cycle-1", Name: "Cycle 1", Number: 1, TeamID: teamID},
+		{ID: "cycle-2", Number: 2, TeamID: teamID},
+	}
+	cache.cycles[teamID] = expectedCycles
+	cache.cyclesExpiry[teamID] = time.Now().Add(time.Hour)
+
+	cycles, err := cache.GetCycles(context.Background(), teamID)
+	if err != nil {
+		t.Fatalf("GetCycles() error = %v", err)
+	}
+
+	if len(cycles) != len(expectedCycles) {
+		t.Fatalf("GetCycles() returned %d cycles, want %d", len(cycles), len(expectedCycles))
+	}
+	if cycles[1].DisplayName() != "Cycle 2" {
+		t.Fatalf("cycles[1].DisplayName() = %q, want Cycle 2", cycles[1].DisplayName())
+	}
+}
+
+func TestTeamCache_InvalidateProjectMilestones(t *testing.T) {
+	cache := NewTeamCache(nil, 5*time.Minute)
+	cache.projectMilestones["project-1"] = []linearapi.ProjectMilestone{{ID: "milestone-1", Name: "Beta"}}
+	cache.projectMilestonesExpiry["project-1"] = time.Now().Add(time.Hour)
+	cache.projectMilestones["project-2"] = []linearapi.ProjectMilestone{{ID: "milestone-2", Name: "GA"}}
+	cache.projectMilestonesExpiry["project-2"] = time.Now().Add(time.Hour)
+
+	cache.InvalidateProjectMilestones("project-1")
+
+	if _, ok := cache.projectMilestones["project-1"]; ok {
+		t.Error("project-1 milestones should be removed")
+	}
+	if _, ok := cache.projectMilestones["project-2"]; !ok {
+		t.Error("project-2 milestones should still exist")
+	}
+}
+
+func TestTeamCache_GetProjectMilestones_CacheHit(t *testing.T) {
+	cache := NewTeamCache(nil, 5*time.Minute)
+	projectID := "project-1"
+	target := "2026-06-30"
+	expectedMilestones := []linearapi.ProjectMilestone{
+		{ID: "milestone-1", Name: "Beta", ProjectID: projectID, TargetDate: &target},
+		{ID: "milestone-2", Name: "GA", ProjectID: projectID},
+	}
+	cache.projectMilestones[projectID] = expectedMilestones
+	cache.projectMilestonesExpiry[projectID] = time.Now().Add(time.Hour)
+
+	milestones, err := cache.GetProjectMilestones(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("GetProjectMilestones() error = %v", err)
+	}
+	if len(milestones) != len(expectedMilestones) {
+		t.Fatalf("GetProjectMilestones() returned %d milestones, want %d", len(milestones), len(expectedMilestones))
+	}
+	if milestones[0].ID != "milestone-1" || milestones[0].TargetDate == nil || *milestones[0].TargetDate != target {
+		t.Fatalf("milestones[0] = %+v, want milestone-1 with target date", milestones[0])
+	}
+}
+
 func TestTeamCache_CacheExpiry(t *testing.T) {
 	cache := NewTeamCache(nil, 1*time.Millisecond)
 
@@ -330,5 +427,25 @@ func TestNewTeamCache_LabelsInitialized(t *testing.T) {
 	}
 	if cache.labelsExpiry == nil {
 		t.Error("labelsExpiry map should be initialized")
+	}
+}
+
+func TestTeamCache_PreloadTeamMetadata_UsesCachedCycles(t *testing.T) {
+	cache := NewTeamCache(nil, 5*time.Minute)
+	teamID := "team-1"
+	expires := time.Now().Add(time.Hour)
+	cache.users[teamID] = []linearapi.User{{ID: "user-1"}}
+	cache.usersExpiry[teamID] = expires
+	cache.projects[teamID] = []linearapi.Project{{ID: "project-1"}}
+	cache.projectsExpiry[teamID] = expires
+	cache.states[teamID] = []linearapi.WorkflowState{{ID: "state-1"}}
+	cache.statesExpiry[teamID] = expires
+	cache.labels[teamID] = []linearapi.IssueLabel{{ID: "label-1"}}
+	cache.labelsExpiry[teamID] = expires
+	cache.cycles[teamID] = []linearapi.Cycle{{ID: "cycle-1"}}
+	cache.cyclesExpiry[teamID] = expires
+
+	if err := cache.PreloadTeamMetadata(context.Background(), teamID); err != nil {
+		t.Fatalf("PreloadTeamMetadata() error = %v", err)
 	}
 }

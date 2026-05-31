@@ -33,24 +33,35 @@ type TeamCache struct {
 	states       map[string][]linearapi.WorkflowState
 	statesExpiry map[string]time.Time
 
+	cycles       map[string][]linearapi.Cycle
+	cyclesExpiry map[string]time.Time
+
 	// Label caches (merged team + workspace labels per team)
 	labels       map[string][]linearapi.IssueLabel
 	labelsExpiry map[string]time.Time
+
+	// Project-scoped caches
+	projectMilestones       map[string][]linearapi.ProjectMilestone
+	projectMilestonesExpiry map[string]time.Time
 }
 
 // NewTeamCache creates a new team cache with the given client and TTL.
 func NewTeamCache(client *linearapi.Client, ttl time.Duration) *TeamCache {
 	return &TeamCache{
-		client:         client,
-		ttl:            ttl,
-		users:          make(map[string][]linearapi.User),
-		usersExpiry:    make(map[string]time.Time),
-		projects:       make(map[string][]linearapi.Project),
-		projectsExpiry: make(map[string]time.Time),
-		states:         make(map[string][]linearapi.WorkflowState),
-		statesExpiry:   make(map[string]time.Time),
-		labels:         make(map[string][]linearapi.IssueLabel),
-		labelsExpiry:   make(map[string]time.Time),
+		client:                  client,
+		ttl:                     ttl,
+		users:                   make(map[string][]linearapi.User),
+		usersExpiry:             make(map[string]time.Time),
+		projects:                make(map[string][]linearapi.Project),
+		projectsExpiry:          make(map[string]time.Time),
+		states:                  make(map[string][]linearapi.WorkflowState),
+		statesExpiry:            make(map[string]time.Time),
+		cycles:                  make(map[string][]linearapi.Cycle),
+		cyclesExpiry:            make(map[string]time.Time),
+		labels:                  make(map[string][]linearapi.IssueLabel),
+		labelsExpiry:            make(map[string]time.Time),
+		projectMilestones:       make(map[string][]linearapi.ProjectMilestone),
+		projectMilestonesExpiry: make(map[string]time.Time),
 	}
 }
 
@@ -154,9 +165,19 @@ func (c *TeamCache) GetWorkflowStates(ctx context.Context, teamID string) ([]lin
 	return getCachedOrFetch(ctx, c, teamID, c.states, c.statesExpiry, c.client.ListWorkflowStates)
 }
 
+// GetCycles returns cached cycles for a team or fetches from the API.
+func (c *TeamCache) GetCycles(ctx context.Context, teamID string) ([]linearapi.Cycle, error) {
+	return getCachedOrFetch(ctx, c, teamID, c.cycles, c.cyclesExpiry, c.client.ListCycles)
+}
+
 // GetIssueLabels returns cached labels (merged team + workspace) for a team or fetches from the API.
 func (c *TeamCache) GetIssueLabels(ctx context.Context, teamID string) ([]linearapi.IssueLabel, error) {
 	return getCachedOrFetch(ctx, c, teamID, c.labels, c.labelsExpiry, c.client.ListIssueLabels)
+}
+
+// GetProjectMilestones returns cached milestones for a project or fetches from the API.
+func (c *TeamCache) GetProjectMilestones(ctx context.Context, projectID string) ([]linearapi.ProjectMilestone, error) {
+	return getCachedOrFetch(ctx, c, projectID, c.projectMilestones, c.projectMilestonesExpiry, c.client.ListProjectMilestones)
 }
 
 // InvalidateTeams clears the teams cache.
@@ -191,12 +212,28 @@ func (c *TeamCache) InvalidateWorkflowStates(teamID string) {
 	delete(c.statesExpiry, teamID)
 }
 
+// InvalidateCycles clears the cycles cache for a specific team.
+func (c *TeamCache) InvalidateCycles(teamID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.cycles, teamID)
+	delete(c.cyclesExpiry, teamID)
+}
+
 // InvalidateIssueLabels clears the labels cache for a specific team.
 func (c *TeamCache) InvalidateIssueLabels(teamID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.labels, teamID)
 	delete(c.labelsExpiry, teamID)
+}
+
+// InvalidateProjectMilestones clears the milestone cache for a specific project.
+func (c *TeamCache) InvalidateProjectMilestones(projectID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.projectMilestones, projectID)
+	delete(c.projectMilestonesExpiry, projectID)
 }
 
 // InvalidateAll clears all caches.
@@ -215,8 +252,12 @@ func (c *TeamCache) InvalidateAll() {
 	c.projectsExpiry = make(map[string]time.Time)
 	c.states = make(map[string][]linearapi.WorkflowState)
 	c.statesExpiry = make(map[string]time.Time)
+	c.cycles = make(map[string][]linearapi.Cycle)
+	c.cyclesExpiry = make(map[string]time.Time)
 	c.labels = make(map[string][]linearapi.IssueLabel)
 	c.labelsExpiry = make(map[string]time.Time)
+	c.projectMilestones = make(map[string][]linearapi.ProjectMilestone)
+	c.projectMilestonesExpiry = make(map[string]time.Time)
 }
 
 // PreloadTeamMetadata preloads all metadata for a team (users, projects, states, labels).
@@ -224,9 +265,9 @@ func (c *TeamCache) InvalidateAll() {
 func (c *TeamCache) PreloadTeamMetadata(ctx context.Context, teamID string) error {
 	// Load in parallel
 	var wg sync.WaitGroup
-	var usersErr, projectsErr, statesErr, labelsErr error
+	var usersErr, projectsErr, statesErr, cyclesErr, labelsErr error
 
-	wg.Add(4)
+	wg.Add(5)
 
 	go func() {
 		defer wg.Done()
@@ -245,6 +286,11 @@ func (c *TeamCache) PreloadTeamMetadata(ctx context.Context, teamID string) erro
 
 	go func() {
 		defer wg.Done()
+		_, cyclesErr = c.GetCycles(ctx, teamID)
+	}()
+
+	go func() {
+		defer wg.Done()
 		_, labelsErr = c.GetIssueLabels(ctx, teamID)
 	}()
 
@@ -259,6 +305,9 @@ func (c *TeamCache) PreloadTeamMetadata(ctx context.Context, teamID string) erro
 	}
 	if statesErr != nil {
 		return statesErr
+	}
+	if cyclesErr != nil {
+		return cyclesErr
 	}
 	if labelsErr != nil {
 		return labelsErr

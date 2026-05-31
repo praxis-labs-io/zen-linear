@@ -31,6 +31,7 @@ type AgentOutputModal struct {
 	statusText    string
 	structured    bool
 	resumeCommand string
+	failed        bool
 
 	streamMu    sync.Mutex
 	pending     []StreamLine
@@ -69,6 +70,7 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 	om.streamView.SetDynamicColors(true).
 		SetWrap(true).
 		SetWordWrap(true).
+		SetScrollable(true).
 		SetBackgroundColor(app.theme.HeaderBg).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
@@ -79,6 +81,7 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 	om.finalView.SetDynamicColors(true).
 		SetWrap(true).
 		SetWordWrap(true).
+		SetScrollable(true).
 		SetBackgroundColor(app.theme.HeaderBg).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
@@ -86,7 +89,7 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		SetTitleColor(app.theme.Foreground)
 
 	om.helpView = tview.NewTextView()
-	om.helpView.SetText("Esc: cancel • c: copy • r: resume cmd • ↑↓/j/k: scroll")
+	om.helpView.SetText("Esc: cancel • c: copy • r: resume cmd • ↑↓/j/k: scroll • g/G: top/bottom • Tab: switch view")
 	om.helpView.SetTextColor(app.theme.SecondaryText)
 	om.helpView.SetBackgroundColor(app.theme.HeaderBg)
 	om.helpView.SetTextAlign(tview.AlignCenter)
@@ -193,6 +196,7 @@ func (om *AgentOutputModal) Show(title string, onCancel func()) {
 	om.streamMu.Lock()
 	om.statusText = "Status: Running"
 	om.structured = false
+	om.failed = false
 	om.streamMu.Unlock()
 
 	om.app.pages.AddPage("agent_output", om.modal, true, true)
@@ -235,6 +239,10 @@ func (om *AgentOutputModal) AppendRawLine(line string) {
 	}
 	om.streamMu.Lock()
 	structured := om.structured
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), "error:") {
+		om.failed = true
+		om.statusText = "Status: Error - " + strings.TrimSpace(line)
+	}
 	om.streamMu.Unlock()
 	if structured {
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(line)), "error:") {
@@ -262,6 +270,9 @@ func (om *AgentOutputModal) Hide() {
 
 // HandleKey handles keyboard input for the output modal.
 func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
+	// Get the currently focused view for scrolling
+	focused := om.app.app.GetFocus()
+
 	switch event.Key() {
 	case tcell.KeyEscape:
 		if om.onCancel != nil {
@@ -269,16 +280,72 @@ func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		om.Hide()
 		return nil
+	case tcell.KeyUp:
+		if tv, ok := focused.(*tview.TextView); ok {
+			row, col := tv.GetScrollOffset()
+			tv.ScrollTo(row-1, col)
+		}
+		return nil
+	case tcell.KeyDown:
+		if tv, ok := focused.(*tview.TextView); ok {
+			row, col := tv.GetScrollOffset()
+			tv.ScrollTo(row+1, col)
+		}
+		return nil
+	case tcell.KeyPgUp:
+		if tv, ok := focused.(*tview.TextView); ok {
+			row, col := tv.GetScrollOffset()
+			tv.ScrollTo(row-10, col)
+		}
+		return nil
+	case tcell.KeyPgDn:
+		if tv, ok := focused.(*tview.TextView); ok {
+			row, col := tv.GetScrollOffset()
+			tv.ScrollTo(row+10, col)
+		}
+		return nil
+	case tcell.KeyTab:
+		// Switch focus between stream and final views
+		if focused == om.streamView {
+			om.app.app.SetFocus(om.finalView)
+		} else {
+			om.app.app.SetFocus(om.streamView)
+		}
+		return nil
 	case tcell.KeyRune:
-		if event.Rune() == 'c' {
+		switch event.Rune() {
+		case 'c':
 			finalText := om.finalView.GetText(true)
 			if err := copyToClipboard(finalText); err != nil {
 				om.app.updateStatusBarWithError(err)
 			}
 			return nil
-		}
-		if event.Rune() == 'r' {
+		case 'r':
 			om.copyResumeCommand()
+			return nil
+		case 'j':
+			if tv, ok := focused.(*tview.TextView); ok {
+				row, col := tv.GetScrollOffset()
+				tv.ScrollTo(row+1, col)
+			}
+			return nil
+		case 'k':
+			if tv, ok := focused.(*tview.TextView); ok {
+				row, col := tv.GetScrollOffset()
+				tv.ScrollTo(row-1, col)
+			}
+			return nil
+		case 'g':
+			// Scroll to top
+			if tv, ok := focused.(*tview.TextView); ok {
+				tv.ScrollToBeginning()
+			}
+			return nil
+		case 'G':
+			// Scroll to bottom
+			if tv, ok := focused.(*tview.TextView); ok {
+				tv.ScrollToEnd()
+			}
 			return nil
 		}
 	}
@@ -288,7 +355,41 @@ func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 // StopSpinner stops the spinner and updates the status line.
 func (om *AgentOutputModal) StopSpinner() {
 	om.spinner.Stop()
+	om.streamMu.Lock()
+	failed := om.failed
+	om.streamMu.Unlock()
+	if failed {
+		om.setStatusText("Status: Error")
+		return
+	}
 	om.setStatusText("Status: Completed")
+}
+
+func (om *AgentOutputModal) FailRun(err error) {
+	om.spinner.Stop()
+	om.stopFlushTicker()
+	message := strings.TrimSpace(fmt.Sprint(err))
+	if message == "" {
+		message = "agent exited with an unknown error"
+	}
+	om.streamMu.Lock()
+	om.failed = true
+	om.statusText = "Status: Error"
+	om.streamMu.Unlock()
+	om.statusView.SetText("Status: Error")
+	om.finalView.Clear()
+	writer := tview.ANSIWriter(om.finalView)
+	_, _ = fmt.Fprintln(writer, "Agent run failed.")
+	_, _ = fmt.Fprintf(writer, "\nError: %s\n", message)
+	if looksLikeAgentModelError(message) {
+		_, _ = fmt.Fprintln(writer, "\nCheck agent provider/model settings, then retry the run.")
+	}
+	om.finalView.ScrollToBeginning()
+}
+
+func looksLikeAgentModelError(message string) bool {
+	lower := strings.ToLower(message)
+	return strings.Contains(lower, "model") || strings.Contains(lower, "available models") || strings.Contains(lower, "invalid model")
 }
 
 // setResumeHint updates the footer with a resume command hint.
@@ -345,13 +446,15 @@ func (om *AgentOutputModal) startFlushTicker() {
 	}
 	om.flushTicker = time.NewTicker(100 * time.Millisecond)
 	om.flushStop = make(chan struct{})
+	ticker := om.flushTicker
+	stop := om.flushStop
 
 	go func() {
 		for {
 			select {
-			case <-om.flushStop:
+			case <-stop:
 				return
-			case <-om.flushTicker.C:
+			case <-ticker.C:
 				om.flushStreamLines()
 				om.updateStatusLine()
 			}

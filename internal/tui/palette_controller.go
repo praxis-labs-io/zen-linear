@@ -117,19 +117,16 @@ func (p *PaletteController) filterCommands() {
 		return
 	}
 
-	query := strings.ToLower(p.query)
+	tokens := strings.Fields(strings.ToLower(p.query))
 	filtered := make([]Command, 0)
 
 	for _, cmd := range p.commands {
-		matched := false
-		if strings.Contains(strings.ToLower(cmd.Title), query) {
-			matched = true
-		} else {
-			for _, keyword := range cmd.Keywords {
-				if strings.Contains(strings.ToLower(keyword), query) {
-					matched = true
-					break
-				}
+		searchable := strings.ToLower(cmd.Title + " " + strings.Join(cmd.Keywords, " "))
+		matched := true
+		for _, token := range tokens {
+			if !strings.Contains(searchable, token) {
+				matched = false
+				break
 			}
 		}
 		if matched {

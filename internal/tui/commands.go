@@ -117,18 +117,95 @@ func handleAskAgent(a *App) {
 				a.agentOutputModal.AppendLine(fmt.Sprintf("error: %v", runErr))
 			})
 
-			a.agentOutputModal.StopSpinner()
-
 			if runErr != nil {
 				a.QueueUpdateDraw(func() {
 					a.agentOutputModal.AppendLine(fmt.Sprintf("error: %v", runErr))
+					a.agentOutputModal.FailRun(runErr)
 				})
 				return
 			}
 
+			a.agentOutputModal.StopSpinner()
 			a.agentOutputModal.AppendLine("Agent run completed.")
 		}()
 	})
+}
+
+func runIssueUpdateCommand(a *App, issue *linearapi.Issue, input linearapi.UpdateIssueInput, logAction, successMessage string) {
+	input.ID = issue.ID
+	go func() {
+		ctx := context.Background()
+		_, err := a.GetAPI().UpdateIssue(ctx, input)
+		a.QueueUpdateDraw(func() {
+			if err != nil {
+				logger.ErrorWithErr(err, "tui.commands: failed to %s issue=%s", logAction, issue.Identifier)
+				a.updateStatusBarWithError(err)
+				return
+			}
+			logger.Info("tui.commands: %s issue=%s", logAction, issue.Identifier)
+			a.flashStatus(successMessage)
+			go a.refreshIssues(issue.ID)
+		})
+	}()
+}
+
+func handleOpenBrowserCommand(a *App) {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	if issue.URL == "" {
+		a.flashStatus(fmt.Sprintf("No URL for %s", issue.Identifier))
+		return
+	}
+	openFn := a.openURLFunc
+	if openFn == nil {
+		openFn = openURL
+	}
+	if err := openFn(issue.URL); err != nil {
+		a.updateStatusBarWithError(err)
+		return
+	}
+	a.flashStatus(fmt.Sprintf("Opened %s: %s", issue.Identifier, issue.URL))
+}
+
+func handleCopyIssueIDCommand(a *App) {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	copyFn := a.copyToClipboardFunc
+	if copyFn == nil {
+		copyFn = copyToClipboard
+	}
+	if err := copyFn(issue.Identifier); err != nil {
+		a.updateStatusBarWithError(err)
+		return
+	}
+	a.flashStatus(fmt.Sprintf("Copied issue ID: %s", issue.Identifier))
+}
+
+func handleCopyIssueURLCommand(a *App) {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	if issue.URL == "" {
+		a.flashStatus(fmt.Sprintf("No URL for %s", issue.Identifier))
+		return
+	}
+	copyFn := a.copyToClipboardFunc
+	if copyFn == nil {
+		copyFn = copyToClipboard
+	}
+	if err := copyFn(issue.URL); err != nil {
+		a.updateStatusBarWithError(err)
+		return
+	}
+	a.flashStatus(fmt.Sprintf("Copied issue URL: %s", issue.Identifier))
 }
 
 // DefaultCommands returns the default set of commands for the palette.
@@ -146,6 +223,7 @@ func DefaultCommands(app *App) []Command {
 			Keywords:     []string{"refresh", "reload", "r"},
 			ShortcutRune: 'r',
 			Run: func(a *App) {
+				a.flashStatus("Refreshing issues...")
 				go a.refreshIssues()
 			},
 		},
@@ -215,45 +293,211 @@ func DefaultCommands(app *App) []Command {
 			Title:        "Open in browser",
 			Keywords:     []string{"open", "browser", "o", "web"},
 			ShortcutRune: 'o',
-			Run: func(a *App) {
-				issue := a.GetSelectedIssue()
-				if issue == nil || issue.URL == "" {
-					return
-				}
-				_ = openURL(issue.URL)
-			},
+			Run:          handleOpenBrowserCommand,
 		},
 		{
 			ID:           "copy_id",
 			Title:        "Copy issue ID",
 			Keywords:     []string{"copy", "id", "c", "identifier"},
 			ShortcutRune: 'y',
-			Run: func(a *App) {
-				issue := a.GetSelectedIssue()
-				if issue == nil {
-					return
-				}
-				_ = copyToClipboard(issue.Identifier)
-			},
+			Run:          handleCopyIssueIDCommand,
 		},
 		{
 			ID:           "copy_url",
 			Title:        "Copy issue URL",
 			Keywords:     []string{"copy", "url", "link"},
 			ShortcutRune: 'w', // 'w' for web URL
-			Run: func(a *App) {
-				issue := a.GetSelectedIssue()
-				if issue == nil || issue.URL == "" {
-					return
-				}
-				_ = copyToClipboard(issue.URL)
-			},
+			Run:          handleCopyIssueURLCommand,
 		},
 		{
 			ID:       "ask_agent",
 			Title:    "Ask agent about selected issue",
 			Keywords: []string{"agent", "ai", "claude", "cursor", "assistant"},
 			Run:      handleAskAgent,
+		},
+		{
+			ID:       "set_due_date",
+			Title:    "Set due date",
+			Keywords: []string{"due", "date", "deadline", "set"},
+			Run: func(a *App) {
+				a.showSetDueDateModal()
+			},
+		},
+		{
+			ID:       "clear_due_date",
+			Title:    "Clear due date",
+			Keywords: []string{"due", "date", "deadline", "clear", "remove"},
+			Run: func(a *App) {
+				a.clearDueDateForSelectedIssue()
+			},
+		},
+		{
+			ID:       "edit_estimate",
+			Title:    "Edit estimate",
+			Keywords: []string{"estimate", "points", "edit"},
+			Run: func(a *App) {
+				a.showEditEstimateModal()
+			},
+		},
+		{
+			ID:       "clear_estimate",
+			Title:    "Clear estimate",
+			Keywords: []string{"estimate", "points", "clear", "remove"},
+			Run: func(a *App) {
+				a.clearEstimateForSelectedIssue()
+			},
+		},
+		{
+			ID:       "list_project_milestones",
+			Title:    "List project milestones",
+			Keywords: []string{"project", "milestone", "list"},
+			Run: func(a *App) {
+				a.listProjectMilestonesForSelectedIssue()
+			},
+		},
+		{
+			ID:       "set_milestone",
+			Title:    "Set milestone",
+			Keywords: []string{"project", "milestone", "set"},
+			Run: func(a *App) {
+				a.showSetMilestonePicker()
+			},
+		},
+		{
+			ID:       "clear_milestone",
+			Title:    "Clear milestone",
+			Keywords: []string{"project", "milestone", "clear", "remove"},
+			Run: func(a *App) {
+				a.clearMilestoneForSelectedIssue()
+			},
+		},
+		{
+			ID:       "filter_issues",
+			Title:    "Filter issues",
+			Keywords: []string{"filter", "issues", "query"},
+			Run: func(a *App) {
+				a.showFilterIssuesPicker()
+			},
+		},
+		{
+			ID:       "clear_filters",
+			Title:    "Clear filters",
+			Keywords: []string{"filter", "clear", "reset"},
+			Run: func(a *App) {
+				a.clearFilters()
+			},
+		},
+		{
+			ID:       "filter_assignee",
+			Title:    "Filter by assignee",
+			Keywords: []string{"filter", "assignee", "user"},
+			Run: func(a *App) {
+				a.showAssigneeFilter()
+			},
+		},
+		{
+			ID:       "filter_labels",
+			Title:    "Filter by labels",
+			Keywords: []string{"filter", "labels", "tags"},
+			Run: func(a *App) {
+				a.showLabelFilter()
+			},
+		},
+		{
+			ID:       "filter_status",
+			Title:    "Filter by status",
+			Keywords: []string{"filter", "status", "state"},
+			Run: func(a *App) {
+				a.showStatusFilter()
+			},
+		},
+		{
+			ID:       "filter_project",
+			Title:    "Filter by project",
+			Keywords: []string{"filter", "project"},
+			Run: func(a *App) {
+				a.showProjectFilter()
+			},
+		},
+		{
+			ID:       "filter_cycle",
+			Title:    "Filter by cycle",
+			Keywords: []string{"filter", "cycle", "sprint"},
+			Run: func(a *App) {
+				a.showCycleFilter()
+			},
+		},
+		{
+			ID:       "filter_due_date",
+			Title:    "Filter by due date",
+			Keywords: []string{"filter", "due", "date"},
+			Run: func(a *App) {
+				a.showDueDateFilter()
+			},
+		},
+		{
+			ID:       "filter_estimate",
+			Title:    "Filter by estimate",
+			Keywords: []string{"filter", "estimate", "points"},
+			Run: func(a *App) {
+				a.showEstimateFilter()
+			},
+		},
+		{
+			ID:       "filter_text",
+			Title:    "Filter by text search",
+			Keywords: []string{"filter", "text", "search"},
+			Run: func(a *App) {
+				a.showTextFilter()
+			},
+		},
+		{
+			ID:       "add_issue_relation",
+			Title:    "Add issue relation",
+			Keywords: []string{"relation", "dependency", "blocking", "blocked", "related", "duplicate", "similar"},
+			Run: func(a *App) {
+				a.showAddIssueRelationPicker()
+			},
+		},
+		{
+			ID:       "remove_issue_relation",
+			Title:    "Remove issue relation",
+			Keywords: []string{"relation", "dependency", "remove", "unlink"},
+			Run: func(a *App) {
+				a.showRemoveIssueRelationPicker()
+			},
+		},
+		{
+			ID:       "subscribe_issue",
+			Title:    "Subscribe",
+			Keywords: []string{"subscribe", "watch", "subscriber"},
+			Run: func(a *App) {
+				a.subscribeSelectedIssue()
+			},
+		},
+		{
+			ID:       "unsubscribe_issue",
+			Title:    "Unsubscribe",
+			Keywords: []string{"unsubscribe", "watch", "subscriber"},
+			Run: func(a *App) {
+				a.unsubscribeSelectedIssue()
+			},
+		},
+		{
+			ID:       "open_attachment",
+			Title:    "Open attachment",
+			Keywords: []string{"attachment", "link", "open", "github", "jira", "slack", "url"},
+			Run: func(a *App) {
+				a.openSelectedAttachment()
+			},
+		},
+		{
+			ID:       "copy_attachment_url",
+			Title:    "Copy attachment URL",
+			Keywords: []string{"attachment", "link", "copy", "url"},
+			Run: func(a *App) {
+				a.copySelectedAttachmentURL()
+			},
 		},
 		{
 			ID:           "assign_me",
@@ -264,6 +508,7 @@ func DefaultCommands(app *App) []Command {
 				issue := a.GetSelectedIssue()
 				user := a.GetCurrentUser()
 				if issue == nil || user == nil {
+					a.flashStatus("No issue or current user selected")
 					return
 				}
 				go func() {
@@ -279,6 +524,7 @@ func DefaultCommands(app *App) []Command {
 							return
 						}
 						logger.Info("tui.commands: assigned issue issue=%s user=%s", issue.Identifier, user.DisplayName)
+						a.flashStatus(fmt.Sprintf("Assigned %s to %s", issue.Identifier, user.DisplayName))
 						go a.refreshIssues(issue.ID)
 					})
 				}()
@@ -292,6 +538,7 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
 				emptyAssignee := ""
@@ -308,6 +555,7 @@ func DefaultCommands(app *App) []Command {
 							return
 						}
 						logger.Info("tui.commands: unassigned issue issue=%s", issue.Identifier)
+						a.flashStatus(fmt.Sprintf("Unassigned %s", issue.Identifier))
 						go a.refreshIssues(issue.ID)
 					})
 				}()
@@ -321,22 +569,31 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
-				go func() {
-					ctx := context.Background()
-					err := a.GetAPI().ArchiveIssue(ctx, issue.ID)
-					a.QueueUpdateDraw(func() {
-						if err != nil {
-							logger.ErrorWithErr(err, "tui.commands: failed to archive issue issue=%s", issue.Identifier)
-							a.updateStatusBarWithError(err)
-							return
-						}
-						logger.Info("tui.commands: archived issue issue=%s", issue.Identifier)
-						// After archiving, the issue won't be in the list, so just refresh without ID
-						go a.refreshIssues()
-					})
-				}()
+				a.confirmationModal.Show(
+					"Archive Issue",
+					fmt.Sprintf("Archive %s - %s?", issue.Identifier, issue.Title),
+					"Archive",
+					func() {
+						go func() {
+							ctx := context.Background()
+							err := a.GetAPI().ArchiveIssue(ctx, issue.ID)
+							a.QueueUpdateDraw(func() {
+								if err != nil {
+									logger.ErrorWithErr(err, "tui.commands: failed to archive issue issue=%s", issue.Identifier)
+									a.updateStatusBarWithError(err)
+									return
+								}
+								logger.Info("tui.commands: archived issue issue=%s", issue.Identifier)
+								a.flashStatus(fmt.Sprintf("Archived %s", issue.Identifier))
+								// After archiving, the issue won't be in the list, so just refresh without ID
+								go a.refreshIssues()
+							})
+						}()
+					},
+				)
 			},
 		},
 		{
@@ -347,6 +604,7 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
 				a.ShowStatusPicker(func(stateID string) {
@@ -363,10 +621,61 @@ func DefaultCommands(app *App) []Command {
 								return
 							}
 							logger.Info("tui.commands: changed status issue=%s", issue.Identifier)
+							a.flashStatus(fmt.Sprintf("Changed status for %s", issue.Identifier))
 							go a.refreshIssues(issue.ID)
 						})
 					}()
 				})
+			},
+		},
+		{
+			ID:           "set_cycle",
+			Title:        "Set cycle",
+			Keywords:     []string{"cycle", "sprint", "iteration", "set"},
+			ShortcutRune: 'c',
+			Run: func(a *App) {
+				issue := a.GetSelectedIssue()
+				if issue == nil {
+					a.flashStatus("No issue selected")
+					return
+				}
+				a.ShowCyclePicker(func(cycleID string) {
+					runIssueUpdateCommand(a, issue, linearapi.UpdateIssueInput{CycleID: &cycleID}, "set cycle", fmt.Sprintf("Set cycle for %s", issue.Identifier))
+				})
+			},
+		},
+		{
+			ID:       "clear_cycle",
+			Title:    "Clear cycle",
+			Keywords: []string{"cycle", "clear", "remove", "unset"},
+			Run: func(a *App) {
+				issue := a.GetSelectedIssue()
+				if issue == nil {
+					a.flashStatus("No issue selected")
+					return
+				}
+				if issue.Cycle == nil {
+					a.flashStatus("No cycle assigned")
+					return
+				}
+				emptyCycleID := ""
+				go func() {
+					ctx := context.Background()
+					_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
+						ID:      issue.ID,
+						CycleID: &emptyCycleID,
+					})
+					a.QueueUpdateDraw(func() {
+						if err != nil {
+							logger.ErrorWithErr(err, "tui.commands: failed to clear cycle issue=%s", issue.Identifier)
+							a.updateStatusBarWithError(err)
+							return
+						}
+						logger.Info("tui.commands: cleared cycle issue=%s", issue.Identifier)
+						a.flashStatus(fmt.Sprintf("Cleared cycle for %s", issue.Identifier))
+						go a.refreshIssues(issue.ID)
+					})
+				}()
 			},
 		},
 		{
@@ -377,25 +686,11 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
 				a.ShowUserPicker(func(userID string) {
-					go func() {
-						ctx := context.Background()
-						_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
-							ID:         issue.ID,
-							AssigneeID: &userID,
-						})
-						a.QueueUpdateDraw(func() {
-							if err != nil {
-								logger.ErrorWithErr(err, "tui.commands: failed to assign issue to user issue=%s", issue.Identifier)
-								a.updateStatusBarWithError(err)
-								return
-							}
-							logger.Info("tui.commands: assigned issue to user issue=%s", issue.Identifier)
-							go a.refreshIssues(issue.ID)
-						})
-					}()
+					runIssueUpdateCommand(a, issue, linearapi.UpdateIssueInput{AssigneeID: &userID}, "assign issue to user", fmt.Sprintf("Assigned %s", issue.Identifier))
 				})
 			},
 		},
@@ -421,6 +716,7 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
 				a.ShowEditTitleModal()
@@ -434,6 +730,7 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
 				a.ShowEditLabelsModal()
@@ -447,6 +744,7 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
 				a.toggleIssueExpanded(issue.ID)
@@ -459,7 +757,12 @@ func DefaultCommands(app *App) []Command {
 			ShortcutRune: 'p',
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
-				if issue == nil || issue.Parent == nil {
+				if issue == nil {
+					a.flashStatus("No issue selected")
+					return
+				}
+				if issue.Parent == nil {
+					a.flashStatus("No parent issue")
 					return
 				}
 				// Try to navigate to parent in the table
@@ -586,6 +889,7 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
 				// Create sub-issue with current issue as parent
@@ -600,11 +904,13 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
 				// Cannot set parent if this issue has children
 				if len(issue.Children) > 0 {
 					logger.Warning("tui.commands: cannot set parent on issue with sub-issues issue=%s", issue.Identifier)
+					a.flashStatus("Cannot set parent on issue with sub-issues")
 					return
 				}
 				a.ShowParentIssuePicker(func(parentID string) {
@@ -621,6 +927,7 @@ func DefaultCommands(app *App) []Command {
 								return
 							}
 							logger.Info("tui.commands: set parent issue=%s", issue.Identifier)
+							a.flashStatus(fmt.Sprintf("Set parent for %s", issue.Identifier))
 							go a.refreshIssues(issue.ID)
 						})
 					}()
@@ -634,26 +941,39 @@ func DefaultCommands(app *App) []Command {
 			ShortcutRune: 'd',
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
-				if issue == nil || issue.Parent == nil {
+				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
-				emptyParent := ""
-				go func() {
-					ctx := context.Background()
-					_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
-						ID:       issue.ID,
-						ParentID: &emptyParent,
-					})
-					a.QueueUpdateDraw(func() {
-						if err != nil {
-							logger.ErrorWithErr(err, "tui.commands: failed to remove parent issue=%s", issue.Identifier)
-							a.updateStatusBarWithError(err)
-							return
-						}
-						logger.Info("tui.commands: removed parent issue=%s", issue.Identifier)
-						go a.refreshIssues(issue.ID)
-					})
-				}()
+				if issue.Parent == nil {
+					a.flashStatus("No parent issue")
+					return
+				}
+				a.confirmationModal.Show(
+					"Remove Parent",
+					fmt.Sprintf("Remove parent from %s?", issue.Identifier),
+					"Remove",
+					func() {
+						emptyParent := ""
+						go func() {
+							ctx := context.Background()
+							_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
+								ID:       issue.ID,
+								ParentID: &emptyParent,
+							})
+							a.QueueUpdateDraw(func() {
+								if err != nil {
+									logger.ErrorWithErr(err, "tui.commands: failed to remove parent issue=%s", issue.Identifier)
+									a.updateStatusBarWithError(err)
+									return
+								}
+								logger.Info("tui.commands: removed parent issue=%s", issue.Identifier)
+								a.flashStatus(fmt.Sprintf("Removed parent from %s", issue.Identifier))
+								go a.refreshIssues(issue.ID)
+							})
+						}()
+					},
+				)
 			},
 		},
 		{
@@ -664,6 +984,7 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
+					a.flashStatus("No issue selected")
 					return
 				}
 				a.createCommentModal.Show(issue.ID, a.handleCreateComment)

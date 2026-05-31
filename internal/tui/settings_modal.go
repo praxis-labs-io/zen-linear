@@ -223,6 +223,7 @@ type SettingsModal struct {
 	timeoutField         *tview.InputField
 	pageSizeField        *tview.InputField
 	cacheTTLField        *tview.InputField
+	searchDebounceField  *tview.InputField
 	logFileField         *tview.InputField
 	logLevelField        *tview.DropDown
 	logLevelOptions      []string
@@ -296,6 +297,11 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetLabel("Cache TTL").
 		SetFieldWidth(20)
 	sm.form.AddFormItem(sm.cacheTTLField)
+
+	sm.searchDebounceField = tview.NewInputField().
+		SetLabel("Search debounce").
+		SetFieldWidth(20)
+	sm.form.AddFormItem(sm.searchDebounceField)
 
 	sm.logFileField = tview.NewInputField().
 		SetLabel("Log file").
@@ -429,6 +435,7 @@ func (sm *SettingsModal) Show() {
 	sm.timeoutField.SetText(settings.Timeout)
 	sm.pageSizeField.SetText(strconv.Itoa(settings.PageSize))
 	sm.cacheTTLField.SetText(settings.CacheTTL)
+	sm.searchDebounceField.SetText(settings.SearchDebounce)
 	sm.logFileField.SetText(settings.LogFile)
 	sm.setLogLevelSelection(settings.LogLevel)
 	sm.setThemeSelection(settings.Theme)
@@ -548,12 +555,43 @@ func (sm *SettingsModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 
 // saveSettings validates input, persists settings, and applies them to the app.
 func (sm *SettingsModal) saveSettings() {
+	settings, err := sm.settingsFromForm()
+	if err != nil {
+		logger.ErrorWithErr(err, "tui.settings: failed to build settings from form")
+		sm.app.updateStatusBarWithError(err)
+		return
+	}
+
+	newCfg, err := config.ConfigFromSettings(sm.app.config.LinearAPIKey, settings)
+	if err != nil {
+		logger.ErrorWithErr(err, "tui.settings: failed to parse settings")
+		sm.app.updateStatusBarWithError(err)
+		return
+	}
+
+	settingsPath, err := config.ConfigFilePath()
+	if err != nil {
+		logger.ErrorWithErr(err, "tui.settings: failed to get config file path")
+		sm.app.updateStatusBarWithError(err)
+		return
+	}
+
+	if err := config.SaveSettings(settingsPath, settings); err != nil {
+		logger.ErrorWithErr(err, "tui.settings: failed to save settings path=%s", settingsPath)
+		sm.app.updateStatusBarWithError(err)
+		return
+	}
+
+	logger.Debug("tui.settings: settings saved successfully path=%s", settingsPath)
+	sm.Hide()
+	sm.app.applySettings(newCfg)
+}
+
+func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 	pageSizeText := strings.TrimSpace(sm.pageSizeField.GetText())
 	pageSize, err := strconv.Atoi(pageSizeText)
 	if err != nil {
-		logger.ErrorWithErr(err, "tui.settings: invalid page size value=%s", pageSizeText)
-		sm.app.updateStatusBarWithError(fmt.Errorf("page size must be a number: %w", err))
-		return
+		return config.Settings{}, fmt.Errorf("page size must be a number: %w", err)
 	}
 
 	_, logLevel := sm.logLevelField.GetCurrentOption()
@@ -595,6 +633,7 @@ func (sm *SettingsModal) saveSettings() {
 		Timeout:        strings.TrimSpace(sm.timeoutField.GetText()),
 		PageSize:       pageSize,
 		CacheTTL:       strings.TrimSpace(sm.cacheTTLField.GetText()),
+		SearchDebounce: strings.TrimSpace(sm.searchDebounceField.GetText()),
 		LogFile:        strings.TrimSpace(sm.logFileField.GetText()),
 		LogLevel:       logLevel,
 		Theme:          theme,
@@ -604,30 +643,7 @@ func (sm *SettingsModal) saveSettings() {
 		AgentModel:     agentModel,
 		AgentWorkspace: strings.TrimSpace(sm.agentWorkspaceField.GetText()),
 	}
-
-	newCfg, err := config.ConfigFromSettings(sm.app.config.LinearAPIKey, settings)
-	if err != nil {
-		logger.ErrorWithErr(err, "tui.settings: failed to parse settings")
-		sm.app.updateStatusBarWithError(err)
-		return
-	}
-
-	settingsPath, err := config.ConfigFilePath()
-	if err != nil {
-		logger.ErrorWithErr(err, "tui.settings: failed to get config file path")
-		sm.app.updateStatusBarWithError(err)
-		return
-	}
-
-	if err := config.SaveSettings(settingsPath, settings); err != nil {
-		logger.ErrorWithErr(err, "tui.settings: failed to save settings path=%s", settingsPath)
-		sm.app.updateStatusBarWithError(err)
-		return
-	}
-
-	logger.Debug("tui.settings: settings saved successfully path=%s", settingsPath)
-	sm.Hide()
-	sm.app.applySettings(newCfg)
+	return settings, nil
 }
 
 // setLogLevelSelection updates the dropdown selection to match the provided level.

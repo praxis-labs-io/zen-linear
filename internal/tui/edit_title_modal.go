@@ -68,11 +68,18 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 	titleView.SetTextColor(app.theme.Accent)
 	titleView.SetBackgroundColor(app.theme.HeaderBg)
 
+	helpView := tview.NewTextView()
+	helpView.SetText("Esc: cancel • Enter: submit")
+	helpView.SetTextColor(app.theme.SecondaryText)
+	helpView.SetBackgroundColor(app.theme.HeaderBg)
+	helpView.SetTextAlign(tview.AlignCenter)
+
 	// Build modal content
 	modalContent := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(titleView, 1, 0, false).
-		AddItem(etm.form, 0, 1, true)
+		AddItem(etm.form, 0, 1, true).
+		AddItem(helpView, 1, 0, false)
 	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
 	modalContent.SetBackgroundColor(app.theme.HeaderBg).
 		SetBorder(true).
@@ -88,7 +95,7 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 		AddItem(tview.NewFlex().
 			SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(modalContent, 8, 0, true).
+			AddItem(modalContent, 9, 0, true).
 			AddItem(nil, 0, 1, false), 60, 0, true).
 		AddItem(nil, 0, 1, false)
 	etm.modal.SetBackgroundColor(app.theme.Background)

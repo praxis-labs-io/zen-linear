@@ -50,6 +50,7 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 - Settings are stored in `~/.linear-tui/config.json` and created on first start.
 - Use the Settings modal from the command palette (`:` -> `Settings`) to edit and apply settings immediately.
 - UI settings in `config.json`: `theme` (`linear`, `high_contrast`, `color_blind`) and `density` (`comfortable`, `compact`).
+- Search settings in `config.json`: `search_debounce` controls the live search debounce delay (default `300ms`).
 - Agent settings live in `config.json`: `agent_provider` (`cursor` or `claude`), `agent_sandbox` (`enabled` or `disabled`), `agent_model` (optional), and `agent_workspace` (optional).
 - Prompt templates are stored in `~/.linear-tui/prompts.json` and edited via the "Edit agent prompt templates" command.
 - `agent_workspace` is the default workspace for agent runs and can be overridden per run in the Ask Agent modal (overrides are not persisted).
@@ -62,6 +63,7 @@ Example `~/.linear-tui/config.json`:
   "timeout": "30s",
   "page_size": 50,
   "cache_ttl": "5m",
+  "search_debounce": "300ms",
   "log_file": "/Users/you/.linear-tui/app.log",
   "log_level": "warning",
   "theme": "linear",
@@ -103,9 +105,18 @@ Download pre-built binaries from the [Releases](https://github.com/roeyazroel/li
 
 ## Usage
 
-### Basic Usage
+Set your Linear API key before starting the app.
 
-Set your Linear API key and run the application:
+### Homebrew
+
+```bash
+export LINEAR_API_KEY="your-api-key-here"
+linear-tui
+```
+
+### Local Build
+
+If you cloned the repository and built the binary locally, run the local executable:
 
 ```bash
 export LINEAR_API_KEY="your-api-key-here"
@@ -122,6 +133,7 @@ Example `~/.linear-tui/config.json`:
   "timeout": "30s",
   "page_size": 50,
   "cache_ttl": "5m",
+  "search_debounce": "300ms",
   "log_file": "/Users/you/.linear-tui/app.log",
   "log_level": "warning",
   "theme": "linear",

@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"sort"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
@@ -102,22 +104,35 @@ func (elm *EditLabelsModal) Show(issueID string, currentLabelIDs []string, avail
 
 // refreshList rebuilds the list with current selection state.
 func (elm *EditLabelsModal) refreshList() {
+	currentIdx := elm.list.GetCurrentItem()
 	elm.list.Clear()
 
-	for _, label := range elm.availableLabels {
+	if len(elm.availableLabels) == 0 {
+		elm.list.AddItem("No labels available", "", 0, nil)
+		return
+	}
+
+	for idx, label := range elm.availableLabels {
 		// Build display text with selection indicator
 		// Using parentheses to avoid tview interpreting [] as color tags
+		focusPrefix := "  "
+		if idx == currentIdx {
+			focusPrefix = "> "
+		}
 		prefix := "( ) "
 		if elm.selectedIDs[label.ID] {
-			prefix = "(•) "
+			prefix = "(x) "
 		}
-		displayText := prefix + label.Name
+		displayText := focusPrefix + prefix + label.Name
 
 		elm.list.AddItem(displayText, "", 0, nil)
 	}
 
+	if currentIdx < 0 || currentIdx >= len(elm.availableLabels) {
+		currentIdx = 0
+	}
 	if len(elm.availableLabels) > 0 {
-		elm.list.SetCurrentItem(0)
+		elm.list.SetCurrentItem(currentIdx)
 	}
 }
 
@@ -147,6 +162,7 @@ func (elm *EditLabelsModal) getSelectedLabelIDs() []string {
 	for id := range elm.selectedIDs {
 		ids = append(ids, id)
 	}
+	sort.Strings(ids)
 	return ids
 }
 
@@ -171,37 +187,40 @@ func (elm *EditLabelsModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case tcell.KeyUp:
-		idx := elm.list.GetCurrentItem()
-		if idx > 0 {
-			elm.list.SetCurrentItem(idx - 1)
-		}
+		elm.moveCurrentItem(-1)
 		return nil
 	case tcell.KeyDown:
-		idx := elm.list.GetCurrentItem()
-		if idx < elm.list.GetItemCount()-1 {
-			elm.list.SetCurrentItem(idx + 1)
-		}
+		elm.moveCurrentItem(1)
 		return nil
 	case tcell.KeyRune:
 		switch event.Rune() {
-		case ' ':
+		case ' ', 't':
 			elm.toggleCurrentItem()
 			return nil
 		case 'j':
-			idx := elm.list.GetCurrentItem()
-			if idx < elm.list.GetItemCount()-1 {
-				elm.list.SetCurrentItem(idx + 1)
-			}
+			elm.moveCurrentItem(1)
 			return nil
 		case 'k':
-			idx := elm.list.GetCurrentItem()
-			if idx > 0 {
-				elm.list.SetCurrentItem(idx - 1)
-			}
+			elm.moveCurrentItem(-1)
 			return nil
 		}
 	}
 	return event
+}
+
+func (elm *EditLabelsModal) moveCurrentItem(delta int) {
+	if len(elm.availableLabels) == 0 {
+		return
+	}
+	idx := elm.list.GetCurrentItem() + delta
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(elm.availableLabels) {
+		idx = len(elm.availableLabels) - 1
+	}
+	elm.list.SetCurrentItem(idx)
+	elm.refreshList()
 }
 
 // GetModal returns the modal flex for adding to pages.

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -122,7 +123,27 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false).
 		SetExpansion(2))
-	table.SetCell(0, 4, tview.NewTableCell("Title").
+	table.SetCell(0, 4, tview.NewTableCell("Cycle").
+		SetStyle(headerStyle).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false).
+		SetExpansion(1))
+	table.SetCell(0, 5, tview.NewTableCell("Due").
+		SetStyle(headerStyle).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false).
+		SetExpansion(1))
+	table.SetCell(0, 6, tview.NewTableCell("Est").
+		SetStyle(headerStyle).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false).
+		SetExpansion(1))
+	table.SetCell(0, 7, tview.NewTableCell("Milestone").
+		SetStyle(headerStyle).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false).
+		SetExpansion(2))
+	table.SetCell(0, 8, tview.NewTableCell("Title").
 		SetStyle(headerStyle).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false).
@@ -398,7 +419,27 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false).
 		SetExpansion(2))
-	table.SetCell(0, 4, tview.NewTableCell("Title").
+	table.SetCell(0, 4, tview.NewTableCell("Cycle").
+		SetStyle(headerStyle).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false).
+		SetExpansion(1))
+	table.SetCell(0, 5, tview.NewTableCell("Due").
+		SetStyle(headerStyle).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false).
+		SetExpansion(1))
+	table.SetCell(0, 6, tview.NewTableCell("Est").
+		SetStyle(headerStyle).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false).
+		SetExpansion(1))
+	table.SetCell(0, 7, tview.NewTableCell("Milestone").
+		SetStyle(headerStyle).
+		SetAlign(tview.AlignLeft).
+		SetSelectable(false).
+		SetExpansion(2))
+	table.SetCell(0, 8, tview.NewTableCell("Title").
 		SetStyle(headerStyle).
 		SetAlign(tview.AlignLeft).
 		SetSelectable(false).
@@ -484,9 +525,51 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			SetTextColor(assigneeColor).
 			SetAlign(tview.AlignLeft))
 
+		cycle := formatCycleName(issue.Cycle)
+		cycleColor := theme.Foreground
+		if cycle == "-" {
+			cycleColor = theme.SecondaryText
+		}
+		if len(cycle) > 15 {
+			cycle = cycle[:15]
+		}
+		table.SetCell(row, 4, tview.NewTableCell(cycle).
+			SetTextColor(cycleColor).
+			SetAlign(tview.AlignLeft))
+
+		dueDate := formatDueDate(issue.DueDate)
+		dueColor := theme.Foreground
+		if dueDate == "-" {
+			dueColor = theme.SecondaryText
+		}
+		table.SetCell(row, 5, tview.NewTableCell(dueDate).
+			SetTextColor(dueColor).
+			SetAlign(tview.AlignLeft))
+
+		estimate := formatEstimate(issue.Estimate)
+		estimateColor := theme.Foreground
+		if estimate == "-" {
+			estimateColor = theme.SecondaryText
+		}
+		table.SetCell(row, 6, tview.NewTableCell(estimate).
+			SetTextColor(estimateColor).
+			SetAlign(tview.AlignLeft))
+
+		milestone := formatMilestoneName(issue.ProjectMilestone)
+		milestoneColor := theme.Foreground
+		if milestone == "-" {
+			milestoneColor = theme.SecondaryText
+		}
+		if len(milestone) > 18 {
+			milestone = milestone[:18]
+		}
+		table.SetCell(row, 7, tview.NewTableCell(milestone).
+			SetTextColor(milestoneColor).
+			SetAlign(tview.AlignLeft))
+
 		// Title
 		title := issue.Title
-		table.SetCell(row, 4, tview.NewTableCell(title).
+		table.SetCell(row, 8, tview.NewTableCell(title).
 			SetTextColor(theme.Foreground).
 			SetAlign(tview.AlignLeft))
 	}
@@ -509,12 +592,44 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		table.SetCell(1, 0, tview.NewTableCell("").SetSelectable(false))
 		table.SetCell(1, 1, tview.NewTableCell("").SetSelectable(false))
 		table.SetCell(1, 2, tview.NewTableCell("").SetSelectable(false))
-		table.SetCell(1, 3, tview.NewTableCell("No issues").
+		table.SetCell(1, 3, tview.NewTableCell("").SetSelectable(false))
+		table.SetCell(1, 4, tview.NewTableCell("No issues").
 			SetTextColor(theme.SecondaryText).
 			SetAlign(tview.AlignCenter).
 			SetSelectable(false))
-		table.SetCell(1, 4, tview.NewTableCell("").SetSelectable(false))
+		table.SetCell(1, 5, tview.NewTableCell("").SetSelectable(false))
+		table.SetCell(1, 6, tview.NewTableCell("").SetSelectable(false))
+		table.SetCell(1, 7, tview.NewTableCell("").SetSelectable(false))
+		table.SetCell(1, 8, tview.NewTableCell("").SetSelectable(false))
 	}
+}
+
+func formatCycleName(cycle *linearapi.CycleRef) string {
+	if cycle == nil {
+		return "-"
+	}
+	return cycle.DisplayName()
+}
+
+func formatDueDate(dueDate *string) string {
+	if dueDate == nil || strings.TrimSpace(*dueDate) == "" {
+		return "-"
+	}
+	return strings.TrimSpace(*dueDate)
+}
+
+func formatEstimate(estimate *float64) string {
+	if estimate == nil {
+		return "-"
+	}
+	return strconv.FormatFloat(*estimate, 'f', -1, 64)
+}
+
+func formatMilestoneName(milestone *linearapi.ProjectMilestoneRef) string {
+	if milestone == nil || strings.TrimSpace(milestone.Name) == "" {
+		return "-"
+	}
+	return milestone.Name
 }
 
 // renderIssueRow formats an issue for display in the table.
@@ -540,5 +655,17 @@ func renderIssueRow(issue linearapi.Issue) []string {
 		assignee = assignee[:10]
 	}
 
-	return []string{identifier, state, priorityText, assignee, issue.Title}
+	cycle := formatCycleName(issue.Cycle)
+	if len(cycle) > 10 {
+		cycle = cycle[:10]
+	}
+
+	dueDate := formatDueDate(issue.DueDate)
+	estimate := formatEstimate(issue.Estimate)
+	milestone := formatMilestoneName(issue.ProjectMilestone)
+	if len(milestone) > 10 {
+		milestone = milestone[:10]
+	}
+
+	return []string{identifier, state, priorityText, assignee, cycle, dueDate, estimate, milestone, issue.Title}
 }

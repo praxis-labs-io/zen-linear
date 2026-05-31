@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -25,6 +26,120 @@ const (
 	SortByCreatedAt SortField = "createdAt"
 	SortByPriority  SortField = "priority"
 )
+
+// IssueFilters contains structured filters applied in addition to navigation.
+type IssueFilters struct {
+	AssigneeID   string
+	AssigneeName string
+	LabelIDs     []string
+	LabelNames   []string
+	StateID      string
+	StateName    string
+	ProjectID    string
+	ProjectName  string
+	CycleID      string
+	CycleName    string
+	DueDate      linearapi.DateFilter
+	Estimate     linearapi.NumberFilter
+}
+
+func (f IssueFilters) Empty() bool {
+	return f.AssigneeID == "" &&
+		len(f.LabelIDs) == 0 &&
+		f.StateID == "" &&
+		f.ProjectID == "" &&
+		f.CycleID == "" &&
+		f.DueDate.Empty() &&
+		f.Estimate.Empty()
+}
+
+func (f IssueFilters) Summary() string {
+	parts := make([]string, 0, 8)
+	if f.AssigneeID != "" {
+		label := f.AssigneeName
+		if label == "" {
+			label = f.AssigneeID
+		}
+		parts = append(parts, "assignee="+label)
+	}
+	if len(f.LabelIDs) > 0 {
+		labels := f.LabelNames
+		if len(labels) == 0 {
+			labels = f.LabelIDs
+		}
+		parts = append(parts, "labels="+strings.Join(labels, ","))
+	}
+	if f.StateID != "" {
+		label := f.StateName
+		if label == "" {
+			label = f.StateID
+		}
+		parts = append(parts, "status="+label)
+	}
+	if f.ProjectID != "" {
+		label := f.ProjectName
+		if label == "" {
+			label = f.ProjectID
+		}
+		parts = append(parts, "project="+label)
+	}
+	if f.CycleID != "" {
+		label := f.CycleName
+		if label == "" {
+			label = f.CycleID
+		}
+		parts = append(parts, "cycle="+label)
+	}
+	if !f.DueDate.Empty() {
+		parts = append(parts, "due="+formatDateFilterSummary(f.DueDate))
+	}
+	if !f.Estimate.Empty() {
+		parts = append(parts, "estimate="+formatNumberFilterSummary(f.Estimate))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatDateFilterSummary(filter linearapi.DateFilter) string {
+	switch {
+	case filter.Eq != "":
+		return filter.Eq
+	case filter.GTE != "":
+		return ">=" + filter.GTE
+	case filter.GT != "":
+		return ">" + filter.GT
+	case filter.LTE != "":
+		return "<=" + filter.LTE
+	case filter.LT != "":
+		return "<" + filter.LT
+	case filter.Null != nil && *filter.Null:
+		return "none"
+	case filter.Null != nil:
+		return "set"
+	default:
+		return ""
+	}
+}
+
+func formatNumberFilterSummary(filter linearapi.NumberFilter) string {
+	switch {
+	case filter.Eq != nil:
+		return formatEstimate(filter.Eq)
+	case filter.GTE != nil:
+		return ">=" + formatEstimate(filter.GTE)
+	case filter.GT != nil:
+		return ">" + formatEstimate(filter.GT)
+	case filter.LTE != nil:
+		return "<=" + formatEstimate(filter.LTE)
+	case filter.LT != nil:
+		return "<" + formatEstimate(filter.LT)
+	case filter.Null != nil && *filter.Null:
+		return "none"
+	case filter.Null != nil:
+		return "set"
+	default:
+		return ""
+	}
+}
 
 // App is the main application controller that manages all UI components.
 type App struct {
@@ -58,10 +173,13 @@ type App struct {
 	createCommentModal     *CreateCommentModal
 	editTitleModal         *EditTitleModal
 	editLabelsModal        *EditLabelsModal
+	textInputModal         *TextInputModal
+	multiSelectModal       *MultiSelectModal
 	settingsModal          *SettingsModal
 	promptTemplatesModal   *AgentPromptTemplatesModal
 	agentPromptModal       *AgentPromptModal
 	agentOutputModal       *AgentOutputModal
+	confirmationModal      *ConfirmationModal
 	agentRunner            *agents.Runner
 	agentPromptTemplates   []config.AgentPromptTemplate
 
@@ -85,13 +203,21 @@ type App struct {
 	expandedState  map[string]bool             // Expanded state for parent issues (shared across sections)
 
 	// Filter/sort state
-	searchQuery string
-	sortField   SortField
+	searchQuery   string
+	richFilters   IssueFilters
+	sortField     SortField
+	statusMessage string
+
+	searchDebounceTimer      *time.Timer
+	searchDebounceMu         sync.Mutex
+	searchDebounceGeneration atomic.Int64
 
 	// Cached metadata for currently selected team
 	currentUser    *linearapi.User
 	teamUsers      []linearapi.User
+	teamProjects   []linearapi.Project
 	workflowStates []linearapi.WorkflowState
+	teamCycles     []linearapi.Cycle
 
 	// Loading state
 	isLoading                      bool
@@ -102,9 +228,17 @@ type App struct {
 	refreshGeneration              atomic.Int64
 
 	// Lazy loading helpers (overridable in tests)
-	fetchIssuesPage func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error)
-	fetchIssueByID  func(context.Context, string) (linearapi.Issue, error)
-	queueUpdateDraw func(func())
+	fetchIssuesPage         func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error)
+	fetchIssueByID          func(context.Context, string) (linearapi.Issue, error)
+	queueUpdateDraw         func(func())
+	updateIssueFunc         func(context.Context, linearapi.UpdateIssueInput) (linearapi.Issue, error)
+	createIssueRelationFunc func(context.Context, linearapi.CreateIssueRelationInput) (linearapi.IssueRelation, error)
+	deleteIssueRelationFunc func(context.Context, string) error
+	subscribeIssueFunc      func(context.Context, string) (linearapi.Issue, error)
+	unsubscribeIssueFunc    func(context.Context, string) (linearapi.Issue, error)
+	openURLFunc             func(string) error
+	copyToClipboardFunc     func(string) error
+	refreshCompleted        func()
 
 	// UI update mutex (for test safety when queueUpdateDraw executes immediately)
 	uiUpdateMu sync.Mutex
@@ -157,6 +291,13 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
 	app.fetchIssuesPage = api.FetchIssuesPage
 	app.fetchIssueByID = api.FetchIssueByID
+	app.updateIssueFunc = api.UpdateIssue
+	app.createIssueRelationFunc = api.CreateIssueRelation
+	app.deleteIssueRelationFunc = api.DeleteIssueRelation
+	app.subscribeIssueFunc = api.SubscribeToIssue
+	app.unsubscribeIssueFunc = api.UnsubscribeFromIssue
+	app.openURLFunc = openURL
+	app.copyToClipboardFunc = copyToClipboard
 	app.queueUpdateDraw = func(f func()) {
 		app.app.QueueUpdateDraw(f)
 	}
@@ -225,6 +366,11 @@ func (a *App) applySettings(newCfg config.Config) {
 	a.cache = cache.NewTeamCache(a.api, newCfg.CacheTTL)
 	a.fetchIssuesPage = a.api.FetchIssuesPage
 	a.fetchIssueByID = a.api.FetchIssueByID
+	a.updateIssueFunc = a.api.UpdateIssue
+	a.createIssueRelationFunc = a.api.CreateIssueRelation
+	a.deleteIssueRelationFunc = a.api.DeleteIssueRelation
+	a.subscribeIssueFunc = a.api.SubscribeToIssue
+	a.unsubscribeIssueFunc = a.api.UnsubscribeFromIssue
 
 	logger.Debug("tui.app: resetting cached state after settings change")
 	a.resetCachedState()
@@ -324,6 +470,8 @@ func (a *App) rebuildModals() {
 	a.createCommentModal = NewCreateCommentModal(a)
 	a.editTitleModal = NewEditTitleModal(a)
 	a.editLabelsModal = NewEditLabelsModal(a)
+	a.textInputModal = NewTextInputModal(a)
+	a.multiSelectModal = NewMultiSelectModal(a)
 	a.settingsModal = NewSettingsModal(a)
 	a.promptTemplatesModal = NewAgentPromptTemplatesModal(a)
 	a.agentPromptModal = NewAgentPromptModal(a)
@@ -333,6 +481,7 @@ func (a *App) rebuildModals() {
 		a.agentOutputModal.ApplyTheme(a.theme)
 		a.agentOutputModal.ApplyDensity(a.density)
 	}
+	a.confirmationModal = NewConfirmationModal(a)
 }
 
 func (a *App) applyIssuesTableTheme(table *tview.Table) {
@@ -416,7 +565,12 @@ func (a *App) resetCachedState() {
 	a.selectedNavigation = nil
 	a.currentUser = nil
 	a.teamUsers = nil
+	a.teamProjects = nil
 	a.workflowStates = nil
+	a.teamCycles = nil
+	a.richFilters = IssueFilters{}
+	a.searchQuery = ""
+	a.cancelSearchDebounce()
 	a.activeIssuesSection = IssuesSectionOther
 	a.expandedState = make(map[string]bool)
 
@@ -506,15 +660,16 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 		return
 	}
 
-	// Load projects and workflow states asynchronously
+	// Load projects, workflow states, and cycles asynchronously.
 	go func() {
 		logger.Debug("tui.app: loading navigation children team_id=%s", teamID)
 		ctx := context.Background()
 		var projects []linearapi.Project
 		var states []linearapi.WorkflowState
-		var projectsErr, statesErr error
+		var cycles []linearapi.Cycle
+		var projectsErr, statesErr, cyclesErr error
 		var wg sync.WaitGroup
-		wg.Add(2)
+		wg.Add(3)
 		go func() {
 			defer wg.Done()
 			projects, projectsErr = a.cache.GetProjects(ctx, teamID)
@@ -522,6 +677,10 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 		go func() {
 			defer wg.Done()
 			states, statesErr = a.cache.GetWorkflowStates(ctx, teamID)
+		}()
+		go func() {
+			defer wg.Done()
+			cycles, cyclesErr = a.cache.GetCycles(ctx, teamID)
 		}()
 		wg.Wait()
 		if projectsErr != nil {
@@ -538,13 +697,55 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 			})
 			return
 		}
-		logger.Debug("tui.app: loaded navigation children team_id=%s projects=%d states=%d", teamID, len(projects), len(states))
+		if cyclesErr != nil {
+			logger.ErrorWithErr(cyclesErr, "tui.app: failed to load cycles team_id=%s", teamID)
+			a.app.QueueUpdateDraw(func() {
+				a.updateStatusBarWithError(cyclesErr)
+			})
+			return
+		}
+		logger.Debug("tui.app: loaded navigation children team_id=%s projects=%d states=%d cycles=%d", teamID, len(projects), len(states), len(cycles))
 
 		a.app.QueueUpdateDraw(func() {
 			// Double-check children haven't been added by another goroutine
 			if len(teamNode.GetChildren()) > 0 {
 				teamNode.SetExpanded(true)
 				return
+			}
+			if len(cycles) > 0 {
+				sortCyclesForNavigation(cycles)
+				cyclesGroup := tview.NewTreeNode("  Cycles").
+					SetColor(a.theme.SecondaryText).
+					SetSelectable(false).
+					SetReference(&NavigationNode{
+						ID:      fmt.Sprintf("%s-cycles", teamID),
+						Text:    "Cycles",
+						TeamID:  teamID,
+						IsCycle: true,
+					})
+				for _, cycle := range cycles {
+					label := cycle.DisplayName()
+					switch {
+					case cycle.IsActive:
+						label += " (active)"
+					case cycle.IsNext:
+						label += " (next)"
+					case cycle.IsPrevious:
+						label += " (previous)"
+					}
+					cycleNode := tview.NewTreeNode("    " + label).
+						SetColor(a.theme.SecondaryText).
+						SetReference(&NavigationNode{
+							ID:        cycle.ID,
+							Text:      label,
+							TeamID:    teamID,
+							IsCycle:   true,
+							CycleID:   cycle.ID,
+							CycleName: cycle.DisplayName(),
+						})
+					cyclesGroup.AddChild(cycleNode)
+				}
+				teamNode.AddChild(cyclesGroup)
 			}
 			if len(states) > 0 {
 				sort.Slice(states, func(i, j int) bool {
@@ -590,6 +791,37 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 	}()
 }
 
+func sortCyclesForNavigation(cycles []linearapi.Cycle) {
+	sort.SliceStable(cycles, func(i, j int) bool {
+		leftRank := cycleNavigationRank(cycles[i])
+		rightRank := cycleNavigationRank(cycles[j])
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		if cycles[i].IsFuture || cycles[i].IsNext {
+			return cycles[i].StartsAt.Before(cycles[j].StartsAt)
+		}
+		return cycles[i].StartsAt.After(cycles[j].StartsAt)
+	})
+}
+
+func cycleNavigationRank(cycle linearapi.Cycle) int {
+	switch {
+	case cycle.IsActive:
+		return 0
+	case cycle.IsNext:
+		return 1
+	case cycle.IsFuture:
+		return 2
+	case cycle.IsPrevious:
+		return 3
+	case cycle.IsPast:
+		return 4
+	default:
+		return 5
+	}
+}
+
 // buildLayout constructs the main UI layout.
 func (a *App) buildLayout() {
 	// Build all panes
@@ -627,10 +859,13 @@ func (a *App) buildLayout() {
 	a.createCommentModal = NewCreateCommentModal(a)
 	a.editTitleModal = NewEditTitleModal(a)
 	a.editLabelsModal = NewEditLabelsModal(a)
+	a.textInputModal = NewTextInputModal(a)
+	a.multiSelectModal = NewMultiSelectModal(a)
 	a.settingsModal = NewSettingsModal(a)
 	a.promptTemplatesModal = NewAgentPromptTemplatesModal(a)
 	a.agentPromptModal = NewAgentPromptModal(a)
 	a.agentOutputModal = NewAgentOutputModal(a)
+	a.confirmationModal = NewConfirmationModal(a)
 	a.agentRunner = agents.NewRunner()
 
 	// Add main layout to pages
@@ -644,6 +879,10 @@ func (a *App) buildLayout() {
 // bindGlobalKeys sets up global keyboard shortcuts.
 func (a *App) bindGlobalKeys() {
 	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if a.pages.HasPage("confirmation") && a.confirmationModal != nil {
+			return a.confirmationModal.HandleKey(event)
+		}
+
 		// Handle picker modal if active
 		if a.pickerActive {
 			return a.pickerModal.HandleKey(event)
@@ -667,6 +906,14 @@ func (a *App) bindGlobalKeys() {
 		// Check if edit labels modal is visible and handle its keys
 		if a.pages.HasPage("edit_labels") && a.editLabelsModal != nil {
 			return a.editLabelsModal.HandleKey(event)
+		}
+
+		if a.pages.HasPage("text_input") && a.textInputModal != nil {
+			return a.textInputModal.HandleKey(event)
+		}
+
+		if a.pages.HasPage("multi_select") && a.multiSelectModal != nil {
+			return a.multiSelectModal.HandleKey(event)
 		}
 
 		// Check if settings modal is visible and handle its keys
@@ -860,6 +1107,7 @@ func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyEscape:
 		if a.paletteCtrl.IsSearchMode() {
 			// In search mode, clear search and close palette
+			a.cancelSearchDebounce()
 			a.closePaletteUI()
 			a.setSearchQuery("")
 			return nil
@@ -870,6 +1118,7 @@ func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 		if a.paletteCtrl.IsSearchMode() {
 			// In search mode, submit the search query
 			query := a.paletteCtrl.Query()
+			a.cancelSearchDebounce()
 			a.closePaletteUI()      // Close UI without changing focus
 			a.setSearchQuery(query) // This will set focus to issues pane
 			return nil
@@ -898,7 +1147,9 @@ func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 		if len(query) > 0 {
 			a.paletteCtrl.SetQuery(query[:len(query)-1])
 			a.paletteInput.SetText(a.paletteCtrl.Query())
-			if !a.paletteCtrl.IsSearchMode() {
+			if a.paletteCtrl.IsSearchMode() {
+				a.scheduleSearchDebounce(a.paletteCtrl.Query())
+			} else {
 				a.updatePaletteList()
 			}
 		}
@@ -907,7 +1158,9 @@ func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 		query := a.paletteCtrl.Query() + string(event.Rune())
 		a.paletteCtrl.SetQuery(query)
 		a.paletteInput.SetText(query)
-		if !a.paletteCtrl.IsSearchMode() {
+		if a.paletteCtrl.IsSearchMode() {
+			a.scheduleSearchDebounce(query)
+		} else {
 			a.updatePaletteList()
 		}
 		return nil
@@ -1132,6 +1385,7 @@ func (a *App) openPalette() {
 	a.paletteCtrl.Reset()
 	a.paletteInput.SetText("")
 	a.paletteInput.SetLabel("> ")
+	a.paletteInput.SetPlaceholder("Type to filter commands...")
 	a.updatePaletteList()
 	a.pages.ShowPage("palette")
 	a.pages.SendToFront("palette")
@@ -1145,7 +1399,9 @@ func (a *App) openSearchPalette() {
 	a.paletteCtrl.SetQuery(a.searchQuery)
 	a.paletteInput.SetText(a.searchQuery)
 	a.paletteInput.SetLabel("/ ")
+	a.paletteInput.SetPlaceholder("Type to search issues...")
 	a.paletteList.Clear()
+	a.paletteModalContent.SetTitle(" Search Issues ")
 	a.pages.ShowPage("palette")
 	a.pages.SendToFront("palette")
 	a.focusedPane = FocusPalette
@@ -1154,6 +1410,7 @@ func (a *App) openSearchPalette() {
 
 // closePalette closes the command palette overlay.
 func (a *App) closePalette() {
+	a.cancelSearchDebounce()
 	a.paletteCtrl.SetSearchMode(false)
 	a.pages.HidePage("palette")
 	a.focusedPane = FocusNavigation
@@ -1163,8 +1420,49 @@ func (a *App) closePalette() {
 // closePaletteUI closes the palette UI without changing focus.
 // This is used when focus will be set by the caller (e.g., after search).
 func (a *App) closePaletteUI() {
+	a.cancelSearchDebounce()
 	a.paletteCtrl.SetSearchMode(false)
 	a.pages.HidePage("palette")
+}
+
+func (a *App) searchDebounceDelay() time.Duration {
+	if a.config.SearchDebounce > 0 {
+		return a.config.SearchDebounce
+	}
+	return config.DefaultSearchDebounce
+}
+
+func (a *App) scheduleSearchDebounce(query string) {
+	delay := a.searchDebounceDelay()
+	generation := a.searchDebounceGeneration.Add(1)
+
+	a.searchDebounceMu.Lock()
+	if a.searchDebounceTimer != nil {
+		a.searchDebounceTimer.Stop()
+	}
+	a.searchDebounceTimer = time.AfterFunc(delay, func() {
+		if generation != a.searchDebounceGeneration.Load() {
+			return
+		}
+		a.QueueUpdateDraw(func() {
+			if generation != a.searchDebounceGeneration.Load() || !a.paletteCtrl.IsSearchMode() {
+				return
+			}
+			a.setSearchQueryWithFocusChange(query, false)
+		})
+	})
+	a.searchDebounceMu.Unlock()
+}
+
+func (a *App) cancelSearchDebounce() {
+	a.searchDebounceGeneration.Add(1)
+
+	a.searchDebounceMu.Lock()
+	if a.searchDebounceTimer != nil {
+		a.searchDebounceTimer.Stop()
+		a.searchDebounceTimer = nil
+	}
+	a.searchDebounceMu.Unlock()
 }
 
 // queueIssuesRefresh records a refresh request while a fetch is in progress.
@@ -1196,6 +1494,12 @@ func (a *App) runQueuedIssuesRefresh() {
 		return
 	}
 	go a.refreshIssuesWithFocusChange(allowFocusChange)
+}
+
+func (a *App) notifyRefreshCompleted() {
+	if a.refreshCompleted != nil {
+		a.refreshCompleted()
+	}
 }
 
 // refreshIssues fetches issues from the API and updates the UI.
@@ -1232,6 +1536,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			Search:  a.searchQuery,
 			OrderBy: string(a.sortField),
 		}
+		a.applyRichFiltersToParams(&params)
 
 		// Apply team/project/state filter based on navigation selection
 		if a.selectedNavigation != nil {
@@ -1239,6 +1544,9 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			case a.selectedNavigation.IsStatus:
 				params.TeamID = a.selectedNavigation.TeamID
 				params.StateID = a.selectedNavigation.StateID
+			case a.selectedNavigation.IsCycle:
+				params.TeamID = a.selectedNavigation.TeamID
+				params.CycleID = a.selectedNavigation.CycleID
 			case a.selectedNavigation.IsTeam:
 				params.TeamID = a.selectedNavigation.TeamID
 			case a.selectedNavigation.IsProject:
@@ -1255,13 +1563,14 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 
 		pageCount := 0
 		fetchedCount := 0
-		logger.Debug("tui.app: refreshing issues team_id=%s project_id=%s state_id=%s search=%s", params.TeamID, params.ProjectID, params.StateID, params.Search)
+		logger.Debug("tui.app: refreshing issues team_id=%s project_id=%s state_id=%s cycle_id=%s assignee_id=%s labels=%d search=%s", params.TeamID, params.ProjectID, params.StateID, params.CycleID, params.AssigneeID, len(params.LabelIDs), params.Search)
 		page, err := fetchPage(ctx, params, nil)
 		if err != nil {
 			a.QueueUpdateDraw(func() {
 				a.isLoading = false
 				logger.ErrorWithErr(err, "tui.app: failed to fetch issues")
 				a.updateStatusBarWithError(err)
+				a.notifyRefreshCompleted()
 				a.runQueuedIssuesRefresh()
 			})
 			return
@@ -1269,6 +1578,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		if generation != a.refreshGeneration.Load() {
 			a.QueueUpdateDraw(func() {
 				a.isLoading = false
+				a.notifyRefreshCompleted()
 				a.runQueuedIssuesRefresh()
 			})
 			return
@@ -1322,6 +1632,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			a.isLoading = false
 			logger.Debug("tui.app: refresh completed pages=%d total_fetched=%d", pageCount, fetchedCount)
 			a.updateStatusBar()
+			a.notifyRefreshCompleted()
 			a.runQueuedIssuesRefresh()
 		})
 	}()
@@ -1330,6 +1641,34 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 	a.QueueUpdateDraw(func() {
 		a.statusBar.SetText(fmt.Sprintf("%sLoading...[-]", a.themeTags.Warning))
 	})
+}
+
+func (a *App) applyRichFiltersToParams(params *linearapi.FetchIssuesParams) {
+	if params == nil {
+		return
+	}
+	filters := a.richFilters
+	if filters.AssigneeID != "" {
+		params.AssigneeID = filters.AssigneeID
+	}
+	if len(filters.LabelIDs) > 0 {
+		params.LabelIDs = append([]string(nil), filters.LabelIDs...)
+	}
+	if filters.StateID != "" {
+		params.StateID = filters.StateID
+	}
+	if filters.ProjectID != "" {
+		params.ProjectID = filters.ProjectID
+	}
+	if filters.CycleID != "" {
+		params.CycleID = filters.CycleID
+	}
+	if !filters.DueDate.Empty() {
+		params.DueDate = filters.DueDate
+	}
+	if !filters.Estimate.Empty() {
+		params.Estimate = filters.Estimate
+	}
 }
 
 // updateIssuesColumnLayout updates the issues column flex to show/hide My Issues table.
@@ -1618,25 +1957,27 @@ func (a *App) toggleIssueExpanded(issueID string) {
 
 // onNavigationSelected handles when a navigation item is selected.
 func (a *App) onNavigationSelected(node *NavigationNode) {
-	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v", node.ID, node.Text, node.IsTeam, node.IsProject)
+	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v is_cycle=%v", node.ID, node.Text, node.IsTeam, node.IsProject, node.IsCycle)
 	a.selectedNavigation = node
 
-	// Update selected team/project
-	if node.IsTeam {
-		// Load team metadata (users, workflow states) in background
+	// Update selected team metadata for commands and create-issue defaults.
+	if node.TeamID != "" {
 		go func() {
 			logger.Debug("tui.app: preloading team metadata team_id=%s", node.TeamID)
 			ctx := context.Background()
 			_ = a.cache.PreloadTeamMetadata(ctx, node.TeamID)
 
-			// Update team users and states for the selected team
 			users, _ := a.cache.GetUsers(ctx, node.TeamID)
+			projects, _ := a.cache.GetProjects(ctx, node.TeamID)
 			states, _ := a.cache.GetWorkflowStates(ctx, node.TeamID)
+			cycles, _ := a.cache.GetCycles(ctx, node.TeamID)
 
-			logger.Debug("tui.app: loaded team metadata team_id=%s users_count=%d states_count=%d", node.TeamID, len(users), len(states))
+			logger.Debug("tui.app: loaded team metadata team_id=%s users_count=%d projects_count=%d states_count=%d cycles_count=%d", node.TeamID, len(users), len(projects), len(states), len(cycles))
 			a.app.QueueUpdateDraw(func() {
 				a.teamUsers = users
+				a.teamProjects = projects
 				a.workflowStates = states
+				a.teamCycles = cycles
 			})
 		}()
 	}
@@ -1648,14 +1989,21 @@ func (a *App) onNavigationSelected(node *NavigationNode) {
 
 // setSearchQuery sets the search query and refreshes issues.
 func (a *App) setSearchQuery(query string) {
+	a.cancelSearchDebounce()
+	a.setSearchQueryWithFocusChange(query, true)
+}
+
+func (a *App) setSearchQueryWithFocusChange(query string, allowFocusChange bool) {
 	trimmedQuery := strings.TrimSpace(query)
 	logger.Debug("tui.app: setting search query query=%s", trimmedQuery)
 	a.searchQuery = trimmedQuery
 	// Set focus to issues pane when searching
-	a.focusedPane = FocusIssues
+	if allowFocusChange {
+		a.focusedPane = FocusIssues
+	}
 	a.updateFocus()
 	// Run in goroutine to avoid deadlock when called from tview callbacks
-	go a.refreshIssues()
+	go a.refreshIssuesWithFocusChange(allowFocusChange)
 }
 
 // setSortField sets the sort field and refreshes issues.
@@ -1693,6 +2041,12 @@ func (a *App) updateStatusBar() {
 			} else {
 				label = "Status"
 			}
+		} else if a.selectedNavigation.IsCycle {
+			if a.selectedNavigation.CycleName != "" {
+				label = fmt.Sprintf("Cycle: %s", a.selectedNavigation.CycleName)
+			} else {
+				label = "Cycle"
+			}
 		}
 		navText = fmt.Sprintf("%s%s[-]", a.themeTags.Accent, label)
 	}
@@ -1700,6 +2054,10 @@ func (a *App) updateStatusBar() {
 	searchText := ""
 	if a.searchQuery != "" {
 		searchText = fmt.Sprintf("%s🔍 %s[-]", a.themeTags.Warning, a.searchQuery)
+	}
+	filterText := ""
+	if !a.richFilters.Empty() {
+		filterText = fmt.Sprintf("%sFilters: %s[-]", a.themeTags.Warning, a.richFilters.Summary())
 	}
 
 	a.issuesMu.RLock()
@@ -1719,6 +2077,12 @@ func (a *App) updateStatusBar() {
 	if searchText != "" {
 		parts = append(parts, searchText)
 	}
+	if filterText != "" {
+		parts = append(parts, filterText)
+	}
+	if a.statusMessage != "" {
+		parts = append(parts, fmt.Sprintf("%s%s[-]", a.themeTags.Accent, a.statusMessage))
+	}
 	parts = append(parts, statusText)
 
 	text := parts[0]
@@ -1732,6 +2096,15 @@ func (a *App) updateStatusBar() {
 // updateStatusBarWithError updates the status bar with an error message.
 func (a *App) updateStatusBarWithError(err error) {
 	a.statusBar.SetText(fmt.Sprintf("%sError: %v[-]", a.themeTags.Error, err))
+}
+
+func (a *App) flashStatus(message string) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return
+	}
+	a.statusMessage = message
+	a.statusBar.SetText(fmt.Sprintf("%s%s[-]", a.themeTags.Accent, message))
 }
 
 // GetAPI returns the Linear API client (used by commands).
@@ -1785,6 +2158,39 @@ func (a *App) FetchTeamUsers(teamID string) ([]linearapi.User, error) {
 	}
 	a.teamUsers = users
 	return users, nil
+}
+
+// GetTeamProjects returns the projects for the currently selected team.
+func (a *App) GetTeamProjects() []linearapi.Project {
+	return a.teamProjects
+}
+
+// FetchTeamProjects fetches projects for a specific team from the API.
+func (a *App) FetchTeamProjects(teamID string) ([]linearapi.Project, error) {
+	ctx := context.Background()
+	projects, err := a.cache.GetProjects(ctx, teamID)
+	if err != nil {
+		return nil, err
+	}
+	a.teamProjects = projects
+	return projects, nil
+}
+
+// GetTeamCycles returns the cycles for the currently selected team.
+func (a *App) GetTeamCycles() []linearapi.Cycle {
+	return a.teamCycles
+}
+
+// FetchTeamCycles fetches cycles for a specific team from the API.
+func (a *App) FetchTeamCycles(teamID string) ([]linearapi.Cycle, error) {
+	ctx := context.Background()
+	cycles, err := a.cache.GetCycles(ctx, teamID)
+	if err != nil {
+		return nil, err
+	}
+	sortCyclesForNavigation(cycles)
+	a.teamCycles = cycles
+	return cycles, nil
 }
 
 // GetWorkflowStates returns the workflow states for the currently selected team.
@@ -1917,16 +2323,69 @@ func (a *App) showUserPickerWithUsers(users []linearapi.User, onSelect func(user
 	})
 }
 
+// ShowCyclePicker shows a picker for team cycles.
+func (a *App) ShowCyclePicker(onSelect func(cycleID string)) {
+	logger.Debug("tui.app: showing cycle picker")
+	cycles := a.teamCycles
+	if len(cycles) == 0 {
+		a.loadPickerData(
+			"cycles for picker",
+			func() bool { return len(a.teamCycles) > 0 },
+			func(ctx context.Context, teamID string) error {
+				loadedCycles, err := a.cache.GetCycles(ctx, teamID)
+				if err != nil {
+					return err
+				}
+				sortCyclesForNavigation(loadedCycles)
+				a.teamCycles = loadedCycles
+				return nil
+			},
+			func() {
+				a.showCyclePickerWithCycles(a.teamCycles, onSelect)
+			},
+		)
+		return
+	}
+	a.showCyclePickerWithCycles(cycles, onSelect)
+}
+
+func (a *App) showCyclePickerWithCycles(cycles []linearapi.Cycle, onSelect func(cycleID string)) {
+	items := make([]PickerItem, 0, len(cycles))
+	for _, cycle := range cycles {
+		label := cycle.DisplayName()
+		switch {
+		case cycle.IsActive:
+			label += " (active)"
+		case cycle.IsNext:
+			label += " (next)"
+		case cycle.IsPrevious:
+			label += " (previous)"
+		}
+		items = append(items, PickerItem{
+			ID:    cycle.ID,
+			Label: label,
+		})
+	}
+
+	a.pickerActive = true
+	a.pickerModal.Show("Select Cycle", items, func(item PickerItem) {
+		a.pickerActive = false
+		onSelect(item.ID)
+	})
+}
+
 // ShowParentIssuePicker shows a picker for selecting a parent issue.
 // It lists all top-level issues (issues without a parent) from the current list.
 func (a *App) ShowParentIssuePicker(onSelect func(parentID string)) {
 	// Filter to only show issues that could be parents (no parent themselves)
 	a.issuesMu.RLock()
 	issues := a.issues
+	selectedIssue := a.selectedIssue
 	a.issuesMu.RUnlock()
+	excludedIDs := excludedParentCandidateIDs(selectedIssue, issues)
 	items := make([]PickerItem, 0)
 	for _, issue := range issues {
-		if issue.Parent == nil {
+		if issue.Parent == nil && !excludedIDs[issue.ID] {
 			items = append(items, PickerItem{
 				ID:    issue.ID,
 				Label: issue.Identifier + " - " + issue.Title,
@@ -1948,25 +2407,60 @@ func (a *App) ShowParentIssuePicker(onSelect func(parentID string)) {
 	})
 }
 
+func excludedParentCandidateIDs(selected *linearapi.Issue, issues []linearapi.Issue) map[string]bool {
+	excluded := make(map[string]bool)
+	if selected == nil {
+		return excluded
+	}
+	excluded[selected.ID] = true
+	byID := make(map[string]linearapi.Issue, len(issues))
+	for _, issue := range issues {
+		byID[issue.ID] = issue
+	}
+	var visit func(issue linearapi.Issue)
+	visit = func(issue linearapi.Issue) {
+		for _, child := range issue.Children {
+			if excluded[child.ID] {
+				continue
+			}
+			excluded[child.ID] = true
+			if fullChild, ok := byID[child.ID]; ok {
+				visit(fullChild)
+			}
+		}
+	}
+	visit(*selected)
+	return excluded
+}
+
 // ShowCreateIssueModal shows the create issue modal.
 func (a *App) ShowCreateIssueModal() {
-	a.showCreateIssueModalWithParent("")
+	a.showCreateIssueModalWithParent("", nil)
 }
 
 // ShowCreateSubIssueModal shows the create issue modal with a parent issue pre-set.
 func (a *App) ShowCreateSubIssueModal(parentID string) {
-	a.showCreateIssueModalWithParent(parentID)
+	a.showCreateIssueModalWithParent(parentID, a.issueRefForID(parentID))
 }
 
 // showCreateIssueModalWithParent shows the create issue modal, optionally with a parent.
-func (a *App) showCreateIssueModalWithParent(parentID string) {
+func (a *App) showCreateIssueModalWithParent(parentID string, parentRef *linearapi.IssueRef) {
 	teamID := a.GetSelectedTeamID()
 	projectID := ""
 	if a.selectedNavigation != nil && a.selectedNavigation.IsProject {
 		projectID = a.selectedNavigation.ID
 	}
+	cycleID := ""
+	if a.selectedNavigation != nil && a.selectedNavigation.IsCycle {
+		cycleID = a.selectedNavigation.CycleID
+	}
 
-	a.createIssueModal.Show(teamID, projectID, func(title, description, tID, pID, assigneeID string, priority int) {
+	a.createIssueModal.ShowWithOptions(CreateIssueModalOptions{
+		TeamID:    teamID,
+		ProjectID: projectID,
+		Parent:    parentRef,
+		CycleID:   cycleID,
+	}, func(title, description, tID, pID, assigneeID, cID string, priority int) {
 		if title == "" {
 			return
 		}
@@ -1983,6 +2477,9 @@ func (a *App) showCreateIssueModalWithParent(parentID string) {
 			if assigneeID != "" {
 				input.AssigneeID = assigneeID
 			}
+			if cID != "" {
+				input.CycleID = cID
+			}
 			if priority > 0 {
 				input.Priority = priority
 			}
@@ -1998,13 +2495,32 @@ func (a *App) showCreateIssueModalWithParent(parentID string) {
 				}
 				if parentID != "" {
 					logger.Info("tui.app: created sub-issue issue=%s title=%s", issue.Identifier, title)
+					a.flashStatus(fmt.Sprintf("Created sub-issue %s", issue.Identifier))
 				} else {
 					logger.Info("tui.app: created issue issue=%s title=%s", issue.Identifier, title)
+					a.flashStatus(fmt.Sprintf("Created issue %s", issue.Identifier))
 				}
 				go a.refreshIssues(issue.ID)
 			})
 		}()
 	})
+}
+
+func (a *App) issueRefForID(issueID string) *linearapi.IssueRef {
+	if issueID == "" {
+		return nil
+	}
+	a.issuesMu.RLock()
+	defer a.issuesMu.RUnlock()
+	if a.selectedIssue != nil && a.selectedIssue.ID == issueID {
+		return &linearapi.IssueRef{ID: a.selectedIssue.ID, Identifier: a.selectedIssue.Identifier, Title: a.selectedIssue.Title}
+	}
+	for _, issue := range a.issues {
+		if issue.ID == issueID {
+			return &linearapi.IssueRef{ID: issue.ID, Identifier: issue.Identifier, Title: issue.Title}
+		}
+	}
+	return nil
 }
 
 // ShowEditTitleModal shows the edit title modal.
@@ -2028,6 +2544,7 @@ func (a *App) ShowEditTitleModal() {
 					return
 				}
 				logger.Info("tui.app: updated issue title issue=%s", issue.Identifier)
+				a.flashStatus(fmt.Sprintf("Updated title for %s", issue.Identifier))
 				go a.refreshIssues(issueID)
 			})
 		}()
@@ -2086,6 +2603,7 @@ func (a *App) ShowEditLabelsModal() {
 							return
 						}
 						logger.Info("tui.app: updated labels issue=%s", issue.Identifier)
+						a.flashStatus(fmt.Sprintf("Updated labels for %s", issue.Identifier))
 						go a.refreshIssues(issueID)
 					})
 				}()
