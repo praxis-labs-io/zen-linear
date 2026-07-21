@@ -294,6 +294,71 @@ func TestAuthTransport(t *testing.T) {
 	}
 }
 
+func TestAuthTransportBearer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth != "Bearer oauth-token" {
+			t.Errorf("Authorization header = %q, want Bearer oauth-token", auth)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	transport := &authTransport{
+		Token:     "oauth-token",
+		UseBearer: true,
+		Base:      http.DefaultTransport,
+	}
+	req, err := http.NewRequest("POST", server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+}
+
+func TestAuthTransportUnauthorizedRefreshRetry(t *testing.T) {
+	var calls int
+	var headers []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		headers = append(headers, r.Header.Get("Authorization"))
+		if calls == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{"teams":{"nodes":[]}}}`))
+	}))
+	defer server.Close()
+
+	refreshCalls := 0
+	client := NewClient(ClientConfig{
+		Token:     "old-token",
+		UseBearer: true,
+		Endpoint:  server.URL,
+		OnUnauthorized: func(ctx context.Context) (string, error) {
+			refreshCalls++
+			return "new-token", nil
+		},
+	})
+
+	_, err := client.ListTeams(context.Background())
+	_ = err
+	if refreshCalls != 1 {
+		t.Fatalf("refreshCalls = %d", refreshCalls)
+	}
+	if calls < 2 {
+		t.Fatalf("expected retry after 401, calls=%d headers=%v", calls, headers)
+	}
+	if len(headers) >= 2 && headers[1] != "Bearer new-token" {
+		t.Fatalf("retry header = %q, headers=%v", headers[1], headers)
+	}
+}
+
 func TestFetchIssues_RequestFormat(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check Authorization header format

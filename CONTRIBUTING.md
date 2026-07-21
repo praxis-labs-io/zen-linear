@@ -7,7 +7,7 @@ Thank you for your interest in contributing to linear-tui! This document provide
 ### Prerequisites
 
 - Go 1.24 or later
-- A Linear API key (set as `LINEAR_API_KEY` environment variable)
+- Linear authentication via `linear-tui auth login` or a `LINEAR_API_KEY` environment variable
 - `golangci-lint` installed (for linting)
 - `make` (optional, but recommended for using Makefile targets)
 

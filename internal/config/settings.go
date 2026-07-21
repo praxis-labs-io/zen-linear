@@ -82,10 +82,11 @@ func SettingsFromConfig(cfg Config) Settings {
 	}
 }
 
-// ConfigFromSettings builds runtime configuration from settings and API key.
+// ConfigFromSettings builds runtime configuration from settings and a resolved auth token.
+// Callers should resolve the token via LINEAR_API_KEY or OAuth credentials before calling.
 func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 	if apiKey == "" {
-		return Config{}, fmt.Errorf("%s environment variable is not set", LinearAPIKeyEnv)
+		return Config{}, fmt.Errorf("auth token is empty")
 	}
 
 	timeout, err := parseDuration(settings.Timeout, "timeout")

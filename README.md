@@ -39,14 +39,18 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 
 ## Requirements
 
-- Linear API key (set as `LINEAR_API_KEY` environment variable)
+- Linear authentication via either:
+  - `linear-tui auth login` (OAuth, recommended), or
+  - `LINEAR_API_KEY` environment variable (personal API key override)
 - Agent CLI for the agent command:
   - Claude provider: `claude`
   - Cursor provider: `cursor-agent` (preferred) or `agent`
 
 ## Configuration
 
-- `LINEAR_API_KEY` is required (the API key is not stored on disk).
+- Prefer `linear-tui auth login` to store OAuth credentials in `~/.linear-tui/credentials.json` (mode `0600`).
+- `LINEAR_API_KEY` overrides stored OAuth credentials when set.
+- Use `linear-tui auth logout` to revoke (best effort) and delete stored credentials.
 - Settings are stored in `~/.linear-tui/config.json` and created on first start.
 - Use the Settings modal from the command palette (`:` -> `Settings`) to edit and apply settings immediately.
 - UI settings in `config.json`: `theme` (`linear`, `high_contrast`, `color_blind`) and `density` (`comfortable`, `compact`).
@@ -105,12 +109,26 @@ Download pre-built binaries from the [Releases](https://github.com/roeyazroel/li
 
 ## Usage
 
-Set your Linear API key before starting the app.
+Authenticate once, then start the app.
+
+### OAuth login (recommended)
+
+```bash
+linear-tui auth login
+linear-tui
+```
+
+### Personal API key override
+
+```bash
+export LINEAR_API_KEY="your-api-key-here"
+linear-tui
+```
 
 ### Homebrew
 
 ```bash
-export LINEAR_API_KEY="your-api-key-here"
+linear-tui auth login
 linear-tui
 ```
 
@@ -119,8 +137,14 @@ linear-tui
 If you cloned the repository and built the binary locally, run the local executable:
 
 ```bash
-export LINEAR_API_KEY="your-api-key-here"
+./linear-tui auth login
 ./linear-tui
+```
+
+To log out and remove stored OAuth credentials:
+
+```bash
+linear-tui auth logout
 ```
 
 ### Advanced Configuration

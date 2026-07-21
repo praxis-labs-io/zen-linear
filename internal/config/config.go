@@ -11,6 +11,7 @@ import (
 // Environment variable names for configuration.
 const (
 	LinearAPIKeyEnv   = "LINEAR_API_KEY"
+	LinearClientIDEnv = "LINEAR_CLIENT_ID"
 	LinearAPIEndpoint = "LINEAR_API_ENDPOINT"
 	TimeoutEnv        = "LINEAR_TIMEOUT"
 	PageSizeEnv       = "LINEAR_PAGE_SIZE"
@@ -50,7 +51,8 @@ func getDefaultLogFile() string {
 
 // Config holds runtime configuration for the application.
 type Config struct {
-	// LinearAPIKey is the API key for authenticating with Linear.
+	// LinearAPIKey is the credential used for Linear GraphQL auth.
+	// It may be a personal API key or an OAuth access token resolved at startup.
 	LinearAPIKey string
 
 	// APIEndpoint is the Linear GraphQL API endpoint (useful for testing).

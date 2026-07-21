@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/roeyazroel/linear-tui/internal/logger"
@@ -142,8 +144,13 @@ const (
 
 // ClientConfig contains configuration for creating a new Linear API client.
 type ClientConfig struct {
-	// Token is the Linear API key for authentication.
+	// Token is the Linear API key or OAuth access token for authentication.
 	Token string
+	// UseBearer prefixes the Authorization header with "Bearer " (OAuth tokens).
+	// Personal API keys must leave this false.
+	UseBearer bool
+	// OnUnauthorized optionally refreshes credentials after a 401 and retries once.
+	OnUnauthorized func(ctx context.Context) (string, error)
 	// Endpoint is the GraphQL API endpoint (defaults to Linear's production endpoint).
 	Endpoint string
 	// HTTPClient is an optional custom HTTP client (useful for testing).
@@ -524,6 +531,12 @@ func NewClient(cfg ClientConfig) *Client {
 		timeout = 30 * time.Second
 	}
 
+	transport := &authTransport{
+		Token:          cfg.Token,
+		UseBearer:      cfg.UseBearer,
+		OnUnauthorized: cfg.OnUnauthorized,
+	}
+
 	var httpClient *http.Client
 	if cfg.HTTPClient != nil {
 		// Use provided HTTP client but wrap its transport with auth
@@ -531,18 +544,14 @@ func NewClient(cfg ClientConfig) *Client {
 		if httpClient.Transport == nil {
 			httpClient.Transport = http.DefaultTransport
 		}
-		httpClient.Transport = &authTransport{
-			Token: cfg.Token,
-			Base:  httpClient.Transport,
-		}
+		transport.Base = httpClient.Transport
+		httpClient.Transport = transport
 	} else {
 		// Create a new HTTP client
+		transport.Base = http.DefaultTransport
 		httpClient = &http.Client{
-			Timeout: timeout,
-			Transport: &authTransport{
-				Token: cfg.Token,
-				Base:  http.DefaultTransport,
-			},
+			Timeout:   timeout,
+			Transport: transport,
 		}
 	}
 
@@ -561,19 +570,95 @@ func NewClientWithToken(token string) *Client {
 	return NewClient(ClientConfig{Token: token})
 }
 
-// authTransport adds the Authorization header to requests.
+// authTransport adds the Authorization header to requests and optionally
+// refreshes OAuth credentials once after a 401 response.
 type authTransport struct {
-	Token string
-	Base  http.RoundTripper
+	mu             sync.Mutex
+	Token          string
+	UseBearer      bool
+	OnUnauthorized func(ctx context.Context) (string, error)
+	Base           http.RoundTripper
 }
 
 // RoundTrip implements http.RoundTripper.
 func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("Authorization", t.Token)
-	if t.Base == nil {
-		return http.DefaultTransport.RoundTrip(req)
+	base := t.Base
+	if base == nil {
+		base = http.DefaultTransport
 	}
-	return t.Base.RoundTrip(req)
+
+	authReq, err := cloneRequestForRetry(req)
+	if err != nil {
+		return nil, err
+	}
+	t.setAuthHeader(authReq)
+
+	resp, err := base.RoundTrip(authReq)
+	if err != nil || resp == nil || resp.StatusCode != http.StatusUnauthorized || t.OnUnauthorized == nil {
+		return resp, err
+	}
+
+	_ = resp.Body.Close()
+
+	newToken, refreshErr := t.OnUnauthorized(req.Context())
+	if refreshErr != nil {
+		return nil, fmt.Errorf("refresh auth after 401: %w", refreshErr)
+	}
+
+	t.mu.Lock()
+	t.Token = newToken
+	t.mu.Unlock()
+
+	retryReq, err := cloneRequestForRetry(req)
+	if err != nil {
+		return nil, err
+	}
+	t.setAuthHeader(retryReq)
+	return base.RoundTrip(retryReq)
+}
+
+// setAuthHeader applies the current token to the request Authorization header.
+func (t *authTransport) setAuthHeader(req *http.Request) {
+	t.mu.Lock()
+	token := t.Token
+	useBearer := t.UseBearer
+	t.mu.Unlock()
+
+	if useBearer {
+		req.Header.Set("Authorization", "Bearer "+token)
+		return
+	}
+	req.Header.Set("Authorization", token)
+}
+
+// cloneRequestForRetry duplicates req so the body can be resent after a 401 refresh.
+func cloneRequestForRetry(req *http.Request) (*http.Request, error) {
+	clone := req.Clone(req.Context())
+	if req.Body == nil || req.Body == http.NoBody {
+		return clone, nil
+	}
+	if req.GetBody != nil {
+		body, err := req.GetBody()
+		if err != nil {
+			return nil, fmt.Errorf("rewind request body: %w", err)
+		}
+		clone.Body = body
+		return clone, nil
+	}
+	// Fall back to buffering when GetBody is unavailable.
+	data, err := io.ReadAll(req.Body)
+	_ = req.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read request body: %w", err)
+	}
+	req.Body = io.NopCloser(strings.NewReader(string(data)))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(string(data))), nil
+	}
+	clone.Body = io.NopCloser(strings.NewReader(string(data)))
+	clone.GetBody = req.GetBody
+	clone.ContentLength = int64(len(data))
+	return clone, nil
 }
 
 // Endpoint returns the GraphQL endpoint being used.
