@@ -90,6 +90,34 @@ func TestFavoriteNavigationNodesSkipsUnsupportedTypes(t *testing.T) {
 	}
 }
 
+// TestFavoriteNavigationNodesViews verifies custom view and predefined view
+// favorites map onto navigation nodes.
+func TestFavoriteNavigationNodesViews(t *testing.T) {
+	favorites := []linearapi.Favorite{
+		{Type: "customView", CustomViewID: "view-1", CustomViewName: "Open Bugs", Title: "Open Bugs"},
+		{Type: "predefinedView", ID: "fav-triage", Title: "Triage", PredefinedViewType: "triage", PredefinedViewTeamID: "team-1"},
+		{Type: "predefinedView", ID: "fav-all", Title: "All issues", PredefinedViewType: "allIssues"},
+		{Type: "predefinedView", ID: "fav-other", Title: "Cycles", PredefinedViewType: "cycles"},
+	}
+
+	nodes := favoriteNavigationNodes(favorites)
+	if len(nodes) != 3 {
+		t.Fatalf("favoriteNavigationNodes() returned %d nodes, want 3: %+v", len(nodes), nodes)
+	}
+	view := nodes[0]
+	if view.CustomViewID != "view-1" || view.Text != "Open Bugs" {
+		t.Errorf("custom view node = %+v", view)
+	}
+	triage := nodes[1]
+	if triage.StateType != "triage" || triage.TeamID != "team-1" || triage.Text != "Triage" {
+		t.Errorf("triage node = %+v", triage)
+	}
+	all := nodes[2]
+	if all.ID != "all" || all.Text != "All issues" {
+		t.Errorf("all issues node = %+v", all)
+	}
+}
+
 // TestRebuildNavigationTreeOmitsEmptyFavorites verifies the Favorites group
 // only renders when displayable favorites exist.
 func TestRebuildNavigationTreeOmitsEmptyFavorites(t *testing.T) {
