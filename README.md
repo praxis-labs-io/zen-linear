@@ -18,6 +18,7 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 
 - 3-pane layout (navigation tree + issues list + details view)
 - Command palette for quick actions with keyboard shortcuts
+- Toggle the navigation and details panes from the command palette
 - Vim-style keyboard navigation (j/k, h/l, g/G)
 - Mouse support (click to focus, scroll to navigate)
 - Issue descriptions with markdown rendering
