@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -210,64 +211,60 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			switch event.Rune() {
 			case 'j':
 				row, _ := table.GetSelection()
-				if row < table.GetRowCount()-1 {
-					table.Select(row+1, 0)
-					if issue := a.getIssueFromRowForSection(row+1, section); issue != nil {
+				if next := nextIssueRow(a.rowsForSection(section), row, 1); next > 0 {
+					table.Select(next, 0)
+					if issue := a.getIssueFromRowForSection(next, section); issue != nil {
 						a.onIssueSelected(*issue)
 						a.activeIssuesSection = section
 					}
 				} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
-					// At bottom of this section - try to move to next section
-					// Move to Other Issues table
+					// At bottom of this section - move to the Other Issues table
 					a.activeIssuesSection = IssuesSectionOther
-					a.otherIssuesTable.Select(1, 0)
-					if issue := a.getIssueFromRowForSection(1, IssuesSectionOther); issue != nil {
-						a.onIssueSelected(*issue)
+					if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
+						a.otherIssuesTable.Select(first, 0)
+						if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
+							a.onIssueSelected(*issue)
+						}
 					}
 					a.updateFocus()
 				}
 				return nil
 			case 'k':
 				row, _ := table.GetSelection()
-				if row > 1 {
-					table.Select(row-1, 0)
-					if issue := a.getIssueFromRowForSection(row-1, section); issue != nil {
+				if previous := nextIssueRow(a.rowsForSection(section), row, -1); previous > 0 {
+					table.Select(previous, 0)
+					if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
 						a.onIssueSelected(*issue)
 						a.activeIssuesSection = section
 					}
 				} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
-					// At top of this section - try to move to previous section
-					// Move to My Issues table
+					// At top of this section - move to the My Issues table
 					a.activeIssuesSection = IssuesSectionMy
-					lastRow := len(a.myIssueRows)
-					a.myIssuesTable.Select(lastRow, 0)
-					if issue := a.getIssueFromRowForSection(lastRow, IssuesSectionMy); issue != nil {
-						a.onIssueSelected(*issue)
+					if last := nextIssueRow(a.myIssueRows, len(a.myIssueRows)+1, -1); last > 0 {
+						a.myIssuesTable.Select(last, 0)
+						if issue := a.getIssueFromRowForSection(last, IssuesSectionMy); issue != nil {
+							a.onIssueSelected(*issue)
+						}
 					}
 					a.updateFocus()
 				}
 				return nil
 			case 'g':
 				// Go to top of current section
-				table.Select(1, 0)
-				if issue := a.getIssueFromRowForSection(1, section); issue != nil {
-					a.onIssueSelected(*issue)
-					a.activeIssuesSection = section
+				if first := nextIssueRow(a.rowsForSection(section), 0, 1); first > 0 {
+					table.Select(first, 0)
+					if issue := a.getIssueFromRowForSection(first, section); issue != nil {
+						a.onIssueSelected(*issue)
+						a.activeIssuesSection = section
+					}
 				}
 				return nil
 			case 'G':
 				// Go to bottom of current section
-				var rows []IssueRow
-				switch section {
-				case IssuesSectionMy:
-					rows = a.myIssueRows
-				case IssuesSectionOther:
-					rows = a.otherIssueRows
-				}
-				if len(rows) > 0 {
-					lastRow := len(rows)
-					table.Select(lastRow, 0)
-					if issue := a.getIssueFromRowForSection(lastRow, section); issue != nil {
+				rows := a.rowsForSection(section)
+				if last := nextIssueRow(rows, len(rows)+1, -1); last > 0 {
+					table.Select(last, 0)
+					if issue := a.getIssueFromRowForSection(last, section); issue != nil {
 						a.onIssueSelected(*issue)
 						a.activeIssuesSection = section
 					}
@@ -347,37 +344,40 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			return nil
 		case tcell.KeyDown:
 			row, _ := table.GetSelection()
-			if row < table.GetRowCount()-1 {
-				table.Select(row+1, 0)
-				if issue := a.getIssueFromRowForSection(row+1, section); issue != nil {
+			if next := nextIssueRow(a.rowsForSection(section), row, 1); next > 0 {
+				table.Select(next, 0)
+				if issue := a.getIssueFromRowForSection(next, section); issue != nil {
 					a.onIssueSelected(*issue)
 					a.activeIssuesSection = section
 				}
 			} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
-				// At bottom - try to move to next section
+				// At bottom - move to the Other Issues table
 				a.activeIssuesSection = IssuesSectionOther
-				a.otherIssuesTable.Select(1, 0)
-				if issue := a.getIssueFromRowForSection(1, IssuesSectionOther); issue != nil {
-					a.onIssueSelected(*issue)
+				if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
+					a.otherIssuesTable.Select(first, 0)
+					if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
+						a.onIssueSelected(*issue)
+					}
 				}
 				a.updateFocus()
 			}
 			return nil
 		case tcell.KeyUp:
 			row, _ := table.GetSelection()
-			if row > 1 {
-				table.Select(row-1, 0)
-				if issue := a.getIssueFromRowForSection(row-1, section); issue != nil {
+			if previous := nextIssueRow(a.rowsForSection(section), row, -1); previous > 0 {
+				table.Select(previous, 0)
+				if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
 					a.onIssueSelected(*issue)
 					a.activeIssuesSection = section
 				}
 			} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
-				// At top - try to move to previous section
+				// At top - move to the My Issues table
 				a.activeIssuesSection = IssuesSectionMy
-				lastRow := len(a.myIssueRows)
-				a.myIssuesTable.Select(lastRow, 0)
-				if issue := a.getIssueFromRowForSection(lastRow, IssuesSectionMy); issue != nil {
-					a.onIssueSelected(*issue)
+				if last := nextIssueRow(a.myIssueRows, len(a.myIssueRows)+1, -1); last > 0 {
+					a.myIssuesTable.Select(last, 0)
+					if issue := a.getIssueFromRowForSection(last, IssuesSectionMy); issue != nil {
+						a.onIssueSelected(*issue)
+					}
 				}
 				a.updateFocus()
 			}
@@ -385,6 +385,28 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 		}
 		return event
 	})
+}
+
+// rowsForSection returns the row model for the specified section.
+func (a *App) rowsForSection(section IssuesSection) []IssueRow {
+	switch section {
+	case IssuesSectionMy:
+		return a.myIssueRows
+	case IssuesSectionOther:
+		return a.otherIssueRows
+	}
+	return nil
+}
+
+// nextIssueRow returns the next table row holding an issue in the given
+// direction, skipping status group headers. Returns 0 when none remains.
+func nextIssueRow(rows []IssueRow, from int, delta int) int {
+	for row := from + delta; row >= 1 && row <= len(rows); row += delta {
+		if !rows[row-1].IsHeader {
+			return row
+		}
+	}
+	return 0
 }
 
 // getIssueFromRowForSection returns the issue for a given table row in the specified section.
@@ -423,6 +445,21 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 	// Add issue rows using the hierarchical structure
 	for i, issueRow := range rows {
 		row := i + 1
+
+		if issueRow.IsHeader {
+			for column := 0; column < 7; column++ {
+				table.SetCell(row, column, tview.NewTableCell("").SetSelectable(false))
+			}
+			icon, iconColor := formatStateIcon(issueRow.HeaderText, theme)
+			table.SetCell(row, 2, tview.NewTableCell(icon).
+				SetTextColor(iconColor).
+				SetSelectable(false))
+			table.SetCell(row, 3, tview.NewTableCell(fmt.Sprintf("%s (%d)", issueRow.HeaderText, issueRow.HeaderCount)).
+				SetTextColor(theme.HeaderText).
+				SetAttributes(tcell.AttrBold).
+				SetSelectable(false))
+			continue
+		}
 
 		issue, ok := idToIssue[issueRow.IssueID]
 		if !ok || issue == nil {
@@ -496,9 +533,9 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			SetAlign(tview.AlignLeft))
 	}
 
-	// Select the specified issue or first row
+	// Select the specified issue or first issue row (skipping group headers)
 	if len(rows) > 0 {
-		selectedRow := 1 // Default to first issue (row 1, row 0 is header)
+		selectedRow := nextIssueRow(rows, 0, 1)
 		if selectedIssueID != "" {
 			// Find the row with matching issue ID
 			for i, row := range rows {
@@ -507,6 +544,9 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 					break
 				}
 			}
+		}
+		if selectedRow < 1 {
+			selectedRow = 1
 		}
 		table.Select(selectedRow, 0)
 	} else {

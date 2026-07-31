@@ -25,6 +25,7 @@ const (
 	SortByUpdatedAt SortField = "updatedAt"
 	SortByCreatedAt SortField = "createdAt"
 	SortByPriority  SortField = "priority"
+	SortByStatus    SortField = "status"
 )
 
 // IssueFilters contains structured filters applied in addition to navigation.
@@ -1711,9 +1712,7 @@ func (a *App) updateIssuesColumnLayout() {
 func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 	a.issuesMu.Lock()
 	a.issues = issues
-	if a.sortField == SortByPriority {
-		sortIssuesByPriority(a.issues)
-	}
+	a.sortIssuesLocally()
 
 	// Determine target issue ID
 	var targetIssueID string
@@ -1749,9 +1748,13 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	}
 	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
 
-	// Build hierarchical tree rows for each section.
-	a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
-	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
+	// Build hierarchical tree rows for each section, grouped when enabled.
+	buildRows := BuildIssueRows
+	if a.config.GroupByStatus {
+		buildRows = BuildGroupedIssueRows
+	}
+	a.myIssueRows, a.myIDToIssue = buildRows(myIssues, a.expandedState)
+	a.otherIssueRows, a.otherIDToIssue = buildRows(otherIssues, a.expandedState)
 
 	// Legacy: keep old fields for backward compatibility during migration.
 	a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
@@ -1831,9 +1834,7 @@ func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
 		existing[issue.ID] = true
 	}
 
-	if a.sortField == SortByPriority {
-		sortIssuesByPriority(a.issues)
-	}
+	a.sortIssuesLocally()
 
 	targetIssueID := ""
 	if a.selectedIssue != nil {
@@ -1851,6 +1852,42 @@ func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
 	a.issuesMu.Unlock()
 	a.updateDetailsView()
 	a.updateStatusBar()
+}
+
+// sortIssuesLocally applies sort orders the Linear API cannot provide.
+// Callers must hold issuesMu.
+func (a *App) sortIssuesLocally() {
+	switch a.sortField {
+	case SortByPriority:
+		sortIssuesByPriority(a.issues)
+	case SortByStatus:
+		sortIssuesByStatus(a.issues)
+	}
+}
+
+// toggleGroupByStatus switches the issues list between a flat list and
+// Linear-style status groups, keeping the current selection.
+func (a *App) toggleGroupByStatus() {
+	a.config.GroupByStatus = !a.config.GroupByStatus
+
+	a.issuesMu.RLock()
+	targetIssueID := ""
+	if a.selectedIssue != nil {
+		targetIssueID = a.selectedIssue.ID
+	}
+	a.issuesMu.RUnlock()
+
+	selectedIssue := a.rebuildIssuesTables(targetIssueID)
+	a.issuesMu.Lock()
+	a.selectedIssue = selectedIssue
+	a.issuesMu.Unlock()
+	a.updateDetailsView()
+
+	if a.config.GroupByStatus {
+		a.flashStatus("Grouped by status")
+	} else {
+		a.flashStatus("Grouping off")
+	}
 }
 
 // sortIssuesByPriority sorts issues by priority using Linear's priority semantics.

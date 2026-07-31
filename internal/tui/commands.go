@@ -280,6 +280,22 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:       "sort_status",
+			Title:    "Sort by status",
+			Keywords: []string{"sort", "status", "state"},
+			Run: func(a *App) {
+				a.setSortField(SortByStatus)
+			},
+		},
+		{
+			ID:       "group_by_status",
+			Title:    "Toggle group by status",
+			Keywords: []string{"group", "grouping", "status", "state"},
+			Run: func(a *App) {
+				a.toggleGroupByStatus()
+			},
+		},
+		{
 			ID:       "sort_priority",
 			Title:    "Sort by priority",
 			Keywords: []string{"sort", "priority", "urgent"},
