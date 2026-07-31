@@ -157,6 +157,7 @@ type App struct {
 	contentFlex            *tview.Flex
 	navigationHidden       bool
 	detailsHidden          bool
+	layoutMode             layoutMode
 	navigationTree         *tview.TreeView
 	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
 	myIssuesTable          *tview.Table
@@ -890,6 +891,13 @@ func (a *App) buildLayout() {
 	a.confirmationModal = NewConfirmationModal(a)
 	a.agentRunner = agents.NewRunner()
 
+	// Reflow panes when the terminal width crosses a breakpoint.
+	a.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		width, _ := screen.Size()
+		a.watchLayoutWidth(width)
+		return false
+	})
+
 	// Add main layout to pages
 	a.pages.AddPage("main", a.mainLayout, true, true)
 	a.pages.AddPage("palette", a.paletteModal, true, false)
@@ -1267,6 +1275,10 @@ func (a *App) updateFocus() {
 	if (a.focusedPane == FocusNavigation && a.navigationHidden) ||
 		(a.focusedPane == FocusDetails && a.detailsHidden) {
 		a.focusedPane = FocusIssues
+	}
+	// In responsive modes the focused pane decides what is visible.
+	if a.layoutMode != layoutWide {
+		a.rebuildContentLayout()
 	}
 	switch a.focusedPane {
 	case FocusNavigation:
