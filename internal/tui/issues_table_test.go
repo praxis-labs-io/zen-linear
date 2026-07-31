@@ -42,7 +42,7 @@ func TestRenderIssueRow(t *testing.T) {
 			},
 			wantID:       "LIN-1",
 			wantState:    "○",
-			wantPriority: "▄",
+			wantPriority: "=",
 			wantAssignee: "John Doe",
 			wantLabels:   "Bug, UI",
 		},
@@ -57,7 +57,7 @@ func TestRenderIssueRow(t *testing.T) {
 				Priority:   1, // Urgent priority
 			},
 			wantID:       "LIN-2",
-			wantState:    "◐",
+			wantState:    "◉",
 			wantPriority: "▲",
 			wantAssignee: "-",
 			wantLabels:   "-",
