@@ -220,6 +220,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 				} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
 					// At bottom of this section - move to the Other Issues table
 					a.activeIssuesSection = IssuesSectionOther
+					a.updateIssuesColumnLayout()
 					if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
 						a.otherIssuesTable.Select(first, 0)
 						if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
@@ -240,6 +241,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 				} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
 					// At top of this section - move to the My Issues table
 					a.activeIssuesSection = IssuesSectionMy
+					a.updateIssuesColumnLayout()
 					if last := nextIssueRow(a.myIssueRows, len(a.myIssueRows)+1, -1); last > 0 {
 						a.myIssuesTable.Select(last, 0)
 						if issue := a.getIssueFromRowForSection(last, IssuesSectionMy); issue != nil {
@@ -353,6 +355,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
 				// At bottom - move to the Other Issues table
 				a.activeIssuesSection = IssuesSectionOther
+				a.updateIssuesColumnLayout()
 				if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
 					a.otherIssuesTable.Select(first, 0)
 					if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
@@ -373,6 +376,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
 				// At top - move to the My Issues table
 				a.activeIssuesSection = IssuesSectionMy
+				a.updateIssuesColumnLayout()
 				if last := nextIssueRow(a.myIssueRows, len(a.myIssueRows)+1, -1); last > 0 {
 					a.myIssuesTable.Select(last, 0)
 					if issue := a.getIssueFromRowForSection(last, IssuesSectionMy); issue != nil {
