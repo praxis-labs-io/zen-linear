@@ -800,10 +800,9 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "expand_all",
-			Title:        "Expand all sub-issues",
-			Keywords:     []string{"expand", "all", "open"},
-			ShortcutRune: ']',
+			ID:       "expand_all",
+			Title:    "Expand all sub-issues",
+			Keywords: []string{"expand", "all", "open"},
 			Run: func(a *App) {
 				a.issuesMu.RLock()
 				issues := a.issues
@@ -853,10 +852,9 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "collapse_all",
-			Title:        "Collapse all sub-issues",
-			Keywords:     []string{"collapse", "all", "close"},
-			ShortcutRune: '[',
+			ID:       "collapse_all",
+			Title:    "Collapse all sub-issues",
+			Keywords: []string{"collapse", "all", "close"},
 			Run: func(a *App) {
 				CollapseAll(a.expandedState)
 				// Rebuild rows for both sections
