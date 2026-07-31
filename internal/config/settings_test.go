@@ -188,6 +188,20 @@ func TestConfigFromSettingsValidation(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid group_by",
+			mutate: func(settings Settings) Settings {
+				settings.GroupBy = "labels"
+				return settings
+			},
+		},
+		{
+			name: "invalid subgroup_by",
+			mutate: func(settings Settings) Settings {
+				settings.SubgroupBy = "rainbow"
+				return settings
+			},
+		},
+		{
 			name: "invalid agent sandbox",
 			mutate: func(settings Settings) Settings {
 				settings.AgentSandbox = "maybe"

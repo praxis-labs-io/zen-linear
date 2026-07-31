@@ -82,8 +82,12 @@ type Config struct {
 	// Density controls the UI spacing density.
 	Density string
 
-	// GroupByStatus groups the issues list by workflow state.
-	GroupByStatus bool
+	// GroupBy groups the issues list along a dimension
+	// (status, priority, assignee, cycle; empty for a flat list).
+	GroupBy string
+
+	// SubgroupBy adds a second grouping level beneath GroupBy groups.
+	SubgroupBy string
 
 	// AgentProvider selects the agent CLI provider (cursor or claude).
 	AgentProvider string

@@ -9,14 +9,16 @@ import (
 
 // IssueRow represents a single row in the issues table with hierarchy info.
 type IssueRow struct {
-	IssueID     string // Reference to the issue
-	Level       int    // Nesting level (0 = top-level, 1 = child, etc.)
-	IsParent    bool   // True if this issue has children
-	HasChildren bool   // True if this issue has children (same as IsParent for now)
-	IsExpanded  bool   // True if children are shown (only meaningful when HasChildren is true)
-	IsHeader    bool   // True for a status group header row (no issue)
-	HeaderText  string // Workflow state name for header rows
-	HeaderCount int    // Number of top-level issues in the group
+	IssueID         string // Reference to the issue
+	Level           int    // Nesting level (0 = top-level, 1 = child, etc.)
+	IsParent        bool   // True if this issue has children
+	HasChildren     bool   // True if this issue has children (same as IsParent for now)
+	IsExpanded      bool   // True if children are shown (only meaningful when HasChildren is true)
+	IsHeader        bool   // True for a group header row (no issue)
+	HeaderText      string // Group label for header rows
+	HeaderCount     int    // Number of top-level issues in the group
+	HeaderDimension string // Grouping dimension the header belongs to
+	HeaderLevel     int    // 0 for group headers, 1 for subgroup headers
 }
 
 // statusRank orders workflow states by lifecycle category the way Linear's
@@ -63,37 +65,110 @@ func BuildIssueRows(issues []linearapi.Issue, expanded map[string]bool) ([]Issue
 	return rows, idToIssue
 }
 
-// BuildGroupedIssueRows constructs rows grouped by workflow state with a
-// header row per group, like Linear's grouped list view. Hierarchy behaves as
-// in BuildIssueRows; a parent's subtree stays under the parent's group.
-func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool) ([]IssueRow, map[string]*linearapi.Issue) {
-	idToIssue, topLevel, childrenByParent := indexIssues(issues)
+// Grouping dimensions supported by the grouped list view.
+const (
+	GroupByNone     = ""
+	GroupByStatus   = "status"
+	GroupByPriority = "priority"
+	GroupByAssignee = "assignee"
+	GroupByCycle    = "cycle"
+)
 
-	groupsByState := make(map[string][]*linearapi.Issue)
-	var stateOrder []string
-	for _, issue := range topLevel {
-		if _, seen := groupsByState[issue.State]; !seen {
-			stateOrder = append(stateOrder, issue.State)
+// groupKeyFor returns the group label and ordering rank of an issue along a
+// grouping dimension. Groups sort by rank, then label.
+func groupKeyFor(issue *linearapi.Issue, dimension string) (string, int) {
+	switch dimension {
+	case GroupByPriority:
+		switch issue.Priority {
+		case 1:
+			return "Urgent", 1
+		case 2:
+			return "High", 2
+		case 3:
+			return "Normal", 3
+		case 4:
+			return "Low", 4
+		default:
+			return "No priority", 5
 		}
-		groupsByState[issue.State] = append(groupsByState[issue.State], issue)
+	case GroupByAssignee:
+		if issue.Assignee == "" {
+			return "Unassigned", 1
+		}
+		return issue.Assignee, 0
+	case GroupByCycle:
+		if issue.Cycle == nil {
+			return "No cycle", 1_000_000
+		}
+		// Recent cycles first.
+		return issue.Cycle.DisplayName(), -issue.Cycle.Number
+	default: // GroupByStatus
+		return issue.State, statusRank(issue.State)
 	}
-	sort.SliceStable(stateOrder, func(i, j int) bool {
-		ri, rj := statusRank(stateOrder[i]), statusRank(stateOrder[j])
-		if ri != rj {
-			return ri < rj
+}
+
+// groupTopLevel buckets top-level issues along a dimension, returning group
+// labels in display order.
+func groupTopLevel(topLevel []*linearapi.Issue, dimension string) ([]string, map[string][]*linearapi.Issue) {
+	groups := make(map[string][]*linearapi.Issue)
+	ranks := make(map[string]int)
+	var order []string
+	for _, issue := range topLevel {
+		label, rank := groupKeyFor(issue, dimension)
+		if _, seen := groups[label]; !seen {
+			order = append(order, label)
+			ranks[label] = rank
 		}
-		return stateOrder[i] < stateOrder[j]
+		groups[label] = append(groups[label], issue)
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		if ranks[order[i]] != ranks[order[j]] {
+			return ranks[order[i]] < ranks[order[j]]
+		}
+		return order[i] < order[j]
 	})
+	return order, groups
+}
+
+// BuildGroupedIssueRows constructs rows grouped along a dimension with a
+// header row per group — like Linear's grouped list view — and optionally
+// sub-grouped along a second dimension beneath each header. Hierarchy behaves
+// as in BuildIssueRows; a parent's subtree stays under the parent's group.
+func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, groupBy string, subgroupBy string) ([]IssueRow, map[string]*linearapi.Issue) {
+	idToIssue, topLevel, childrenByParent := indexIssues(issues)
+	if groupBy == GroupByNone {
+		return appendIssueRows(nil, topLevel, childrenByParent, expanded), idToIssue
+	}
+	if subgroupBy == groupBy {
+		subgroupBy = GroupByNone
+	}
 
 	var rows []IssueRow
-	for _, state := range stateOrder {
-		group := groupsByState[state]
+	order, groups := groupTopLevel(topLevel, groupBy)
+	for _, label := range order {
+		group := groups[label]
 		rows = append(rows, IssueRow{
-			IsHeader:    true,
-			HeaderText:  state,
-			HeaderCount: len(group),
+			IsHeader:        true,
+			HeaderText:      label,
+			HeaderCount:     len(group),
+			HeaderDimension: groupBy,
 		})
-		rows = appendIssueRows(rows, group, childrenByParent, expanded)
+		if subgroupBy == GroupByNone {
+			rows = appendIssueRows(rows, group, childrenByParent, expanded)
+			continue
+		}
+		subOrder, subGroups := groupTopLevel(group, subgroupBy)
+		for _, subLabel := range subOrder {
+			subGroup := subGroups[subLabel]
+			rows = append(rows, IssueRow{
+				IsHeader:        true,
+				HeaderText:      subLabel,
+				HeaderCount:     len(subGroup),
+				HeaderDimension: subgroupBy,
+				HeaderLevel:     1,
+			})
+			rows = appendIssueRows(rows, subGroup, childrenByParent, expanded)
+		}
 	}
 	return rows, idToIssue
 }

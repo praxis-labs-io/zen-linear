@@ -37,6 +37,30 @@ func formatPriority(priority int, theme Theme) (string, tcell.Color) {
 	}
 }
 
+// formatGroupHeaderIcon returns the icon for a group header row based on its
+// grouping dimension. Assignee and cycle groups have no icon.
+func formatGroupHeaderIcon(row IssueRow, theme Theme) (string, tcell.Color) {
+	switch row.HeaderDimension {
+	case GroupByPriority:
+		switch row.HeaderText {
+		case "Urgent":
+			return formatPriority(1, theme)
+		case "High":
+			return formatPriority(2, theme)
+		case "Normal":
+			return formatPriority(3, theme)
+		case "Low":
+			return formatPriority(4, theme)
+		default:
+			return formatPriority(0, theme)
+		}
+	case GroupByAssignee, GroupByCycle:
+		return "", theme.SecondaryText
+	default: // status
+		return formatStateIcon(row.HeaderText, theme)
+	}
+}
+
 // formatStateIcon renders a workflow state as a colored icon from a single
 // circle family so every state occupies one cell at the same visual weight.
 func formatStateIcon(state string, theme Theme) (string, tcell.Color) {
@@ -454,11 +478,14 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			for column := 0; column < 7; column++ {
 				table.SetCell(row, column, tview.NewTableCell("").SetSelectable(false))
 			}
-			icon, iconColor := formatStateIcon(issueRow.HeaderText, theme)
-			table.SetCell(row, 2, tview.NewTableCell(icon).
-				SetTextColor(iconColor).
-				SetSelectable(false))
-			table.SetCell(row, 3, tview.NewTableCell(fmt.Sprintf("%s (%d)", issueRow.HeaderText, issueRow.HeaderCount)).
+			icon, iconColor := formatGroupHeaderIcon(issueRow, theme)
+			if icon != "" {
+				table.SetCell(row, 2, tview.NewTableCell(icon).
+					SetTextColor(iconColor).
+					SetSelectable(false))
+			}
+			indent := strings.Repeat("  ", issueRow.HeaderLevel)
+			table.SetCell(row, 3, tview.NewTableCell(fmt.Sprintf("%s%s (%d)", indent, issueRow.HeaderText, issueRow.HeaderCount)).
 				SetTextColor(theme.Foreground).
 				SetAttributes(tcell.AttrBold).
 				SetSelectable(false))
