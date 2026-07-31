@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -42,6 +43,12 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border)
 	tree.SetBackgroundColor(a.theme.Background)
+	tree.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		// Re-fit node labels on every draw so they track pane resizes and
+		// lazily added nodes.
+		a.padNavigationTree(width - 2)
+		return x + 1, y + 1, width - 2, height - 2
+	})
 	tree.SetRoot(root)
 	tree.SetCurrentNode(root)
 
