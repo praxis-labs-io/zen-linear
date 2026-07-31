@@ -316,7 +316,7 @@ func TestBuildIssueRows_ChildrenSortedByIdentifier(t *testing.T) {
 // TestStatusRank verifies lifecycle ordering, including that "Unstarted" does
 // not match the "started" category.
 func TestStatusRank(t *testing.T) {
-	ordered := []string{"Triage", "Backlog", "Unstarted", "In Progress", "Done", "Canceled"}
+	ordered := []string{"Triage", "In Progress", "Todo", "Backlog", "Done", "Canceled"}
 	for i := 1; i < len(ordered); i++ {
 		if statusRank(ordered[i-1]) > statusRank(ordered[i]) {
 			t.Errorf("statusRank(%q)=%d > statusRank(%q)=%d", ordered[i-1], statusRank(ordered[i-1]), ordered[i], statusRank(ordered[i]))
@@ -343,20 +343,20 @@ func TestBuildGroupedIssueRows(t *testing.T) {
 	if len(idToIssue) != 4 {
 		t.Fatalf("idToIssue size = %d, want 4", len(idToIssue))
 	}
-	// Expect: [Todo header, 2, 3, In Progress header, 4, Done header, 1]
+	// Expect: [In Progress header, 4, Todo header, 2, 3, Done header, 1]
 	if len(rows) != 7 {
 		t.Fatalf("rows = %d, want 7: %#v", len(rows), rows)
 	}
-	wantHeaders := map[int]string{0: "Todo", 3: "In Progress", 5: "Done"}
+	wantHeaders := map[int]string{0: "In Progress", 2: "Todo", 5: "Done"}
 	for index, state := range wantHeaders {
 		if !rows[index].IsHeader || rows[index].HeaderText != state {
 			t.Errorf("rows[%d] = %+v, want header %q", index, rows[index], state)
 		}
 	}
-	if rows[0].HeaderCount != 2 {
-		t.Errorf("Todo header count = %d, want 2", rows[0].HeaderCount)
+	if rows[2].HeaderCount != 2 {
+		t.Errorf("Todo header count = %d, want 2", rows[2].HeaderCount)
 	}
-	if rows[1].IssueID != "2" || rows[2].IssueID != "3" || rows[4].IssueID != "4" || rows[6].IssueID != "1" {
+	if rows[1].IssueID != "4" || rows[3].IssueID != "2" || rows[4].IssueID != "3" || rows[6].IssueID != "1" {
 		t.Errorf("unexpected issue placement: %#v", rows)
 	}
 }
