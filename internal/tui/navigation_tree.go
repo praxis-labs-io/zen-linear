@@ -20,6 +20,11 @@ type NavigationNode struct {
 	CycleID   string
 	CycleName string
 	IssueID   string
+	// CustomViewID makes the node show a Linear custom view's issues.
+	CustomViewID string
+	// StateType filters by workflow state type (e.g. triage), scoped to
+	// TeamID when set.
+	StateType string
 }
 
 // buildNavigationTree creates and configures the navigation tree widget.
