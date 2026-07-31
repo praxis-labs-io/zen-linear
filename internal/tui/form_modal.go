@@ -433,9 +433,15 @@ func (fm *FormModal) contentHeight(screenH int) int {
 	return total
 }
 
+// screenSize returns the pages' current width and height.
+func (fm *FormModal) screenSize() (int, int) {
+	_, _, w, h := fm.app.pages.GetRect()
+	return w, h
+}
+
 // ensureVisible scrolls the row window so the given row is fully on screen.
 func (fm *FormModal) ensureVisible(rowIdx int) {
-	_, _, _, screenH := fm.app.pages.GetRect()
+	_, screenH := fm.screenSize()
 	heights := fm.rowHeights(screenH)
 	avail := fm.contentHeight(screenH) - fm.chromeHeight()
 
@@ -471,11 +477,11 @@ func (fm *FormModal) applyRowWindow(heights []int, avail int) {
 // layout sizes the modal for the current screen and rebuilds the centering
 // wrappers. Pointers stay stable so pages keep referencing the same root.
 func (fm *FormModal) layout() {
-	_, _, screenW, screenH := fm.app.pages.GetRect()
+	screenW, screenH := fm.screenSize()
 
 	width := screenW - formModalScreenWMargin
-	if max := fm.effectiveMaxWidth(); width > max || width <= 0 {
-		width = max
+	if limit := fm.effectiveMaxWidth(); width > limit || width <= 0 {
+		width = limit
 	}
 	height := fm.contentHeight(screenH)
 
