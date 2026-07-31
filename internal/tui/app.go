@@ -1642,6 +1642,11 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		// Apply team/project/state filter based on navigation selection
 		if a.selectedNavigation != nil {
 			switch {
+			case a.selectedNavigation.CustomViewID != "":
+				params.CustomViewID = a.selectedNavigation.CustomViewID
+			case a.selectedNavigation.StateType != "":
+				params.TeamID = a.selectedNavigation.TeamID
+				params.StateType = a.selectedNavigation.StateType
 			case a.selectedNavigation.IsStatus:
 				params.TeamID = a.selectedNavigation.TeamID
 				params.StateID = a.selectedNavigation.StateID

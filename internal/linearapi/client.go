@@ -198,6 +198,14 @@ type Favorite struct {
 
 	TeamID   string
 	TeamName string
+
+	Title string // Linear's display label for the favorite
+
+	CustomViewID   string
+	CustomViewName string
+
+	PredefinedViewType   string // e.g. "triage", "allIssues"
+	PredefinedViewTeamID string
 }
 
 // Project represents a Linear project.
@@ -420,6 +428,12 @@ type FetchIssuesParams struct {
 	DueDate            DateFilter
 	Estimate           NumberFilter
 	Search             string
+	// CustomViewID fetches the issues of a Linear custom view instead of a
+	// filtered query. Other filters are ignored when set.
+	CustomViewID string
+	// StateType filters by workflow state type (triage, backlog, unstarted,
+	// started, completed, canceled).
+	StateType string
 	// OrderBy specifies the sort order. Valid API values are "updatedAt" and "createdAt".
 	// "priority" is also supported and will be sorted client-side after fetching.
 	OrderBy string
@@ -731,10 +745,19 @@ func (c *Client) ListFavorites(ctx context.Context) ([]Favorite, error) {
 		var query struct {
 			Favorites struct {
 				Nodes []struct {
-					ID        graphql.String
-					Type      graphql.String
-					SortOrder graphql.Float
-					Issue     *struct {
+					ID                 graphql.String
+					Type               graphql.String
+					SortOrder          graphql.Float
+					Title              graphql.String
+					PredefinedViewType *graphql.String
+					PredefinedViewTeam *struct {
+						ID graphql.String
+					}
+					CustomView *struct {
+						ID   graphql.String
+						Name graphql.String
+					}
+					Issue *struct {
 						ID         graphql.String
 						Identifier graphql.String
 						Title      graphql.String
@@ -786,6 +809,17 @@ func (c *Client) ListFavorites(ctx context.Context) ([]Favorite, error) {
 				ID:        string(node.ID),
 				Type:      string(node.Type),
 				SortOrder: float64(node.SortOrder),
+				Title:     string(node.Title),
+			}
+			if node.PredefinedViewType != nil {
+				favorite.PredefinedViewType = string(*node.PredefinedViewType)
+			}
+			if node.PredefinedViewTeam != nil {
+				favorite.PredefinedViewTeamID = string(node.PredefinedViewTeam.ID)
+			}
+			if node.CustomView != nil {
+				favorite.CustomViewID = string(node.CustomView.ID)
+				favorite.CustomViewName = string(node.CustomView.Name)
 			}
 			if node.Issue != nil {
 				favorite.IssueID = string(node.Issue.ID)
@@ -1144,6 +1178,8 @@ func buildBaseIssueFilter(params FetchIssuesParams) IssueFilter {
 	}
 	if params.StateID != "" {
 		filter["state"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.StateID}}
+	} else if params.StateType != "" {
+		filter["state"] = map[string]interface{}{"type": map[string]interface{}{"eq": params.StateType}}
 	}
 	if params.CycleID != "" {
 		filter["cycle"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.CycleID}}
@@ -1281,6 +1317,10 @@ func buildSearchOrFilters(term string) []map[string]interface{} {
 // FetchIssuesPage fetches a single page of issues with optional filtering and sorting.
 // It returns pagination metadata to allow callers to continue fetching.
 func (c *Client) FetchIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
+	if params.CustomViewID != "" {
+		return c.customViewIssuesPage(ctx, params, after)
+	}
+
 	searchTerm := strings.TrimSpace(params.Search)
 	if searchTerm != "" {
 		params.Search = searchTerm
@@ -1512,6 +1552,135 @@ func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesPa
 	return issues, nil
 }
 
+// customViewIssuesPage fetches a single page of a Linear custom view's issues.
+func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
+	first := params.First
+	if first <= 0 {
+		first = 50
+	}
+
+	var afterCursor *graphql.String
+	if after != nil {
+		cursor := graphql.String(*after)
+		afterCursor = &cursor
+	}
+
+	var query struct {
+		CustomView struct {
+			Issues struct {
+				Nodes    []issueQueryNode
+				PageInfo struct {
+					HasNextPage graphql.Boolean
+					EndCursor   graphql.String
+				}
+			} `graphql:"issues(first: $first, after: $after)"`
+		} `graphql:"customView(id: $id)"`
+	}
+
+	variables := map[string]interface{}{
+		"id":    graphql.String(params.CustomViewID),
+		"first": graphql.Int(first),
+		"after": afterCursor,
+	}
+
+	if err := c.client.Query(ctx, &query, variables); err != nil {
+		logger.ErrorWithErr(err, "linearapi.client: customViewIssuesPage failed view_id=%s", params.CustomViewID)
+		return IssuePage{}, fmt.Errorf("fetch custom view issues: %w", err)
+	}
+
+	issues := make([]Issue, 0, len(query.CustomView.Issues.Nodes))
+	for _, node := range query.CustomView.Issues.Nodes {
+		issues = append(issues, c.parseIssueNode(node))
+	}
+
+	hasNext := bool(query.CustomView.Issues.PageInfo.HasNextPage)
+	var endCursor *string
+	if hasNext {
+		cursor := string(query.CustomView.Issues.PageInfo.EndCursor)
+		endCursor = &cursor
+	}
+
+	return IssuePage{
+		Issues:    issues,
+		HasNext:   hasNext,
+		EndCursor: endCursor,
+	}, nil
+}
+
+// issueQueryNode is the GraphQL selection for a single issue, shared by the
+// filtered, search, and custom-view issue queries.
+type issueQueryNode struct {
+	ID         graphql.String
+	Identifier graphql.String
+	Title      graphql.String
+	State      struct {
+		ID   graphql.String
+		Name graphql.String
+	}
+	Assignee *struct {
+		ID   graphql.String
+		Name graphql.String
+	}
+	Priority    graphql.Float
+	UpdatedAt   graphql.String
+	CreatedAt   graphql.String
+	Description *graphql.String
+	Team        struct {
+		ID graphql.String
+	}
+	Project *struct {
+		ID graphql.String
+	}
+	Cycle *struct {
+		ID         graphql.String
+		Name       *graphql.String
+		Number     graphql.Float
+		StartsAt   graphql.String
+		EndsAt     graphql.String
+		IsActive   graphql.Boolean
+		IsFuture   graphql.Boolean
+		IsPast     graphql.Boolean
+		IsNext     graphql.Boolean
+		IsPrevious graphql.Boolean
+	}
+	DueDate          *graphql.String
+	Estimate         *graphql.Float
+	ProjectMilestone *struct {
+		ID         graphql.String
+		Name       graphql.String
+		TargetDate *graphql.String
+		Status     graphql.String
+		Project    struct {
+			ID graphql.String
+		}
+	}
+	Labels struct {
+		Nodes []struct {
+			ID    graphql.String
+			Name  graphql.String
+			Color graphql.String
+		}
+	}
+	URL        graphql.String
+	ArchivedAt *graphql.String
+	Parent     *struct {
+		ID         graphql.String
+		Identifier graphql.String
+		Title      graphql.String
+	}
+	Children struct {
+		Nodes []struct {
+			ID         graphql.String
+			Identifier graphql.String
+			Title      graphql.String
+			State      struct {
+				ID   graphql.String
+				Name graphql.String
+			}
+		}
+	}
+}
+
 // fetchIssuesWithFilterPage fetches a single page of issues using the standard issues query.
 //
 //nolint:dupl // GraphQL library requires inline struct definitions; duplication with searchIssuesPage is unavoidable.
@@ -1539,77 +1708,7 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 
 	var query struct {
 		Issues struct {
-			Nodes []struct {
-				ID         graphql.String
-				Identifier graphql.String
-				Title      graphql.String
-				State      struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Assignee *struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Priority    graphql.Float
-				UpdatedAt   graphql.String
-				CreatedAt   graphql.String
-				Description *graphql.String
-				Team        struct {
-					ID graphql.String
-				}
-				Project *struct {
-					ID graphql.String
-				}
-				Cycle *struct {
-					ID         graphql.String
-					Name       *graphql.String
-					Number     graphql.Float
-					StartsAt   graphql.String
-					EndsAt     graphql.String
-					IsActive   graphql.Boolean
-					IsFuture   graphql.Boolean
-					IsPast     graphql.Boolean
-					IsNext     graphql.Boolean
-					IsPrevious graphql.Boolean
-				}
-				DueDate          *graphql.String
-				Estimate         *graphql.Float
-				ProjectMilestone *struct {
-					ID         graphql.String
-					Name       graphql.String
-					TargetDate *graphql.String
-					Status     graphql.String
-					Project    struct {
-						ID graphql.String
-					}
-				}
-				Labels struct {
-					Nodes []struct {
-						ID    graphql.String
-						Name  graphql.String
-						Color graphql.String
-					}
-				}
-				URL        graphql.String
-				ArchivedAt *graphql.String
-				Parent     *struct {
-					ID         graphql.String
-					Identifier graphql.String
-					Title      graphql.String
-				}
-				Children struct {
-					Nodes []struct {
-						ID         graphql.String
-						Identifier graphql.String
-						Title      graphql.String
-						State      struct {
-							ID   graphql.String
-							Name graphql.String
-						}
-					}
-				}
-			}
+			Nodes    []issueQueryNode
 			PageInfo struct {
 				HasNextPage graphql.Boolean
 				EndCursor   graphql.String
