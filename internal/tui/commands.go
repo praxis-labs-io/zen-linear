@@ -208,6 +208,52 @@ func handleCopyIssueURLCommand(a *App) {
 	a.flashStatus(fmt.Sprintf("Copied issue URL: %s", issue.Identifier))
 }
 
+func handleOpenGitHubCommand(a *App) {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	for _, attachment := range issue.Attachments {
+		if !strings.Contains(strings.ToLower(attachment.SourceType), "github") &&
+			!strings.Contains(attachment.URL, "github.com") {
+			continue
+		}
+		openFn := a.openURLFunc
+		if openFn == nil {
+			openFn = openURL
+		}
+		if err := openFn(attachment.URL); err != nil {
+			a.updateStatusBarWithError(err)
+			return
+		}
+		a.flashStatus(fmt.Sprintf("Opened GitHub: %s", attachment.URL))
+		return
+	}
+	a.flashStatus(fmt.Sprintf("No GitHub link on %s", issue.Identifier))
+}
+
+func handleCopyBranchCommand(a *App) {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	if issue.BranchName == "" {
+		a.flashStatus(fmt.Sprintf("No branch name for %s", issue.Identifier))
+		return
+	}
+	copyFn := a.copyToClipboardFunc
+	if copyFn == nil {
+		copyFn = copyToClipboard
+	}
+	if err := copyFn(issue.BranchName); err != nil {
+		a.updateStatusBarWithError(err)
+		return
+	}
+	a.flashStatus(fmt.Sprintf("Copied branch name: %s", issue.BranchName))
+}
+
 // DefaultCommands returns the default set of commands for the palette.
 func DefaultCommands(app *App) []Command {
 	lookPath := exec.LookPath
@@ -254,6 +300,31 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:           "switch_workspace",
+			Title:        "Switch workspace",
+			Keywords:     []string{"workspace", "switch", "account", "organization"},
+			ShortcutRune: 'W',
+			Run: func(a *App) {
+				a.showWorkspacePicker()
+			},
+		},
+		{
+			ID:       "toggle_navigation_pane",
+			Title:    "Toggle navigation pane",
+			Keywords: []string{"navigation", "sidebar", "pane", "hide", "show", "toggle"},
+			Run: func(a *App) {
+				a.toggleNavigationPane()
+			},
+		},
+		{
+			ID:       "toggle_details_pane",
+			Title:    "Toggle details pane",
+			Keywords: []string{"details", "pane", "hide", "show", "toggle"},
+			Run: func(a *App) {
+				a.toggleDetailsPane()
+			},
+		},
+		{
 			ID:       "edit_prompt_templates",
 			Title:    "Edit agent prompt templates",
 			Keywords: []string{"agent", "prompt", "prompts", "template", "templates"},
@@ -280,6 +351,47 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:       "toggle_expand_all",
+			Title:    "Toggle expand/collapse all sub-issues",
+			Keywords: []string{"toggle", "expand", "collapse", "all", "sub-issues"},
+			Run: func(a *App) {
+				a.issuesMu.RLock()
+				issues := a.issues
+				a.issuesMu.RUnlock()
+				if len(a.expandedState) > 0 {
+					CollapseAll(a.expandedState)
+					a.regroupIssues("Collapsed all sub-issues")
+					return
+				}
+				ExpandAll(a.expandedState, issues)
+				a.regroupIssues("Expanded all sub-issues")
+			},
+		},
+		{
+			ID:       "sort_status",
+			Title:    "Sort by status",
+			Keywords: []string{"sort", "status", "state"},
+			Run: func(a *App) {
+				a.setSortField(SortByStatus)
+			},
+		},
+		{
+			ID:       "group_by",
+			Title:    "Group issues by…",
+			Keywords: []string{"group", "grouping", "status", "priority", "assignee", "cycle"},
+			Run: func(a *App) {
+				a.showGroupByPicker()
+			},
+		},
+		{
+			ID:       "subgroup_by",
+			Title:    "Subgroup issues by…",
+			Keywords: []string{"subgroup", "group", "grouping", "nested"},
+			Run: func(a *App) {
+				a.showSubgroupByPicker()
+			},
+		},
+		{
 			ID:       "sort_priority",
 			Title:    "Sort by priority",
 			Keywords: []string{"sort", "priority", "urgent"},
@@ -301,6 +413,22 @@ func DefaultCommands(app *App) []Command {
 			Keywords:     []string{"copy", "id", "c", "identifier"},
 			ShortcutRune: 'y',
 			Run:          handleCopyIssueIDCommand,
+		},
+		{
+			ID:       "open_github",
+			Title:    "Open GitHub link",
+			Keywords: []string{"open", "github", "pull", "pr"},
+			Run: func(a *App) {
+				handleOpenGitHubCommand(a)
+			},
+		},
+		{
+			ID:       "copy_branch",
+			Title:    "Copy branch name",
+			Keywords: []string{"copy", "branch", "git", "checkout"},
+			Run: func(a *App) {
+				handleCopyBranchCommand(a)
+			},
 		},
 		{
 			ID:           "copy_url",
@@ -824,8 +952,8 @@ func DefaultCommands(app *App) []Command {
 					}
 				}
 
-				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
-				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
+				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
+				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
 			},
 		},
 		{
@@ -877,8 +1005,8 @@ func DefaultCommands(app *App) []Command {
 					}
 				}
 
-				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
-				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
+				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
+				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
 			},
 		},
 		{
@@ -1000,6 +1128,10 @@ func DefaultCommands(app *App) []Command {
 			filtered = append(filtered, command)
 		}
 		commands = filtered
+	}
+
+	if app != nil {
+		applyCommandKeybindings(commands, app.config.Keybindings)
 	}
 	return commands
 }

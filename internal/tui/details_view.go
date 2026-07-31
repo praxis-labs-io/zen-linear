@@ -13,27 +13,30 @@ import (
 // markdownRenderer is a shared glamour renderer for markdown content.
 var markdownRenderer *glamour.TermRenderer
 
-// initMarkdownRenderer initializes the glamour markdown renderer.
-func initMarkdownRenderer() {
-	var err error
-	markdownRenderer, err = glamour.NewTermRenderer(
-		glamour.WithStylePath("dark"),
-		glamour.WithWordWrap(80),
+// initMarkdownRenderer initializes the glamour markdown renderer with colors
+// derived from the theme. Word wrap stays disabled: glamour cannot know the
+// pane width, and pre-wrapped output re-wraps badly inside the text views.
+func initMarkdownRenderer(theme Theme) {
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStyles(themeMarkdownStyle(theme)),
+		glamour.WithWordWrap(0),
 	)
 	if err != nil {
-		// Fallback: create a basic renderer if custom style fails
+		// Fallback: create a basic renderer if the themed style fails
 		markdownRenderer, _ = glamour.NewTermRenderer(
 			glamour.WithAutoStyle(),
-			glamour.WithWordWrap(80),
+			glamour.WithWordWrap(0),
 		)
+		return
 	}
+	markdownRenderer = renderer
 }
 
 // renderMarkdown renders markdown content using glamour.
 // Falls back to plain text if rendering fails.
 func renderMarkdown(content string) string {
 	if markdownRenderer == nil {
-		initMarkdownRenderer()
+		initMarkdownRenderer(LinearTheme)
 	}
 
 	rendered, err := markdownRenderer.Render(content)
@@ -101,25 +104,17 @@ func (a *App) buildDetailsView() *tview.Flex {
 	return a.detailsView
 }
 
-// setDetailsCommentsVisibility rebuilds the details layout to show or hide comments.
+// setDetailsCommentsVisibility records whether the Comments tab exists and
+// re-renders the tabbed details layout.
 func (a *App) setDetailsCommentsVisibility(showComments bool) {
 	if a.detailsView == nil || a.detailsDescriptionView == nil || a.detailsCommentsView == nil {
 		return
 	}
-	if a.detailsCommentsVisible == showComments && a.detailsView.GetItemCount() > 0 {
-		return
-	}
-
-	a.detailsView.Clear().
-		AddItem(a.detailsDescriptionView, 0, 3, true)
-	if showComments {
-		a.detailsView.AddItem(a.detailsCommentsView, 0, 2, false)
-	}
-
 	a.detailsCommentsVisible = showComments
 	if !showComments {
 		a.focusedDetailsView = false
 	}
+	a.updateDetailsLayout()
 }
 
 // updateDetailsView updates the details view with the selected issue.
@@ -188,6 +183,12 @@ func (a *App) updateDetailsView() {
 		labelsText = strings.Join(labelNames, ", ")
 	}
 	headerLines = append(headerLines, fmt.Sprintf("%sLabels:[-]     %s%s[-]", keyColor, valColor, labelsText))
+
+	branchName := issue.BranchName
+	if branchName == "" {
+		branchName = "-"
+	}
+	headerLines = append(headerLines, fmt.Sprintf("%sBranch:[-]     %s%s[-]", keyColor, valColor, branchName))
 
 	// Parent issue (if this is a sub-issue)
 	if issue.Parent != nil {

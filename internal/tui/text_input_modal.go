@@ -24,20 +24,20 @@ func NewTextInputModal(app *App) *TextInputModal {
 		SetFieldBackgroundColor(app.theme.Background).
 		SetFieldTextColor(app.theme.Foreground).
 		SetLabelColor(app.theme.SecondaryText)
-	tm.input.SetBackgroundColor(app.theme.HeaderBg)
+	tm.input.SetBackgroundColor(app.theme.ModalBackground())
 
 	tm.helpView = tview.NewTextView()
 	tm.helpView.SetText("Enter: save | Esc: cancel")
 	tm.helpView.SetTextColor(app.theme.SecondaryText)
-	tm.helpView.SetBackgroundColor(app.theme.HeaderBg)
+	tm.helpView.SetBackgroundColor(app.theme.ModalBackground())
 	tm.helpView.SetTextAlign(tview.AlignCenter)
 
 	content := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(tm.input, 1, 0, true).
 		AddItem(tm.helpView, 1, 0, false)
-	content.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
-	content.SetBackgroundColor(app.theme.HeaderBg).
+	content.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	content.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitleColor(app.theme.Foreground)
