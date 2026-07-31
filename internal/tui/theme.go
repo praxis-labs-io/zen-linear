@@ -108,10 +108,10 @@ var ColorBlindTheme = Theme{
 var RosePineMoonTheme = Theme{
 	Background:    tcell.ColorDefault,               // terminal default (transparent)
 	Foreground:    tcell.NewRGBColor(224, 222, 244), // #E0DEF4 text
-	Border:        tcell.NewRGBColor(68, 65, 90),    // #44415A highlight mid
+	Border:        tcell.NewRGBColor(86, 82, 110),   // #56526E highlight high
 	BorderFocus:   tcell.NewRGBColor(196, 167, 231), // #C4A7E7 iris
 	SelectionText: tcell.NewRGBColor(224, 222, 244), // #E0DEF4 text
-	SelectionBg:   tcell.NewRGBColor(57, 53, 82),    // #393552 overlay
+	SelectionBg:   tcell.NewRGBColor(68, 65, 90),    // #44415A highlight med
 	HeaderBg:      tcell.NewRGBColor(42, 39, 63),    // #2A273F surface
 	HeaderText:    tcell.NewRGBColor(144, 140, 170), // #908CAA subtle
 	SecondaryText: tcell.NewRGBColor(110, 106, 134), // #6E6A86 muted

@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -23,9 +24,8 @@ func (a *App) buildPaletteModal() *tview.Flex {
 	// Create list for filtered commands
 	a.paletteList = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextColor(a.theme.Foreground).
-		SetSelectedBackgroundColor(a.theme.Accent).
-		SetSelectedTextColor(a.theme.SelectionText).
+		SetMainTextStyle(tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.HeaderBg)).
+		SetSelectedStyle(a.selectionStyle().Bold(false)).
 		SetHighlightFullLine(true)
 	a.paletteList.SetBackgroundColor(a.theme.HeaderBg)
 
@@ -119,9 +119,16 @@ func (a *App) updatePaletteList() {
 		a.paletteList.SetCurrentItem(cursor)
 	}
 
-	// Update modal to show all commands without scrolling
-	// Calculate content height: input (1) + help (1) + spacers + list rows
-	contentHeight := len(filtered) + 2 + (2 * a.density.PaletteSpacerLines)
+	// Show all commands when they fit; otherwise cap the modal to the screen
+	// and let the list scroll.
+	listRows := len(filtered)
+	chromeRows := 2 + (2 * a.density.PaletteSpacerLines) + 2 // input + help + spacers + border
+	if _, _, _, pagesHeight := a.pages.GetRect(); pagesHeight > chromeRows+4 {
+		if maxRows := pagesHeight - chromeRows - 2; listRows > maxRows {
+			listRows = maxRows
+		}
+	}
+	contentHeight := listRows + 2 + (2 * a.density.PaletteSpacerLines)
 	if contentHeight < 6 {
 		contentHeight = 6 // Minimum height for usability
 	}
@@ -140,12 +147,12 @@ func (a *App) updatePaletteList() {
 	spacerTop := tview.NewBox().SetBackgroundColor(a.theme.HeaderBg)
 	spacerBottom := tview.NewBox().SetBackgroundColor(a.theme.HeaderBg)
 
-	// Rebuild modalContent with list height set to number of commands (no scrolling)
+	// Rebuild modalContent with the capped list height
 	a.paletteModalContent = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(spacerTop, a.density.PaletteSpacerLines, 0, false).
 		AddItem(a.paletteInput, 1, 0, true).
-		AddItem(a.paletteList, len(filtered), 0, false).
+		AddItem(a.paletteList, listRows, 0, false).
 		AddItem(spacerBottom, a.density.PaletteSpacerLines, 0, false).
 		AddItem(helpText, 1, 0, false)
 	a.paletteModalContent.Box = tview.NewBox().SetBackgroundColor(a.theme.HeaderBg)
