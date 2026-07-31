@@ -844,7 +844,7 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, projects []linearapi.Project, states []linearapi.WorkflowState, cycles []linearapi.Cycle) {
 	if len(cycles) > 0 {
 		sortCyclesForNavigation(cycles)
-		cyclesGroup := tview.NewTreeNode("  Cycles").
+		cyclesGroup := tview.NewTreeNode("Cycles").
 			SetColor(a.theme.SecondaryText).
 			SetSelectable(false).
 			SetReference(&NavigationNode{
@@ -863,7 +863,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 			case cycle.IsPrevious:
 				label += " (previous)"
 			}
-			cycleNode := tview.NewTreeNode("    " + label).
+			cycleNode := tview.NewTreeNode(label).
 				SetColor(a.theme.SecondaryText).
 				SetReference(&NavigationNode{
 					ID:        cycle.ID,
@@ -881,7 +881,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		sort.Slice(states, func(i, j int) bool {
 			return states[i].Position < states[j].Position
 		})
-		statusGroup := tview.NewTreeNode("  Status").
+		statusGroup := tview.NewTreeNode("Status").
 			SetColor(a.theme.SecondaryText).
 			SetSelectable(false).
 			SetReference(&NavigationNode{
@@ -891,7 +891,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 				IsStatus: true,
 			})
 		for _, state := range states {
-			stateNode := tview.NewTreeNode("    " + state.Name).
+			stateNode := tview.NewTreeNode(state.Name).
 				SetColor(a.theme.SecondaryText).
 				SetReference(&NavigationNode{
 					ID:        state.ID,
@@ -906,7 +906,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		teamNode.AddChild(statusGroup)
 	}
 	for _, proj := range projects {
-		projNode := tview.NewTreeNode("  " + proj.Name).
+		projNode := tview.NewTreeNode(proj.Name).
 			SetColor(a.theme.SecondaryText).
 			SetReference(&NavigationNode{
 				ID:        proj.ID,
