@@ -1211,12 +1211,12 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		// { and } cycle the issues tabs, lazygit-style ([ and ] keep their
 		// original expand/collapse-all bindings).
-		if r == '{' || r == '}' {
-			direction := 1
-			if r == '{' {
-				direction = -1
-			}
-			a.cycleIssuesSection(direction)
+		switch r {
+		case a.actionKey("tab_prev", '{'):
+			a.cycleIssuesSection(-1)
+			return nil
+		case a.actionKey("tab_next", '}'):
+			a.cycleIssuesSection(1)
 			return nil
 		}
 		// Handle command shortcuts (plain letters) - skip navigation keys
