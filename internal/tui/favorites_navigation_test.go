@@ -76,7 +76,6 @@ func TestFavoriteNavigationNodesSkipsUnsupportedTypes(t *testing.T) {
 		{Type: "customView", ID: "fav-1"},
 		{Type: "label", ID: "fav-2"},
 		{Type: "document", ID: "fav-3"},
-		{Type: "folder", ID: "fav-4"},
 		{Type: "issue", ID: "fav-5"}, // missing IssueID: skipped defensively
 		{Type: "project", ProjectID: "project-1", ProjectName: "Website"},
 	}
@@ -87,6 +86,32 @@ func TestFavoriteNavigationNodesSkipsUnsupportedTypes(t *testing.T) {
 	}
 	if !nodes[0].IsProject || nodes[0].ID != "project-1" {
 		t.Errorf("node = %+v, want the project favorite", nodes[0])
+	}
+}
+
+// TestFavoriteNavigationNodesFolders verifies folder favorites nest their
+// children while unfoldered favorites stay at the top level.
+func TestFavoriteNavigationNodesFolders(t *testing.T) {
+	favorites := []linearapi.Favorite{
+		{Type: "project", ProjectID: "project-0", ProjectName: "Loose"},
+		{Type: "folder", ID: "folder-1", Title: "Features"},
+		{Type: "project", ID: "fav-a", ProjectID: "project-1", ProjectName: "Inside", ParentID: "folder-1"},
+		{Type: "project", ID: "fav-b", ProjectID: "project-2", ProjectName: "Also Inside", ParentID: "folder-1"},
+	}
+
+	nodes := favoriteNavigationNodes(favorites)
+	if len(nodes) != 2 {
+		t.Fatalf("favoriteNavigationNodes() returned %d roots, want 2: %+v", len(nodes), nodes)
+	}
+	if nodes[0].Text != "Loose" {
+		t.Errorf("nodes[0] = %+v, want the loose project first", nodes[0])
+	}
+	folder := nodes[1]
+	if !folder.IsFolder || folder.Text != "Features" {
+		t.Fatalf("nodes[1] = %+v, want the Features folder", folder)
+	}
+	if len(folder.Children) != 2 || folder.Children[0].Text != "Inside" || folder.Children[1].Text != "Also Inside" {
+		t.Errorf("folder children = %+v", folder.Children)
 	}
 }
 
