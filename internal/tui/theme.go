@@ -189,6 +189,7 @@ var Icons = struct {
 	Todo       string
 	InProgress string
 	Done       string
+	Canceled   string
 	Priority   string
 }{
 	Team:       "📁 ",
@@ -197,5 +198,6 @@ var Icons = struct {
 	Todo:       "○ ",
 	InProgress: "◐ ",
 	Done:       "✔ ", // or ●
+	Canceled:   "✕ ",
 	Priority:   "⚡",
 }
