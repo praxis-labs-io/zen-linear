@@ -155,6 +155,7 @@ type App struct {
 	pages                  *tview.Pages
 	mainLayout             *tview.Flex
 	navigationTree         *tview.TreeView
+	navNodeOriginalText    map[*tview.TreeNode]string
 	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
 	myIssuesTable          *tview.Table
 	otherIssuesTable       *tview.Table
@@ -286,6 +287,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		focusedPane:          FocusNavigation,
 		sortField:            SortByUpdatedAt,
 		expandedState:        make(map[string]bool),
+		navNodeOriginalText:  make(map[*tview.TreeNode]string),
 		idToIssue:            make(map[string]*linearapi.Issue),
 		myIDToIssue:          make(map[string]*linearapi.Issue),
 		otherIDToIssue:       make(map[string]*linearapi.Issue),
@@ -677,6 +679,7 @@ func (a *App) loadNavigationData(ctx context.Context) bool {
 
 // rebuildNavigationTree rebuilds the navigation tree with real data.
 func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
+	a.navNodeOriginalText = make(map[*tview.TreeNode]string)
 	root := tview.NewTreeNode("Linear").
 		SetColor(a.theme.Accent).
 		SetSelectable(false)
