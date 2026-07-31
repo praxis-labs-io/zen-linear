@@ -352,7 +352,8 @@ func (a *App) loadInitialData() {
 		// Fetch teams and build navigation. Default navigation triggers its own
 		// refresh after applying the configured selection.
 		if !a.loadNavigationData(ctx) {
-			a.refreshIssues()
+			// Startup refresh must not steal focus from the navigation pane.
+			a.refreshIssuesWithFocusChange(false)
 		}
 	}()
 }
