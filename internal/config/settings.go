@@ -360,10 +360,10 @@ func validateTheme(theme string, label string) error {
 // validateGroupDimension validates the allowed grouping dimensions.
 func validateGroupDimension(dimension string, label string) error {
 	switch dimension {
-	case "", "status", "priority", "assignee", "cycle":
+	case "", "status", "priority", "assignee", "cycle", "project":
 		return nil
 	default:
-		return fmt.Errorf("invalid %s value %q: must be status, priority, assignee, cycle, or empty", label, dimension)
+		return fmt.Errorf("invalid %s value %q: must be status, priority, assignee, cycle, project, or empty", label, dimension)
 	}
 }
 
