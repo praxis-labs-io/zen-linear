@@ -1090,6 +1090,11 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 			a.updateFocus()
 			return nil
 		}
+		// [ and ] cycle the issues tabs, lazygit-style.
+		if r == '[' || r == ']' {
+			a.cycleIssuesSection()
+			return nil
+		}
 		// Handle command shortcuts (plain letters) - skip navigation keys
 		if r != 'j' && r != 'k' { // j/k are handled by table for up/down
 			for _, cmd := range a.paletteCtrl.commands {
@@ -1111,9 +1116,17 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 		a.updateFocus()
 		return nil
 	case tcell.KeyRune:
-		if event.Rune() == 'h' {
+		switch event.Rune() {
+		case 'h':
 			a.focusedPane = FocusIssues
 			a.updateFocus()
+			return nil
+		case '[', ']':
+			// Cycle the Details/Comments tabs, lazygit-style.
+			if a.detailsCommentsVisible {
+				a.focusedDetailsView = !a.focusedDetailsView
+				a.updateFocus()
+			}
 			return nil
 		}
 	}
@@ -1292,6 +1305,7 @@ func (a *App) updateFocus() {
 		if !a.detailsCommentsVisible {
 			a.focusedDetailsView = false
 		}
+		a.updateDetailsLayout()
 		if a.focusedDetailsView && a.detailsCommentsVisible {
 			a.app.SetFocus(a.detailsCommentsView)
 			a.detailsDescriptionView.SetBorderColor(a.theme.Border)
@@ -1330,71 +1344,23 @@ func (a *App) updateAllPaneTitles() {
 		a.navigationTree.SetTitleColor(a.theme.Foreground)
 	}
 
-	// Update Issues pane titles
+	// Update Issues pane tab strip
 	isIssuesFocused := a.focusedPane == FocusIssues
+	issuesTitle := a.issuesTabsTitle(isIssuesFocused)
+	a.myIssuesTable.SetTitle(issuesTitle)
+	a.myIssuesTable.SetTitleColor(a.theme.Foreground)
+	a.otherIssuesTable.SetTitle(issuesTitle)
+	a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
 
-	// Update My Issues table title
-	if len(a.myIssueRows) > 0 {
-		if isIssuesFocused && a.activeIssuesSection == IssuesSectionMy {
-			// Active section: add visual indicator and accent color
-			a.myIssuesTable.SetTitle(" ▶ My Issues ")
-			a.myIssuesTable.SetTitleColor(a.theme.Accent)
-		} else {
-			// Inactive section: normal title
-			a.myIssuesTable.SetTitle(" My Issues ")
-			a.myIssuesTable.SetTitleColor(a.theme.Foreground)
-		}
-	} else {
-		// No issues in this section
-		a.myIssuesTable.SetTitle(" My Issues ")
-		a.myIssuesTable.SetTitleColor(a.theme.Foreground)
-	}
-
-	// Update Other Issues table title
-	if len(a.otherIssueRows) > 0 {
-		if isIssuesFocused && a.activeIssuesSection == IssuesSectionOther {
-			// Active section: add visual indicator and accent color
-			a.otherIssuesTable.SetTitle(" ▶ Other Issues ")
-			a.otherIssuesTable.SetTitleColor(a.theme.Accent)
-		} else {
-			// Inactive section: normal title
-			a.otherIssuesTable.SetTitle(" Other Issues ")
-			a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
-		}
-	} else {
-		// No issues in this section
-		a.otherIssuesTable.SetTitle(" Other Issues ")
-		a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
-	}
-
-	// Update Details pane titles
+	// Update Details pane tab strip
 	isDetailsFocused := a.focusedPane == FocusDetails
 	if a.detailsDescriptionView != nil {
-		if isDetailsFocused {
-			// Details pane is focused - show indicator on active sub-view
-			if a.focusedDetailsView && a.detailsCommentsVisible && a.detailsCommentsView != nil {
-				// Comments view is active
-				a.detailsDescriptionView.SetTitle(" Details ")
-				a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
-				a.detailsCommentsView.SetTitle(" ▶ Comments ")
-				a.detailsCommentsView.SetTitleColor(a.theme.Accent)
-			} else {
-				// Description view is active
-				a.detailsDescriptionView.SetTitle(" ▶ Details ")
-				a.detailsDescriptionView.SetTitleColor(a.theme.Accent)
-				if a.detailsCommentsVisible && a.detailsCommentsView != nil {
-					a.detailsCommentsView.SetTitle(" Comments ")
-					a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
-				}
-			}
-		} else {
-			// Details pane is not focused - reset both titles
-			a.detailsDescriptionView.SetTitle(" Details ")
-			a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
-			if a.detailsCommentsView != nil {
-				a.detailsCommentsView.SetTitle(" Comments ")
-				a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
-			}
+		detailsTitle := a.detailsTabsTitle(isDetailsFocused)
+		a.detailsDescriptionView.SetTitle(detailsTitle)
+		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
+		if a.detailsCommentsView != nil {
+			a.detailsCommentsView.SetTitle(detailsTitle)
+			a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
 		}
 	}
 }
@@ -1690,17 +1656,15 @@ func (a *App) applyRichFiltersToParams(params *linearapi.FetchIssuesParams) {
 	}
 }
 
-// updateIssuesColumnLayout updates the issues column flex to show/hide My Issues table.
+// updateIssuesColumnLayout shows the active issues tab at full height.
 func (a *App) updateIssuesColumnLayout() {
 	a.issuesColumn.Clear()
 
-	// Add My Issues table if there are any
-	if len(a.myIssueRows) > 0 {
-		a.issuesColumn.AddItem(a.myIssuesTable, 0, 1, false)
+	// Without any My Issues, the Other Issues tab is the only one.
+	if len(a.myIssueRows) == 0 {
+		a.activeIssuesSection = IssuesSectionOther
 	}
-
-	// Always add Other Issues table
-	a.issuesColumn.AddItem(a.otherIssuesTable, 0, 1, false)
+	a.issuesColumn.AddItem(a.tableForSection(a.activeIssuesSection), 0, 1, false)
 
 	// Update all pane titles to reflect current state
 	a.updateAllPaneTitles()
@@ -1765,9 +1729,6 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 		a.idToIssue[k] = v
 	}
 
-	// Update layout to show/hide My Issues section.
-	a.updateIssuesColumnLayout()
-
 	// Render both tables.
 	var selectedMyIssueID, selectedOtherIssueID string
 	if targetIssueID != "" {
@@ -1780,6 +1741,9 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 			a.activeIssuesSection = IssuesSectionOther
 		}
 	}
+
+	// Show the active tab (after target selection may have switched it).
+	a.updateIssuesColumnLayout()
 
 	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
 	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
