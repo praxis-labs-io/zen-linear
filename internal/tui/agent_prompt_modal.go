@@ -11,10 +11,7 @@ import (
 // AgentPromptModal manages the prompt input for agent runs.
 type AgentPromptModal struct {
 	app             *App
-	modal           *tview.Flex
-	modalContent    *tview.Flex
-	modalWidth      int
-	form            *tview.Form
+	fm              *FormModal
 	templateField   *tview.DropDown
 	templateLabels  []string
 	templatePrompts []string
@@ -23,31 +20,15 @@ type AgentPromptModal struct {
 	onSubmit        func(prompt string, workspace string)
 }
 
-const (
-	agentPromptLabel    = "Prompt (issue context included)"
-	minPromptModalWidth = 80
-	maxPromptModalWidth = 140
-	promptModalHeight   = 20
-)
+const agentPromptModalWidth = 90
 
 // NewAgentPromptModal creates a new agent prompt modal.
 func NewAgentPromptModal(app *App) *AgentPromptModal {
-	am := &AgentPromptModal{
-		app: app,
-	}
+	am := &AgentPromptModal{app: app}
+	am.fm = NewFormModal(app, "Ask Agent")
+	am.fm.SetMaxWidth(agentPromptModalWidth)
 
-	am.form = tview.NewForm()
-	am.form.SetBackgroundColor(app.theme.ModalBackground())
-	am.form.SetFieldBackgroundColor(app.theme.InputBg)
-	am.form.SetFieldTextColor(app.theme.Foreground)
-	am.form.SetButtonBackgroundColor(app.theme.Accent)
-	am.form.SetButtonTextColor(app.theme.SelectionText)
-	am.form.SetLabelColor(app.theme.Foreground)
-
-	am.workspaceField = tview.NewInputField().
-		SetLabel("Workspace").
-		SetFieldWidth(0)
-	am.form.AddFormItem(am.workspaceField)
+	am.workspaceField = am.fm.AddInput("Workspace", "")
 
 	if len(app.agentPromptTemplates) > 0 {
 		labels := make([]string, 0, len(app.agentPromptTemplates))
@@ -58,61 +39,20 @@ func NewAgentPromptModal(app *App) *AgentPromptModal {
 		}
 		am.templateLabels = labels
 		am.templatePrompts = prompts
-
-		am.templateField = tview.NewDropDown().
-			SetLabel("Template").
-			SetOptions(am.templateLabels, func(_ string, index int) {
-				am.applyTemplatePrompt(index)
-			})
-		am.templateField.SetFieldWidth(40)
-		am.templateField.SetListStyles(
-			tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
-			tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
-		)
-		am.form.AddFormItem(am.templateField)
+		am.templateField = am.fm.AddPicker("Template", am.templateLabels, 0, func(_ string, index int) {
+			am.applyTemplatePrompt(index)
+		})
 	}
 
-	am.form.AddTextArea(agentPromptLabel, "", 70, 5, 0, nil)
-	if item := am.form.GetFormItemByLabel(agentPromptLabel); item != nil {
-		if textArea, ok := item.(*tview.TextArea); ok {
-			am.promptField = textArea
-		}
-	}
+	am.promptField = am.fm.AddTextArea("Prompt (issue context included)", "", 5)
 
-	am.form.AddButton("Run", func() {
-		am.submitPrompt()
-	})
-	am.form.AddButton("Cancel", func() {
-		am.Hide()
-	})
-
-	headerView := tview.NewTextView()
-	headerView.SetText("Ask Agent")
-	headerView.SetTextColor(app.theme.Accent)
-	headerView.SetBackgroundColor(app.theme.ModalBackground())
-
-	helpView := tview.NewTextView()
-	helpView.SetText("Esc: cancel • Ctrl+Enter / Cmd+Enter: run • Template fills prompt • Workspace blank uses CWD • Includes title, description, comments")
-	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.ModalBackground())
-	helpView.SetTextAlign(tview.AlignCenter)
-
-	am.modalContent = tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(headerView, 1, 0, false).
-		AddItem(am.form, 0, 1, true).
-		AddItem(helpView, 1, 0, false)
-	am.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
-	am.modalContent.SetBackgroundColor(app.theme.ModalBackground()).
-		SetBorder(true).
-		SetBorderColor(app.theme.Accent).
-		SetTitle(" Agent Prompt ").
-		SetTitleColor(app.theme.Foreground)
-	padding := app.density.ModalPadding
-	am.modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-
-	am.modalWidth = minPromptModalWidth
-	am.modal = am.buildModal(am.modalWidth)
+	am.fm.AddButtons(
+		FormButton{Label: "Run", OnPress: am.submitPrompt},
+		FormButton{Label: "Cancel", OnPress: am.Hide},
+	)
+	am.fm.SetOnSubmit(am.submitPrompt)
+	am.fm.SetOnCancel(am.Hide)
+	am.fm.SetHint("Esc cancel · ⌃⏎ run · template fills prompt · blank workspace uses CWD")
 
 	return am
 }
@@ -138,33 +78,17 @@ func (am *AgentPromptModal) Show(onSubmit func(prompt string, workspace string))
 		am.workspaceField.SetText(defaultWorkspace)
 	}
 
-	am.updateModalWidth()
-
-	am.app.pages.AddPage("agent_prompt", am.modal, true, true)
-	am.app.pages.SendToFront("agent_prompt")
-	am.app.app.SetFocus(am.form)
+	am.fm.Show("agent_prompt")
 }
 
 // Hide hides the prompt modal.
 func (am *AgentPromptModal) Hide() {
-	am.app.pages.RemovePage("agent_prompt")
-	am.app.updateFocus()
+	am.fm.Hide("agent_prompt")
 }
 
 // HandleKey handles keyboard input for the prompt modal.
 func (am *AgentPromptModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
-	switch event.Key() {
-	case tcell.KeyEscape:
-		am.Hide()
-		return nil
-	case tcell.KeyEnter:
-		mod := event.Modifiers()
-		if mod&tcell.ModCtrl != 0 || mod&tcell.ModMeta != 0 {
-			am.submitPrompt()
-			return nil
-		}
-	}
-	return event
+	return am.fm.HandleKey(event)
 }
 
 // submitPrompt validates and submits the prompt text.
@@ -186,44 +110,6 @@ func (am *AgentPromptModal) submitPrompt() {
 	am.Hide()
 	if am.onSubmit != nil {
 		am.onSubmit(prompt, workspace)
-	}
-}
-
-// buildModal builds the centered modal container with the given width.
-func (am *AgentPromptModal) buildModal(width int) *tview.Flex {
-	modal := tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().
-			SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(am.modalContent, promptModalHeight, 0, true).
-			AddItem(nil, 0, 1, false), width, 0, true).
-		AddItem(nil, 0, 1, false)
-	modal.SetBackgroundColor(am.app.theme.Background)
-	return modal
-}
-
-// updateModalWidth adjusts the modal width to fit the workspace path.
-func (am *AgentPromptModal) updateModalWidth() {
-	workspace := ""
-	if am.workspaceField != nil {
-		workspace = strings.TrimSpace(am.workspaceField.GetText())
-	}
-
-	desiredWidth := minPromptModalWidth
-	if workspace != "" {
-		desiredWidth = len(workspace) + 20
-		if desiredWidth < minPromptModalWidth {
-			desiredWidth = minPromptModalWidth
-		}
-		if desiredWidth > maxPromptModalWidth {
-			desiredWidth = maxPromptModalWidth
-		}
-	}
-
-	if desiredWidth != am.modalWidth {
-		am.modalWidth = desiredWidth
-		am.modal = am.buildModal(am.modalWidth)
 	}
 }
 
