@@ -68,7 +68,9 @@ func formatStateIcon(state string, theme Theme) (string, tcell.Color) {
 	switch {
 	case strings.Contains(lowerState, "done") || strings.Contains(lowerState, "complete"):
 		return "●", theme.StatusDone
-	case strings.Contains(lowerState, "progress") || strings.Contains(lowerState, "review"):
+	case strings.Contains(lowerState, "review"):
+		return "◉", theme.StatusReviewColor()
+	case strings.Contains(lowerState, "progress"):
 		return "◉", theme.StatusInProgress
 	case strings.Contains(lowerState, "cancel") || strings.Contains(lowerState, "duplicate"):
 		return "⊘", theme.StatusCanceled
@@ -223,126 +225,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				row, _ := table.GetSelection()
-				if next := nextIssueRow(a.rowsForSection(section), row, 1); next > 0 {
-					table.Select(next, 0)
-					if issue := a.getIssueFromRowForSection(next, section); issue != nil {
-						a.onIssueSelected(*issue)
-						a.activeIssuesSection = section
-					}
-				} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
-					// At bottom of this section - move to the Other Issues table
-					a.activeIssuesSection = IssuesSectionOther
-					a.updateIssuesColumnLayout()
-					if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
-						selectIssueRow(a.otherIssuesTable, a.otherIssueRows, first)
-						if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
-							a.onIssueSelected(*issue)
-						}
-					}
-					a.updateFocus()
-				}
-				return nil
-			case 'k':
-				row, _ := table.GetSelection()
-				if previous := nextIssueRow(a.rowsForSection(section), row, -1); previous > 0 {
-					selectIssueRow(table, a.rowsForSection(section), previous)
-					if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
-						a.onIssueSelected(*issue)
-						a.activeIssuesSection = section
-					}
-				} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
-					// At top of this section - move to the My Issues table
-					a.activeIssuesSection = IssuesSectionMy
-					a.updateIssuesColumnLayout()
-					if last := nextIssueRow(a.myIssueRows, len(a.myIssueRows)+1, -1); last > 0 {
-						a.myIssuesTable.Select(last, 0)
-						if issue := a.getIssueFromRowForSection(last, IssuesSectionMy); issue != nil {
-							a.onIssueSelected(*issue)
-						}
-					}
-					a.updateFocus()
-				}
-				return nil
-			case 'g':
-				// Go to top of current section
-				if first := nextIssueRow(a.rowsForSection(section), 0, 1); first > 0 {
-					selectIssueRow(table, a.rowsForSection(section), first)
-					if issue := a.getIssueFromRowForSection(first, section); issue != nil {
-						a.onIssueSelected(*issue)
-						a.activeIssuesSection = section
-					}
-				}
-				return nil
-			case 'G':
-				// Go to bottom of current section
-				rows := a.rowsForSection(section)
-				if last := nextIssueRow(rows, len(rows)+1, -1); last > 0 {
-					table.Select(last, 0)
-					if issue := a.getIssueFromRowForSection(last, section); issue != nil {
-						a.onIssueSelected(*issue)
-						a.activeIssuesSection = section
-					}
-				}
-				return nil
-			case 'l':
-				// Expand current parent issue
-				row, _ := table.GetSelection()
-				if issue := a.getIssueFromRowForSection(row, section); issue != nil {
-					if len(issue.Children) > 0 && !a.expandedState[issue.ID] {
-						a.toggleIssueExpanded(issue.ID)
-						a.activeIssuesSection = section
-					}
-				}
-				return nil
-			case 'h':
-				// Collapse current parent issue, or go to parent if on child
-				row, _ := table.GetSelection()
-				if issue := a.getIssueFromRowForSection(row, section); issue != nil {
-					if len(issue.Children) > 0 && a.expandedState[issue.ID] {
-						// Collapse this parent
-						a.toggleIssueExpanded(issue.ID)
-						a.activeIssuesSection = section
-					} else if issue.Parent != nil {
-						// Navigate to parent - may be in different section
-						parentRow := a.getRowForIssueInSection(issue.Parent.ID, IssuesSectionMy)
-						if parentRow > 0 {
-							a.activeIssuesSection = IssuesSectionMy
-							a.myIssuesTable.Select(parentRow, 0)
-							if parent := a.getIssueFromRowForSection(parentRow, IssuesSectionMy); parent != nil {
-								a.onIssueSelected(*parent)
-							}
-							a.updateFocus()
-						} else {
-							parentRow = a.getRowForIssueInSection(issue.Parent.ID, IssuesSectionOther)
-							if parentRow > 0 {
-								a.activeIssuesSection = IssuesSectionOther
-								a.otherIssuesTable.Select(parentRow, 0)
-								if parent := a.getIssueFromRowForSection(parentRow, IssuesSectionOther); parent != nil {
-									a.onIssueSelected(*parent)
-								}
-								a.updateFocus()
-							}
-						}
-					}
-				}
-				return nil
-			case 'H', 'L':
-				scrollIssueColumns(table, event.Rune())
-				return nil
-			case ' ':
-				// Space toggles expand/collapse
-				row, _ := table.GetSelection()
-				if issue := a.getIssueFromRowForSection(row, section); issue != nil {
-					if len(issue.Children) > 0 {
-						a.toggleIssueExpanded(issue.ID)
-						a.activeIssuesSection = section
-					}
-				}
-				return nil
-			}
+			return a.handleIssuesTableRune(table, section, event)
 		case tcell.KeyEnter:
 			// Enter toggles the details pane while staying in the list;
 			// Space toggles expand/collapse on parents.
@@ -443,6 +326,131 @@ func nextIssueRow(rows []IssueRow, from int, delta int) int {
 		}
 	}
 	return 0
+}
+
+// handleIssuesTableRune handles single-rune keys for an issues table.
+func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, event *tcell.EventKey) *tcell.EventKey {
+	switch event.Rune() {
+	case 'j':
+		row, _ := table.GetSelection()
+		if next := nextIssueRow(a.rowsForSection(section), row, 1); next > 0 {
+			table.Select(next, 0)
+			if issue := a.getIssueFromRowForSection(next, section); issue != nil {
+				a.onIssueSelected(*issue)
+				a.activeIssuesSection = section
+			}
+		} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
+			// At bottom of this section - move to the Other Issues table
+			a.activeIssuesSection = IssuesSectionOther
+			a.updateIssuesColumnLayout()
+			if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
+				selectIssueRow(a.otherIssuesTable, a.otherIssueRows, first)
+				if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
+					a.onIssueSelected(*issue)
+				}
+			}
+			a.updateFocus()
+		}
+		return nil
+	case 'k':
+		row, _ := table.GetSelection()
+		if previous := nextIssueRow(a.rowsForSection(section), row, -1); previous > 0 {
+			selectIssueRow(table, a.rowsForSection(section), previous)
+			if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
+				a.onIssueSelected(*issue)
+				a.activeIssuesSection = section
+			}
+		} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
+			// At top of this section - move to the My Issues table
+			a.activeIssuesSection = IssuesSectionMy
+			a.updateIssuesColumnLayout()
+			if last := nextIssueRow(a.myIssueRows, len(a.myIssueRows)+1, -1); last > 0 {
+				a.myIssuesTable.Select(last, 0)
+				if issue := a.getIssueFromRowForSection(last, IssuesSectionMy); issue != nil {
+					a.onIssueSelected(*issue)
+				}
+			}
+			a.updateFocus()
+		}
+		return nil
+	case 'g':
+		// Go to top of current section
+		if first := nextIssueRow(a.rowsForSection(section), 0, 1); first > 0 {
+			selectIssueRow(table, a.rowsForSection(section), first)
+			if issue := a.getIssueFromRowForSection(first, section); issue != nil {
+				a.onIssueSelected(*issue)
+				a.activeIssuesSection = section
+			}
+		}
+		return nil
+	case 'G':
+		// Go to bottom of current section
+		rows := a.rowsForSection(section)
+		if last := nextIssueRow(rows, len(rows)+1, -1); last > 0 {
+			table.Select(last, 0)
+			if issue := a.getIssueFromRowForSection(last, section); issue != nil {
+				a.onIssueSelected(*issue)
+				a.activeIssuesSection = section
+			}
+		}
+		return nil
+	case 'l':
+		// Expand current parent issue
+		row, _ := table.GetSelection()
+		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
+			if len(issue.Children) > 0 && !a.expandedState[issue.ID] {
+				a.toggleIssueExpanded(issue.ID)
+				a.activeIssuesSection = section
+			}
+		}
+		return nil
+	case 'h':
+		// Collapse current parent issue, or go to parent if on child
+		row, _ := table.GetSelection()
+		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
+			if len(issue.Children) > 0 && a.expandedState[issue.ID] {
+				// Collapse this parent
+				a.toggleIssueExpanded(issue.ID)
+				a.activeIssuesSection = section
+			} else if issue.Parent != nil {
+				// Navigate to parent - may be in different section
+				parentRow := a.getRowForIssueInSection(issue.Parent.ID, IssuesSectionMy)
+				if parentRow > 0 {
+					a.activeIssuesSection = IssuesSectionMy
+					a.myIssuesTable.Select(parentRow, 0)
+					if parent := a.getIssueFromRowForSection(parentRow, IssuesSectionMy); parent != nil {
+						a.onIssueSelected(*parent)
+					}
+					a.updateFocus()
+				} else {
+					parentRow = a.getRowForIssueInSection(issue.Parent.ID, IssuesSectionOther)
+					if parentRow > 0 {
+						a.activeIssuesSection = IssuesSectionOther
+						a.otherIssuesTable.Select(parentRow, 0)
+						if parent := a.getIssueFromRowForSection(parentRow, IssuesSectionOther); parent != nil {
+							a.onIssueSelected(*parent)
+						}
+						a.updateFocus()
+					}
+				}
+			}
+		}
+		return nil
+	case 'H', 'L':
+		scrollIssueColumns(table, event.Rune())
+		return nil
+	case ' ':
+		// Space toggles expand/collapse
+		row, _ := table.GetSelection()
+		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
+			if len(issue.Children) > 0 {
+				a.toggleIssueExpanded(issue.ID)
+				a.activeIssuesSection = section
+			}
+		}
+		return nil
+	}
+	return event
 }
 
 // getIssueFromRowForSection returns the issue for a given table row in the specified section.
