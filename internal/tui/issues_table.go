@@ -329,19 +329,8 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					}
 				}
 				return nil
-			case 'H':
-				// Scroll columns left.
-				rowOffset, columnOffset := table.GetOffset()
-				if columnOffset > 0 {
-					table.SetOffset(rowOffset, columnOffset-1)
-				}
-				return nil
-			case 'L':
-				// Scroll columns right.
-				rowOffset, columnOffset := table.GetOffset()
-				if columnOffset < 6 {
-					table.SetOffset(rowOffset, columnOffset+1)
-				}
+			case 'H', 'L':
+				scrollIssueColumns(table, event.Rune())
 				return nil
 			case ' ':
 				// Space toggles expand/collapse
@@ -422,6 +411,17 @@ func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 		return a.issueRows
 	}
 	return nil
+}
+
+// scrollIssueColumns scrolls the issue table horizontally: H left, L right.
+func scrollIssueColumns(table *tview.Table, key rune) {
+	rowOffset, columnOffset := table.GetOffset()
+	switch {
+	case key == 'H' && columnOffset > 0:
+		table.SetOffset(rowOffset, columnOffset-1)
+	case key == 'L' && columnOffset < 6:
+		table.SetOffset(rowOffset, columnOffset+1)
+	}
 }
 
 // selectIssueRow selects a table row and, when the selection reaches the
