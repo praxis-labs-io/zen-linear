@@ -158,6 +158,7 @@ type App struct {
 	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
 	myIssuesTable          *tview.Table
 	otherIssuesTable       *tview.Table
+	allIssuesTable         *tview.Table
 	issuesColumn           *tview.Flex     // Vertical flex containing My/Other tables
 	detailsView            *tview.Flex     // Flex container for details (description + comments)
 	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
@@ -431,6 +432,10 @@ func (a *App) applyThemeToComponents() {
 	if a.otherIssuesTable != nil {
 		a.applyIssuesTableTheme(a.otherIssuesTable)
 		renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, a.selectedIssueID(IssuesSectionOther), a.theme)
+	}
+	if a.allIssuesTable != nil {
+		a.applyIssuesTableTheme(a.allIssuesTable)
+		renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, a.selectedIssueID(IssuesSectionAll), a.theme)
 	}
 
 	if a.detailsDescriptionView != nil {
@@ -848,6 +853,7 @@ func (a *App) buildLayout() {
 	// Build My Issues and Other Issues tables
 	a.myIssuesTable = a.buildIssuesTable(" My Issues ", IssuesSectionMy)
 	a.otherIssuesTable = a.buildIssuesTable(" Other Issues ", IssuesSectionOther)
+	a.allIssuesTable = a.buildIssuesTable(" All Issues ", IssuesSectionAll)
 	// Create vertical flex for issues column
 	a.issuesColumn = tview.NewFlex().SetDirection(tview.FlexRow)
 	// Initially show only Other Issues table (My Issues will be added when issues are loaded)
@@ -1280,21 +1286,22 @@ func (a *App) updateFocus() {
 		a.navigationTree.SetBorderColor(a.theme.BorderFocus)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusIssues:
 		// Focus the active issues section
-		if a.activeIssuesSection == IssuesSectionMy && len(a.myIssueRows) > 0 {
-			a.app.SetFocus(a.myIssuesTable)
-			a.myIssuesTable.SetBorderColor(a.theme.BorderFocus)
-			a.otherIssuesTable.SetBorderColor(a.theme.Border)
-		} else {
-			a.app.SetFocus(a.otherIssuesTable)
-			a.myIssuesTable.SetBorderColor(a.theme.Border)
-			a.otherIssuesTable.SetBorderColor(a.theme.BorderFocus)
+		if a.activeIssuesSection == IssuesSectionMy && len(a.myIssueRows) == 0 {
 			a.activeIssuesSection = IssuesSectionOther
+		}
+		a.myIssuesTable.SetBorderColor(a.theme.Border)
+		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
+		if table := a.tableForSection(a.activeIssuesSection); table != nil {
+			a.app.SetFocus(table)
+			table.SetBorderColor(a.theme.BorderFocus)
 		}
 		// Update all pane titles
 		a.updateAllPaneTitles()
@@ -1319,6 +1326,7 @@ func (a *App) updateFocus() {
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusPalette:
@@ -1326,6 +1334,7 @@ func (a *App) updateFocus() {
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles
@@ -1352,6 +1361,8 @@ func (a *App) updateAllPaneTitles() {
 	a.myIssuesTable.SetTitleColor(a.theme.Foreground)
 	a.otherIssuesTable.SetTitle(issuesTitle)
 	a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
+	a.allIssuesTable.SetTitle(issuesTitle)
+	a.allIssuesTable.SetTitleColor(a.theme.Foreground)
 
 	// Update Details pane tab strip
 	isDetailsFocused := a.focusedPane == FocusDetails
@@ -1661,8 +1672,8 @@ func (a *App) applyRichFiltersToParams(params *linearapi.FetchIssuesParams) {
 func (a *App) updateIssuesColumnLayout() {
 	a.issuesColumn.Clear()
 
-	// Without any My Issues, the Other Issues tab is the only one.
-	if len(a.myIssueRows) == 0 {
+	// Without any My Issues, that tab disappears.
+	if a.activeIssuesSection == IssuesSectionMy && len(a.myIssueRows) == 0 {
 		a.activeIssuesSection = IssuesSectionOther
 	}
 	a.issuesColumn.AddItem(a.tableForSection(a.activeIssuesSection), 0, 1, false)
@@ -1718,28 +1729,25 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
 	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
-	// Legacy: keep old fields for backward compatibility during migration.
-	a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
-	a.issueRows = append(a.issueRows, a.myIssueRows...)
-	a.issueRows = append(a.issueRows, a.otherIssueRows...)
-	a.idToIssue = make(map[string]*linearapi.Issue)
-	for k, v := range a.myIDToIssue {
-		a.idToIssue[k] = v
-	}
-	for k, v := range a.otherIDToIssue {
-		a.idToIssue[k] = v
-	}
+	// The All Issues tab renders the full list.
+	a.issueRows, a.idToIssue = BuildIssueRows(issues, a.expandedState)
 
-	// Render both tables.
-	var selectedMyIssueID, selectedOtherIssueID string
+	// Render the tables.
+	var selectedMyIssueID, selectedOtherIssueID, selectedAllIssueID string
 	if targetIssueID != "" {
-		// Check which section contains the target issue.
+		selectedAllIssueID = targetIssueID
+		// Check which section contains the target issue; the All tab shows
+		// everything, so it stays active when selected.
 		if _, ok := a.myIDToIssue[targetIssueID]; ok {
 			selectedMyIssueID = targetIssueID
-			a.activeIssuesSection = IssuesSectionMy
+			if a.activeIssuesSection != IssuesSectionAll {
+				a.activeIssuesSection = IssuesSectionMy
+			}
 		} else if _, ok := a.otherIDToIssue[targetIssueID]; ok {
 			selectedOtherIssueID = targetIssueID
-			a.activeIssuesSection = IssuesSectionOther
+			if a.activeIssuesSection != IssuesSectionAll {
+				a.activeIssuesSection = IssuesSectionOther
+			}
 		}
 	}
 
@@ -1748,6 +1756,7 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 
 	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
 	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
+	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme)
 
 	// Select issue and update details.
 	var selectedIssue *linearapi.Issue
@@ -1910,33 +1919,30 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
 	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
 
-	// Legacy: keep old fields for backward compatibility
-	a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
-	a.issueRows = append(a.issueRows, a.myIssueRows...)
-	a.issueRows = append(a.issueRows, a.otherIssueRows...)
-	a.idToIssue = make(map[string]*linearapi.Issue)
-	for k, v := range a.myIDToIssue {
-		a.idToIssue[k] = v
-	}
-	for k, v := range a.otherIDToIssue {
-		a.idToIssue[k] = v
-	}
+	// The All Issues tab renders the full list.
+	a.issueRows, a.idToIssue = BuildIssueRows(issues, a.expandedState)
 
 	// Update layout
 	a.updateIssuesColumnLayout()
 
-	// Render both tables, selecting the toggled issue
+	// Render the tables, selecting the toggled issue
 	var selectedMyIssueID, selectedOtherIssueID string
+	selectedAllIssueID := issueID
 	if _, ok := a.myIDToIssue[issueID]; ok {
 		selectedMyIssueID = issueID
-		a.activeIssuesSection = IssuesSectionMy
+		if a.activeIssuesSection != IssuesSectionAll {
+			a.activeIssuesSection = IssuesSectionMy
+		}
 	} else if _, ok := a.otherIDToIssue[issueID]; ok {
 		selectedOtherIssueID = issueID
-		a.activeIssuesSection = IssuesSectionOther
+		if a.activeIssuesSection != IssuesSectionAll {
+			a.activeIssuesSection = IssuesSectionOther
+		}
 	}
 
 	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
 	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
+	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme)
 }
 
 // onNavigationSelected handles when a navigation item is selected.
