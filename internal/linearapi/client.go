@@ -393,6 +393,7 @@ type Issue struct {
 	CreatedAt        time.Time
 	TeamID           string
 	ProjectID        string
+	ProjectName      string
 	Cycle            *CycleRef
 	DueDate          *string
 	Estimate         *float64
@@ -540,7 +541,8 @@ type issueMutationNode struct {
 		ID graphql.String
 	}
 	Project *struct {
-		ID graphql.String
+		ID   graphql.String
+		Name graphql.String
 	}
 	Cycle *struct {
 		ID         graphql.String
@@ -1435,7 +1437,8 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 					ID graphql.String
 				}
 				Project *struct {
-					ID graphql.String
+					ID   graphql.String
+					Name graphql.String
 				}
 				Cycle *struct {
 					ID         graphql.String
@@ -1642,7 +1645,8 @@ type issueQueryNode struct {
 		ID graphql.String
 	}
 	Project *struct {
-		ID graphql.String
+		ID   graphql.String
+		Name graphql.String
 	}
 	Cycle *struct {
 		ID         graphql.String
@@ -2065,9 +2069,11 @@ func (c *Client) parseIssueNode(node interface{}) Issue {
 	teamID := v.FieldByName("Team").FieldByName("ID").String()
 
 	projectID := ""
+	projectName := ""
 	projectField := v.FieldByName("Project")
 	if projectField.IsValid() && projectField.Kind() == reflect.Pointer && !projectField.IsNil() {
 		projectID = projectField.Elem().FieldByName("ID").String()
+		projectName = reflectStringField(projectField.Elem(), "Name")
 	}
 
 	cycle := parseCycleRefValue(v.FieldByName("Cycle"))
@@ -2145,6 +2151,7 @@ func (c *Client) parseIssueNode(node interface{}) Issue {
 		Description:      description,
 		TeamID:           teamID,
 		ProjectID:        projectID,
+		ProjectName:      projectName,
 		Cycle:            cycle,
 		DueDate:          dueDate,
 		Estimate:         estimate,
@@ -2200,7 +2207,8 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 				ID graphql.String
 			}
 			Project *struct {
-				ID graphql.String
+				ID   graphql.String
+				Name graphql.String
 			}
 			Cycle *struct {
 				ID         graphql.String
@@ -2382,7 +2390,8 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 					ID graphql.String
 				}
 				Project *struct {
-					ID graphql.String
+					ID   graphql.String
+					Name graphql.String
 				}
 				Cycle *struct {
 					ID         graphql.String
