@@ -152,23 +152,13 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 	// Set fixed column widths
 	table.SetFixed(1, 0)
 
-	// Handle selection (Enter to open details or toggle expand)
+	// Handle selection (Enter toggles the details pane; Space toggles expand)
 	table.SetSelectedFunc(func(row, _ int) {
 		issue := a.getIssueFromRowForSection(row, section)
-		if issue == nil {
-			return
+		if issue != nil {
+			a.onIssueSelected(*issue)
 		}
-
-		// If issue has children, toggle expand/collapse
-		if len(issue.Children) > 0 {
-			a.toggleIssueExpanded(issue.ID)
-			return
-		}
-
-		// Otherwise, focus on details
-		a.onIssueSelected(*issue)
-		a.focusedPane = FocusDetails
-		a.updateFocus()
+		a.toggleDetailsPane()
 	})
 
 	// Set up keyboard navigation with cross-section support
@@ -302,23 +292,14 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 				return nil
 			}
 		case tcell.KeyEnter:
+			// Enter toggles the details pane while staying in the list;
+			// Space toggles expand/collapse on parents.
 			row, _ := table.GetSelection()
-			issue := a.getIssueFromRowForSection(row, section)
-			if issue == nil {
-				return nil
-			}
-
-			// If issue has children, toggle expand/collapse
-			if len(issue.Children) > 0 {
-				a.toggleIssueExpanded(issue.ID)
+			if issue := a.getIssueFromRowForSection(row, section); issue != nil {
+				a.onIssueSelected(*issue)
 				a.activeIssuesSection = section
-				return nil
 			}
-
-			// Otherwise, focus on details
-			a.onIssueSelected(*issue)
-			a.focusedPane = FocusDetails
-			a.updateFocus()
+			a.toggleDetailsPane()
 			return nil
 		case tcell.KeyDown:
 			row, _ := table.GetSelection()
