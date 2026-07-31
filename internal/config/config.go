@@ -91,6 +91,10 @@ type Config struct {
 	// SubgroupBy adds a second grouping level beneath GroupBy groups.
 	SubgroupBy string
 
+	// Columns selects and orders the issue list columns. Empty uses the
+	// default Linear-style layout.
+	Columns []string
+
 	// RoundedBorders draws pane borders with rounded corners.
 	RoundedBorders bool
 

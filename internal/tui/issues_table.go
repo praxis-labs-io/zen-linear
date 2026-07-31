@@ -104,35 +104,129 @@ func formatLabels(labels []linearapi.IssueLabel) string {
 	return strings.Join(names, ", ")
 }
 
-// setIssuesTableHeaders writes the list header row. Column order and default
-// visibility match Linear's own list view: priority, id, state, title, then
-// trailing metadata. Cycle, due date, estimate, and milestone stay in the
-// details pane.
-func setIssuesTableHeaders(table *tview.Table, theme Theme) {
+// Issue list column identifiers, configurable via the columns setting.
+const (
+	ColumnPriority  = "priority"
+	ColumnID        = "id"
+	ColumnState     = "state"
+	ColumnTitle     = "title"
+	ColumnLabels    = "labels"
+	ColumnAssignee  = "assignee"
+	ColumnUpdated   = "updated"
+	ColumnCycle     = "cycle"
+	ColumnDue       = "due"
+	ColumnEstimate  = "estimate"
+	ColumnMilestone = "milestone"
+)
+
+// DefaultIssueColumns matches Linear's own list view.
+var DefaultIssueColumns = []string{
+	ColumnPriority, ColumnID, ColumnState, ColumnTitle, ColumnLabels, ColumnAssignee, ColumnUpdated,
+}
+
+// issueColumnSpec describes how one column renders.
+type issueColumnSpec struct {
+	header    string
+	expansion int
+	maxWidth  int
+}
+
+// issueColumnSpecs maps column identifiers to their rendering properties.
+var issueColumnSpecs = map[string]issueColumnSpec{
+	ColumnPriority:  {header: " ", expansion: 0},
+	ColumnID:        {header: "ID", expansion: 0},
+	ColumnState:     {header: " ", expansion: 0},
+	ColumnTitle:     {header: "Title", expansion: 4, maxWidth: 45},
+	ColumnLabels:    {header: "Labels", expansion: 1, maxWidth: 18},
+	ColumnAssignee:  {header: "Assignee", expansion: 1},
+	ColumnUpdated:   {header: "Updated", expansion: 0},
+	ColumnCycle:     {header: "Cycle", expansion: 1, maxWidth: 15},
+	ColumnDue:       {header: "Due", expansion: 0},
+	ColumnEstimate:  {header: "Est", expansion: 0},
+	ColumnMilestone: {header: "Milestone", expansion: 1, maxWidth: 18},
+}
+
+// columnIndex returns the position of a column in the layout, or fallback.
+func columnIndex(columns []string, name string, fallback int) int {
+	for index, column := range columns {
+		if column == name {
+			return index
+		}
+	}
+	return fallback
+}
+
+// setIssuesTableHeaders writes the list header row for the configured
+// columns. The default order and visibility match Linear's own list view.
+func setIssuesTableHeaders(table *tview.Table, theme Theme, columns []string) {
 	headerStyle := tcell.StyleDefault.
 		Foreground(theme.HeaderText).
 		Background(theme.HeaderBg).
 		Bold(true)
 
-	headers := []struct {
-		text      string
-		expansion int
-	}{
-		{" ", 0}, // priority icon
-		{"ID", 0},
-		{" ", 0}, // state icon
-		{"Title", 4},
-		{"Labels", 1},
-		{"Assignee", 1},
-		{"Updated", 0},
-	}
-	for column, header := range headers {
-		table.SetCell(0, column, tview.NewTableCell(header.text).
+	for column, name := range columns {
+		spec := issueColumnSpecs[name]
+		table.SetCell(0, column, tview.NewTableCell(spec.header).
 			SetStyle(headerStyle).
 			SetAlign(tview.AlignLeft).
 			SetSelectable(false).
-			SetExpansion(header.expansion))
+			SetExpansion(spec.expansion))
 	}
+}
+
+// issueColumnCell renders one issue cell for a column identifier.
+func issueColumnCell(name string, issue *linearapi.Issue, identifierPrefix string, theme Theme) (string, tcell.Color) {
+	switch name {
+	case ColumnPriority:
+		return formatPriority(issue.Priority, theme)
+	case ColumnID:
+		return identifierPrefix + issue.Identifier, theme.SecondaryText
+	case ColumnState:
+		return formatStateIcon(issue.State, theme)
+	case ColumnTitle:
+		return issue.Title, theme.Foreground
+	case ColumnLabels:
+		labels := formatLabels(issue.Labels)
+		if labels == "-" {
+			return labels, theme.SecondaryText
+		}
+		return labels, theme.HeaderText
+	case ColumnAssignee:
+		if issue.Assignee == "" {
+			return "-", theme.SecondaryText
+		}
+		assignee := issue.Assignee
+		if len(assignee) > 14 {
+			assignee = assignee[:14]
+		}
+		return assignee, theme.Foreground
+	case ColumnUpdated:
+		return formatUpdatedAt(issue.UpdatedAt), theme.SecondaryText
+	case ColumnCycle:
+		if issue.Cycle == nil {
+			return "-", theme.SecondaryText
+		}
+		return issue.Cycle.DisplayName(), theme.Foreground
+	case ColumnDue:
+		due := formatDueDate(issue.DueDate)
+		if due == "-" {
+			return due, theme.SecondaryText
+		}
+		return due, theme.Foreground
+	case ColumnEstimate:
+		estimate := formatEstimate(issue.Estimate)
+		if estimate == "-" {
+			return estimate, theme.SecondaryText
+		}
+		return estimate, theme.Foreground
+	case ColumnMilestone:
+		milestone := formatMilestoneName(issue.ProjectMilestone)
+		if milestone == "-" {
+			return milestone, theme.SecondaryText
+		}
+		return milestone, theme.Foreground
+	}
+	return "", theme.SecondaryText
 }
 
 // getIssueFromRow returns the issue for a given table row (accounting for header).
@@ -200,7 +294,7 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 		Background(a.theme.SelectionBg).
 		Bold(true))
 
-	setIssuesTableHeaders(table, a.theme)
+	setIssuesTableHeaders(table, a.theme, a.issueColumns())
 
 	// Set fixed column widths
 	table.SetFixed(1, 0)
@@ -302,7 +396,7 @@ func scrollIssueColumns(table *tview.Table, key rune) {
 	switch {
 	case key == 'H' && columnOffset > 0:
 		table.SetOffset(rowOffset, columnOffset-1)
-	case key == 'L' && columnOffset < 6:
+	case key == 'L' && columnOffset < table.GetColumnCount()-1:
 		table.SetOffset(rowOffset, columnOffset+1)
 	}
 }
@@ -486,24 +580,30 @@ func (a *App) getRowForIssueInSection(issueID string, section IssuesSection) int
 }
 
 // renderIssuesTableModel renders a table with the given rows and issue lookup map.
-func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[string]*linearapi.Issue, selectedIssueID string, theme Theme) {
+func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[string]*linearapi.Issue, selectedIssueID string, theme Theme, columns []string) {
+	if len(columns) == 0 {
+		columns = DefaultIssueColumns
+	}
 	table.Clear()
 
-	setIssuesTableHeaders(table, theme)
+	setIssuesTableHeaders(table, theme, columns)
 
 	// Add issue rows using the hierarchical structure
 	for i, issueRow := range rows {
 		row := i + 1
 
 		if issueRow.IsHeader {
-			for column := 0; column < 7; column++ {
+			for column := range columns {
 				table.SetCell(row, column, tview.NewTableCell("").SetSelectable(false))
 			}
-			icon, iconColor := formatGroupHeaderIcon(issueRow, theme)
-			if icon != "" {
-				table.SetCell(row, 2, tview.NewTableCell(icon).
-					SetTextColor(iconColor).
-					SetSelectable(false))
+			labelIndex := columnIndex(columns, ColumnTitle, 0)
+			if stateIndex := columnIndex(columns, ColumnState, -1); stateIndex >= 0 && stateIndex != labelIndex {
+				icon, iconColor := formatGroupHeaderIcon(issueRow, theme)
+				if icon != "" {
+					table.SetCell(row, stateIndex, tview.NewTableCell(icon).
+						SetTextColor(iconColor).
+						SetSelectable(false))
+				}
 			}
 			indent := strings.Repeat("  ", issueRow.HeaderLevel)
 			// Group labels read distinctly from issue titles: accent for the
@@ -512,7 +612,7 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			if issueRow.HeaderLevel > 0 {
 				labelColor = theme.HeaderText
 			}
-			table.SetCell(row, 3, tview.NewTableCell(fmt.Sprintf("%s%s (%d)", indent, issueRow.HeaderText, issueRow.HeaderCount)).
+			table.SetCell(row, labelIndex, tview.NewTableCell(fmt.Sprintf("%s%s (%d)", indent, issueRow.HeaderText, issueRow.HeaderCount)).
 				SetTextColor(labelColor).
 				SetAttributes(tcell.AttrBold).
 				SetSelectable(false))
@@ -525,7 +625,6 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		}
 
 		// Build identifier with hierarchy indicator
-		identifier := issue.Identifier
 		identifierPrefix := " "
 
 		if issueRow.Level > 0 {
@@ -540,55 +639,19 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			}
 		}
 
-		// Priority icon
-		priorityText, priorityColor := formatPriority(issue.Priority, theme)
-		table.SetCell(row, 0, tview.NewTableCell(" "+priorityText).
-			SetTextColor(priorityColor).
-			SetAlign(tview.AlignLeft))
-
-		table.SetCell(row, 1, tview.NewTableCell(identifierPrefix+identifier).
-			SetTextColor(theme.SecondaryText).
-			SetAlign(tview.AlignLeft))
-
-		// State icon
-		stateIcon, stateColor := formatStateIcon(issue.State, theme)
-		table.SetCell(row, 2, tview.NewTableCell(stateIcon).
-			SetTextColor(stateColor).
-			SetAlign(tview.AlignLeft))
-
-		// Title
-		table.SetCell(row, 3, tview.NewTableCell(issue.Title).
-			SetTextColor(theme.Foreground).
-			SetAlign(tview.AlignLeft).
-			SetMaxWidth(45))
-
-		labels := formatLabels(issue.Labels)
-		labelsColor := theme.HeaderText
-		if labels == "-" {
-			labelsColor = theme.SecondaryText
+		for column, name := range columns {
+			cellText, cellColor := issueColumnCell(name, issue, identifierPrefix, theme)
+			if column == 0 && name != ColumnID {
+				cellText = " " + cellText
+			}
+			cell := tview.NewTableCell(cellText).
+				SetTextColor(cellColor).
+				SetAlign(tview.AlignLeft)
+			if spec := issueColumnSpecs[name]; spec.maxWidth > 0 {
+				cell.SetMaxWidth(spec.maxWidth)
+			}
+			table.SetCell(row, column, cell)
 		}
-		table.SetCell(row, 4, tview.NewTableCell(labels).
-			SetTextColor(labelsColor).
-			SetAlign(tview.AlignLeft).
-			SetMaxWidth(18))
-
-		// Assignee
-		assignee := issue.Assignee
-		assigneeColor := theme.Foreground
-		if assignee == "" {
-			assignee = "-"
-			assigneeColor = theme.SecondaryText
-		}
-		if len(assignee) > 14 {
-			assignee = assignee[:14]
-		}
-		table.SetCell(row, 5, tview.NewTableCell(assignee).
-			SetTextColor(assigneeColor).
-			SetAlign(tview.AlignLeft))
-
-		table.SetCell(row, 6, tview.NewTableCell(formatUpdatedAt(issue.UpdatedAt)).
-			SetTextColor(theme.SecondaryText).
-			SetAlign(tview.AlignLeft))
 	}
 
 	// Select the specified issue or first issue row (skipping group headers)
@@ -609,10 +672,10 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		selectIssueRow(table, rows, selectedRow)
 	} else {
 		// Show empty state message
-		for column := 0; column < 7; column++ {
+		for column := range columns {
 			table.SetCell(1, column, tview.NewTableCell("").SetSelectable(false))
 		}
-		table.SetCell(1, 3, tview.NewTableCell("No issues").
+		table.SetCell(1, columnIndex(columns, ColumnTitle, 0), tview.NewTableCell("No issues").
 			SetTextColor(theme.SecondaryText).
 			SetAlign(tview.AlignCenter).
 			SetSelectable(false))

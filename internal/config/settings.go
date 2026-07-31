@@ -23,6 +23,7 @@ type SettingsFile struct {
 	Density          *string     `json:"density"`
 	GroupBy          *string     `json:"group_by"`
 	SubgroupBy       *string     `json:"subgroup_by"`
+	Columns          []string    `json:"columns"`
 	RoundedBorders   *bool       `json:"rounded_borders"`
 	Workspaces       []Workspace `json:"workspaces"`
 	DefaultWorkspace *string     `json:"default_workspace"`
@@ -47,6 +48,7 @@ type Settings struct {
 	Density          string      `json:"density"`
 	GroupBy          string      `json:"group_by"`
 	SubgroupBy       string      `json:"subgroup_by"`
+	Columns          []string    `json:"columns,omitempty"`
 	RoundedBorders   bool        `json:"rounded_borders"`
 	Workspaces       []Workspace `json:"workspaces,omitempty"`
 	DefaultWorkspace string      `json:"default_workspace,omitempty"`
@@ -96,6 +98,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		Density:          cfg.Density,
 		GroupBy:          cfg.GroupBy,
 		SubgroupBy:       cfg.SubgroupBy,
+		Columns:          cfg.Columns,
 		RoundedBorders:   cfg.RoundedBorders,
 		Workspaces:       cfg.Workspaces,
 		DefaultWorkspace: cfg.DefaultWorkspace,
@@ -169,6 +172,10 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		return Config{}, err
 	}
 
+	if err := validateColumns(settings.Columns, "columns"); err != nil {
+		return Config{}, err
+	}
+
 	if err := validateWorkspaces(settings.Workspaces, "workspaces"); err != nil {
 		return Config{}, err
 	}
@@ -186,6 +193,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		Density:          density,
 		GroupBy:          settings.GroupBy,
 		SubgroupBy:       settings.SubgroupBy,
+		Columns:          settings.Columns,
 		RoundedBorders:   settings.RoundedBorders,
 		Workspaces:       settings.Workspaces,
 		DefaultWorkspace: settings.DefaultWorkspace,
@@ -277,6 +285,9 @@ func LoadSettings(path string) (Settings, error) {
 	}
 	if file.SubgroupBy != nil {
 		settings.SubgroupBy = *file.SubgroupBy
+	}
+	if file.Columns != nil {
+		settings.Columns = file.Columns
 	}
 	if file.RoundedBorders != nil {
 		settings.RoundedBorders = *file.RoundedBorders
@@ -381,6 +392,26 @@ func validateTheme(theme string, label string) error {
 	default:
 		return fmt.Errorf("invalid %s value %q: must be linear, high_contrast, color_blind, or rose_pine_moon", label, theme)
 	}
+}
+
+// validateColumns validates the issue list column selection.
+func validateColumns(columns []string, label string) error {
+	known := map[string]bool{
+		"priority": true, "id": true, "state": true, "title": true,
+		"labels": true, "assignee": true, "updated": true,
+		"cycle": true, "due": true, "estimate": true, "milestone": true,
+	}
+	seen := make(map[string]bool, len(columns))
+	for _, column := range columns {
+		if !known[column] {
+			return fmt.Errorf("invalid %s entry %q: unknown column", label, column)
+		}
+		if seen[column] {
+			return fmt.Errorf("invalid %s entry %q: duplicate column", label, column)
+		}
+		seen[column] = true
+	}
+	return nil
 }
 
 // validateGroupDimension validates the allowed grouping dimensions.
