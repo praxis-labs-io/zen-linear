@@ -201,6 +201,11 @@ type Favorite struct {
 
 	Title string // Linear's display label for the favorite
 
+	// ParentID references the enclosing favorite folder, if any.
+	ParentID string
+	// FolderName is set for folder favorites.
+	FolderName string
+
 	CustomViewID   string
 	CustomViewName string
 
@@ -745,10 +750,14 @@ func (c *Client) ListFavorites(ctx context.Context) ([]Favorite, error) {
 		var query struct {
 			Favorites struct {
 				Nodes []struct {
-					ID                 graphql.String
-					Type               graphql.String
-					SortOrder          graphql.Float
-					Title              graphql.String
+					ID         graphql.String
+					Type       graphql.String
+					SortOrder  graphql.Float
+					Title      graphql.String
+					FolderName *graphql.String
+					Parent     *struct {
+						ID graphql.String
+					}
 					PredefinedViewType *graphql.String
 					PredefinedViewTeam *struct {
 						ID graphql.String
@@ -810,6 +819,12 @@ func (c *Client) ListFavorites(ctx context.Context) ([]Favorite, error) {
 				Type:      string(node.Type),
 				SortOrder: float64(node.SortOrder),
 				Title:     string(node.Title),
+			}
+			if node.Parent != nil {
+				favorite.ParentID = string(node.Parent.ID)
+			}
+			if node.FolderName != nil {
+				favorite.FolderName = string(*node.FolderName)
 			}
 			if node.PredefinedViewType != nil {
 				favorite.PredefinedViewType = string(*node.PredefinedViewType)
