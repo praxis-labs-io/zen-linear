@@ -12,42 +12,44 @@ import (
 
 // SettingsFile represents the on-disk JSON with optional fields.
 type SettingsFile struct {
-	APIEndpoint    *string     `json:"api_endpoint"`
-	Timeout        *string     `json:"timeout"`
-	PageSize       *int        `json:"page_size"`
-	CacheTTL       *string     `json:"cache_ttl"`
-	SearchDebounce *string     `json:"search_debounce"`
-	LogFile        *string     `json:"log_file"`
-	LogLevel       *string     `json:"log_level"`
-	Theme          *string     `json:"theme"`
-	Density        *string     `json:"density"`
-	AgentProvider  *string     `json:"agent_provider"`
-	AgentSandbox   *string     `json:"agent_sandbox"`
-	AgentModel     *string     `json:"agent_model"`
-	AgentWorkspace *string     `json:"agent_workspace"`
-	DefaultTeam    *string     `json:"default_team"`
-	DefaultProject *string     `json:"default_project"`
-	Workspaces     []Workspace `json:"workspaces"`
+	APIEndpoint      *string     `json:"api_endpoint"`
+	Timeout          *string     `json:"timeout"`
+	PageSize         *int        `json:"page_size"`
+	CacheTTL         *string     `json:"cache_ttl"`
+	SearchDebounce   *string     `json:"search_debounce"`
+	LogFile          *string     `json:"log_file"`
+	LogLevel         *string     `json:"log_level"`
+	Theme            *string     `json:"theme"`
+	Density          *string     `json:"density"`
+	AgentProvider    *string     `json:"agent_provider"`
+	AgentSandbox     *string     `json:"agent_sandbox"`
+	AgentModel       *string     `json:"agent_model"`
+	AgentWorkspace   *string     `json:"agent_workspace"`
+	DefaultTeam      *string     `json:"default_team"`
+	DefaultProject   *string     `json:"default_project"`
+	Workspaces       []Workspace `json:"workspaces"`
+	DefaultWorkspace *string     `json:"default_workspace"`
 }
 
 // Settings contains concrete settings values for UI and persistence.
 type Settings struct {
-	APIEndpoint    string      `json:"api_endpoint"`
-	Timeout        string      `json:"timeout"`
-	PageSize       int         `json:"page_size"`
-	CacheTTL       string      `json:"cache_ttl"`
-	SearchDebounce string      `json:"search_debounce"`
-	LogFile        string      `json:"log_file"`
-	LogLevel       string      `json:"log_level"`
-	Theme          string      `json:"theme"`
-	Density        string      `json:"density"`
-	AgentProvider  string      `json:"agent_provider"`
-	AgentSandbox   string      `json:"agent_sandbox"`
-	AgentModel     string      `json:"agent_model"`
-	AgentWorkspace string      `json:"agent_workspace"`
-	DefaultTeam    string      `json:"default_team"`
-	DefaultProject string      `json:"default_project"`
-	Workspaces     []Workspace `json:"workspaces,omitempty"`
+	APIEndpoint      string      `json:"api_endpoint"`
+	Timeout          string      `json:"timeout"`
+	PageSize         int         `json:"page_size"`
+	CacheTTL         string      `json:"cache_ttl"`
+	SearchDebounce   string      `json:"search_debounce"`
+	LogFile          string      `json:"log_file"`
+	LogLevel         string      `json:"log_level"`
+	Theme            string      `json:"theme"`
+	Density          string      `json:"density"`
+	AgentProvider    string      `json:"agent_provider"`
+	AgentSandbox     string      `json:"agent_sandbox"`
+	AgentModel       string      `json:"agent_model"`
+	AgentWorkspace   string      `json:"agent_workspace"`
+	DefaultTeam      string      `json:"default_team"`
+	DefaultProject   string      `json:"default_project"`
+	Workspaces       []Workspace `json:"workspaces,omitempty"`
+	DefaultWorkspace string      `json:"default_workspace,omitempty"`
 }
 
 // DefaultSettings returns the default settings for the config file and UI.
@@ -74,22 +76,23 @@ func DefaultSettings() Settings {
 // SettingsFromConfig converts runtime config into settings values.
 func SettingsFromConfig(cfg Config) Settings {
 	return Settings{
-		APIEndpoint:    cfg.APIEndpoint,
-		Timeout:        cfg.Timeout.String(),
-		PageSize:       cfg.PageSize,
-		CacheTTL:       cfg.CacheTTL.String(),
-		SearchDebounce: cfg.SearchDebounce.String(),
-		LogFile:        cfg.LogFile,
-		LogLevel:       cfg.LogLevel,
-		Theme:          cfg.Theme,
-		Density:        cfg.Density,
-		AgentProvider:  cfg.AgentProvider,
-		AgentSandbox:   cfg.AgentSandbox,
-		AgentModel:     cfg.AgentModel,
-		AgentWorkspace: cfg.AgentWorkspace,
-		DefaultTeam:    cfg.DefaultTeam,
-		DefaultProject: cfg.DefaultProject,
-		Workspaces:     cfg.Workspaces,
+		APIEndpoint:      cfg.APIEndpoint,
+		Timeout:          cfg.Timeout.String(),
+		PageSize:         cfg.PageSize,
+		CacheTTL:         cfg.CacheTTL.String(),
+		SearchDebounce:   cfg.SearchDebounce.String(),
+		LogFile:          cfg.LogFile,
+		LogLevel:         cfg.LogLevel,
+		Theme:            cfg.Theme,
+		Density:          cfg.Density,
+		AgentProvider:    cfg.AgentProvider,
+		AgentSandbox:     cfg.AgentSandbox,
+		AgentModel:       cfg.AgentModel,
+		AgentWorkspace:   cfg.AgentWorkspace,
+		DefaultTeam:      cfg.DefaultTeam,
+		DefaultProject:   cfg.DefaultProject,
+		Workspaces:       cfg.Workspaces,
+		DefaultWorkspace: cfg.DefaultWorkspace,
 	}
 }
 
@@ -152,23 +155,24 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 	}
 
 	return Config{
-		LinearAPIKey:   apiKey,
-		APIEndpoint:    settings.APIEndpoint,
-		Timeout:        timeout,
-		PageSize:       settings.PageSize,
-		CacheTTL:       cacheTTL,
-		SearchDebounce: searchDebounce,
-		LogFile:        settings.LogFile,
-		LogLevel:       settings.LogLevel,
-		Theme:          theme,
-		Density:        density,
-		AgentProvider:  settings.AgentProvider,
-		AgentSandbox:   settings.AgentSandbox,
-		AgentModel:     settings.AgentModel,
-		AgentWorkspace: settings.AgentWorkspace,
-		DefaultTeam:    settings.DefaultTeam,
-		DefaultProject: settings.DefaultProject,
-		Workspaces:     settings.Workspaces,
+		LinearAPIKey:     apiKey,
+		APIEndpoint:      settings.APIEndpoint,
+		Timeout:          timeout,
+		PageSize:         settings.PageSize,
+		CacheTTL:         cacheTTL,
+		SearchDebounce:   searchDebounce,
+		LogFile:          settings.LogFile,
+		LogLevel:         settings.LogLevel,
+		Theme:            theme,
+		Density:          density,
+		AgentProvider:    settings.AgentProvider,
+		AgentSandbox:     settings.AgentSandbox,
+		AgentModel:       settings.AgentModel,
+		AgentWorkspace:   settings.AgentWorkspace,
+		DefaultTeam:      settings.DefaultTeam,
+		DefaultProject:   settings.DefaultProject,
+		Workspaces:       settings.Workspaces,
+		DefaultWorkspace: settings.DefaultWorkspace,
 	}, nil
 }
 
@@ -266,6 +270,9 @@ func LoadSettings(path string) (Settings, error) {
 	}
 	if file.Workspaces != nil {
 		settings.Workspaces = file.Workspaces
+	}
+	if file.DefaultWorkspace != nil {
+		settings.DefaultWorkspace = *file.DefaultWorkspace
 	}
 
 	return settings, nil

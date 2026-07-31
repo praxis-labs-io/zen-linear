@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -102,6 +103,10 @@ type Config struct {
 
 	// Workspaces lists Linear workspaces the app can switch between.
 	Workspaces []Workspace
+
+	// DefaultWorkspace selects the startup workspace by name. Empty falls
+	// back to the first workspace whose key env var is set.
+	DefaultWorkspace string
 }
 
 // Workspace describes a switchable Linear workspace. The API key is read from
@@ -125,6 +130,19 @@ func FirstAvailableWorkspace(workspaces []Workspace) (Workspace, bool) {
 		}
 	}
 	return Workspace{}, false
+}
+
+// StartupWorkspace resolves the workspace to use at startup: the configured
+// default when its key is available, else the first workspace with a key.
+func StartupWorkspace(workspaces []Workspace, defaultName string) (Workspace, bool) {
+	if defaultName != "" {
+		for _, workspace := range workspaces {
+			if strings.EqualFold(workspace.Name, defaultName) && workspace.APIKey() != "" {
+				return workspace, true
+			}
+		}
+	}
+	return FirstAvailableWorkspace(workspaces)
 }
 
 // LoadFromEnv loads configuration from environment variables.
