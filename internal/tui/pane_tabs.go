@@ -8,7 +8,7 @@ import (
 
 // The issues and details panes render lazygit-style tabs: one view fills the
 // pane and the border title lists every tab, highlighting the active one.
-// The [ and ] keys cycle tabs within the focused pane.
+// The { and } keys cycle tabs within the focused pane.
 
 // tableForSection returns the table widget backing a section.
 func (a *App) tableForSection(section IssuesSection) *tview.Table {

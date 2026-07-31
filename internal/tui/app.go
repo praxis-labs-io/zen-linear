@@ -1090,8 +1090,9 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 			a.updateFocus()
 			return nil
 		}
-		// [ and ] cycle the issues tabs, lazygit-style.
-		if r == '[' || r == ']' {
+		// { and } cycle the issues tabs, lazygit-style ([ and ] keep their
+		// original expand/collapse-all bindings).
+		if r == '{' || r == '}' {
 			a.cycleIssuesSection()
 			return nil
 		}
@@ -1121,7 +1122,7 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 			a.focusedPane = FocusIssues
 			a.updateFocus()
 			return nil
-		case '[', ']':
+		case '{', '}':
 			// Cycle the Details/Comments tabs, lazygit-style.
 			if a.detailsCommentsVisible {
 				a.focusedDetailsView = !a.focusedDetailsView
