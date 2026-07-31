@@ -1270,7 +1270,7 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 			a.focusedPane = FocusIssues
 			a.updateFocus()
 			return nil
-		case '{', '}':
+		case a.actionKey("tab_prev", '{'), a.actionKey("tab_next", '}'):
 			// Cycle the Details/Comments tabs, lazygit-style.
 			if a.detailsCommentsVisible {
 				a.focusedDetailsView = !a.focusedDetailsView
