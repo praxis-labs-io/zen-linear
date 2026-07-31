@@ -195,6 +195,42 @@ func (fm *FormModal) AddPicker(label string, options []string, selected int, onC
 	return dd
 }
 
+// AddCheckbox appends a one-row toggle with its caps label beside it.
+func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
+	theme := fm.app.theme
+
+	box := tview.NewCheckbox().SetChecked(checked)
+	box.SetFieldBackgroundColor(theme.InputBg)
+	box.SetFieldTextColor(theme.Foreground)
+	box.SetBackgroundColor(theme.ModalBackground())
+
+	labelView := tview.NewTextView()
+	labelView.SetText(strings.ToUpper(label))
+	labelView.SetTextColor(theme.SecondaryText)
+	labelView.SetBackgroundColor(theme.ModalBackground())
+
+	container := tview.NewFlex()
+	container.SetBackgroundColor(theme.ModalBackground())
+	container.AddItem(box, 3, 0, true)
+	container.AddItem(nil, 2, 0, false)
+	container.AddItem(labelView, 0, 1, false)
+
+	wrapper := tview.NewFlex().SetDirection(tview.FlexRow)
+	wrapper.SetBackgroundColor(theme.ModalBackground())
+	wrapper.AddItem(container, 1, 0, true)
+
+	fm.pickerRow = nil
+	fm.appendRow(formRow{
+		container:  wrapper,
+		height:     1,
+		minHeight:  1,
+		focusables: []tview.Primitive{box},
+		labelView:  labelView,
+	})
+	fm.registerFocusable(box, len(fm.rows)-1)
+	return box
+}
+
 // AddStatic appends a one-row read-only line (e.g. the sub-issue parent).
 func (fm *FormModal) AddStatic(text string) *tview.TextView {
 	view := tview.NewTextView()
