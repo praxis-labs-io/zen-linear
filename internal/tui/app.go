@@ -294,6 +294,8 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		otherIDToIssue:       make(map[string]*linearapi.Issue),
 		activeIssuesSection:  IssuesSectionOther, // Default to Other section
 		agentPromptTemplates: templates,
+		// Details opens on demand (palette toggle); the list gets the room.
+		detailsHidden: true,
 	}
 
 	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
