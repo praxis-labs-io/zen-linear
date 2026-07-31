@@ -46,10 +46,18 @@ type FormModal struct {
 	rows       []formRow
 	order      []tview.Primitive
 	buttons    []*tview.Button
+	pickerRow  *pickerRowState
 	focusIdx   int
 	scrollTop  int
 	onCancel   func()
 	onSubmit   func()
+}
+
+// pickerRowState tracks the open shared row consecutive pickers pack into.
+type pickerRowState struct {
+	labels *tview.Flex
+	values *tview.Flex
+	rowIdx int
 }
 
 // NewFormModal creates an empty form modal shell with the given border title.
@@ -124,9 +132,84 @@ func (fm *FormModal) AddTextArea(label, initial string, rows int) *tview.TextAre
 	return area
 }
 
+// AddPicker appends a dropdown. Consecutive AddPicker calls share one
+// two-row unit: caps labels on the first row, the dropdowns beneath, equal
+// widths — the New Issue assignee/cycle/priority row.
+func (fm *FormModal) AddPicker(label string, options []string, selected int, onChange func(text string, index int)) *tview.DropDown {
+	theme := fm.app.theme
+
+	dd := tview.NewDropDown().
+		SetOptions(options, onChange).
+		SetFieldBackgroundColor(theme.ModalBackground()).
+		SetFieldTextColor(theme.Foreground)
+	dd.SetFieldWidth(0)
+	dd.SetListStyles(
+		tcell.StyleDefault.Background(theme.ModalBackground()).Foreground(theme.Foreground),
+		tcell.StyleDefault.Background(theme.Accent).Foreground(theme.InverseTextColor()),
+	)
+	dd.SetBackgroundColor(theme.ModalBackground())
+	if selected >= 0 && selected < len(options) {
+		dd.SetCurrentOption(selected)
+	}
+
+	labelView := tview.NewTextView()
+	labelView.SetText(strings.ToUpper(label))
+	labelView.SetTextColor(theme.SecondaryText)
+	labelView.SetBackgroundColor(theme.ModalBackground())
+
+	if fm.pickerRow == nil {
+		labels := tview.NewFlex()
+		labels.SetBackgroundColor(theme.ModalBackground())
+		values := tview.NewFlex()
+		values.SetBackgroundColor(theme.ModalBackground())
+
+		container := tview.NewFlex().SetDirection(tview.FlexRow)
+		container.SetBackgroundColor(theme.ModalBackground())
+		container.AddItem(labels, 1, 0, false)
+		container.AddItem(values, 1, 0, true)
+
+		fm.appendRow(formRow{
+			container: container,
+			height:    2,
+			minHeight: 2,
+		})
+		fm.pickerRow = &pickerRowState{labels: labels, values: values, rowIdx: len(fm.rows) - 1}
+	} else {
+		fm.pickerRow.labels.AddItem(nil, 2, 0, false)
+		fm.pickerRow.values.AddItem(nil, 2, 0, false)
+	}
+
+	fm.pickerRow.labels.AddItem(labelView, 0, 1, false)
+	fm.pickerRow.values.AddItem(dd, 0, 1, true)
+	rowIdx := fm.pickerRow.rowIdx
+	fm.rows[rowIdx].focusables = append(fm.rows[rowIdx].focusables, dd)
+	fm.registerFocusable(dd, rowIdx)
+	return dd
+}
+
+// AddStatic appends a one-row read-only line (e.g. the sub-issue parent).
+func (fm *FormModal) AddStatic(text string) *tview.TextView {
+	view := tview.NewTextView()
+	view.SetText(text)
+	view.SetTextColor(fm.app.theme.SecondaryText)
+	view.SetBackgroundColor(fm.app.theme.ModalBackground())
+	fm.pickerRow = nil
+	fm.appendRow(formRow{container: staticRowContainer(view, fm.app.theme), height: 1, minHeight: 1})
+	return view
+}
+
+// staticRowContainer wraps a static view so rows stay uniform Flex items.
+func staticRowContainer(view *tview.TextView, theme Theme) *tview.Flex {
+	container := tview.NewFlex().SetDirection(tview.FlexRow)
+	container.SetBackgroundColor(theme.ModalBackground())
+	container.AddItem(view, 1, 0, false)
+	return container
+}
+
 // addFramedRow builds the caps-label-plus-framed-editor unit shared by text
 // fields and registers the editor in the tab order.
 func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRows int, flexible bool) {
+	fm.pickerRow = nil
 	theme := fm.app.theme
 
 	labelView := tview.NewTextView()
@@ -200,6 +283,16 @@ func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
 			row.frame.SetBorderColor(fm.app.theme.Border)
 		}
 	}
+	// Pickers have no frame; the focused one gets the input fill instead.
+	for _, candidate := range fm.order {
+		if dd, ok := candidate.(*tview.DropDown); ok {
+			if dd == p {
+				dd.SetFieldBackgroundColor(fm.app.theme.InputBg)
+			} else {
+				dd.SetFieldBackgroundColor(fm.app.theme.ModalBackground())
+			}
+		}
+	}
 	if rowIdx >= 0 {
 		fm.ensureVisible(rowIdx)
 	}
@@ -209,6 +302,7 @@ func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
 // no persistent primary; order carries the emphasis and Cancel goes last.
 func (fm *FormModal) AddButtons(buttons ...FormButton) {
 	theme := fm.app.theme
+	fm.pickerRow = nil
 	fm.buttonsRow = tview.NewFlex()
 	fm.buttonsRow.SetBackgroundColor(theme.ModalBackground())
 	for i, spec := range buttons {
