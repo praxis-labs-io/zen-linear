@@ -41,8 +41,8 @@ func TestRenderIssueRow(t *testing.T) {
 				Labels:     []linearapi.IssueLabel{{Name: "Bug"}, {Name: "UI"}},
 			},
 			wantID:       "LIN-1",
-			wantState:    Icons.Todo,
-			wantPriority: Icons.Priority,
+			wantState:    "○",
+			wantPriority: "▄",
 			wantAssignee: "John Doe",
 			wantLabels:   "Bug, UI",
 		},
@@ -57,8 +57,8 @@ func TestRenderIssueRow(t *testing.T) {
 				Priority:   1, // Urgent priority
 			},
 			wantID:       "LIN-2",
-			wantState:    Icons.InProgress,
-			wantPriority: "!",
+			wantState:    "◐",
+			wantPriority: "▲",
 			wantAssignee: "-",
 			wantLabels:   "-",
 		},
@@ -73,7 +73,7 @@ func TestRenderIssueRow(t *testing.T) {
 				Priority:   0, // No priority
 			},
 			wantID:       "VERY-LONG-", // truncated to 10 chars
-			wantState:    Icons.Done,
+			wantState:    "●",
 			wantPriority: "-",
 			wantAssignee: "Jane",
 			wantLabels:   "-",

@@ -17,36 +17,41 @@ const (
 	IconChildPrefix = "└─"
 )
 
-// formatPriority renders a priority as a colored icon, like Linear's list
-// view: urgent stands out, the rest share the icon and differ by color.
+// formatPriority renders a priority as a rising bar glyph like Linear's
+// priority icon; urgent breaks the pattern deliberately. All glyphs are
+// single-cell text presentation so rows stay aligned (no emoji-width
+// variance).
 // Linear priority: 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low.
 func formatPriority(priority int, theme Theme) (string, tcell.Color) {
 	switch priority {
 	case 1:
-		return "!", theme.StatusCanceled // Red for urgent
+		return "▲", theme.StatusCanceled // Red for urgent
 	case 2:
-		return Icons.Priority, theme.StatusInProgress // Yellow for high
+		return "▆", theme.StatusInProgress // Yellow for high
 	case 3:
-		return Icons.Priority, theme.Foreground // Default for normal
+		return "▄", theme.Foreground // Default for normal
 	case 4:
-		return Icons.Priority, theme.SecondaryText // Gray for low
+		return "▂", theme.SecondaryText // Gray for low
 	default:
 		return "-", theme.SecondaryText // No priority
 	}
 }
 
-// formatStateIcon renders a workflow state as a colored icon.
+// formatStateIcon renders a workflow state as a colored icon from a single
+// circle family so every state occupies one cell at the same visual weight.
 func formatStateIcon(state string, theme Theme) (string, tcell.Color) {
 	lowerState := strings.ToLower(state)
 	switch {
 	case strings.Contains(lowerState, "done") || strings.Contains(lowerState, "complete"):
-		return Icons.Done, theme.StatusDone
-	case strings.Contains(lowerState, "progress"):
-		return Icons.InProgress, theme.StatusInProgress
-	case strings.Contains(lowerState, "cancel"):
-		return Icons.Canceled, theme.StatusCanceled
+		return "●", theme.StatusDone
+	case strings.Contains(lowerState, "progress") || strings.Contains(lowerState, "review"):
+		return "◐", theme.StatusInProgress
+	case strings.Contains(lowerState, "cancel") || strings.Contains(lowerState, "duplicate"):
+		return "⊘", theme.StatusCanceled
+	case strings.Contains(lowerState, "backlog"):
+		return "◌", theme.SecondaryText
 	default:
-		return Icons.Todo, theme.StatusTodo
+		return "○", theme.StatusTodo
 	}
 }
 
@@ -461,7 +466,7 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		table.SetCell(row, 3, tview.NewTableCell(issue.Title).
 			SetTextColor(theme.Foreground).
 			SetAlign(tview.AlignLeft).
-			SetMaxWidth(60))
+			SetMaxWidth(45))
 
 		labels := formatLabels(issue.Labels)
 		labelsColor := theme.HeaderText
