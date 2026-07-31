@@ -1296,14 +1296,11 @@ func (a *App) updateFocus() {
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusIssues:
-		// Focus the active issues section
-		if a.activeIssuesSection == IssuesSectionMy && len(a.myIssueRows) == 0 {
-			a.activeIssuesSection = IssuesSectionOther
-		}
+		// Focus the visible issues section
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
-		if table := a.tableForSection(a.activeIssuesSection); table != nil {
+		if table := a.tableForSection(a.effectiveIssuesSection()); table != nil {
 			a.app.SetFocus(table)
 			table.SetBorderColor(a.theme.BorderFocus)
 		}
@@ -1676,11 +1673,9 @@ func (a *App) applyRichFiltersToParams(params *linearapi.FetchIssuesParams) {
 func (a *App) updateIssuesColumnLayout() {
 	a.issuesColumn.Clear()
 
-	// Without any My Issues, that tab disappears.
-	if a.activeIssuesSection == IssuesSectionMy && len(a.myIssueRows) == 0 {
-		a.activeIssuesSection = IssuesSectionOther
-	}
-	a.issuesColumn.AddItem(a.tableForSection(a.activeIssuesSection), 0, 1, false)
+	// Without any My Issues, that tab disappears (without forgetting the
+	// active choice: My re-applies once it has rows).
+	a.issuesColumn.AddItem(a.tableForSection(a.effectiveIssuesSection()), 0, 1, false)
 
 	// Update all pane titles to reflect current state
 	a.updateAllPaneTitles()
