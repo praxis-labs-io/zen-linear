@@ -1896,6 +1896,7 @@ func groupDimensionPickerItems() []PickerItem {
 		{ID: GroupByPriority, Label: "Priority"},
 		{ID: GroupByAssignee, Label: "Assignee"},
 		{ID: GroupByCycle, Label: "Cycle"},
+		{ID: GroupByProject, Label: "Project"},
 	}
 }
 
