@@ -530,8 +530,11 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 			}
 		}
 		return nil
-	case 'H', 'L':
-		scrollIssueColumns(table, event.Rune())
+	case a.actionKey("columns_left", 'H'):
+		scrollIssueColumns(table, 'H')
+		return nil
+	case a.actionKey("columns_right", 'L'):
+		scrollIssueColumns(table, 'L')
 		return nil
 	case ' ':
 		// Space toggles expand/collapse
