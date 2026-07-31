@@ -12,12 +12,14 @@ import (
 	"github.com/roeyazroel/linear-tui/internal/logger"
 )
 
-// FormatShortcut returns a human-readable string for a shortcut.
+// FormatShortcut returns a human-readable string for a shortcut. The rune is
+// shown verbatim: shortcut dispatch is case-sensitive, so 'w' and 'W' are
+// different binds and must render differently.
 func FormatShortcut(r rune) string {
 	if r == 0 {
 		return ""
 	}
-	return strings.ToUpper(string(r))
+	return string(r)
 }
 
 // Command represents a command that can be executed from the palette.
@@ -848,6 +850,20 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				a.ShowEditTitleModal()
+			},
+		},
+		{
+			ID:           "edit_description",
+			Title:        "Edit issue description",
+			Keywords:     []string{"edit", "description", "body", "details"},
+			ShortcutRune: 'D',
+			Run: func(a *App) {
+				issue := a.GetSelectedIssue()
+				if issue == nil {
+					a.flashStatus("No issue selected")
+					return
+				}
+				a.ShowEditDescriptionModal()
 			},
 		},
 		{
