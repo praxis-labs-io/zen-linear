@@ -57,6 +57,41 @@ func favoriteNavigationNodes(favorites []linearapi.Favorite) []*NavigationNode {
 				TeamID: favorite.TeamID,
 				IsTeam: true,
 			})
+		case "customView":
+			if favorite.CustomViewID == "" {
+				continue
+			}
+			label := favorite.CustomViewName
+			if favorite.Title != "" {
+				label = favorite.Title
+			}
+			nodes = append(nodes, &NavigationNode{
+				ID:           favorite.CustomViewID,
+				Text:         label,
+				CustomViewID: favorite.CustomViewID,
+			})
+		case "predefinedView":
+			switch favorite.PredefinedViewType {
+			case "triage":
+				label := favorite.Title
+				if label == "" {
+					label = "Triage"
+				}
+				nodes = append(nodes, &NavigationNode{
+					ID:        favorite.ID,
+					Text:      label,
+					TeamID:    favorite.PredefinedViewTeamID,
+					StateType: "triage",
+				})
+			case "allIssues":
+				label := favorite.Title
+				if label == "" {
+					label = "All Issues"
+				}
+				nodes = append(nodes, &NavigationNode{ID: "all", Text: label})
+			default:
+				logger.Debug("tui.favorites: skipping unsupported predefined view type=%s id=%s", favorite.PredefinedViewType, favorite.ID)
+			}
 		default:
 			logger.Debug("tui.favorites: skipping unsupported favorite type=%s id=%s", favorite.Type, favorite.ID)
 		}
