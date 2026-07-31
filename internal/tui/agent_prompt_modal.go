@@ -37,7 +37,7 @@ func NewAgentPromptModal(app *App) *AgentPromptModal {
 	}
 
 	am.form = tview.NewForm()
-	am.form.SetBackgroundColor(app.theme.HeaderBg)
+	am.form.SetBackgroundColor(app.theme.ModalBackground())
 	am.form.SetFieldBackgroundColor(app.theme.InputBg)
 	am.form.SetFieldTextColor(app.theme.Foreground)
 	am.form.SetButtonBackgroundColor(app.theme.Accent)
@@ -66,7 +66,7 @@ func NewAgentPromptModal(app *App) *AgentPromptModal {
 			})
 		am.templateField.SetFieldWidth(40)
 		am.templateField.SetListStyles(
-			tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+			tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 			tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 		)
 		am.form.AddFormItem(am.templateField)
@@ -89,12 +89,12 @@ func NewAgentPromptModal(app *App) *AgentPromptModal {
 	headerView := tview.NewTextView()
 	headerView.SetText("Ask Agent")
 	headerView.SetTextColor(app.theme.Accent)
-	headerView.SetBackgroundColor(app.theme.HeaderBg)
+	headerView.SetBackgroundColor(app.theme.ModalBackground())
 
 	helpView := tview.NewTextView()
 	helpView.SetText("Esc: cancel • Ctrl+Enter / Cmd+Enter: run • Template fills prompt • Workspace blank uses CWD • Includes title, description, comments")
 	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.HeaderBg)
+	helpView.SetBackgroundColor(app.theme.ModalBackground())
 	helpView.SetTextAlign(tview.AlignCenter)
 
 	am.modalContent = tview.NewFlex().
@@ -102,8 +102,8 @@ func NewAgentPromptModal(app *App) *AgentPromptModal {
 		AddItem(headerView, 1, 0, false).
 		AddItem(am.form, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
-	am.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
-	am.modalContent.SetBackgroundColor(app.theme.HeaderBg).
+	am.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	am.modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" Agent Prompt ").

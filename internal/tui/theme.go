@@ -34,6 +34,16 @@ type Theme struct {
 	StatusCanceled   tcell.Color
 }
 
+// ModalBackground returns the panel color for modals and overlays: themes
+// with a transparent background stay transparent, opaque themes keep the
+// header background for contrast against the app surface.
+func (t Theme) ModalBackground() tcell.Color {
+	if t.Background == tcell.ColorDefault {
+		return tcell.ColorDefault
+	}
+	return t.HeaderBg
+}
+
 // InverseTextColor returns the color for inverse-video text, falling back to
 // the theme background when no explicit inverse color is set.
 func (t Theme) InverseTextColor() tcell.Color {
