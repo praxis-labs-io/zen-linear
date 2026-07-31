@@ -55,7 +55,7 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 - Settings are stored in `~/.linear-tui/config.json` and created on first start.
 - Use the Settings modal from the command palette (`:` -> `Settings`) to edit and apply settings immediately.
 - UI settings in `config.json`: `theme` (`linear`, `high_contrast`, `color_blind`) and `density` (`comfortable`, `compact`).
-- Workspaces in `config.json`: `workspaces` is a list of `{"name": "Acme", "api_key_env": "LINEAR_API_KEY_ACME"}` entries. Keys are read from the named environment variables, never stored in the file. With no explicit `LINEAR_API_KEY`, the first workspace whose env var is set becomes the startup default (stored OAuth credentials remain the fallback), and the `Switch workspace` palette command swaps between them at runtime.
+- Workspaces in `config.json`: `workspaces` is a list of `{"name": "Acme", "api_key_env": "LINEAR_API_KEY_ACME"}` entries. Keys are read from the named environment variables, never stored in the file. With no explicit `LINEAR_API_KEY`, the first workspace whose env var is set becomes the startup default (stored OAuth credentials remain the fallback), and the `Switch workspace` palette command swaps between them at runtime. `default_workspace` selects the startup workspace by name.
 - Search settings in `config.json`: `search_debounce` controls the live search debounce delay (default `300ms`).
 - Agent settings live in `config.json`: `agent_provider` (`cursor` or `claude`), `agent_sandbox` (`enabled` or `disabled`), `agent_model` (optional), and `agent_workspace` (optional).
 - Prompt templates are stored in `~/.linear-tui/prompts.json` and edited via the "Edit agent prompt templates" command.
