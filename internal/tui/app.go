@@ -419,6 +419,20 @@ func (a *App) applyThemeStyles() {
 	tview.Styles.InverseTextColor = a.theme.InverseTextColor()
 	tview.Styles.ContrastSecondaryTextColor = a.theme.SecondaryText
 
+	// Square by default; the setting swaps in rounded corner runes. Both
+	// branches assign so toggling the setting at runtime restores either look.
+	if a.config.RoundedBorders {
+		tview.Borders.TopLeft = '\u256d'     // ╭
+		tview.Borders.TopRight = '\u256e'    // ╮
+		tview.Borders.BottomLeft = '\u2570'  // ╰
+		tview.Borders.BottomRight = '\u256f' // ╯
+	} else {
+		tview.Borders.TopLeft = tview.BoxDrawingsLightDownAndRight
+		tview.Borders.TopRight = tview.BoxDrawingsLightDownAndLeft
+		tview.Borders.BottomLeft = tview.BoxDrawingsLightUpAndRight
+		tview.Borders.BottomRight = tview.BoxDrawingsLightUpAndLeft
+	}
+
 	// Focused panes are already highlighted via BorderFocus; keep single-line
 	// borders instead of tview's default double-line focus runes.
 	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
