@@ -272,6 +272,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 	}
 	theme := ResolveTheme(cfg.Theme)
 	density := ResolveDensity(cfg.Density)
+	initMarkdownRenderer(theme)
 
 	app := &App{
 		app:                  tview.NewApplication(),
@@ -392,6 +393,7 @@ func (a *App) applyThemeAndDensity() {
 	a.theme = ResolveTheme(a.config.Theme)
 	a.themeTags = NewThemeTags(a.theme)
 	a.density = ResolveDensity(a.config.Density)
+	initMarkdownRenderer(a.theme)
 
 	a.applyThemeStyles()
 	a.applyThemeToComponents()
@@ -533,8 +535,32 @@ func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
 			node.SetColor(a.theme.Foreground)
 		}
 	}
+	node.SetSelectedTextStyle(a.selectionStyle())
 	for _, child := range node.GetChildren() {
 		a.applyNavigationNodeColors(child)
+	}
+}
+
+// selectionStyle is the selected-row style shared by the tree, tables, and
+// lists. tview's default inverse-video selection paints text in the primitive
+// background color, which is unreadable for themes with a transparent
+// background.
+func (a *App) selectionStyle() tcell.Style {
+	return tcell.StyleDefault.
+		Foreground(a.theme.SelectionText).
+		Background(a.theme.SelectionBg).
+		Bold(true)
+}
+
+// applySelectionStyleToTree sets the shared selection style on a node subtree
+// without touching node colors.
+func (a *App) applySelectionStyleToTree(node *tview.TreeNode) {
+	if node == nil {
+		return
+	}
+	node.SetSelectedTextStyle(a.selectionStyle())
+	for _, child := range node.GetChildren() {
+		a.applySelectionStyleToTree(child)
 	}
 }
 
@@ -661,6 +687,7 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
 		root.AddChild(teamNode)
 	}
 
+	a.applySelectionStyleToTree(root)
 	a.navigationTree.SetRoot(root)
 	a.navigationTree.SetCurrentNode(allIssues)
 	a.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
@@ -808,6 +835,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 			})
 		teamNode.AddChild(projNode)
 	}
+	a.applySelectionStyleToTree(teamNode)
 }
 
 func sortCyclesForNavigation(cycles []linearapi.Cycle) {
