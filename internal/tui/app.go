@@ -875,6 +875,9 @@ func (a *App) buildLayout() {
 		AddItem(a.contentFlex, 0, 1, true).
 		AddItem(a.statusBar, 1, 1, false)
 
+	// Apply initial pane visibility (details is hidden by default).
+	a.rebuildContentLayout()
+
 	// Build palette modal
 	a.paletteModal = a.buildPaletteModal()
 
