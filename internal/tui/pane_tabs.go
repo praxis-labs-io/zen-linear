@@ -11,6 +11,16 @@ import (
 // pane and the border title lists every tab, highlighting the active one.
 // The { and } keys cycle tabs within the focused pane.
 
+// effectiveIssuesSection returns the section to display: the active one, or
+// Other Issues while the My tab has no rows. The active section itself is
+// left untouched so the My default re-applies once data arrives.
+func (a *App) effectiveIssuesSection() IssuesSection {
+	if a.activeIssuesSection == IssuesSectionMy && len(a.myIssueRows) == 0 {
+		return IssuesSectionOther
+	}
+	return a.activeIssuesSection
+}
+
 // tableForSection returns the table widget backing a section.
 func (a *App) tableForSection(section IssuesSection) *tview.Table {
 	switch section {
@@ -62,7 +72,7 @@ func (a *App) cycleIssuesSection(direction int) {
 	order := []IssuesSection{IssuesSectionMy, IssuesSectionOther, IssuesSectionAll}
 	current := 0
 	for i, section := range order {
-		if section == a.activeIssuesSection {
+		if section == a.effectiveIssuesSection() {
 			current = i
 			break
 		}
@@ -89,13 +99,14 @@ func (a *App) issuesTabsTitle(focused bool) string {
 	if focused {
 		prefix = " ▶ "
 	}
+	shown := a.effectiveIssuesSection()
 	var segments []string
 	if len(a.myIssueRows) > 0 {
-		segments = append(segments, a.tabSegment(fmt.Sprintf("My (%d)", len(a.myIssueRows)), a.activeIssuesSection == IssuesSectionMy, focused))
+		segments = append(segments, a.tabSegment(fmt.Sprintf("My (%d)", len(a.myIssueRows)), shown == IssuesSectionMy, focused))
 	}
 	segments = append(segments,
-		a.tabSegment(fmt.Sprintf("Other (%d)", len(a.otherIssueRows)), a.activeIssuesSection == IssuesSectionOther, focused),
-		a.tabSegment(fmt.Sprintf("All (%d)", len(a.issueRows)), a.activeIssuesSection == IssuesSectionAll, focused))
+		a.tabSegment(fmt.Sprintf("Other (%d)", len(a.otherIssueRows)), shown == IssuesSectionOther, focused),
+		a.tabSegment(fmt.Sprintf("All (%d)", len(a.issueRows)), shown == IssuesSectionAll, focused))
 	return prefix + strings.Join(segments, " · ") + " "
 }
 
