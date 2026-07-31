@@ -29,9 +29,9 @@ func (a *App) padNavigationNode(node *tview.TreeNode, level int, width int) {
 		original = node.GetText()
 		a.navNodeOriginalText[node] = original
 	}
-	// Each tree level indents its label by two graphics columns; keep one
-	// spare cell so the ellipsis lands before tview's own hard clip.
-	if available := width - 2*level - 1; available > 0 {
+	// Each tree level indents its label by three cells: one graphics offset
+	// plus tview's default node indent of two.
+	if available := width - 3*level; available > 0 {
 		node.SetText(fitToWidth(original, available))
 	}
 	for _, child := range node.GetChildren() {
