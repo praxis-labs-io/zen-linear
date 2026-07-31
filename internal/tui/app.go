@@ -151,6 +151,10 @@ type App struct {
 	themeTags ThemeTags
 	density   DensityProfile
 
+	// activeWorkspaceName is the configured workspace the current API key
+	// belongs to; empty for explicit keys and OAuth sessions.
+	activeWorkspaceName string
+
 	// UI components
 	pages                  *tview.Pages
 	mainLayout             *tview.Flex
@@ -290,6 +294,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		otherIDToIssue:       make(map[string]*linearapi.Issue),
 		activeIssuesSection:  IssuesSectionOther, // Default to Other section
 		agentPromptTemplates: templates,
+		activeWorkspaceName:  workspaceNameForKey(cfg.Workspaces, cfg.LinearAPIKey),
 	}
 
 	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
@@ -632,7 +637,11 @@ func (a *App) loadNavigationData(ctx context.Context) bool {
 
 // rebuildNavigationTree rebuilds the navigation tree with real data.
 func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
-	root := tview.NewTreeNode("Linear").
+	rootLabel := "Linear"
+	if a.activeWorkspaceName != "" {
+		rootLabel = "Linear · " + a.activeWorkspaceName
+	}
+	root := tview.NewTreeNode(rootLabel).
 		SetColor(a.theme.Accent).
 		SetSelectable(false)
 

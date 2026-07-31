@@ -194,6 +194,30 @@ func TestConfigFromSettingsValidation(t *testing.T) {
 				return settings
 			},
 		},
+		{
+			name: "workspace missing name",
+			mutate: func(settings Settings) Settings {
+				settings.Workspaces = []Workspace{{APIKeyEnv: "LINEAR_KEY_A"}}
+				return settings
+			},
+		},
+		{
+			name: "workspace missing api_key_env",
+			mutate: func(settings Settings) Settings {
+				settings.Workspaces = []Workspace{{Name: "Acme"}}
+				return settings
+			},
+		},
+		{
+			name: "duplicate workspace names",
+			mutate: func(settings Settings) Settings {
+				settings.Workspaces = []Workspace{
+					{Name: "Acme", APIKeyEnv: "LINEAR_KEY_A"},
+					{Name: "acme", APIKeyEnv: "LINEAR_KEY_B"},
+				}
+				return settings
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -204,6 +228,64 @@ func TestConfigFromSettingsValidation(t *testing.T) {
 				t.Errorf("ConfigFromSettings() expected error for %s", tt.name)
 			}
 		})
+	}
+}
+
+// TestConfigFromSettingsAcceptsWorkspaces verifies a valid workspace list
+// passes validation and reaches the config.
+func TestConfigFromSettingsAcceptsWorkspaces(t *testing.T) {
+	settings := DefaultSettings()
+	settings.Workspaces = []Workspace{
+		{Name: "Acme", APIKeyEnv: "LINEAR_KEY_A"},
+		{Name: "Side", APIKeyEnv: "LINEAR_KEY_B"},
+	}
+
+	cfg, err := ConfigFromSettings("test-key", settings)
+	if err != nil {
+		t.Fatalf("ConfigFromSettings() error: %v", err)
+	}
+	if !reflect.DeepEqual(cfg.Workspaces, settings.Workspaces) {
+		t.Errorf("Workspaces = %+v, want %+v", cfg.Workspaces, settings.Workspaces)
+	}
+}
+
+// TestLoadSettingsParsesWorkspaces verifies workspaces load from JSON.
+func TestLoadSettingsParsesWorkspaces(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "config.json")
+
+	data := []byte(`{"workspaces":[{"name":"Acme","api_key_env":"LINEAR_KEY_A"}]}`)
+	if err := os.WriteFile(settingsPath, data, 0644); err != nil {
+		t.Fatalf("write settings file: %v", err)
+	}
+
+	settings, err := LoadSettings(settingsPath)
+	if err != nil {
+		t.Fatalf("LoadSettings() error: %v", err)
+	}
+
+	expected := DefaultSettings()
+	expected.Workspaces = []Workspace{{Name: "Acme", APIKeyEnv: "LINEAR_KEY_A"}}
+	assertSettingsEqual(t, settings, expected)
+}
+
+// TestFirstAvailableWorkspace verifies startup default selection skips
+// workspaces whose env var is unset.
+func TestFirstAvailableWorkspace(t *testing.T) {
+	t.Setenv("LINEAR_KEY_B", "k-side")
+	workspaces := []Workspace{
+		{Name: "Acme", APIKeyEnv: "LINEAR_KEY_A_UNSET"},
+		{Name: "Side", APIKeyEnv: "LINEAR_KEY_B"},
+	}
+
+	workspace, ok := FirstAvailableWorkspace(workspaces)
+	if !ok || workspace.Name != "Side" {
+		t.Errorf("FirstAvailableWorkspace() = %+v, %v; want Side, true", workspace, ok)
+	}
+
+	_, ok = FirstAvailableWorkspace([]Workspace{{Name: "Acme", APIKeyEnv: "LINEAR_KEY_A_UNSET"}})
+	if ok {
+		t.Error("FirstAvailableWorkspace() = true with no env vars set, want false")
 	}
 }
 
