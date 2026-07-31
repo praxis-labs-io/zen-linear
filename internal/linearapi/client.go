@@ -174,6 +174,32 @@ type Team struct {
 	Name string
 }
 
+// Favorite represents an entry in the viewer's Linear favorites list. The
+// nested object fields are populated according to Type; unsupported favorite
+// types carry only ID, Type, and SortOrder.
+type Favorite struct {
+	ID        string
+	Type      string // issue, project, cycle, team, customView, label, document, ...
+	SortOrder float64
+
+	IssueID         string
+	IssueIdentifier string
+	IssueTitle      string
+	IssueTeamID     string
+
+	ProjectID     string
+	ProjectName   string
+	ProjectTeamID string
+
+	CycleID     string
+	CycleName   string
+	CycleNumber int
+	CycleTeamID string
+
+	TeamID   string
+	TeamName string
+}
+
 // Project represents a Linear project.
 type Project struct {
 	ID     string
@@ -694,6 +720,113 @@ func (c *Client) ListTeams(ctx context.Context) ([]Team, error) {
 	}
 
 	return teams, nil
+}
+
+// ListFavorites fetches the viewer's favorites, ordered as in Linear's sidebar.
+func (c *Client) ListFavorites(ctx context.Context) ([]Favorite, error) {
+	var after *graphql.String
+	favorites := make([]Favorite, 0)
+
+	for {
+		var query struct {
+			Favorites struct {
+				Nodes []struct {
+					ID        graphql.String
+					Type      graphql.String
+					SortOrder graphql.Float
+					Issue     *struct {
+						ID         graphql.String
+						Identifier graphql.String
+						Title      graphql.String
+						Team       struct {
+							ID graphql.String
+						}
+					}
+					Project *struct {
+						ID    graphql.String
+						Name  graphql.String
+						Teams struct {
+							Nodes []struct {
+								ID graphql.String
+							}
+						} `graphql:"teams(first: 1)"`
+					}
+					Cycle *struct {
+						ID     graphql.String
+						Name   *graphql.String
+						Number graphql.Float
+						Team   struct {
+							ID graphql.String
+						}
+					}
+					Team *struct {
+						ID   graphql.String
+						Name graphql.String
+					}
+				}
+				PageInfo struct {
+					HasNextPage graphql.Boolean
+					EndCursor   graphql.String
+				}
+			} `graphql:"favorites(first: $first, after: $after)"`
+		}
+
+		variables := map[string]interface{}{
+			"first": graphql.Int(50),
+			"after": after,
+		}
+
+		if err := c.client.Query(ctx, &query, variables); err != nil {
+			logger.ErrorWithErr(err, "linearapi.client: ListFavorites failed")
+			return nil, fmt.Errorf("list favorites: %w", err)
+		}
+
+		for _, node := range query.Favorites.Nodes {
+			favorite := Favorite{
+				ID:        string(node.ID),
+				Type:      string(node.Type),
+				SortOrder: float64(node.SortOrder),
+			}
+			if node.Issue != nil {
+				favorite.IssueID = string(node.Issue.ID)
+				favorite.IssueIdentifier = string(node.Issue.Identifier)
+				favorite.IssueTitle = string(node.Issue.Title)
+				favorite.IssueTeamID = string(node.Issue.Team.ID)
+			}
+			if node.Project != nil {
+				favorite.ProjectID = string(node.Project.ID)
+				favorite.ProjectName = string(node.Project.Name)
+				if len(node.Project.Teams.Nodes) > 0 {
+					favorite.ProjectTeamID = string(node.Project.Teams.Nodes[0].ID)
+				}
+			}
+			if node.Cycle != nil {
+				favorite.CycleID = string(node.Cycle.ID)
+				if node.Cycle.Name != nil {
+					favorite.CycleName = string(*node.Cycle.Name)
+				}
+				favorite.CycleNumber = int(node.Cycle.Number)
+				favorite.CycleTeamID = string(node.Cycle.Team.ID)
+			}
+			if node.Team != nil {
+				favorite.TeamID = string(node.Team.ID)
+				favorite.TeamName = string(node.Team.Name)
+			}
+			favorites = append(favorites, favorite)
+		}
+
+		if !bool(query.Favorites.PageInfo.HasNextPage) {
+			break
+		}
+		cursor := query.Favorites.PageInfo.EndCursor
+		after = &cursor
+	}
+
+	sort.SliceStable(favorites, func(i, j int) bool {
+		return favorites[i].SortOrder < favorites[j].SortOrder
+	})
+
+	return favorites, nil
 }
 
 // ListProjects fetches all projects for a team.
