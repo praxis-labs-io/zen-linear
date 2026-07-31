@@ -34,7 +34,7 @@ func NewMultiSelectModal(app *App) *MultiSelectModal {
 	mm.list = tview.NewList().
 		ShowSecondaryText(false).
 		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.HeaderBg)).
-		SetSelectedStyle(app.selectionStyle().Bold(false)).
+		SetSelectedStyle(app.listSelectionStyle()).
 		SetHighlightFullLine(true)
 	mm.list.SetBackgroundColor(app.theme.HeaderBg)
 

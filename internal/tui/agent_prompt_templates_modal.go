@@ -38,7 +38,7 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	pm.list = tview.NewList().
 		ShowSecondaryText(false).
 		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.HeaderBg)).
-		SetSelectedStyle(app.selectionStyle().Bold(false)).
+		SetSelectedStyle(app.listSelectionStyle()).
 		SetHighlightFullLine(true)
 	pm.list.SetBackgroundColor(app.theme.HeaderBg)
 	pm.list.SetChangedFunc(func(index int, _ string, _ string, _ rune) {

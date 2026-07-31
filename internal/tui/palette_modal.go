@@ -41,7 +41,7 @@ func (a *App) buildPaletteModal() *tview.Flex {
 	a.paletteList = tview.NewList().
 		ShowSecondaryText(false).
 		SetMainTextStyle(tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.HeaderBg)).
-		SetSelectedStyle(a.selectionStyle().Bold(false)).
+		SetSelectedStyle(a.listSelectionStyle()).
 		SetHighlightFullLine(true)
 	a.paletteList.SetBackgroundColor(a.theme.HeaderBg)
 

@@ -555,14 +555,24 @@ func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
 	}
 }
 
-// selectionStyle is the selected-row style shared by the tree, tables, and
-// lists. tview's default inverse-video selection paints text in the primitive
+// selectionStyle is the selected-row style shared by the tree and tables.
+// tview's default inverse-video selection paints text in the primitive
 // background color, which is unreadable for themes with a transparent
 // background.
 func (a *App) selectionStyle() tcell.Style {
 	return tcell.StyleDefault.
 		Foreground(a.theme.SelectionText).
 		Background(a.theme.SelectionBg).
+		Bold(true)
+}
+
+// listSelectionStyle is the stronger accent selection used by modal lists
+// (command palette, pickers), where the selected row is the primary object on
+// screen and must stand apart from input fields and panel fills.
+func (a *App) listSelectionStyle() tcell.Style {
+	return tcell.StyleDefault.
+		Foreground(a.theme.InverseTextColor()).
+		Background(a.theme.Accent).
 		Bold(true)
 }
 
