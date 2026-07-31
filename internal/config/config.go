@@ -31,6 +31,7 @@ const (
 	ThemeLinear           = "linear"
 	ThemeHighContrast     = "high_contrast"
 	ThemeColorBlind       = "color_blind"
+	ThemeRosePineMoon     = "rose_pine_moon"
 	DefaultTheme          = ThemeLinear
 	DensityComfortable    = "comfortable"
 	DensityCompact        = "compact"
