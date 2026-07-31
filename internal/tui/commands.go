@@ -254,6 +254,22 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:       "toggle_navigation_pane",
+			Title:    "Toggle navigation pane",
+			Keywords: []string{"navigation", "sidebar", "pane", "hide", "show", "toggle"},
+			Run: func(a *App) {
+				a.toggleNavigationPane()
+			},
+		},
+		{
+			ID:       "toggle_details_pane",
+			Title:    "Toggle details pane",
+			Keywords: []string{"details", "pane", "hide", "show", "toggle"},
+			Run: func(a *App) {
+				a.toggleDetailsPane()
+			},
+		},
+		{
 			ID:       "edit_prompt_templates",
 			Title:    "Edit agent prompt templates",
 			Keywords: []string{"agent", "prompt", "prompts", "template", "templates"},
