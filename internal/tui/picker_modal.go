@@ -109,7 +109,7 @@ func (pm *PickerModal) Hide() {
 	if pm.app.pages.HasPage("create_issue") {
 		pm.app.pages.SendToFront("create_issue")
 		if pm.app.createIssueModal != nil {
-			pm.app.app.SetFocus(pm.app.createIssueModal.form)
+			pm.app.createIssueModal.fm.Focus()
 		}
 		return
 	}
