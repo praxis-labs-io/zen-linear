@@ -1524,13 +1524,10 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 	// Build filter.
 	filter := buildIssueFilter(params)
 
-	// Determine if client-side sorting is needed.
 	// Linear API only supports "createdAt" and "updatedAt" for PaginationOrderBy.
-	// For "priority" sorting, we fetch by updatedAt and sort client-side.
-	sortByPriority := params.OrderBy == "priority"
-
 	orderBy := PaginationOrderBy(params.OrderBy)
-	if orderBy == "" || sortByPriority {
+	if orderBy != OrderByCreatedAt && orderBy != OrderByUpdatedAt {
+		// "priority" and "status" sort client-side; fetch by updatedAt.
 		orderBy = OrderByUpdatedAt
 	}
 

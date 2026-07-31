@@ -665,9 +665,10 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		AgentWorkspace: strings.TrimSpace(sm.agentWorkspaceField.GetText()),
 		DefaultTeam:    strings.TrimSpace(sm.defaultTeamField.GetText()),
 		DefaultProject: strings.TrimSpace(sm.defaultProjectField.GetText()),
-		// The form has no workspaces field; carry the current list through so
-		// saving settings never strips it from the config file.
-		Workspaces: sm.app.config.Workspaces,
+		// The form has no fields for these; carry the current values through
+		// so saving settings never strips them from the config file.
+		GroupByStatus: sm.app.config.GroupByStatus,
+		Workspaces:    sm.app.config.Workspaces,
 	}
 	return settings, nil
 }

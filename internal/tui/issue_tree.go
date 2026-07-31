@@ -2,6 +2,7 @@ package tui
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
@@ -13,41 +14,117 @@ type IssueRow struct {
 	IsParent    bool   // True if this issue has children
 	HasChildren bool   // True if this issue has children (same as IsParent for now)
 	IsExpanded  bool   // True if children are shown (only meaningful when HasChildren is true)
+	IsHeader    bool   // True for a status group header row (no issue)
+	HeaderText  string // Workflow state name for header rows
+	HeaderCount int    // Number of top-level issues in the group
+}
+
+// statusRank orders workflow states by lifecycle category, mirroring Linear:
+// triage, backlog, unstarted, started, completed, canceled. The state type is
+// not fetched, so the category is derived from the state name.
+func statusRank(state string) int {
+	lowerState := strings.ToLower(state)
+	switch {
+	case strings.Contains(lowerState, "triage"):
+		return 0
+	case strings.Contains(lowerState, "backlog"):
+		return 1
+	case strings.Contains(lowerState, "unstarted"):
+		return 2
+	case strings.Contains(lowerState, "progress") || strings.Contains(lowerState, "review") || strings.Contains(lowerState, "started"):
+		return 3
+	case strings.Contains(lowerState, "done") || strings.Contains(lowerState, "complete"):
+		return 4
+	case strings.Contains(lowerState, "cancel") || strings.Contains(lowerState, "duplicate"):
+		return 5
+	default:
+		return 2 // todo and anything unrecognized sit with unstarted
+	}
+}
+
+// sortIssuesByStatus sorts issues by workflow state category, then state name.
+func sortIssuesByStatus(issues []linearapi.Issue) {
+	sort.SliceStable(issues, func(i, j int) bool {
+		ri, rj := statusRank(issues[i].State), statusRank(issues[j].State)
+		if ri != rj {
+			return ri < rj
+		}
+		return issues[i].State < issues[j].State
+	})
 }
 
 // BuildIssueRows constructs a flattened list of rows for table rendering.
 // It builds a hierarchical view where parent issues can be expanded/collapsed.
 // Returns the rows and a map for quick issue lookup by ID.
 func BuildIssueRows(issues []linearapi.Issue, expanded map[string]bool) ([]IssueRow, map[string]*linearapi.Issue) {
+	idToIssue, topLevel, childrenByParent := indexIssues(issues)
+	rows := appendIssueRows(nil, topLevel, childrenByParent, expanded)
+	return rows, idToIssue
+}
+
+// BuildGroupedIssueRows constructs rows grouped by workflow state with a
+// header row per group, like Linear's grouped list view. Hierarchy behaves as
+// in BuildIssueRows; a parent's subtree stays under the parent's group.
+func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool) ([]IssueRow, map[string]*linearapi.Issue) {
+	idToIssue, topLevel, childrenByParent := indexIssues(issues)
+
+	groupsByState := make(map[string][]*linearapi.Issue)
+	var stateOrder []string
+	for _, issue := range topLevel {
+		if _, seen := groupsByState[issue.State]; !seen {
+			stateOrder = append(stateOrder, issue.State)
+		}
+		groupsByState[issue.State] = append(groupsByState[issue.State], issue)
+	}
+	sort.SliceStable(stateOrder, func(i, j int) bool {
+		ri, rj := statusRank(stateOrder[i]), statusRank(stateOrder[j])
+		if ri != rj {
+			return ri < rj
+		}
+		return stateOrder[i] < stateOrder[j]
+	})
+
+	var rows []IssueRow
+	for _, state := range stateOrder {
+		group := groupsByState[state]
+		rows = append(rows, IssueRow{
+			IsHeader:    true,
+			HeaderText:  state,
+			HeaderCount: len(group),
+		})
+		rows = appendIssueRows(rows, group, childrenByParent, expanded)
+	}
+	return rows, idToIssue
+}
+
+// indexIssues splits issues into top-level entries and children keyed by
+// parent, alongside the id lookup map.
+// An issue is "top-level" if it has no parent or its parent is not in the
+// fetched list (orphan sub-issue).
+func indexIssues(issues []linearapi.Issue) (map[string]*linearapi.Issue, []*linearapi.Issue, map[string][]*linearapi.Issue) {
 	idToIssue := make(map[string]*linearapi.Issue, len(issues))
 	for i := range issues {
 		idToIssue[issues[i].ID] = &issues[i]
 	}
 
-	// Separate parent issues (no parent in our list) from children
-	// An issue is a "top-level" issue if:
-	// 1. It has no parent (issue.Parent == nil), OR
-	// 2. Its parent is not in our fetched list (orphan sub-issue)
 	var topLevel []*linearapi.Issue
 	childrenByParent := make(map[string][]*linearapi.Issue)
-
 	for i := range issues {
 		issue := &issues[i]
 		if issue.Parent == nil {
-			// No parent - this is a top-level issue
 			topLevel = append(topLevel, issue)
 		} else if _, parentInList := idToIssue[issue.Parent.ID]; parentInList {
-			// Parent is in our list - group under parent
 			childrenByParent[issue.Parent.ID] = append(childrenByParent[issue.Parent.ID], issue)
 		} else {
-			// Orphan sub-issue (parent not in list) - treat as top-level with marker
 			topLevel = append(topLevel, issue)
 		}
 	}
+	return idToIssue, topLevel, childrenByParent
+}
 
-	// Build rows
-	var rows []IssueRow
-
+// appendIssueRows emits table rows for the given top-level issues, expanding
+// children where requested.
+func appendIssueRows(rows []IssueRow, topLevel []*linearapi.Issue, childrenByParent map[string][]*linearapi.Issue, expanded map[string]bool) []IssueRow {
 	for _, issue := range topLevel {
 		// Check if this issue has children in our list
 		children := childrenByParent[issue.ID]
@@ -87,7 +164,7 @@ func BuildIssueRows(issues []linearapi.Issue, expanded map[string]bool) ([]Issue
 		}
 	}
 
-	return rows, idToIssue
+	return rows
 }
 
 // ToggleExpanded toggles the expanded state for an issue.

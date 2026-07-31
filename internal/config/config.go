@@ -83,6 +83,9 @@ type Config struct {
 	// Density controls the UI spacing density.
 	Density string
 
+	// GroupByStatus groups the issues list by workflow state.
+	GroupByStatus bool
+
 	// RoundedBorders draws pane borders with rounded corners.
 	RoundedBorders bool
 
