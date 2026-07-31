@@ -1383,7 +1383,6 @@ func (c *Client) searchIssues(ctx context.Context, params FetchIssuesParams) ([]
 
 // searchIssuesPage fetches a single page of issues using Linear's searchIssues query.
 //
-//nolint:dupl // GraphQL library requires inline struct definitions; duplication with fetchIssuesWithFilterPage is unavoidable.
 func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {
@@ -1683,7 +1682,6 @@ type issueQueryNode struct {
 
 // fetchIssuesWithFilterPage fetches a single page of issues using the standard issues query.
 //
-//nolint:dupl // GraphQL library requires inline struct definitions; duplication with searchIssuesPage is unavoidable.
 func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {
