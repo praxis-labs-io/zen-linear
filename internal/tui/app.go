@@ -412,7 +412,7 @@ func (a *App) applyThemeStyles() {
 	tview.Styles.PrimaryTextColor = a.theme.Foreground
 	tview.Styles.SecondaryTextColor = a.theme.SecondaryText
 	tview.Styles.TertiaryTextColor = a.theme.SecondaryText
-	tview.Styles.InverseTextColor = a.theme.Background
+	tview.Styles.InverseTextColor = a.theme.InverseTextColor()
 	tview.Styles.ContrastSecondaryTextColor = a.theme.SecondaryText
 }
 

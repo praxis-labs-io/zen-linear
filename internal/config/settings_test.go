@@ -102,6 +102,19 @@ func TestLoadSettingsPreservesEmptyLogFile(t *testing.T) {
 	assertSettingsEqual(t, settings, expected)
 }
 
+// TestConfigFromSettingsAcceptsAllThemes checks every registered theme name validates.
+func TestConfigFromSettingsAcceptsAllThemes(t *testing.T) {
+	for _, theme := range []string{ThemeLinear, ThemeHighContrast, ThemeColorBlind, ThemeRosePineMoon} {
+		t.Run(theme, func(t *testing.T) {
+			settings := DefaultSettings()
+			settings.Theme = theme
+			if _, err := ConfigFromSettings("test-key", settings); err != nil {
+				t.Errorf("ConfigFromSettings() error for theme %q: %v", theme, err)
+			}
+		})
+	}
+}
+
 // TestConfigFromSettingsValidation checks invalid settings are rejected.
 func TestConfigFromSettingsValidation(t *testing.T) {
 	base := DefaultSettings()
