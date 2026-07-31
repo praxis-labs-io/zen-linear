@@ -421,6 +421,15 @@ func (a *App) applyThemeStyles() {
 	tview.Styles.TertiaryTextColor = a.theme.SecondaryText
 	tview.Styles.InverseTextColor = a.theme.InverseTextColor()
 	tview.Styles.ContrastSecondaryTextColor = a.theme.SecondaryText
+
+	// Focused panes are already highlighted via BorderFocus; keep single-line
+	// borders instead of tview's default double-line focus runes.
+	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
+	tview.Borders.VerticalFocus = tview.Borders.Vertical
+	tview.Borders.TopLeftFocus = tview.Borders.TopLeft
+	tview.Borders.TopRightFocus = tview.Borders.TopRight
+	tview.Borders.BottomLeftFocus = tview.Borders.BottomLeft
+	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
 }
 
 func (a *App) applyThemeToComponents() {
