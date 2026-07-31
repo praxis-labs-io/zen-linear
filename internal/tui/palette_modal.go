@@ -7,6 +7,10 @@ import (
 	"github.com/rivo/tview"
 )
 
+// paletteMaxVisibleRows caps how many commands the palette shows at once;
+// longer lists scroll.
+const paletteMaxVisibleRows = 12
+
 // buildPaletteModal creates and configures the command palette modal overlay.
 func (a *App) buildPaletteModal() *tview.Flex {
 	// Create input field for query with improved styling
@@ -119,9 +123,13 @@ func (a *App) updatePaletteList() {
 		a.paletteList.SetCurrentItem(cursor)
 	}
 
-	// Show all commands when they fit; otherwise cap the modal to the screen
-	// and let the list scroll.
+	// Keep the palette compact like a typical command palette: show at most
+	// paletteMaxVisibleRows commands (fewer on short screens) and scroll the
+	// rest.
 	listRows := len(filtered)
+	if listRows > paletteMaxVisibleRows {
+		listRows = paletteMaxVisibleRows
+	}
 	chromeRows := 2 + (2 * a.density.PaletteSpacerLines) + 2 // input + help + spacers + border
 	if _, _, _, pagesHeight := a.pages.GetRect(); pagesHeight > chromeRows+4 {
 		if maxRows := pagesHeight - chromeRows - 2; listRows > maxRows {
