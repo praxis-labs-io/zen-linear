@@ -1923,15 +1923,16 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 		}
 	}
 
-	// If no target issue, default to first available.
+	// If no target issue, default to the first issue row (skipping group
+	// headers, which carry no issue).
 	if selectedIssue == nil {
-		if len(a.myIssueRows) > 0 {
-			if issue, ok := a.myIDToIssue[a.myIssueRows[0].IssueID]; ok {
+		if first := nextIssueRow(a.myIssueRows, 0, 1); first > 0 {
+			if issue, ok := a.myIDToIssue[a.myIssueRows[first-1].IssueID]; ok {
 				selectedIssue = issue
 				a.activeIssuesSection = IssuesSectionMy
 			}
-		} else if len(a.otherIssueRows) > 0 {
-			if issue, ok := a.otherIDToIssue[a.otherIssueRows[0].IssueID]; ok {
+		} else if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
+			if issue, ok := a.otherIDToIssue[a.otherIssueRows[first-1].IssueID]; ok {
 				selectedIssue = issue
 				a.activeIssuesSection = IssuesSectionOther
 			}
