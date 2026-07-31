@@ -24,8 +24,18 @@ type Theme struct {
 	// Status Colors
 	StatusTodo       tcell.Color
 	StatusInProgress tcell.Color
+	StatusReview     tcell.Color // zero value falls back to StatusDone
 	StatusDone       tcell.Color
 	StatusCanceled   tcell.Color
+}
+
+// StatusReviewColor returns the color for review states, falling back to the
+// done color for themes that predate the field.
+func (t Theme) StatusReviewColor() tcell.Color {
+	if t.StatusReview != tcell.ColorDefault {
+		return t.StatusReview
+	}
+	return t.StatusDone
 }
 
 // LinearTheme is the default dark theme inspired by Linear.
@@ -44,6 +54,7 @@ var LinearTheme = Theme{
 
 	StatusTodo:       tcell.NewRGBColor(140, 140, 140), // Gray
 	StatusInProgress: tcell.NewRGBColor(242, 201, 76),  // Yellow
+	StatusReview:     tcell.NewRGBColor(76, 183, 130),  // #4CB782 green
 	StatusDone:       tcell.NewRGBColor(94, 106, 210),  // Purple/Blue (Linear uses purple for done often, or green)
 	StatusCanceled:   tcell.NewRGBColor(255, 80, 80),   // Red
 }
@@ -64,6 +75,7 @@ var HighContrastTheme = Theme{
 
 	StatusTodo:       tcell.NewRGBColor(255, 255, 255), // White
 	StatusInProgress: tcell.NewRGBColor(255, 255, 0),   // Yellow
+	StatusReview:     tcell.NewRGBColor(0, 255, 0),     // Green
 	StatusDone:       tcell.NewRGBColor(0, 255, 0),     // Green
 	StatusCanceled:   tcell.NewRGBColor(255, 0, 0),     // Red
 }
@@ -84,6 +96,7 @@ var ColorBlindTheme = Theme{
 
 	StatusTodo:       tcell.NewRGBColor(153, 153, 153), // Gray
 	StatusInProgress: tcell.NewRGBColor(86, 180, 233),  // #56B4E9
+	StatusReview:     tcell.NewRGBColor(0, 158, 115),   // #009E73
 	StatusDone:       tcell.NewRGBColor(0, 158, 115),   // #009E73
 	StatusCanceled:   tcell.NewRGBColor(213, 94, 0),    // #D55E00
 }
