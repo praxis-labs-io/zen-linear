@@ -1417,6 +1417,7 @@ func (a *App) updateAllPaneTitles() {
 
 // openPalette opens the command palette overlay.
 func (a *App) openPalette() {
+	a.paletteCtrl.SetIssueContext(a.focusedPane == FocusIssues || a.focusedPane == FocusDetails)
 	a.paletteCtrl.Reset()
 	a.paletteInput.SetText("")
 	a.paletteInput.SetLabel("> ")
