@@ -2311,7 +2311,6 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 					Title      graphql.String
 					Subtitle   *graphql.String
 					URL        graphql.String
-					BranchName graphql.String
 					SourceType *graphql.String
 					CreatedAt  graphql.String
 					UpdatedAt  graphql.String
