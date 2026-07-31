@@ -118,7 +118,7 @@ func (pm *PickerModal) Hide() {
 	if pm.app.pages.HasPage("edit_title") {
 		pm.app.pages.SendToFront("edit_title")
 		if pm.app.editTitleModal != nil {
-			pm.app.app.SetFocus(pm.app.editTitleModal.form)
+			pm.app.editTitleModal.fm.Focus()
 		}
 		return
 	}

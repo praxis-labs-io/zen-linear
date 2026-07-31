@@ -28,6 +28,7 @@ type formRow struct {
 	flexible   bool
 	focusables []tview.Primitive
 	frame      *tview.Flex
+	labelView  *tview.TextView
 }
 
 // FormModal renders a Linear-style form modal: caps labels above framed
@@ -100,6 +101,13 @@ func (fm *FormModal) SetTitle(title string) {
 
 // SetHint sets the dim hint line inside the bottom border.
 func (fm *FormModal) SetHint(hint string) { fm.hintView.SetText(hint) }
+
+// SetRowLabel retitles a field's caps label (some modals relabel per Show).
+func (fm *FormModal) SetRowLabel(rowIdx int, label string) {
+	if rowIdx >= 0 && rowIdx < len(fm.rows) && fm.rows[rowIdx].labelView != nil {
+		fm.rows[rowIdx].labelView.SetText(strings.ToUpper(label))
+	}
+}
 
 // SetOnCancel sets the Esc handler.
 func (fm *FormModal) SetOnCancel(fn func()) { fm.onCancel = fn }
@@ -235,6 +243,7 @@ func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRo
 		flexible:   flexible,
 		focusables: []tview.Primitive{editor},
 		frame:      editorFrame,
+		labelView:  labelView,
 	}
 	if !flexible {
 		row.minHeight = row.height
@@ -482,6 +491,14 @@ func (fm *FormModal) Hide(pageName string) {
 
 // Root returns the fullscreen wrapper for pages.
 func (fm *FormModal) Root() *tview.Flex { return fm.root }
+
+// Focus returns keyboard focus to the form's current field — used when an
+// overlay (e.g. a picker) closes over a stacked form modal.
+func (fm *FormModal) Focus() {
+	if p := fm.focusedPrimitive(); p != nil {
+		fm.app.app.SetFocus(p)
+	}
+}
 
 // openDropdown returns the open dropdown in the tab order, if any.
 func (fm *FormModal) openDropdown() *tview.DropDown {
