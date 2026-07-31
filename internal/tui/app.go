@@ -25,6 +25,7 @@ const (
 	SortByUpdatedAt SortField = "updatedAt"
 	SortByCreatedAt SortField = "createdAt"
 	SortByPriority  SortField = "priority"
+	SortByStatus    SortField = "status"
 )
 
 // IssueFilters contains structured filters applied in addition to navigation.
@@ -151,13 +152,24 @@ type App struct {
 	themeTags ThemeTags
 	density   DensityProfile
 
+	// activeWorkspaceName is the configured workspace the current API key
+	// belongs to; empty for explicit keys and OAuth sessions.
+	activeWorkspaceName string
+
 	// UI components
 	pages                  *tview.Pages
 	mainLayout             *tview.Flex
+	contentFlex            *tview.Flex
+	navigationHidden       bool
+	detailsHidden          bool
+	layoutMode             layoutMode
+	palettePreviousPane    FocusTarget
 	navigationTree         *tview.TreeView
+	navNodeOriginalText    map[*tview.TreeNode]string
 	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
 	myIssuesTable          *tview.Table
 	otherIssuesTable       *tview.Table
+	allIssuesTable         *tview.Table
 	issuesColumn           *tview.Flex     // Vertical flex containing My/Other tables
 	detailsView            *tview.Flex     // Flex container for details (description + comments)
 	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
@@ -203,10 +215,11 @@ type App struct {
 	expandedState  map[string]bool             // Expanded state for parent issues (shared across sections)
 
 	// Filter/sort state
-	searchQuery   string
-	richFilters   IssueFilters
-	sortField     SortField
-	statusMessage string
+	searchQuery     string
+	richFilters     IssueFilters
+	sortField       SortField
+	collapsedGroups map[string]bool
+	statusMessage   string
 
 	searchDebounceTimer      *time.Timer
 	searchDebounceMu         sync.Mutex
@@ -272,6 +285,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 	}
 	theme := ResolveTheme(cfg.Theme)
 	density := ResolveDensity(cfg.Density)
+	initMarkdownRenderer(theme)
 
 	app := &App{
 		app:                  tview.NewApplication(),
@@ -285,11 +299,16 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		focusedPane:          FocusNavigation,
 		sortField:            SortByUpdatedAt,
 		expandedState:        make(map[string]bool),
+		navNodeOriginalText:  make(map[*tview.TreeNode]string),
 		idToIssue:            make(map[string]*linearapi.Issue),
 		myIDToIssue:          make(map[string]*linearapi.Issue),
 		otherIDToIssue:       make(map[string]*linearapi.Issue),
-		activeIssuesSection:  IssuesSectionOther, // Default to Other section
+		activeIssuesSection:  IssuesSectionMy, // Default to My Issues (falls back to Other when empty)
 		agentPromptTemplates: templates,
+		activeWorkspaceName:  workspaceNameForKey(cfg.Workspaces, cfg.LinearAPIKey),
+		// Details opens on demand (Enter or the palette toggle); the list
+		// gets the room.
+		detailsHidden: true,
 	}
 
 	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
@@ -346,7 +365,8 @@ func (a *App) loadInitialData() {
 		// Fetch teams and build navigation. Default navigation triggers its own
 		// refresh after applying the configured selection.
 		if !a.loadNavigationData(ctx) {
-			a.refreshIssues()
+			// Startup refresh must not steal focus from the navigation pane.
+			a.refreshIssuesWithFocusChange(false)
 		}
 	}()
 }
@@ -392,6 +412,7 @@ func (a *App) applyThemeAndDensity() {
 	a.theme = ResolveTheme(a.config.Theme)
 	a.themeTags = NewThemeTags(a.theme)
 	a.density = ResolveDensity(a.config.Density)
+	initMarkdownRenderer(a.theme)
 
 	a.applyThemeStyles()
 	a.applyThemeToComponents()
@@ -412,8 +433,31 @@ func (a *App) applyThemeStyles() {
 	tview.Styles.PrimaryTextColor = a.theme.Foreground
 	tview.Styles.SecondaryTextColor = a.theme.SecondaryText
 	tview.Styles.TertiaryTextColor = a.theme.SecondaryText
-	tview.Styles.InverseTextColor = a.theme.Background
+	tview.Styles.InverseTextColor = a.theme.InverseTextColor()
 	tview.Styles.ContrastSecondaryTextColor = a.theme.SecondaryText
+
+	// Square by default; the setting swaps in rounded corner runes. Both
+	// branches assign so toggling the setting at runtime restores either look.
+	if a.config.RoundedBorders {
+		tview.Borders.TopLeft = '\u256d'     // ╭
+		tview.Borders.TopRight = '\u256e'    // ╮
+		tview.Borders.BottomLeft = '\u2570'  // ╰
+		tview.Borders.BottomRight = '\u256f' // ╯
+	} else {
+		tview.Borders.TopLeft = tview.BoxDrawingsLightDownAndRight
+		tview.Borders.TopRight = tview.BoxDrawingsLightDownAndLeft
+		tview.Borders.BottomLeft = tview.BoxDrawingsLightUpAndRight
+		tview.Borders.BottomRight = tview.BoxDrawingsLightUpAndLeft
+	}
+
+	// Focused panes are already highlighted via BorderFocus; keep single-line
+	// borders instead of tview's default double-line focus runes.
+	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
+	tview.Borders.VerticalFocus = tview.Borders.Vertical
+	tview.Borders.TopLeftFocus = tview.Borders.TopLeft
+	tview.Borders.TopRightFocus = tview.Borders.TopRight
+	tview.Borders.BottomLeftFocus = tview.Borders.BottomLeft
+	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
 }
 
 func (a *App) applyThemeToComponents() {
@@ -426,11 +470,15 @@ func (a *App) applyThemeToComponents() {
 
 	if a.myIssuesTable != nil {
 		a.applyIssuesTableTheme(a.myIssuesTable)
-		renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, a.selectedIssueID(IssuesSectionMy), a.theme)
+		renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, a.selectedIssueID(IssuesSectionMy), a.theme, a.issueColumns())
 	}
 	if a.otherIssuesTable != nil {
 		a.applyIssuesTableTheme(a.otherIssuesTable)
-		renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, a.selectedIssueID(IssuesSectionOther), a.theme)
+		renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, a.selectedIssueID(IssuesSectionOther), a.theme, a.issueColumns())
+	}
+	if a.allIssuesTable != nil {
+		a.applyIssuesTableTheme(a.allIssuesTable)
+		renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, a.selectedIssueID(IssuesSectionAll), a.theme, a.issueColumns())
 	}
 
 	if a.detailsDescriptionView != nil {
@@ -533,8 +581,42 @@ func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
 			node.SetColor(a.theme.Foreground)
 		}
 	}
+	node.SetSelectedTextStyle(a.selectionStyle())
 	for _, child := range node.GetChildren() {
 		a.applyNavigationNodeColors(child)
+	}
+}
+
+// selectionStyle is the selected-row style shared by the tree and tables.
+// tview's default inverse-video selection paints text in the primitive
+// background color, which is unreadable for themes with a transparent
+// background.
+func (a *App) selectionStyle() tcell.Style {
+	return tcell.StyleDefault.
+		Foreground(a.theme.SelectionText).
+		Background(a.theme.SelectionBg).
+		Bold(true)
+}
+
+// listSelectionStyle is the stronger accent selection used by modal lists
+// (command palette, pickers), where the selected row is the primary object on
+// screen and must stand apart from input fields and panel fills.
+func (a *App) listSelectionStyle() tcell.Style {
+	return tcell.StyleDefault.
+		Foreground(a.theme.InverseTextColor()).
+		Background(a.theme.Accent).
+		Bold(true)
+}
+
+// applySelectionStyleToTree sets the shared selection style on a node subtree
+// without touching node colors.
+func (a *App) applySelectionStyleToTree(node *tview.TreeNode) {
+	if node == nil {
+		return
+	}
+	node.SetSelectedTextStyle(a.selectionStyle())
+	for _, child := range node.GetChildren() {
+		a.applySelectionStyleToTree(child)
 	}
 }
 
@@ -580,6 +662,7 @@ func (a *App) resetCachedState() {
 	a.workflowStates = nil
 	a.teamCycles = nil
 	a.richFilters = IssueFilters{}
+	a.collapsedGroups = make(map[string]bool)
 	a.searchQuery = ""
 	a.cancelSearchDebounce()
 	a.activeIssuesSection = IssuesSectionOther
@@ -614,25 +697,50 @@ func parseLogLevel(level string) logger.LogLevel {
 // navigation tree. It reports whether default navigation started the initial
 // issue refresh.
 func (a *App) loadNavigationData(ctx context.Context) bool {
-	teams, err := a.cache.GetTeams(ctx)
-	if err != nil {
-		logger.ErrorWithErr(err, "tui.app: failed to load teams")
+	var teams []linearapi.Team
+	var favorites []linearapi.Favorite
+	var teamsErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		teams, teamsErr = a.cache.GetTeams(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		fetched, err := a.api.ListFavorites(ctx)
+		if err != nil {
+			// Favorites only enhance the tree; render it without them on failure.
+			logger.ErrorWithErr(err, "tui.app: failed to load favorites")
+			return
+		}
+		favorites = fetched
+	}()
+	wg.Wait()
+
+	if teamsErr != nil {
+		logger.ErrorWithErr(teamsErr, "tui.app: failed to load teams")
 		a.app.QueueUpdateDraw(func() {
-			a.updateStatusBarWithError(err)
+			a.updateStatusBarWithError(teamsErr)
 		})
 		return false
 	}
 
-	logger.Debug("tui.app: loaded teams count=%d", len(teams))
+	logger.Debug("tui.app: loaded teams count=%d favorites_count=%d", len(teams), len(favorites))
 	a.app.QueueUpdateDraw(func() {
-		a.rebuildNavigationTree(teams)
+		a.rebuildNavigationTree(teams, favorites)
 	})
 	return a.applyDefaultNavigation(ctx, teams)
 }
 
 // rebuildNavigationTree rebuilds the navigation tree with real data.
-func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
-	root := tview.NewTreeNode("Linear").
+func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearapi.Favorite) {
+	a.navNodeOriginalText = make(map[*tview.TreeNode]string)
+	rootLabel := "Linear"
+	if a.activeWorkspaceName != "" {
+		rootLabel = "Linear · " + a.activeWorkspaceName
+	}
+	root := tview.NewTreeNode(rootLabel).
 		SetColor(a.theme.Accent).
 		SetSelectable(false)
 
@@ -642,6 +750,8 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
 		SetReference(&NavigationNode{ID: "all", Text: "All Issues"}).
 		SetExpanded(true)
 	root.AddChild(allIssues)
+
+	a.appendFavoritesSection(root, favorites)
 
 	// Add teams
 	for _, team := range teams {
@@ -661,6 +771,7 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
 		root.AddChild(teamNode)
 	}
 
+	a.applySelectionStyleToTree(root)
 	a.navigationTree.SetRoot(root)
 	a.navigationTree.SetCurrentNode(allIssues)
 	a.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
@@ -736,7 +847,7 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, projects []linearapi.Project, states []linearapi.WorkflowState, cycles []linearapi.Cycle) {
 	if len(cycles) > 0 {
 		sortCyclesForNavigation(cycles)
-		cyclesGroup := tview.NewTreeNode("  Cycles").
+		cyclesGroup := tview.NewTreeNode("Cycles").
 			SetColor(a.theme.SecondaryText).
 			SetSelectable(false).
 			SetReference(&NavigationNode{
@@ -755,7 +866,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 			case cycle.IsPrevious:
 				label += " (previous)"
 			}
-			cycleNode := tview.NewTreeNode("    " + label).
+			cycleNode := tview.NewTreeNode(label).
 				SetColor(a.theme.SecondaryText).
 				SetReference(&NavigationNode{
 					ID:        cycle.ID,
@@ -773,7 +884,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		sort.Slice(states, func(i, j int) bool {
 			return states[i].Position < states[j].Position
 		})
-		statusGroup := tview.NewTreeNode("  Status").
+		statusGroup := tview.NewTreeNode("Status").
 			SetColor(a.theme.SecondaryText).
 			SetSelectable(false).
 			SetReference(&NavigationNode{
@@ -783,7 +894,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 				IsStatus: true,
 			})
 		for _, state := range states {
-			stateNode := tview.NewTreeNode("    " + state.Name).
+			stateNode := tview.NewTreeNode(state.Name).
 				SetColor(a.theme.SecondaryText).
 				SetReference(&NavigationNode{
 					ID:        state.ID,
@@ -798,7 +909,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		teamNode.AddChild(statusGroup)
 	}
 	for _, proj := range projects {
-		projNode := tview.NewTreeNode("  " + proj.Name).
+		projNode := tview.NewTreeNode(proj.Name).
 			SetColor(a.theme.SecondaryText).
 			SetReference(&NavigationNode{
 				ID:        proj.ID,
@@ -808,6 +919,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 			})
 		teamNode.AddChild(projNode)
 	}
+	a.applySelectionStyleToTree(teamNode)
 }
 
 func sortCyclesForNavigation(cycles []linearapi.Cycle) {
@@ -848,6 +960,7 @@ func (a *App) buildLayout() {
 	// Build My Issues and Other Issues tables
 	a.myIssuesTable = a.buildIssuesTable(" My Issues ", IssuesSectionMy)
 	a.otherIssuesTable = a.buildIssuesTable(" Other Issues ", IssuesSectionOther)
+	a.allIssuesTable = a.buildIssuesTable(" All Issues ", IssuesSectionAll)
 	// Create vertical flex for issues column
 	a.issuesColumn = tview.NewFlex().SetDirection(tview.FlexRow)
 	// Initially show only Other Issues table (My Issues will be added when issues are loaded)
@@ -858,7 +971,7 @@ func (a *App) buildLayout() {
 	a.statusBar = a.buildStatusBar()
 
 	// Create horizontal split: navigation (20%) | issues (50%) | details (30%)
-	contentFlex := tview.NewFlex().
+	a.contentFlex = tview.NewFlex().
 		AddItem(a.navigationTree, 0, 2, true).
 		AddItem(a.issuesColumn, 0, 5, false).
 		AddItem(a.detailsView, 0, 3, false)
@@ -866,8 +979,11 @@ func (a *App) buildLayout() {
 	// Create vertical layout: content + status bar
 	a.mainLayout = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(contentFlex, 0, 1, true).
+		AddItem(a.contentFlex, 0, 1, true).
 		AddItem(a.statusBar, 1, 1, false)
+
+	// Apply initial pane visibility (details is hidden by default).
+	a.rebuildContentLayout()
 
 	// Build palette modal
 	a.paletteModal = a.buildPaletteModal()
@@ -886,6 +1002,13 @@ func (a *App) buildLayout() {
 	a.agentOutputModal = NewAgentOutputModal(a)
 	a.confirmationModal = NewConfirmationModal(a)
 	a.agentRunner = agents.NewRunner()
+
+	// Reflow panes when the terminal width crosses a breakpoint.
+	a.app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		width, _ := screen.Size()
+		a.watchLayoutWidth(width)
+		return false
+	})
 
 	// Add main layout to pages
 	a.pages.AddPage("main", a.mainLayout, true, true)
@@ -1021,13 +1144,13 @@ func (a *App) bindGlobalKeys() {
 			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
-			case 'q':
+			case a.actionKey("quit", 'q'):
 				a.app.Stop()
 				return nil
-			case ':':
+			case a.actionKey("open_palette", ':'):
 				a.openPalette()
 				return nil
-			case '/':
+			case a.actionKey("search", '/'):
 				a.openSearchPalette()
 				return nil
 			}
@@ -1047,6 +1170,17 @@ func (a *App) bindGlobalKeys() {
 	})
 }
 
+// runCommandShortcut fires the palette command bound to the rune, if any.
+func (a *App) runCommandShortcut(r rune) bool {
+	for _, cmd := range a.paletteCtrl.commands {
+		if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r {
+			cmd.Run(a)
+			return true
+		}
+	}
+	return false
+}
+
 // handleNavigationKey handles keyboard input when navigation pane is focused.
 func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
@@ -1055,10 +1189,18 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 		a.updateFocus()
 		return nil
 	case tcell.KeyRune:
-		if event.Rune() == 'l' {
+		switch r := event.Rune(); r {
+		case 'l':
 			a.focusedPane = FocusIssues
 			a.updateFocus()
 			return nil
+		case 'j', 'k', 'g', 'G', 'h':
+			// Tree movement keys stay with the tree.
+		default:
+			// Command shortcuts work from the navigation pane too.
+			if a.runCommandShortcut(r) {
+				return nil
+			}
 		}
 	}
 	return event
@@ -1090,13 +1232,20 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 			a.updateFocus()
 			return nil
 		}
+		// { and } cycle the issues tabs, lazygit-style ([ and ] keep their
+		// original expand/collapse-all bindings).
+		switch r {
+		case a.actionKey("tab_prev", '{'):
+			a.cycleIssuesSection(-1)
+			return nil
+		case a.actionKey("tab_next", '}'):
+			a.cycleIssuesSection(1)
+			return nil
+		}
 		// Handle command shortcuts (plain letters) - skip navigation keys
 		if r != 'j' && r != 'k' { // j/k are handled by table for up/down
-			for _, cmd := range a.paletteCtrl.commands {
-				if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r {
-					cmd.Run(a)
-					return nil
-				}
+			if a.runCommandShortcut(r) {
+				return nil
 			}
 		}
 	}
@@ -1106,14 +1255,27 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 // handleDetailsKey handles keyboard input when details pane is focused.
 func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
+	case tcell.KeyEnter:
+		// Enter closes the details pane and returns to the issues list.
+		a.focusedPane = FocusIssues
+		a.toggleDetailsPane()
+		return nil
 	case tcell.KeyLeft:
 		a.focusedPane = FocusIssues
 		a.updateFocus()
 		return nil
 	case tcell.KeyRune:
-		if event.Rune() == 'h' {
+		switch event.Rune() {
+		case 'h':
 			a.focusedPane = FocusIssues
 			a.updateFocus()
+			return nil
+		case a.actionKey("tab_prev", '{'), a.actionKey("tab_next", '}'):
+			// Cycle the Details/Comments tabs, lazygit-style.
+			if a.detailsCommentsVisible {
+				a.focusedDetailsView = !a.focusedDetailsView
+				a.updateFocus()
+			}
 			return nil
 		}
 	}
@@ -1260,27 +1422,34 @@ func (a *App) cyclePanesBackward() {
 
 // updateFocus updates the focus state of all panes.
 func (a *App) updateFocus() {
+	// Hidden panes cannot take focus; fall back to the issues column.
+	if (a.focusedPane == FocusNavigation && a.navigationHidden) ||
+		(a.focusedPane == FocusDetails && a.detailsHidden) {
+		a.focusedPane = FocusIssues
+	}
+	// In responsive modes the focused pane decides what is visible.
+	if a.layoutMode != layoutWide {
+		a.rebuildContentLayout()
+	}
 	switch a.focusedPane {
 	case FocusNavigation:
 		a.app.SetFocus(a.navigationTree)
 		a.navigationTree.SetBorderColor(a.theme.BorderFocus)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusIssues:
-		// Focus the active issues section
-		if a.activeIssuesSection == IssuesSectionMy && len(a.myIssueRows) > 0 {
-			a.app.SetFocus(a.myIssuesTable)
-			a.myIssuesTable.SetBorderColor(a.theme.BorderFocus)
-			a.otherIssuesTable.SetBorderColor(a.theme.Border)
-		} else {
-			a.app.SetFocus(a.otherIssuesTable)
-			a.myIssuesTable.SetBorderColor(a.theme.Border)
-			a.otherIssuesTable.SetBorderColor(a.theme.BorderFocus)
-			a.activeIssuesSection = IssuesSectionOther
+		// Focus the visible issues section
+		a.myIssuesTable.SetBorderColor(a.theme.Border)
+		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
+		if table := a.tableForSection(a.effectiveIssuesSection()); table != nil {
+			a.app.SetFocus(table)
+			table.SetBorderColor(a.theme.BorderFocus)
 		}
 		// Update all pane titles
 		a.updateAllPaneTitles()
@@ -1292,6 +1461,7 @@ func (a *App) updateFocus() {
 		if !a.detailsCommentsVisible {
 			a.focusedDetailsView = false
 		}
+		a.updateDetailsLayout()
 		if a.focusedDetailsView && a.detailsCommentsVisible {
 			a.app.SetFocus(a.detailsCommentsView)
 			a.detailsDescriptionView.SetBorderColor(a.theme.Border)
@@ -1304,6 +1474,7 @@ func (a *App) updateFocus() {
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusPalette:
@@ -1311,6 +1482,7 @@ func (a *App) updateFocus() {
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles
@@ -1330,77 +1502,32 @@ func (a *App) updateAllPaneTitles() {
 		a.navigationTree.SetTitleColor(a.theme.Foreground)
 	}
 
-	// Update Issues pane titles
+	// Update Issues pane tab strip
 	isIssuesFocused := a.focusedPane == FocusIssues
+	issuesTitle := a.issuesTabsTitle(isIssuesFocused)
+	a.myIssuesTable.SetTitle(issuesTitle)
+	a.myIssuesTable.SetTitleColor(a.theme.Foreground)
+	a.otherIssuesTable.SetTitle(issuesTitle)
+	a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
+	a.allIssuesTable.SetTitle(issuesTitle)
+	a.allIssuesTable.SetTitleColor(a.theme.Foreground)
 
-	// Update My Issues table title
-	if len(a.myIssueRows) > 0 {
-		if isIssuesFocused && a.activeIssuesSection == IssuesSectionMy {
-			// Active section: add visual indicator and accent color
-			a.myIssuesTable.SetTitle(" ▶ My Issues ")
-			a.myIssuesTable.SetTitleColor(a.theme.Accent)
-		} else {
-			// Inactive section: normal title
-			a.myIssuesTable.SetTitle(" My Issues ")
-			a.myIssuesTable.SetTitleColor(a.theme.Foreground)
-		}
-	} else {
-		// No issues in this section
-		a.myIssuesTable.SetTitle(" My Issues ")
-		a.myIssuesTable.SetTitleColor(a.theme.Foreground)
-	}
-
-	// Update Other Issues table title
-	if len(a.otherIssueRows) > 0 {
-		if isIssuesFocused && a.activeIssuesSection == IssuesSectionOther {
-			// Active section: add visual indicator and accent color
-			a.otherIssuesTable.SetTitle(" ▶ Other Issues ")
-			a.otherIssuesTable.SetTitleColor(a.theme.Accent)
-		} else {
-			// Inactive section: normal title
-			a.otherIssuesTable.SetTitle(" Other Issues ")
-			a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
-		}
-	} else {
-		// No issues in this section
-		a.otherIssuesTable.SetTitle(" Other Issues ")
-		a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
-	}
-
-	// Update Details pane titles
+	// Update Details pane tab strip
 	isDetailsFocused := a.focusedPane == FocusDetails
 	if a.detailsDescriptionView != nil {
-		if isDetailsFocused {
-			// Details pane is focused - show indicator on active sub-view
-			if a.focusedDetailsView && a.detailsCommentsVisible && a.detailsCommentsView != nil {
-				// Comments view is active
-				a.detailsDescriptionView.SetTitle(" Details ")
-				a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
-				a.detailsCommentsView.SetTitle(" ▶ Comments ")
-				a.detailsCommentsView.SetTitleColor(a.theme.Accent)
-			} else {
-				// Description view is active
-				a.detailsDescriptionView.SetTitle(" ▶ Details ")
-				a.detailsDescriptionView.SetTitleColor(a.theme.Accent)
-				if a.detailsCommentsVisible && a.detailsCommentsView != nil {
-					a.detailsCommentsView.SetTitle(" Comments ")
-					a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
-				}
-			}
-		} else {
-			// Details pane is not focused - reset both titles
-			a.detailsDescriptionView.SetTitle(" Details ")
-			a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
-			if a.detailsCommentsView != nil {
-				a.detailsCommentsView.SetTitle(" Comments ")
-				a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
-			}
+		detailsTitle := a.detailsTabsTitle(isDetailsFocused)
+		a.detailsDescriptionView.SetTitle(detailsTitle)
+		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
+		if a.detailsCommentsView != nil {
+			a.detailsCommentsView.SetTitle(detailsTitle)
+			a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
 		}
 	}
 }
 
 // openPalette opens the command palette overlay.
 func (a *App) openPalette() {
+	a.paletteCtrl.SetIssueContext(a.focusedPane == FocusIssues || a.focusedPane == FocusDetails)
 	a.paletteCtrl.Reset()
 	a.paletteInput.SetText("")
 	a.paletteInput.SetLabel("> ")
@@ -1408,6 +1535,9 @@ func (a *App) openPalette() {
 	a.updatePaletteList()
 	a.pages.ShowPage("palette")
 	a.pages.SendToFront("palette")
+	if a.focusedPane != FocusPalette {
+		a.palettePreviousPane = a.focusedPane
+	}
 	a.focusedPane = FocusPalette
 	a.updateFocus()
 }
@@ -1423,6 +1553,9 @@ func (a *App) openSearchPalette() {
 	a.paletteModalContent.SetTitle(" Search Issues ")
 	a.pages.ShowPage("palette")
 	a.pages.SendToFront("palette")
+	if a.focusedPane != FocusPalette {
+		a.palettePreviousPane = a.focusedPane
+	}
 	a.focusedPane = FocusPalette
 	a.updateFocus()
 }
@@ -1432,7 +1565,8 @@ func (a *App) closePalette() {
 	a.cancelSearchDebounce()
 	a.paletteCtrl.SetSearchMode(false)
 	a.pages.HidePage("palette")
-	a.focusedPane = FocusNavigation
+	// Restore focus to the pane the palette was opened from.
+	a.focusedPane = a.palettePreviousPane
 	a.updateFocus()
 }
 
@@ -1560,6 +1694,11 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		// Apply team/project/state filter based on navigation selection
 		if a.selectedNavigation != nil {
 			switch {
+			case a.selectedNavigation.CustomViewID != "":
+				params.CustomViewID = a.selectedNavigation.CustomViewID
+			case a.selectedNavigation.StateType != "":
+				params.TeamID = a.selectedNavigation.TeamID
+				params.StateType = a.selectedNavigation.StateType
 			case a.selectedNavigation.IsStatus:
 				params.TeamID = a.selectedNavigation.TeamID
 				params.StateID = a.selectedNavigation.StateID
@@ -1690,17 +1829,13 @@ func (a *App) applyRichFiltersToParams(params *linearapi.FetchIssuesParams) {
 	}
 }
 
-// updateIssuesColumnLayout updates the issues column flex to show/hide My Issues table.
+// updateIssuesColumnLayout shows the active issues tab at full height.
 func (a *App) updateIssuesColumnLayout() {
 	a.issuesColumn.Clear()
 
-	// Add My Issues table if there are any
-	if len(a.myIssueRows) > 0 {
-		a.issuesColumn.AddItem(a.myIssuesTable, 0, 1, false)
-	}
-
-	// Always add Other Issues table
-	a.issuesColumn.AddItem(a.otherIssuesTable, 0, 1, false)
+	// Without any My Issues, that tab disappears (without forgetting the
+	// active choice: My re-applies once it has rows).
+	a.issuesColumn.AddItem(a.tableForSection(a.effectiveIssuesSection()), 0, 1, false)
 
 	// Update all pane titles to reflect current state
 	a.updateAllPaneTitles()
@@ -1711,9 +1846,7 @@ func (a *App) updateIssuesColumnLayout() {
 func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 	a.issuesMu.Lock()
 	a.issues = issues
-	if a.sortField == SortByPriority {
-		sortIssuesByPriority(a.issues)
-	}
+	a.sortIssuesLocally()
 
 	// Determine target issue ID
 	var targetIssueID string
@@ -1749,40 +1882,38 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	}
 	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
 
-	// Build hierarchical tree rows for each section.
-	a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
-	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
+	// Build hierarchical tree rows for each section, grouped when enabled.
+	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues)
+	a.otherIssueRows, a.otherIDToIssue = a.buildIssueRowsFor(otherIssues)
 
-	// Legacy: keep old fields for backward compatibility during migration.
-	a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
-	a.issueRows = append(a.issueRows, a.myIssueRows...)
-	a.issueRows = append(a.issueRows, a.otherIssueRows...)
-	a.idToIssue = make(map[string]*linearapi.Issue)
-	for k, v := range a.myIDToIssue {
-		a.idToIssue[k] = v
-	}
-	for k, v := range a.otherIDToIssue {
-		a.idToIssue[k] = v
-	}
+	// The All Issues tab renders the full list.
+	a.issueRows, a.idToIssue = a.buildIssueRowsFor(issues)
 
-	// Update layout to show/hide My Issues section.
-	a.updateIssuesColumnLayout()
-
-	// Render both tables.
-	var selectedMyIssueID, selectedOtherIssueID string
+	// Render the tables.
+	var selectedMyIssueID, selectedOtherIssueID, selectedAllIssueID string
 	if targetIssueID != "" {
-		// Check which section contains the target issue.
+		selectedAllIssueID = targetIssueID
+		// Check which section contains the target issue; the All tab shows
+		// everything, so it stays active when selected.
 		if _, ok := a.myIDToIssue[targetIssueID]; ok {
 			selectedMyIssueID = targetIssueID
-			a.activeIssuesSection = IssuesSectionMy
+			if a.activeIssuesSection != IssuesSectionAll {
+				a.activeIssuesSection = IssuesSectionMy
+			}
 		} else if _, ok := a.otherIDToIssue[targetIssueID]; ok {
 			selectedOtherIssueID = targetIssueID
-			a.activeIssuesSection = IssuesSectionOther
+			if a.activeIssuesSection != IssuesSectionAll {
+				a.activeIssuesSection = IssuesSectionOther
+			}
 		}
 	}
 
-	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
-	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
+	// Show the active tab (after target selection may have switched it).
+	a.updateIssuesColumnLayout()
+
+	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
+	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
+	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme, a.issueColumns())
 
 	// Select issue and update details.
 	var selectedIssue *linearapi.Issue
@@ -1794,15 +1925,16 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 		}
 	}
 
-	// If no target issue, default to first available.
+	// If no target issue, default to the first issue row (skipping group
+	// headers, which carry no issue).
 	if selectedIssue == nil {
-		if len(a.myIssueRows) > 0 {
-			if issue, ok := a.myIDToIssue[a.myIssueRows[0].IssueID]; ok {
+		if first := nextIssueRow(a.myIssueRows, 0, 1); first > 0 {
+			if issue, ok := a.myIDToIssue[a.myIssueRows[first-1].IssueID]; ok {
 				selectedIssue = issue
 				a.activeIssuesSection = IssuesSectionMy
 			}
-		} else if len(a.otherIssueRows) > 0 {
-			if issue, ok := a.otherIDToIssue[a.otherIssueRows[0].IssueID]; ok {
+		} else if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
+			if issue, ok := a.otherIDToIssue[a.otherIssueRows[first-1].IssueID]; ok {
 				selectedIssue = issue
 				a.activeIssuesSection = IssuesSectionOther
 			}
@@ -1831,9 +1963,7 @@ func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
 		existing[issue.ID] = true
 	}
 
-	if a.sortField == SortByPriority {
-		sortIssuesByPriority(a.issues)
-	}
+	a.sortIssuesLocally()
 
 	targetIssueID := ""
 	if a.selectedIssue != nil {
@@ -1851,6 +1981,149 @@ func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
 	a.issuesMu.Unlock()
 	a.updateDetailsView()
 	a.updateStatusBar()
+}
+
+// sortIssuesLocally applies sort orders the Linear API cannot provide.
+// Callers must hold issuesMu.
+func (a *App) sortIssuesLocally() {
+	switch a.sortField {
+	case SortByPriority:
+		sortIssuesByPriority(a.issues)
+	case SortByStatus:
+		sortIssuesByStatus(a.issues)
+	}
+}
+
+// issueColumns returns the configured issue list columns, or the default
+// Linear-style layout.
+func (a *App) issueColumns() []string {
+	if len(a.config.Columns) == 0 {
+		return DefaultIssueColumns
+	}
+	return a.config.Columns
+}
+
+// buildIssueRowsFor builds table rows for an issue list, honoring the
+// configured grouping dimensions.
+func (a *App) buildIssueRowsFor(issues []linearapi.Issue) ([]IssueRow, map[string]*linearapi.Issue) {
+	if a.config.GroupBy == GroupByNone {
+		return BuildIssueRows(issues, a.expandedState)
+	}
+	return BuildGroupedIssueRows(issues, a.expandedState, a.config.GroupBy, a.config.SubgroupBy, a.collapsedGroups)
+}
+
+// toggleGroupCollapse collapses or expands a group header and keeps the
+// header selected after the rebuild.
+func (a *App) toggleGroupCollapse(section IssuesSection, header IssueRow) {
+	if header.HeaderKey == "" {
+		return
+	}
+	if a.collapsedGroups == nil {
+		a.collapsedGroups = make(map[string]bool)
+	}
+	a.collapsedGroups[header.HeaderKey] = !a.collapsedGroups[header.HeaderKey]
+
+	a.issuesMu.RLock()
+	targetIssueID := ""
+	if a.selectedIssue != nil {
+		targetIssueID = a.selectedIssue.ID
+	}
+	a.issuesMu.RUnlock()
+	selectedIssue := a.rebuildIssuesTables(targetIssueID)
+	a.issuesMu.Lock()
+	a.selectedIssue = selectedIssue
+	a.issuesMu.Unlock()
+	a.updateDetailsView()
+
+	// Re-select the toggled header so repeated presses toggle in place.
+	var table *tview.Table
+	switch section {
+	case IssuesSectionMy:
+		table = a.myIssuesTable
+	case IssuesSectionOther:
+		table = a.otherIssuesTable
+	}
+	if table == nil {
+		return
+	}
+	for index, row := range a.rowsForSection(section) {
+		if row.IsHeader && row.HeaderKey == header.HeaderKey {
+			table.Select(index+1, 0)
+			break
+		}
+	}
+}
+
+// regroupIssues rebuilds the tables after a grouping change, keeping the
+// current selection.
+func (a *App) regroupIssues(message string) {
+	a.issuesMu.RLock()
+	targetIssueID := ""
+	if a.selectedIssue != nil {
+		targetIssueID = a.selectedIssue.ID
+	}
+	a.issuesMu.RUnlock()
+
+	selectedIssue := a.rebuildIssuesTables(targetIssueID)
+	a.issuesMu.Lock()
+	a.selectedIssue = selectedIssue
+	a.issuesMu.Unlock()
+	a.updateDetailsView()
+	a.flashStatus(message)
+}
+
+// groupDimensionPickerItems lists the grouping dimensions for the pickers.
+func groupDimensionPickerItems() []PickerItem {
+	return []PickerItem{
+		{ID: GroupByNone, Label: "None"},
+		{ID: GroupByStatus, Label: "Status"},
+		{ID: GroupByPriority, Label: "Priority"},
+		{ID: GroupByAssignee, Label: "Assignee"},
+		{ID: GroupByCycle, Label: "Cycle"},
+		{ID: GroupByProject, Label: "Project"},
+		{ID: GroupByMilestone, Label: "Milestone"},
+	}
+}
+
+// showGroupByPicker selects the primary grouping dimension.
+func (a *App) showGroupByPicker() {
+	a.pickerActive = true
+	a.pickerModal.Show("Group Issues By", groupDimensionPickerItems(), func(item PickerItem) {
+		a.pickerActive = false
+		a.config.GroupBy = item.ID
+		if a.config.SubgroupBy == item.ID {
+			a.config.SubgroupBy = GroupByNone
+		}
+		if item.ID == GroupByNone {
+			a.regroupIssues("Grouping off")
+		} else {
+			a.regroupIssues("Grouped by " + item.Label)
+		}
+	})
+}
+
+// showSubgroupByPicker selects the secondary grouping dimension.
+func (a *App) showSubgroupByPicker() {
+	if a.config.GroupBy == GroupByNone {
+		a.flashStatus("Set a grouping first (Group issues by…)")
+		return
+	}
+	items := make([]PickerItem, 0, 4)
+	for _, item := range groupDimensionPickerItems() {
+		if item.ID != a.config.GroupBy {
+			items = append(items, item)
+		}
+	}
+	a.pickerActive = true
+	a.pickerModal.Show("Subgroup Issues By", items, func(item PickerItem) {
+		a.pickerActive = false
+		a.config.SubgroupBy = item.ID
+		if item.ID == GroupByNone {
+			a.regroupIssues("Subgrouping off")
+		} else {
+			a.regroupIssues("Subgrouped by " + item.Label)
+		}
+	})
 }
 
 // sortIssuesByPriority sorts issues by priority using Linear's priority semantics.
@@ -1942,41 +2215,55 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	issues := a.issues
 	a.issuesMu.RUnlock()
 	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
-	a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
-	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
+	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues)
+	a.otherIssueRows, a.otherIDToIssue = a.buildIssueRowsFor(otherIssues)
 
-	// Legacy: keep old fields for backward compatibility
-	a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
-	a.issueRows = append(a.issueRows, a.myIssueRows...)
-	a.issueRows = append(a.issueRows, a.otherIssueRows...)
-	a.idToIssue = make(map[string]*linearapi.Issue)
-	for k, v := range a.myIDToIssue {
-		a.idToIssue[k] = v
-	}
-	for k, v := range a.otherIDToIssue {
-		a.idToIssue[k] = v
-	}
+	// The All Issues tab renders the full list.
+	a.issueRows, a.idToIssue = a.buildIssueRowsFor(issues)
 
 	// Update layout
 	a.updateIssuesColumnLayout()
 
-	// Render both tables, selecting the toggled issue
+	// Render the tables, selecting the toggled issue
 	var selectedMyIssueID, selectedOtherIssueID string
+	selectedAllIssueID := issueID
 	if _, ok := a.myIDToIssue[issueID]; ok {
 		selectedMyIssueID = issueID
-		a.activeIssuesSection = IssuesSectionMy
+		if a.activeIssuesSection != IssuesSectionAll {
+			a.activeIssuesSection = IssuesSectionMy
+		}
 	} else if _, ok := a.otherIDToIssue[issueID]; ok {
 		selectedOtherIssueID = issueID
-		a.activeIssuesSection = IssuesSectionOther
+		if a.activeIssuesSection != IssuesSectionAll {
+			a.activeIssuesSection = IssuesSectionOther
+		}
 	}
 
-	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
-	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
+	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
+	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
+	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme, a.issueColumns())
 }
 
 // onNavigationSelected handles when a navigation item is selected.
 func (a *App) onNavigationSelected(node *NavigationNode) {
-	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v is_cycle=%v", node.ID, node.Text, node.IsTeam, node.IsProject, node.IsCycle)
+	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v is_cycle=%v is_issue=%v", node.ID, node.Text, node.IsTeam, node.IsProject, node.IsCycle, node.IsIssue)
+
+	// A favorited issue is not a filter of its own: scope to its team and ask
+	// the refresh to land on the issue via the target-issue plumbing.
+	if node.IsIssue {
+		a.selectedNavigation = &NavigationNode{
+			ID:     node.TeamID,
+			Text:   node.Text,
+			TeamID: node.TeamID,
+			IsTeam: true,
+		}
+		if node.TeamID != "" {
+			go a.preloadTeamMetadataFunc(node.TeamID)
+		}
+		go a.refreshIssuesWithFocusChange(false, node.IssueID)
+		return
+	}
+
 	a.selectedNavigation = node
 
 	// Update selected team metadata for commands and create-issue defaults.

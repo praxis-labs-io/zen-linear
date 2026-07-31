@@ -52,18 +52,18 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 	om.statusView = tview.NewTextView()
 	om.statusView.SetDynamicColors(true).
 		SetTextColor(app.theme.SecondaryText).
-		SetBackgroundColor(app.theme.HeaderBg)
+		SetBackgroundColor(app.theme.ModalBackground())
 
 	om.sessionView = tview.NewTextView()
 	om.sessionView.SetDynamicColors(true).
 		SetTextColor(app.theme.SecondaryText).
-		SetBackgroundColor(app.theme.HeaderBg)
+		SetBackgroundColor(app.theme.ModalBackground())
 	om.sessionView.SetTextAlign(tview.AlignRight)
 
 	om.resumeView = tview.NewTextView()
 	om.resumeView.SetDynamicColors(true).
 		SetTextColor(app.theme.SecondaryText).
-		SetBackgroundColor(app.theme.HeaderBg)
+		SetBackgroundColor(app.theme.ModalBackground())
 	om.resumeView.SetTextAlign(tview.AlignCenter)
 
 	om.streamView = tview.NewTextView()
@@ -71,7 +71,7 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		SetWrap(true).
 		SetWordWrap(true).
 		SetScrollable(true).
-		SetBackgroundColor(app.theme.HeaderBg).
+		SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" Stream ").
@@ -82,7 +82,7 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		SetWrap(true).
 		SetWordWrap(true).
 		SetScrollable(true).
-		SetBackgroundColor(app.theme.HeaderBg).
+		SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" Final ").
@@ -91,19 +91,19 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 	om.helpView = tview.NewTextView()
 	om.helpView.SetText("Esc: cancel • c: copy • r: resume cmd • ↑↓/j/k: scroll • g/G: top/bottom • Tab: switch view")
 	om.helpView.SetTextColor(app.theme.SecondaryText)
-	om.helpView.SetBackgroundColor(app.theme.HeaderBg)
+	om.helpView.SetBackgroundColor(app.theme.ModalBackground())
 	om.helpView.SetTextAlign(tview.AlignCenter)
 
 	om.footerView = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(om.helpView, 1, 0, false).
 		AddItem(om.resumeView, 1, 0, false)
-	om.footerView.SetBackgroundColor(app.theme.HeaderBg)
+	om.footerView.SetBackgroundColor(app.theme.ModalBackground())
 
 	om.headerView = tview.NewFlex().
 		AddItem(om.statusView, 0, 1, false).
 		AddItem(om.sessionView, 0, 1, false)
-	om.headerView.SetBackgroundColor(app.theme.HeaderBg)
+	om.headerView.SetBackgroundColor(app.theme.ModalBackground())
 
 	streamSection := tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -115,8 +115,8 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		AddItem(streamSection, 0, 2, false).
 		AddItem(om.finalView, 0, 3, false).
 		AddItem(om.footerView, 1, 0, false)
-	om.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
-	om.modalContent.SetBackgroundColor(app.theme.HeaderBg)
+	om.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	om.modalContent.SetBackgroundColor(app.theme.ModalBackground())
 	padding := app.density.ModalPadding
 	om.modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
@@ -136,35 +136,35 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 // ApplyTheme updates modal colors to match the active theme.
 func (om *AgentOutputModal) ApplyTheme(theme Theme) {
 	if om.statusView != nil {
-		om.statusView.SetTextColor(theme.SecondaryText).SetBackgroundColor(theme.HeaderBg)
+		om.statusView.SetTextColor(theme.SecondaryText).SetBackgroundColor(theme.ModalBackground())
 	}
 	if om.sessionView != nil {
-		om.sessionView.SetTextColor(theme.SecondaryText).SetBackgroundColor(theme.HeaderBg)
+		om.sessionView.SetTextColor(theme.SecondaryText).SetBackgroundColor(theme.ModalBackground())
 	}
 	if om.resumeView != nil {
-		om.resumeView.SetTextColor(theme.SecondaryText).SetBackgroundColor(theme.HeaderBg)
+		om.resumeView.SetTextColor(theme.SecondaryText).SetBackgroundColor(theme.ModalBackground())
 	}
 	if om.helpView != nil {
-		om.helpView.SetTextColor(theme.SecondaryText).SetBackgroundColor(theme.HeaderBg)
+		om.helpView.SetTextColor(theme.SecondaryText).SetBackgroundColor(theme.ModalBackground())
 	}
 	if om.headerView != nil {
-		om.headerView.SetBackgroundColor(theme.HeaderBg)
+		om.headerView.SetBackgroundColor(theme.ModalBackground())
 	}
 	if om.footerView != nil {
-		om.footerView.SetBackgroundColor(theme.HeaderBg)
+		om.footerView.SetBackgroundColor(theme.ModalBackground())
 	}
 	if om.streamView != nil {
-		om.streamView.SetBackgroundColor(theme.HeaderBg).
+		om.streamView.SetBackgroundColor(theme.ModalBackground()).
 			SetBorderColor(theme.Accent).
 			SetTitleColor(theme.Foreground)
 	}
 	if om.finalView != nil {
-		om.finalView.SetBackgroundColor(theme.HeaderBg).
+		om.finalView.SetBackgroundColor(theme.ModalBackground()).
 			SetBorderColor(theme.Accent).
 			SetTitleColor(theme.Foreground)
 	}
 	if om.modalContent != nil {
-		om.modalContent.SetBackgroundColor(theme.HeaderBg)
+		om.modalContent.SetBackgroundColor(theme.ModalBackground())
 	}
 	if om.modal != nil {
 		om.modal.SetBackgroundColor(theme.Background)

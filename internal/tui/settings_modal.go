@@ -231,6 +231,7 @@ type SettingsModal struct {
 	themeOptions         []string
 	themeValues          []string
 	densityField         *tview.DropDown
+	roundedBordersField  *tview.Checkbox
 	densityOptions       []string
 	densityValues        []string
 	agentProviderField   *tview.DropDown
@@ -253,8 +254,8 @@ func NewSettingsModal(app *App) *SettingsModal {
 	sm := &SettingsModal{
 		app:                  app,
 		logLevelOptions:      []string{"debug", "info", "warning", "error"},
-		themeOptions:         []string{"Linear", "High contrast", "Color-blind friendly"},
-		themeValues:          []string{config.ThemeLinear, config.ThemeHighContrast, config.ThemeColorBlind},
+		themeOptions:         []string{"Linear", "High contrast", "Color-blind friendly", "Rose Pine Moon (transparent)"},
+		themeValues:          []string{config.ThemeLinear, config.ThemeHighContrast, config.ThemeColorBlind, config.ThemeRosePineMoon},
 		densityOptions:       []string{"Comfortable", "Compact"},
 		densityValues:        []string{config.DensityComfortable, config.DensityCompact},
 		agentProviderOptions: availableProviders,
@@ -266,7 +267,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 	sm.form = tview.NewForm()
 	sm.form.SetItemPadding(settingsFormItemPadding)
 	sm.form.SetBorderPadding(settingsFormBorderPadding, settingsFormBorderPadding, settingsFormBorderPadding, settingsFormBorderPadding)
-	sm.form.SetBackgroundColor(app.theme.HeaderBg)
+	sm.form.SetBackgroundColor(app.theme.ModalBackground())
 	sm.form.SetFieldBackgroundColor(app.theme.InputBg)
 	sm.form.SetFieldTextColor(app.theme.Foreground)
 	sm.form.SetButtonBackgroundColor(app.theme.Accent)
@@ -315,7 +316,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.logLevelOptions, nil)
 	sm.logLevelField.SetFieldWidth(20)
 	sm.logLevelField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.logLevelField)
@@ -325,7 +326,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.themeOptions, nil)
 	sm.themeField.SetFieldWidth(30)
 	sm.themeField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.themeField)
@@ -335,10 +336,14 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.densityOptions, nil)
 	sm.densityField.SetFieldWidth(20)
 	sm.densityField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.densityField)
+
+	sm.roundedBordersField = tview.NewCheckbox().
+		SetLabel("Rounded borders")
+	sm.form.AddFormItem(sm.roundedBordersField)
 
 	sm.agentProviderField = tview.NewDropDown().
 		SetLabel("Agent provider").
@@ -348,7 +353,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		})
 	sm.agentProviderField.SetFieldWidth(20)
 	sm.agentProviderField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.agentProviderField)
@@ -358,7 +363,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.agentSandboxOptions, nil)
 	sm.agentSandboxField.SetFieldWidth(20)
 	sm.agentSandboxField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.agentSandboxField)
@@ -368,7 +373,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.agentModelOptions, nil)
 	sm.agentModelField.SetFieldWidth(40)
 	sm.agentModelField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.agentModelField)
@@ -398,12 +403,12 @@ func NewSettingsModal(app *App) *SettingsModal {
 	titleView := tview.NewTextView()
 	titleView.SetText("Settings")
 	titleView.SetTextColor(app.theme.Accent)
-	titleView.SetBackgroundColor(app.theme.HeaderBg)
+	titleView.SetBackgroundColor(app.theme.ModalBackground())
 
 	helpView := tview.NewTextView()
 	helpView.SetText("Tab: next field | Enter: open dropdown | Esc: cancel")
 	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.HeaderBg)
+	helpView.SetBackgroundColor(app.theme.ModalBackground())
 	helpView.SetTextAlign(tview.AlignCenter)
 
 	sm.modalContent = tview.NewFlex().
@@ -411,8 +416,8 @@ func NewSettingsModal(app *App) *SettingsModal {
 		AddItem(titleView, 1, 0, false).
 		AddItem(sm.form, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
-	sm.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
-	sm.modalContent.SetBackgroundColor(app.theme.HeaderBg).
+	sm.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	sm.modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" Settings ").
@@ -452,6 +457,7 @@ func (sm *SettingsModal) Show() {
 	sm.setLogLevelSelection(settings.LogLevel)
 	sm.setThemeSelection(settings.Theme)
 	sm.setDensitySelection(settings.Density)
+	sm.roundedBordersField.SetChecked(settings.RoundedBorders)
 	sm.setAgentProviderSelection(selectedProvider)
 	sm.setAgentSandboxSelection(settings.AgentSandbox)
 	sm.setAgentModelOptionsForProvider(selectedProvider)
@@ -652,12 +658,25 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		LogLevel:       logLevel,
 		Theme:          theme,
 		Density:        density,
+		// No form fields; carry the current values so saving settings never
+		// strips them from the config file.
+		GroupBy:        sm.app.config.GroupBy,
+		SubgroupBy:     sm.app.config.SubgroupBy,
+		Columns:        sm.app.config.Columns,
+		RoundedBorders: sm.roundedBordersField.IsChecked(),
 		AgentProvider:  agentProvider,
 		AgentSandbox:   agentSandbox,
 		AgentModel:     agentModel,
 		AgentWorkspace: strings.TrimSpace(sm.agentWorkspaceField.GetText()),
+		// No form field; carry the current value so saving settings never
+		// strips it from the config file.
+		Keybindings:    sm.app.config.Keybindings,
 		DefaultTeam:    strings.TrimSpace(sm.defaultTeamField.GetText()),
 		DefaultProject: strings.TrimSpace(sm.defaultProjectField.GetText()),
+		// The form has no fields for these; carry the current values through
+		// so saving settings never strips them from the config file.
+		Workspaces:       sm.app.config.Workspaces,
+		DefaultWorkspace: sm.app.config.DefaultWorkspace,
 	}
 	return settings, nil
 }

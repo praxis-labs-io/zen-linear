@@ -30,22 +30,21 @@ func NewPickerModal(app *App) *PickerModal {
 	// Create list
 	pm.list = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextColor(app.theme.Foreground).
-		SetSelectedBackgroundColor(app.theme.Accent).
-		SetSelectedTextColor(app.theme.SelectionText).
+		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.ModalBackground())).
+		SetSelectedStyle(app.listSelectionStyle()).
 		SetHighlightFullLine(true)
-	pm.list.SetBackgroundColor(app.theme.HeaderBg)
+	pm.list.SetBackgroundColor(app.theme.ModalBackground())
 
 	// Create title
 	pm.titleView = tview.NewTextView()
 	pm.titleView.SetTextColor(app.theme.Accent)
-	pm.titleView.SetBackgroundColor(app.theme.HeaderBg)
+	pm.titleView.SetBackgroundColor(app.theme.ModalBackground())
 
 	// Create help text
 	helpText := tview.NewTextView()
 	helpText.SetText("↑↓/j/k: navigate | Enter: select | Esc: cancel")
 	helpText.SetTextColor(app.theme.SecondaryText)
-	helpText.SetBackgroundColor(app.theme.HeaderBg)
+	helpText.SetBackgroundColor(app.theme.ModalBackground())
 
 	// Build modal content
 	modalContent := tview.NewFlex().
@@ -53,8 +52,8 @@ func NewPickerModal(app *App) *PickerModal {
 		AddItem(pm.titleView, 1, 0, false).
 		AddItem(pm.list, 0, 1, true).
 		AddItem(helpText, 1, 0, false)
-	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
-	modalContent.SetBackgroundColor(app.theme.HeaderBg).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitleColor(app.theme.Foreground)
@@ -70,7 +69,7 @@ func NewPickerModal(app *App) *PickerModal {
 			AddItem(modalContent, 15, 0, true).
 			AddItem(nil, 0, 1, false), 50, 0, true).
 		AddItem(nil, 0, 1, false)
-	pm.modal.SetBackgroundColor(app.theme.Background)
+	pm.modal.SetBackgroundColor(app.theme.ModalBackground())
 
 	return pm
 }
@@ -83,8 +82,13 @@ func (pm *PickerModal) Show(title string, items []PickerItem, onSelect func(item
 	pm.titleView.SetText(title)
 	pm.list.Clear()
 
-	for _, item := range items {
-		pm.list.AddItem(item.Label, "", 0, nil)
+	for index, item := range items {
+		// Number shortcuts select the first nine entries directly.
+		var shortcut rune
+		if index < 9 {
+			shortcut = rune('1' + index)
+		}
+		pm.list.AddItem(item.Label, "", shortcut, nil)
 	}
 
 	if len(items) > 0 {
@@ -162,6 +166,17 @@ func (pm *PickerModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 			idx := pm.list.GetCurrentItem()
 			if idx > 0 {
 				pm.list.SetCurrentItem(idx - 1)
+			}
+			return nil
+		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			// Number shortcuts select the first nine entries directly.
+			idx := int(event.Rune() - '1')
+			if idx < len(pm.items) {
+				item := pm.items[idx]
+				pm.Hide()
+				if pm.onSelect != nil {
+					pm.onSelect(item)
+				}
 			}
 			return nil
 		}

@@ -29,21 +29,20 @@ func TestRenderIssueRow_IncludesPlanningFields(t *testing.T) {
 		},
 	}
 
+	// Planning fields (due date, estimate, milestone) intentionally stay out
+	// of the list row — the layout matches Linear's list view and planning
+	// data lives in the details pane (covered below).
 	row := renderIssueRow(issue)
-	if len(row) != 9 {
-		t.Fatalf("renderIssueRow() length = %d, want 9: %#v", len(row), row)
+	if len(row) != 7 {
+		t.Fatalf("renderIssueRow() length = %d, want 7: %#v", len(row), row)
 	}
-	if row[5] != dueDate {
-		t.Fatalf("due date column = %q, want %q", row[5], dueDate)
+	if row[3] != issue.Title {
+		t.Fatalf("title column = %q, want %q", row[3], issue.Title)
 	}
-	if row[6] != "5" {
-		t.Fatalf("estimate column = %q, want 5", row[6])
-	}
-	if row[7] != "Beta" {
-		t.Fatalf("milestone column = %q, want Beta", row[7])
-	}
-	if row[8] != issue.Title {
-		t.Fatalf("title column = %q, want %q", row[8], issue.Title)
+	for _, cell := range row {
+		if cell == dueDate || cell == "5" || cell == "Beta" {
+			t.Fatalf("planning field %q leaked into the list row: %#v", cell, row)
+		}
 	}
 }
 

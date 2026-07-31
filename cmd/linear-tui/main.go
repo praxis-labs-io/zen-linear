@@ -107,6 +107,14 @@ func runTUI() int {
 	ctx := context.Background()
 
 	apiKey := os.Getenv(config.LinearAPIKeyEnv)
+	if apiKey == "" {
+		// With no explicit key, use the configured default workspace (or the
+		// first whose key env var is set); OAuth credentials remain the
+		// fallback.
+		if workspace, ok := config.StartupWorkspace(settings.Workspaces, settings.DefaultWorkspace); ok {
+			apiKey = workspace.APIKey()
+		}
+	}
 	resolved, err := auth.Resolve(ctx, apiKey, storePath, oauthClient)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading authentication: %v\n", err)

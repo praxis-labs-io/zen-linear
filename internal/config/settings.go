@@ -12,40 +12,54 @@ import (
 
 // SettingsFile represents the on-disk JSON with optional fields.
 type SettingsFile struct {
-	APIEndpoint    *string `json:"api_endpoint"`
-	Timeout        *string `json:"timeout"`
-	PageSize       *int    `json:"page_size"`
-	CacheTTL       *string `json:"cache_ttl"`
-	SearchDebounce *string `json:"search_debounce"`
-	LogFile        *string `json:"log_file"`
-	LogLevel       *string `json:"log_level"`
-	Theme          *string `json:"theme"`
-	Density        *string `json:"density"`
-	AgentProvider  *string `json:"agent_provider"`
-	AgentSandbox   *string `json:"agent_sandbox"`
-	AgentModel     *string `json:"agent_model"`
-	AgentWorkspace *string `json:"agent_workspace"`
-	DefaultTeam    *string `json:"default_team"`
-	DefaultProject *string `json:"default_project"`
+	APIEndpoint      *string           `json:"api_endpoint"`
+	Timeout          *string           `json:"timeout"`
+	PageSize         *int              `json:"page_size"`
+	CacheTTL         *string           `json:"cache_ttl"`
+	SearchDebounce   *string           `json:"search_debounce"`
+	LogFile          *string           `json:"log_file"`
+	LogLevel         *string           `json:"log_level"`
+	Theme            *string           `json:"theme"`
+	Density          *string           `json:"density"`
+	GroupBy          *string           `json:"group_by"`
+	SubgroupBy       *string           `json:"subgroup_by"`
+	Columns          []string          `json:"columns"`
+	RoundedBorders   *bool             `json:"rounded_borders"`
+	Workspaces       []Workspace       `json:"workspaces"`
+	DefaultWorkspace *string           `json:"default_workspace"`
+	AgentProvider    *string           `json:"agent_provider"`
+	AgentSandbox     *string           `json:"agent_sandbox"`
+	AgentModel       *string           `json:"agent_model"`
+	AgentWorkspace   *string           `json:"agent_workspace"`
+	Keybindings      map[string]string `json:"keybindings"`
+	DefaultTeam      *string           `json:"default_team"`
+	DefaultProject   *string           `json:"default_project"`
 }
 
 // Settings contains concrete settings values for UI and persistence.
 type Settings struct {
-	APIEndpoint    string `json:"api_endpoint"`
-	Timeout        string `json:"timeout"`
-	PageSize       int    `json:"page_size"`
-	CacheTTL       string `json:"cache_ttl"`
-	SearchDebounce string `json:"search_debounce"`
-	LogFile        string `json:"log_file"`
-	LogLevel       string `json:"log_level"`
-	Theme          string `json:"theme"`
-	Density        string `json:"density"`
-	AgentProvider  string `json:"agent_provider"`
-	AgentSandbox   string `json:"agent_sandbox"`
-	AgentModel     string `json:"agent_model"`
-	AgentWorkspace string `json:"agent_workspace"`
-	DefaultTeam    string `json:"default_team"`
-	DefaultProject string `json:"default_project"`
+	APIEndpoint      string            `json:"api_endpoint"`
+	Timeout          string            `json:"timeout"`
+	PageSize         int               `json:"page_size"`
+	CacheTTL         string            `json:"cache_ttl"`
+	SearchDebounce   string            `json:"search_debounce"`
+	LogFile          string            `json:"log_file"`
+	LogLevel         string            `json:"log_level"`
+	Theme            string            `json:"theme"`
+	Density          string            `json:"density"`
+	GroupBy          string            `json:"group_by"`
+	SubgroupBy       string            `json:"subgroup_by"`
+	Columns          []string          `json:"columns,omitempty"`
+	RoundedBorders   bool              `json:"rounded_borders"`
+	Workspaces       []Workspace       `json:"workspaces,omitempty"`
+	DefaultWorkspace string            `json:"default_workspace,omitempty"`
+	AgentProvider    string            `json:"agent_provider"`
+	AgentSandbox     string            `json:"agent_sandbox"`
+	AgentModel       string            `json:"agent_model"`
+	AgentWorkspace   string            `json:"agent_workspace"`
+	Keybindings      map[string]string `json:"keybindings,omitempty"`
+	DefaultTeam      string            `json:"default_team"`
+	DefaultProject   string            `json:"default_project"`
 }
 
 // DefaultSettings returns the default settings for the config file and UI.
@@ -60,6 +74,9 @@ func DefaultSettings() Settings {
 		LogLevel:       DefaultLogLevel,
 		Theme:          DefaultTheme,
 		Density:        DefaultDensity,
+		GroupBy:        "",
+		SubgroupBy:     "",
+		RoundedBorders: false,
 		AgentProvider:  DefaultAgentProvider,
 		AgentSandbox:   DefaultAgentSandbox,
 		AgentModel:     "",
@@ -72,21 +89,28 @@ func DefaultSettings() Settings {
 // SettingsFromConfig converts runtime config into settings values.
 func SettingsFromConfig(cfg Config) Settings {
 	return Settings{
-		APIEndpoint:    cfg.APIEndpoint,
-		Timeout:        cfg.Timeout.String(),
-		PageSize:       cfg.PageSize,
-		CacheTTL:       cfg.CacheTTL.String(),
-		SearchDebounce: cfg.SearchDebounce.String(),
-		LogFile:        cfg.LogFile,
-		LogLevel:       cfg.LogLevel,
-		Theme:          cfg.Theme,
-		Density:        cfg.Density,
-		AgentProvider:  cfg.AgentProvider,
-		AgentSandbox:   cfg.AgentSandbox,
-		AgentModel:     cfg.AgentModel,
-		AgentWorkspace: cfg.AgentWorkspace,
-		DefaultTeam:    cfg.DefaultTeam,
-		DefaultProject: cfg.DefaultProject,
+		APIEndpoint:      cfg.APIEndpoint,
+		Timeout:          cfg.Timeout.String(),
+		PageSize:         cfg.PageSize,
+		CacheTTL:         cfg.CacheTTL.String(),
+		SearchDebounce:   cfg.SearchDebounce.String(),
+		LogFile:          cfg.LogFile,
+		LogLevel:         cfg.LogLevel,
+		Theme:            cfg.Theme,
+		Density:          cfg.Density,
+		GroupBy:          cfg.GroupBy,
+		SubgroupBy:       cfg.SubgroupBy,
+		Columns:          cfg.Columns,
+		RoundedBorders:   cfg.RoundedBorders,
+		Workspaces:       cfg.Workspaces,
+		DefaultWorkspace: cfg.DefaultWorkspace,
+		AgentProvider:    cfg.AgentProvider,
+		AgentSandbox:     cfg.AgentSandbox,
+		AgentModel:       cfg.AgentModel,
+		AgentWorkspace:   cfg.AgentWorkspace,
+		Keybindings:      cfg.Keybindings,
+		DefaultTeam:      cfg.DefaultTeam,
+		DefaultProject:   cfg.DefaultProject,
 	}
 }
 
@@ -144,23 +168,49 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		return Config{}, err
 	}
 
+	if err := validateGroupDimension(settings.GroupBy, "group_by"); err != nil {
+		return Config{}, err
+	}
+	if err := validateGroupDimension(settings.SubgroupBy, "subgroup_by"); err != nil {
+		return Config{}, err
+	}
+
+	if err := validateColumns(settings.Columns, "columns"); err != nil {
+		return Config{}, err
+	}
+
+	if err := validateKeybindings(settings.Keybindings, "keybindings"); err != nil {
+		return Config{}, err
+	}
+
+	if err := validateWorkspaces(settings.Workspaces, "workspaces"); err != nil {
+		return Config{}, err
+	}
+
 	return Config{
-		LinearAPIKey:   apiKey,
-		APIEndpoint:    settings.APIEndpoint,
-		Timeout:        timeout,
-		PageSize:       settings.PageSize,
-		CacheTTL:       cacheTTL,
-		SearchDebounce: searchDebounce,
-		LogFile:        settings.LogFile,
-		LogLevel:       settings.LogLevel,
-		Theme:          theme,
-		Density:        density,
-		AgentProvider:  settings.AgentProvider,
-		AgentSandbox:   settings.AgentSandbox,
-		AgentModel:     settings.AgentModel,
-		AgentWorkspace: settings.AgentWorkspace,
-		DefaultTeam:    settings.DefaultTeam,
-		DefaultProject: settings.DefaultProject,
+		LinearAPIKey:     apiKey,
+		APIEndpoint:      settings.APIEndpoint,
+		Timeout:          timeout,
+		PageSize:         settings.PageSize,
+		CacheTTL:         cacheTTL,
+		SearchDebounce:   searchDebounce,
+		LogFile:          settings.LogFile,
+		LogLevel:         settings.LogLevel,
+		Theme:            theme,
+		Density:          density,
+		GroupBy:          settings.GroupBy,
+		SubgroupBy:       settings.SubgroupBy,
+		Columns:          settings.Columns,
+		RoundedBorders:   settings.RoundedBorders,
+		Workspaces:       settings.Workspaces,
+		DefaultWorkspace: settings.DefaultWorkspace,
+		AgentProvider:    settings.AgentProvider,
+		AgentSandbox:     settings.AgentSandbox,
+		AgentModel:       settings.AgentModel,
+		AgentWorkspace:   settings.AgentWorkspace,
+		Keybindings:      settings.Keybindings,
+		DefaultTeam:      settings.DefaultTeam,
+		DefaultProject:   settings.DefaultProject,
 	}, nil
 }
 
@@ -238,6 +288,18 @@ func LoadSettings(path string) (Settings, error) {
 	if file.Density != nil {
 		settings.Density = *file.Density
 	}
+	if file.GroupBy != nil {
+		settings.GroupBy = *file.GroupBy
+	}
+	if file.SubgroupBy != nil {
+		settings.SubgroupBy = *file.SubgroupBy
+	}
+	if file.Columns != nil {
+		settings.Columns = file.Columns
+	}
+	if file.RoundedBorders != nil {
+		settings.RoundedBorders = *file.RoundedBorders
+	}
 	if file.AgentProvider != nil {
 		settings.AgentProvider = *file.AgentProvider
 	}
@@ -250,11 +312,20 @@ func LoadSettings(path string) (Settings, error) {
 	if file.AgentWorkspace != nil {
 		settings.AgentWorkspace = *file.AgentWorkspace
 	}
+	if file.Keybindings != nil {
+		settings.Keybindings = file.Keybindings
+	}
 	if file.DefaultTeam != nil {
 		settings.DefaultTeam = *file.DefaultTeam
 	}
 	if file.DefaultProject != nil {
 		settings.DefaultProject = *file.DefaultProject
+	}
+	if file.Workspaces != nil {
+		settings.Workspaces = file.Workspaces
+	}
+	if file.DefaultWorkspace != nil {
+		settings.DefaultWorkspace = *file.DefaultWorkspace
 	}
 
 	return settings, nil
@@ -327,11 +398,78 @@ func validateLogLevel(logLevel string, label string) error {
 // validateTheme validates the allowed theme values.
 func validateTheme(theme string, label string) error {
 	switch theme {
-	case ThemeLinear, ThemeHighContrast, ThemeColorBlind:
+	case ThemeLinear, ThemeHighContrast, ThemeColorBlind, ThemeRosePineMoon:
 		return nil
 	default:
-		return fmt.Errorf("invalid %s value %q: must be linear, high_contrast, or color_blind", label, theme)
+		return fmt.Errorf("invalid %s value %q: must be linear, high_contrast, color_blind, or rose_pine_moon", label, theme)
 	}
+}
+
+// validateKeybindings validates that every binding maps to a single key and
+// that no key is bound twice.
+func validateKeybindings(bindings map[string]string, label string) error {
+	used := make(map[string]string, len(bindings))
+	for action, key := range bindings {
+		if len([]rune(key)) != 1 {
+			return fmt.Errorf("invalid %s entry %q: key %q must be a single character", label, action, key)
+		}
+		if previous, taken := used[key]; taken {
+			return fmt.Errorf("invalid %s: key %q bound to both %q and %q", label, key, previous, action)
+		}
+		used[key] = action
+	}
+	return nil
+}
+
+// validateColumns validates the issue list column selection.
+func validateColumns(columns []string, label string) error {
+	known := map[string]bool{
+		"priority": true, "id": true, "state": true, "title": true,
+		"labels": true, "assignee": true, "updated": true,
+		"cycle": true, "due": true, "estimate": true, "milestone": true,
+	}
+	seen := make(map[string]bool, len(columns))
+	for _, column := range columns {
+		if !known[column] {
+			return fmt.Errorf("invalid %s entry %q: unknown column", label, column)
+		}
+		if seen[column] {
+			return fmt.Errorf("invalid %s entry %q: duplicate column", label, column)
+		}
+		seen[column] = true
+	}
+	return nil
+}
+
+// validateGroupDimension validates the allowed grouping dimensions.
+func validateGroupDimension(dimension string, label string) error {
+	switch dimension {
+	case "", "status", "priority", "assignee", "cycle", "project", "milestone":
+		return nil
+	default:
+		return fmt.Errorf("invalid %s value %q: must be status, priority, assignee, cycle, project, milestone, or empty", label, dimension)
+	}
+}
+
+// validateWorkspaces validates workspace entries: every entry needs a name and
+// an API key environment variable, and names must be unique.
+func validateWorkspaces(workspaces []Workspace, label string) error {
+	seen := make(map[string]bool, len(workspaces))
+	for i, workspace := range workspaces {
+		name := strings.TrimSpace(workspace.Name)
+		if name == "" {
+			return fmt.Errorf("invalid %s entry %d: name is required", label, i)
+		}
+		if strings.TrimSpace(workspace.APIKeyEnv) == "" {
+			return fmt.Errorf("invalid %s entry %q: api_key_env is required", label, name)
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			return fmt.Errorf("invalid %s entry %q: duplicate workspace name", label, name)
+		}
+		seen[key] = true
+	}
+	return nil
 }
 
 // validateDensity validates the allowed density values.

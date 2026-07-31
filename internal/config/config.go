@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -31,6 +32,7 @@ const (
 	ThemeLinear           = "linear"
 	ThemeHighContrast     = "high_contrast"
 	ThemeColorBlind       = "color_blind"
+	ThemeRosePineMoon     = "rose_pine_moon"
 	DefaultTheme          = ThemeLinear
 	DensityComfortable    = "comfortable"
 	DensityCompact        = "compact"
@@ -82,6 +84,20 @@ type Config struct {
 	// Density controls the UI spacing density.
 	Density string
 
+	// GroupBy groups the issues list along a dimension
+	// (status, priority, assignee, cycle; empty for a flat list).
+	GroupBy string
+
+	// SubgroupBy adds a second grouping level beneath GroupBy groups.
+	SubgroupBy string
+
+	// Columns selects and orders the issue list columns. Empty uses the
+	// default Linear-style layout.
+	Columns []string
+
+	// RoundedBorders draws pane borders with rounded corners.
+	RoundedBorders bool
+
 	// AgentProvider selects the agent CLI provider (cursor or claude).
 	AgentProvider string
 
@@ -94,11 +110,58 @@ type Config struct {
 	// AgentWorkspace is the default workspace path for agent runs.
 	AgentWorkspace string
 
+	// Keybindings remaps palette command shortcuts and UI action keys by
+	// id (e.g. {"refresh": "R", "tab_next": ")"}). Values are single keys.
+	Keybindings map[string]string
+
 	// DefaultTeam selects the team (by key or name) to open on startup.
 	DefaultTeam string
 
 	// DefaultProject selects the project (by name) to open on startup. Requires DefaultTeam.
 	DefaultProject string
+
+	// Workspaces lists Linear workspaces the app can switch between.
+	Workspaces []Workspace
+
+	// DefaultWorkspace selects the startup workspace by name. Empty falls
+	// back to the first workspace whose key env var is set.
+	DefaultWorkspace string
+}
+
+// Workspace describes a switchable Linear workspace. The API key is read from
+// the named environment variable so credentials never live in the config file.
+type Workspace struct {
+	Name      string `json:"name"`
+	APIKeyEnv string `json:"api_key_env"`
+}
+
+// APIKey returns the workspace's API key from the environment.
+func (w Workspace) APIKey() string {
+	return os.Getenv(w.APIKeyEnv)
+}
+
+// FirstAvailableWorkspace returns the first workspace whose API key
+// environment variable is set, for use as the startup default.
+func FirstAvailableWorkspace(workspaces []Workspace) (Workspace, bool) {
+	for _, workspace := range workspaces {
+		if workspace.APIKey() != "" {
+			return workspace, true
+		}
+	}
+	return Workspace{}, false
+}
+
+// StartupWorkspace resolves the workspace to use at startup: the configured
+// default when its key is available, else the first workspace with a key.
+func StartupWorkspace(workspaces []Workspace, defaultName string) (Workspace, bool) {
+	if defaultName != "" {
+		for _, workspace := range workspaces {
+			if strings.EqualFold(workspace.Name, defaultName) && workspace.APIKey() != "" {
+				return workspace, true
+			}
+		}
+	}
+	return FirstAvailableWorkspace(workspaces)
 }
 
 // LoadFromEnv loads configuration from environment variables.

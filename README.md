@@ -1,243 +1,106 @@
 # linear-tui
 
-A terminal user interface (TUI) for Linear built with Go and tview.
+A terminal interface for Linear, built with Go and tview.
+
+This is a fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui)
+by [@roeyazroel](https://github.com/roeyazroel), who built the foundation this
+runs on: the Linear API client, OAuth, the pane layout, and the agent
+integration. Fixes and features from this fork are offered upstream where they
+fit.
 
 ## Screenshots
 
-![Main interface](docs/main.jpeg)
+![Main interface](docs/screenshots/main.png)
 
-![Create issue](docs/create.png)
+![Grouped issues](docs/screenshots/grouped.png)
 
-![Assign issue](docs/assign.png)
-
-## Demo
-
-![Agent demo](docs/agent-demo.gif)
+![Command palette](docs/screenshots/palette.png)
 
 ## Features
 
-- 3-pane layout (navigation tree + issues list + details view)
-- Command palette for quick actions with keyboard shortcuts
-- Vim-style keyboard navigation (j/k, h/l, g/G)
-- Mouse support (click to focus, scroll to navigate)
-- Issue descriptions with markdown rendering
-- Sub-issues support (expand/collapse, create, view parent)
-- Issue management (create, edit title, edit labels, archive)
-- Comments (view and add)
-- Status management (change status, assign/unassign)
-- Search and filtering
-- Sorting (by updated, created, or priority)
-- My Issues vs Other Issues sections
-- Agent runs via command palette (Claude or Cursor Agent)
-- Agent prompt templates and streaming output with copy/resume
-- Real-time issue fetching from Linear API
-- Comprehensive logging system for debugging
-- Settings modal with live config updates
-- Themes (linear, high_contrast, color_blind) and density modes
-- Status bar with context and search info
-- Clipboard actions (issue ID, issue URL, agent output)
+Navigation
+- Favorites matching the Linear sidebar: projects, issues, cycles, teams,
+  custom views, triage, folders
+- Teams with cycles, statuses, and projects
+- Workspace switching with per-workspace API keys and a default workspace
 
-## Requirements
+Issues
+- Linear-style columns, configurable order and visibility
+- Grouping and subgrouping by status, priority, assignee, cycle, project, or
+  milestone, with collapsible headers
+- My, Other, and All tabs with lazygit-style tab strips
+- Sort by updated, created, priority, or status
+- Details drawer with themed markdown, comments, attachments, and branch name
 
-- Linear authentication via either:
-  - `linear-tui auth login` (OAuth, recommended), or
-  - `LINEAR_API_KEY` environment variable (personal API key override)
-- Agent CLI for the agent command:
-  - Claude provider: `claude`
-  - Cursor provider: `cursor-agent` (preferred) or `agent`
+Interaction
+- Context-aware command palette with fuzzy search and number shortcuts
+- Configurable keybindings
+- Pane toggles and a responsive layout on narrow terminals
+- Copy issue ID, URL, or branch name. Open the issue or its GitHub link
+
+Appearance
+- Rose Pine Moon theme with a transparent background, plus the original
+  linear, high contrast, and color blind themes
+- Optional rounded borders
+- Theme-derived selection, markdown, and modal styling
+
+## Install
+
+Requires Go 1.24 or later.
+
+    git clone https://github.com/Drucial/linear-tui.git
+    cd linear-tui
+    go build -o ~/.local/bin/linear-tui ./cmd/linear-tui
+
+Authenticate with `linear-tui auth login`, or set per-workspace API keys as
+described below.
 
 ## Configuration
 
-- Prefer `linear-tui auth login` to store OAuth credentials in `~/.linear-tui/credentials.json` (mode `0600`).
-- `LINEAR_API_KEY` overrides stored OAuth credentials when set.
-- Use `linear-tui auth logout` to revoke (best effort) and delete stored credentials.
-- Settings are stored in `~/.linear-tui/config.json` and created on first start.
-- Use the Settings modal from the command palette (`:` -> `Settings`) to edit and apply settings immediately.
-- UI settings in `config.json`: `theme` (`linear`, `high_contrast`, `color_blind`) and `density` (`comfortable`, `compact`).
-- Search settings in `config.json`: `search_debounce` controls the live search debounce delay (default `300ms`).
-- Agent settings live in `config.json`: `agent_provider` (`cursor` or `claude`), `agent_sandbox` (`enabled` or `disabled`), `agent_model` (optional), and `agent_workspace` (optional).
-- Prompt templates are stored in `~/.linear-tui/prompts.json` and edited via the "Edit agent prompt templates" command.
-- `agent_workspace` is the default workspace for agent runs and can be overridden per run in the Ask Agent modal (overrides are not persisted).
-- Startup view settings in `config.json`: `default_team` opens the app with that team selected (matched by team key or name, case-insensitive), and `default_project` narrows it to a project within that team (matched by name). Both are optional; blank opens All Issues. If a value doesn't match, the app falls back to the standard view and shows a status-bar warning.
+Settings live in `~/.linear-tui/config.json`, created on first start. The
+options added by this fork:
 
-Example `~/.linear-tui/config.json`:
+    {
+      "theme": "rose_pine_moon",
+      "rounded_borders": true,
+      "group_by": "status",
+      "subgroup_by": "",
+      "columns": ["priority", "id", "state", "title", "labels", "assignee", "updated"],
+      "default_workspace": "Work",
+      "workspaces": [
+        { "name": "Work", "api_key_env": "LINEAR_API_KEY_WORK" },
+        { "name": "Personal", "api_key_env": "LINEAR_API_KEY_PERSONAL" }
+      ],
+      "keybindings": {
+        "switch_workspace": "w",
+        "copy_branch": "Y"
+      }
+    }
 
-```json
-{
-  "api_endpoint": "https://api.linear.app/graphql",
-  "timeout": "30s",
-  "page_size": 50,
-  "cache_ttl": "5m",
-  "search_debounce": "300ms",
-  "log_file": "/Users/you/.linear-tui/app.log",
-  "log_level": "warning",
-  "theme": "linear",
-  "density": "comfortable",
-  "agent_provider": "cursor",
-  "agent_sandbox": "enabled",
-  "agent_model": "",
-  "agent_workspace": "",
-  "default_team": "",
-  "default_project": ""
-}
-```
+- `columns` selects and orders the issue list from: priority, id, state,
+  title, labels, assignee, updated, cycle, due, estimate, milestone
+- `group_by` and `subgroup_by` take status, priority, assignee, cycle,
+  project, or milestone
+- `workspaces` reads keys from the named env vars. Keys are never stored in
+  the file
+- `keybindings` remaps palette commands by id, the global quit, open_palette,
+  and search actions, and the tab_next, tab_prev, columns_left, and
+  columns_right actions
 
-## Installation
+## Keys
 
-### Homebrew (macOS)
+    j/k         move            Enter       toggle details
+    h/l, Tab    switch panes    Space       expand sub-issues
+    { }         toggle panes    [ ]         cycle issue tabs*
+    H/L         scroll columns  :           command palette
+    /           search          q           quit
 
-```bash
-brew install roeyazroel/linear-tui/linear-tui
-```
+*Defaults shown reflect this fork's example config; stock defaults keep
+[ ] on expand and collapse all.
 
-### From Source
+## Credits
 
-Requires Go 1.24 or later:
-
-```bash
-go install github.com/roeyazroel/linear-tui/cmd/linear-tui@latest
-```
-
-Or clone and build locally:
-
-```bash
-git clone https://github.com/roeyazroel/linear-tui.git
-cd linear-tui
-go build ./cmd/linear-tui
-```
-
-### Download Binary
-
-Download pre-built binaries from the [Releases](https://github.com/roeyazroel/linear-tui/releases) page.
-
-## Usage
-
-Authenticate once, then start the app.
-
-### OAuth login (recommended)
-
-```bash
-linear-tui auth login
-linear-tui
-```
-
-### Personal API key override
-
-```bash
-export LINEAR_API_KEY="your-api-key-here"
-linear-tui
-```
-
-### Homebrew
-
-```bash
-linear-tui auth login
-linear-tui
-```
-
-### Local Build
-
-If you cloned the repository and built the binary locally, run the local executable:
-
-```bash
-./linear-tui auth login
-./linear-tui
-```
-
-To log out and remove stored OAuth credentials:
-
-```bash
-linear-tui auth logout
-```
-
-### Advanced Configuration
-
-Example `~/.linear-tui/config.json`:
-
-```json
-{
-  "api_endpoint": "https://api.linear.app/graphql",
-  "timeout": "30s",
-  "page_size": 50,
-  "cache_ttl": "5m",
-  "search_debounce": "300ms",
-  "log_file": "/Users/you/.linear-tui/app.log",
-  "log_level": "warning",
-  "theme": "linear",
-  "density": "comfortable",
-  "agent_provider": "cursor",
-  "agent_sandbox": "enabled",
-  "agent_model": "",
-  "agent_workspace": "",
-  "default_team": "",
-  "default_project": ""
-}
-```
-
-### Disable Logging
-
-To disable logging, set `log_file` to an empty string in the settings file or via the Settings modal:
-
-```json
-{
-  "log_file": ""
-}
-```
-
-## Keyboard Shortcuts
-
-### Navigation
-
-- `j` / `↓` - Move down
-- `k` / `↑` - Move up
-- `h` / `←` - Focus left pane
-- `l` / `→` - Focus right pane
-- `g` - Jump to top
-- `G` - Jump to bottom
-- `Tab` / `Shift+Tab` - Cycle between panes
-- `Space` - Toggle expand/collapse sub-issues
-- `Enter` - Select issue / Execute command
-- `Esc` - Close palette / Cancel / Clear search
-- `q` - Quit
-
-### Command Palette
-
-- `:` - Open command palette
-- `/` - Open search palette
-- `ask agent` - Run a terminal agent on the selected issue
-
-### Quick Commands
-
-- `r` - Refresh issues
-- `n` - Create new issue
-- `e` - Edit issue title
-- `g` - Edit issue labels
-- `s` - Change status
-- `a` - Assign to user
-- `m` - Assign to me
-- `u` - Unassign issue
-- `t` - Add comment
-- `o` - Open in browser
-- `y` - Copy issue ID
-- `w` - Copy issue URL
-- `x` - Archive issue
-- `b` - Create sub-issue
-- `p` - View parent issue
-- `i` - Set parent issue
-- `d` - Remove parent
-- `]` - Expand all sub-issues
-- `[` - Collapse all sub-issues
-
-## Development
-
-Run tests:
-
-```bash
-go test ./...
-```
-
-Build:
-
-```bash
-go build ./cmd/linear-tui
-```
+Built on [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui).
+Themed with [Rose Pine](https://rosepinetheme.com). Rendered by
+[tview](https://github.com/rivo/tview) and
+[glamour](https://github.com/charmbracelet/glamour).

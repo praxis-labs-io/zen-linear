@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -14,10 +15,19 @@ type NavigationNode struct {
 	IsProject bool
 	IsStatus  bool
 	IsCycle   bool
+	IsIssue   bool
 	StateID   string
 	StateName string
 	CycleID   string
 	CycleName string
+	IssueID   string
+	// CustomViewID makes the node show a Linear custom view's issues.
+	CustomViewID string
+	// StateType filters by workflow state type (e.g. triage), scoped to
+	// TeamID when set.
+	StateType string
+	// IsFolder marks a favorites folder; selecting it toggles expansion.
+	IsFolder bool
 }
 
 // buildNavigationTree creates and configures the navigation tree widget.
@@ -33,12 +43,19 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 		SetColor(a.theme.SecondaryText).
 		SetSelectable(false)
 	root.AddChild(loadingNode)
+	a.applySelectionStyleToTree(root)
 
 	tree.SetBorder(true).
 		SetTitle(" Navigation ").
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border)
 	tree.SetBackgroundColor(a.theme.Background)
+	tree.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		// Re-fit node labels on every draw so they track pane resizes and
+		// lazily added nodes.
+		a.padNavigationTree(width - 2)
+		return x + 1, y + 1, width - 2, height - 2
+	})
 	tree.SetRoot(root)
 	tree.SetCurrentNode(root)
 
@@ -47,12 +64,20 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 		ref := node.GetReference()
 		if ref != nil {
 			if navNode, ok := ref.(*NavigationNode); ok {
+				// Folders only expand and collapse.
+				if navNode.IsFolder {
+					node.SetExpanded(!node.IsExpanded())
+					return
+				}
 				// For team nodes, handle expand/collapse
 				if navNode.IsTeam {
 					a.onTeamExpanded(navNode.TeamID, node)
 				}
 				// Update selection and refresh issues
 				a.onNavigationSelected(navNode)
+				// Selecting a view moves focus to the issues list.
+				a.focusedPane = FocusIssues
+				a.updateFocus()
 			}
 		}
 	})

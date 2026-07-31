@@ -23,7 +23,7 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 
 	// Create form
 	etm.form = tview.NewForm()
-	etm.form.SetBackgroundColor(app.theme.HeaderBg)
+	etm.form.SetBackgroundColor(app.theme.ModalBackground())
 	etm.form.SetFieldBackgroundColor(app.theme.InputBg)
 	etm.form.SetFieldTextColor(app.theme.Foreground)
 	etm.form.SetButtonBackgroundColor(app.theme.Accent)
@@ -66,12 +66,12 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 	titleView := tview.NewTextView()
 	titleView.SetText("Edit Issue Title")
 	titleView.SetTextColor(app.theme.Accent)
-	titleView.SetBackgroundColor(app.theme.HeaderBg)
+	titleView.SetBackgroundColor(app.theme.ModalBackground())
 
 	helpView := tview.NewTextView()
 	helpView.SetText("Esc: cancel • Enter: submit")
 	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.HeaderBg)
+	helpView.SetBackgroundColor(app.theme.ModalBackground())
 	helpView.SetTextAlign(tview.AlignCenter)
 
 	// Build modal content
@@ -80,8 +80,8 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 		AddItem(titleView, 1, 0, false).
 		AddItem(etm.form, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
-	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
-	modalContent.SetBackgroundColor(app.theme.HeaderBg).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" Edit Title ").

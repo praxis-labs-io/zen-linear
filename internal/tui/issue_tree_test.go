@@ -312,3 +312,131 @@ func TestBuildIssueRows_ChildrenSortedByIdentifier(t *testing.T) {
 		}
 	}
 }
+
+// TestStatusRank verifies lifecycle ordering, including that "Unstarted" does
+// not match the "started" category.
+func TestStatusRank(t *testing.T) {
+	ordered := []string{"Triage", "In Progress", "Todo", "Backlog", "Done", "Canceled"}
+	for i := 1; i < len(ordered); i++ {
+		if statusRank(ordered[i-1]) > statusRank(ordered[i]) {
+			t.Errorf("statusRank(%q)=%d > statusRank(%q)=%d", ordered[i-1], statusRank(ordered[i-1]), ordered[i], statusRank(ordered[i]))
+		}
+	}
+	if statusRank("Unstarted") == statusRank("In Progress") {
+		t.Error("Unstarted must not rank with started states")
+	}
+	if statusRank("In Review") != statusRank("In Progress") {
+		t.Error("In Review should rank with started states")
+	}
+}
+
+// TestBuildGroupedIssueRows verifies headers, group order, and counts.
+func TestBuildGroupedIssueRows(t *testing.T) {
+	issues := []linearapi.Issue{
+		{ID: "1", Identifier: "LIN-1", State: "Done"},
+		{ID: "2", Identifier: "LIN-2", State: "Todo"},
+		{ID: "3", Identifier: "LIN-3", State: "Todo"},
+		{ID: "4", Identifier: "LIN-4", State: "In Progress"},
+	}
+
+	rows, idToIssue := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByNone, nil)
+	if len(idToIssue) != 4 {
+		t.Fatalf("idToIssue size = %d, want 4", len(idToIssue))
+	}
+	// Expect: [In Progress header, 4, Todo header, 2, 3, Done header, 1]
+	if len(rows) != 7 {
+		t.Fatalf("rows = %d, want 7: %#v", len(rows), rows)
+	}
+	wantHeaders := map[int]string{0: "In Progress", 2: "Todo", 5: "Done"}
+	for index, state := range wantHeaders {
+		if !rows[index].IsHeader || rows[index].HeaderText != state {
+			t.Errorf("rows[%d] = %+v, want header %q", index, rows[index], state)
+		}
+	}
+	if rows[2].HeaderCount != 2 {
+		t.Errorf("Todo header count = %d, want 2", rows[2].HeaderCount)
+	}
+	if rows[1].IssueID != "4" || rows[3].IssueID != "2" || rows[4].IssueID != "3" || rows[6].IssueID != "1" {
+		t.Errorf("unexpected issue placement: %#v", rows)
+	}
+}
+
+// TestBuildGroupedIssueRowsSubgroups verifies second-level grouping emits
+// nested headers in dimension order.
+func TestBuildGroupedIssueRowsSubgroups(t *testing.T) {
+	issues := []linearapi.Issue{
+		{ID: "1", Identifier: "LIN-1", State: "Todo", Priority: 2},
+		{ID: "2", Identifier: "LIN-2", State: "Todo", Priority: 1},
+		{ID: "3", Identifier: "LIN-3", State: "Done", Priority: 0},
+	}
+
+	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByPriority, nil)
+	// Expect: Todo hdr, Urgent hdr, 2, High hdr, 1, Done hdr, No priority hdr, 3
+	if len(rows) != 8 {
+		t.Fatalf("rows = %d, want 8: %+v", len(rows), rows)
+	}
+	type expectation struct {
+		header string
+		level  int
+	}
+	wantHeaders := map[int]expectation{
+		0: {"Todo", 0},
+		1: {"Urgent", 1},
+		3: {"High", 1},
+		5: {"Done", 0},
+		6: {"No priority", 1},
+	}
+	for index, want := range wantHeaders {
+		row := rows[index]
+		if !row.IsHeader || row.HeaderText != want.header || row.HeaderLevel != want.level {
+			t.Errorf("rows[%d] = %+v, want header %q level %d", index, row, want.header, want.level)
+		}
+	}
+	if rows[2].IssueID != "2" || rows[4].IssueID != "1" || rows[7].IssueID != "3" {
+		t.Errorf("unexpected issue placement: %+v", rows)
+	}
+}
+
+// TestNextIssueRow verifies header rows are skipped in both directions.
+func TestNextIssueRow(t *testing.T) {
+	rows := []IssueRow{
+		{IsHeader: true, HeaderText: "Todo"},
+		{IssueID: "a"},
+		{IsHeader: true, HeaderText: "Done"},
+		{IssueID: "b"},
+	}
+	if got := nextIssueRow(rows, 0, 1); got != 2 {
+		t.Errorf("first issue row = %d, want 2", got)
+	}
+	if got := nextIssueRow(rows, 2, 1); got != 4 {
+		t.Errorf("next after row 2 = %d, want 4", got)
+	}
+	if got := nextIssueRow(rows, 4, -1); got != 2 {
+		t.Errorf("previous before row 4 = %d, want 2", got)
+	}
+	if got := nextIssueRow(rows, 4, 1); got != 0 {
+		t.Errorf("past end = %d, want 0", got)
+	}
+}
+
+// TestBuildGroupedIssueRowsCollapse verifies collapsed groups hide their rows
+// while keeping the header, with subgroups collapsing independently.
+func TestBuildGroupedIssueRowsCollapse(t *testing.T) {
+	issues := []linearapi.Issue{
+		{ID: "1", Identifier: "LIN-1", State: "Todo"},
+		{ID: "2", Identifier: "LIN-2", State: "Done"},
+	}
+
+	collapsed := map[string]bool{"status\x1fTodo": true}
+	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByNone, collapsed)
+	// Expect: Todo header (collapsed, no rows), Done header, LIN-2
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d, want 3: %+v", len(rows), rows)
+	}
+	if !rows[0].IsHeader || !rows[0].HeaderCollapsed || rows[0].HeaderCount != 1 {
+		t.Errorf("collapsed header = %+v", rows[0])
+	}
+	if rows[2].IssueID != "2" {
+		t.Errorf("rows[2] = %+v, want LIN-2", rows[2])
+	}
+}

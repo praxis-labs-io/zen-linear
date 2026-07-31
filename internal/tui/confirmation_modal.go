@@ -30,7 +30,7 @@ func (cm *ConfirmationModal) Show(title, message, confirmLabel string, onConfirm
 				cm.onConfirm()
 			}
 		})
-	cm.modal.SetBackgroundColor(cm.app.theme.HeaderBg)
+	cm.modal.SetBackgroundColor(cm.app.theme.ModalBackground())
 	cm.modal.SetTextColor(cm.app.theme.Foreground)
 	cm.modal.SetButtonBackgroundColor(cm.app.theme.Accent)
 	cm.modal.SetButtonTextColor(cm.app.theme.SelectionText)

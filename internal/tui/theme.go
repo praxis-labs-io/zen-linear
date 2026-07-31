@@ -21,11 +21,45 @@ type Theme struct {
 	Accent        tcell.Color
 	InputBg       tcell.Color
 
+	// InverseText overrides the color used for inverse-video text. Themes
+	// with a transparent Background must set it, since Background is not a
+	// paintable color there. Zero value falls back to Background.
+	InverseText tcell.Color
+
 	// Status Colors
 	StatusTodo       tcell.Color
 	StatusInProgress tcell.Color
+	StatusReview     tcell.Color // zero value falls back to StatusDone
 	StatusDone       tcell.Color
 	StatusCanceled   tcell.Color
+}
+
+// ModalBackground returns the panel color for modals and overlays: themes
+// with a transparent background stay transparent, opaque themes keep the
+// header background for contrast against the app surface.
+func (t Theme) ModalBackground() tcell.Color {
+	if t.Background == tcell.ColorDefault {
+		return tcell.ColorDefault
+	}
+	return t.HeaderBg
+}
+
+// InverseTextColor returns the color for inverse-video text, falling back to
+// the theme background when no explicit inverse color is set.
+func (t Theme) InverseTextColor() tcell.Color {
+	if t.InverseText != tcell.ColorDefault {
+		return t.InverseText
+	}
+	return t.Background
+}
+
+// StatusReviewColor returns the color for review states, falling back to the
+// done color for themes that predate the field.
+func (t Theme) StatusReviewColor() tcell.Color {
+	if t.StatusReview != tcell.ColorDefault {
+		return t.StatusReview
+	}
+	return t.StatusDone
 }
 
 // LinearTheme is the default dark theme inspired by Linear.
@@ -44,6 +78,7 @@ var LinearTheme = Theme{
 
 	StatusTodo:       tcell.NewRGBColor(140, 140, 140), // Gray
 	StatusInProgress: tcell.NewRGBColor(242, 201, 76),  // Yellow
+	StatusReview:     tcell.NewRGBColor(76, 183, 130),  // #4CB782 green
 	StatusDone:       tcell.NewRGBColor(94, 106, 210),  // Purple/Blue (Linear uses purple for done often, or green)
 	StatusCanceled:   tcell.NewRGBColor(255, 80, 80),   // Red
 }
@@ -64,6 +99,7 @@ var HighContrastTheme = Theme{
 
 	StatusTodo:       tcell.NewRGBColor(255, 255, 255), // White
 	StatusInProgress: tcell.NewRGBColor(255, 255, 0),   // Yellow
+	StatusReview:     tcell.NewRGBColor(0, 255, 0),     // Green
 	StatusDone:       tcell.NewRGBColor(0, 255, 0),     // Green
 	StatusCanceled:   tcell.NewRGBColor(255, 0, 0),     // Red
 }
@@ -84,8 +120,33 @@ var ColorBlindTheme = Theme{
 
 	StatusTodo:       tcell.NewRGBColor(153, 153, 153), // Gray
 	StatusInProgress: tcell.NewRGBColor(86, 180, 233),  // #56B4E9
+	StatusReview:     tcell.NewRGBColor(0, 158, 115),   // #009E73
 	StatusDone:       tcell.NewRGBColor(0, 158, 115),   // #009E73
 	StatusCanceled:   tcell.NewRGBColor(213, 94, 0),    // #D55E00
+}
+
+// RosePineMoonTheme is the Rosé Pine Moon palette (rosepinetheme.com) with a
+// transparent background: tcell.ColorDefault leaves the terminal's own
+// background (and any transparency/blur) visible.
+var RosePineMoonTheme = Theme{
+	Background:    tcell.ColorDefault,               // terminal default (transparent)
+	Foreground:    tcell.NewRGBColor(224, 222, 244), // #E0DEF4 text
+	Border:        tcell.NewRGBColor(86, 82, 110),   // #56526E highlight high
+	BorderFocus:   tcell.NewRGBColor(196, 167, 231), // #C4A7E7 iris
+	SelectionText: tcell.NewRGBColor(224, 222, 244), // #E0DEF4 text
+	SelectionBg:   tcell.NewRGBColor(68, 65, 90),    // #44415A highlight med
+	HeaderBg:      tcell.NewRGBColor(42, 39, 63),    // #2A273F surface
+	HeaderText:    tcell.NewRGBColor(144, 140, 170), // #908CAA subtle
+	SecondaryText: tcell.NewRGBColor(110, 106, 134), // #6E6A86 muted
+	Accent:        tcell.NewRGBColor(196, 167, 231), // #C4A7E7 iris
+	InputBg:       tcell.NewRGBColor(57, 53, 82),    // #393552 overlay
+	InverseText:   tcell.NewRGBColor(35, 33, 54),    // #232136 base
+
+	StatusTodo:       tcell.NewRGBColor(110, 106, 134), // #6E6A86 muted
+	StatusInProgress: tcell.NewRGBColor(246, 193, 119), // #F6C177 gold
+	StatusReview:     tcell.NewRGBColor(62, 143, 176),  // #3E8FB0 pine
+	StatusDone:       tcell.NewRGBColor(156, 207, 216), // #9CCFD8 foam
+	StatusCanceled:   tcell.NewRGBColor(235, 111, 146), // #EB6F92 love
 }
 
 // ThemeTags provides tview tag strings derived from a theme.
@@ -104,6 +165,7 @@ var ThemeRegistry = map[string]Theme{
 	config.ThemeLinear:       LinearTheme,
 	config.ThemeHighContrast: HighContrastTheme,
 	config.ThemeColorBlind:   ColorBlindTheme,
+	config.ThemeRosePineMoon: RosePineMoonTheme,
 }
 
 // ResolveTheme returns the theme for a given name, or the default theme.
@@ -151,6 +213,7 @@ var Icons = struct {
 	Todo       string
 	InProgress string
 	Done       string
+	Canceled   string
 	Priority   string
 }{
 	Team:       "📁 ",
@@ -159,5 +222,6 @@ var Icons = struct {
 	Todo:       "○ ",
 	InProgress: "◐ ",
 	Done:       "✔ ", // or ●
+	Canceled:   "✕ ",
 	Priority:   "⚡",
 }
