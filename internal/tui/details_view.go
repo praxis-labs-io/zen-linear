@@ -101,25 +101,17 @@ func (a *App) buildDetailsView() *tview.Flex {
 	return a.detailsView
 }
 
-// setDetailsCommentsVisibility rebuilds the details layout to show or hide comments.
+// setDetailsCommentsVisibility records whether the Comments tab exists and
+// re-renders the tabbed details layout.
 func (a *App) setDetailsCommentsVisibility(showComments bool) {
 	if a.detailsView == nil || a.detailsDescriptionView == nil || a.detailsCommentsView == nil {
 		return
 	}
-	if a.detailsCommentsVisible == showComments && a.detailsView.GetItemCount() > 0 {
-		return
-	}
-
-	a.detailsView.Clear().
-		AddItem(a.detailsDescriptionView, 0, 3, true)
-	if showComments {
-		a.detailsView.AddItem(a.detailsCommentsView, 0, 2, false)
-	}
-
 	a.detailsCommentsVisible = showComments
 	if !showComments {
 		a.focusedDetailsView = false
 	}
+	a.updateDetailsLayout()
 }
 
 // updateDetailsView updates the details view with the selected issue.
