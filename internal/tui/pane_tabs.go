@@ -33,11 +33,9 @@ func (a *App) jumpToSection(section IssuesSection, row int) {
 	if table == nil || row < 1 {
 		return
 	}
-	table.Select(row, 0)
-	if row <= 1 {
-		// Reset any stale scroll offset when landing at the top of a tab.
-		table.SetOffset(0, 0)
-	}
+	// Reset any stale scroll offset when landing at the top of a tab, so
+	// leading group headers stay visible.
+	selectIssueRow(table, a.rowsForSection(a.activeIssuesSection), row)
 	if issue := a.getIssueFromRowForSection(row, a.activeIssuesSection); issue != nil {
 		a.onIssueSelected(*issue)
 	}
