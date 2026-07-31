@@ -1979,8 +1979,12 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	issues := a.issues
 	a.issuesMu.RUnlock()
 	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
-	a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
-	a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
+	buildRows := BuildIssueRows
+	if a.config.GroupByStatus {
+		buildRows = BuildGroupedIssueRows
+	}
+	a.myIssueRows, a.myIDToIssue = buildRows(myIssues, a.expandedState)
+	a.otherIssueRows, a.otherIDToIssue = buildRows(otherIssues, a.expandedState)
 
 	// Legacy: keep old fields for backward compatibility
 	a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
