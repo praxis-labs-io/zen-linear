@@ -17,21 +17,20 @@ const (
 	IconChildPrefix = "└─"
 )
 
-// formatPriority renders a priority as a rising bar glyph like Linear's
-// priority icon; urgent breaks the pattern deliberately. All glyphs are
-// single-cell text presentation so rows stay aligned (no emoji-width
-// variance).
+// formatPriority renders a priority as an arrow glyph — up for high, equals
+// for normal, down for low, triangle for urgent — all single-cell text
+// presentation so rows stay aligned (no emoji-width variance).
 // Linear priority: 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low.
 func formatPriority(priority int, theme Theme) (string, tcell.Color) {
 	switch priority {
 	case 1:
 		return "▲", theme.StatusCanceled // Red for urgent
 	case 2:
-		return "▆", theme.StatusInProgress // Yellow for high
+		return "↑", theme.StatusInProgress // Yellow for high
 	case 3:
-		return "▄", theme.Foreground // Default for normal
+		return "=", theme.Foreground // Default for normal
 	case 4:
-		return "▂", theme.SecondaryText // Gray for low
+		return "↓", theme.SecondaryText // Gray for low
 	default:
 		return "-", theme.SecondaryText // No priority
 	}
@@ -45,7 +44,7 @@ func formatStateIcon(state string, theme Theme) (string, tcell.Color) {
 	case strings.Contains(lowerState, "done") || strings.Contains(lowerState, "complete"):
 		return "●", theme.StatusDone
 	case strings.Contains(lowerState, "progress") || strings.Contains(lowerState, "review"):
-		return "◐", theme.StatusInProgress
+		return "◉", theme.StatusInProgress
 	case strings.Contains(lowerState, "cancel") || strings.Contains(lowerState, "duplicate"):
 		return "⊘", theme.StatusCanceled
 	case strings.Contains(lowerState, "backlog"):
