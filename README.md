@@ -19,7 +19,7 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 - 3-pane layout (navigation tree + issues list + details view)
 - Favorites section in the navigation tree (favorited issues, projects, cycles, and teams)
 - Workspace switching via the command palette (configured workspaces, API-key based)
-- Lazygit-style tabs: My/Other issues and Details/Comments share their pane full-height, switched with `[` and `]`
+- Lazygit-style tabs: My/Other issues and Details/Comments share their pane full-height, switched with `{` and `}`
 - Command palette for quick actions with keyboard shortcuts
 - Toggle the navigation and details panes from the command palette
 - Vim-style keyboard navigation (j/k, h/l, g/G)
