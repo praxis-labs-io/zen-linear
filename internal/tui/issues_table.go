@@ -237,7 +237,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					a.activeIssuesSection = IssuesSectionOther
 					a.updateIssuesColumnLayout()
 					if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
-						a.otherIssuesTable.Select(first, 0)
+						selectIssueRow(a.otherIssuesTable, a.otherIssueRows, first)
 						if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
 							a.onIssueSelected(*issue)
 						}
@@ -248,7 +248,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			case 'k':
 				row, _ := table.GetSelection()
 				if previous := nextIssueRow(a.rowsForSection(section), row, -1); previous > 0 {
-					table.Select(previous, 0)
+					selectIssueRow(table, a.rowsForSection(section), previous)
 					if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
 						a.onIssueSelected(*issue)
 						a.activeIssuesSection = section
@@ -269,7 +269,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			case 'g':
 				// Go to top of current section
 				if first := nextIssueRow(a.rowsForSection(section), 0, 1); first > 0 {
-					table.Select(first, 0)
+					selectIssueRow(table, a.rowsForSection(section), first)
 					if issue := a.getIssueFromRowForSection(first, section); issue != nil {
 						a.onIssueSelected(*issue)
 						a.activeIssuesSection = section
@@ -363,7 +363,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 				a.activeIssuesSection = IssuesSectionOther
 				a.updateIssuesColumnLayout()
 				if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
-					a.otherIssuesTable.Select(first, 0)
+					selectIssueRow(a.otherIssuesTable, a.otherIssueRows, first)
 					if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
 						a.onIssueSelected(*issue)
 					}
@@ -374,7 +374,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 		case tcell.KeyUp:
 			row, _ := table.GetSelection()
 			if previous := nextIssueRow(a.rowsForSection(section), row, -1); previous > 0 {
-				table.Select(previous, 0)
+				selectIssueRow(table, a.rowsForSection(section), previous)
 				if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
 					a.onIssueSelected(*issue)
 					a.activeIssuesSection = section
@@ -408,6 +408,16 @@ func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 		return a.issueRows
 	}
 	return nil
+}
+
+// selectIssueRow selects a table row and, when the selection reaches the
+// first issue row, resets the scroll offset so leading group headers stay
+// reachable (they are not selectable, so scrolling alone never reveals them).
+func selectIssueRow(table *tview.Table, rows []IssueRow, row int) {
+	table.Select(row, 0)
+	if row == nextIssueRow(rows, 0, 1) {
+		table.SetOffset(0, 0)
+	}
 }
 
 // nextIssueRow returns the next table row holding an issue in the given
@@ -574,12 +584,7 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		if selectedRow < 1 {
 			selectedRow = 1
 		}
-		table.Select(selectedRow, 0)
-		if selectedRow <= nextIssueRow(rows, 0, 1) {
-			// Selection sits at the top of the list: reset any stale scroll
-			// offset so the leading group header stays visible.
-			table.SetOffset(0, 0)
-		}
+		selectIssueRow(table, rows, selectedRow)
 	} else {
 		// Show empty state message
 		for column := 0; column < 7; column++ {
