@@ -184,6 +184,12 @@ func (a *App) updateDetailsView() {
 	}
 	headerLines = append(headerLines, fmt.Sprintf("%sLabels:[-]     %s%s[-]", keyColor, valColor, labelsText))
 
+	branchName := issue.BranchName
+	if branchName == "" {
+		branchName = "-"
+	}
+	headerLines = append(headerLines, fmt.Sprintf("%sBranch:[-]     %s%s[-]", keyColor, valColor, branchName))
+
 	// Parent issue (if this is a sub-issue)
 	if issue.Parent != nil {
 		parentText := fmt.Sprintf("%s - %s", issue.Parent.Identifier, issue.Parent.Title)
