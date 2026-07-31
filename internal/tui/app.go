@@ -1225,6 +1225,11 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 // handleDetailsKey handles keyboard input when details pane is focused.
 func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
+	case tcell.KeyEnter:
+		// Enter closes the details pane and returns to the issues list.
+		a.focusedPane = FocusIssues
+		a.toggleDetailsPane()
+		return nil
 	case tcell.KeyLeft:
 		a.focusedPane = FocusIssues
 		a.updateFocus()
