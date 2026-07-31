@@ -7,6 +7,7 @@ toolchain go1.24.11
 require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/gdamore/tcell/v2 v2.13.7
+	github.com/mattn/go-runewidth v0.0.16
 	github.com/rivo/tview v0.42.0
 	github.com/shurcooL/graphql v0.0.0-20230722043721-ed46e5a46466
 )
@@ -26,7 +27,6 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
