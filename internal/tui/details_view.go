@@ -13,27 +13,30 @@ import (
 // markdownRenderer is a shared glamour renderer for markdown content.
 var markdownRenderer *glamour.TermRenderer
 
-// initMarkdownRenderer initializes the glamour markdown renderer.
-func initMarkdownRenderer() {
-	var err error
-	markdownRenderer, err = glamour.NewTermRenderer(
-		glamour.WithStylePath("dark"),
-		glamour.WithWordWrap(80),
+// initMarkdownRenderer initializes the glamour markdown renderer with colors
+// derived from the theme. Word wrap stays disabled: glamour cannot know the
+// pane width, and pre-wrapped output re-wraps badly inside the text views.
+func initMarkdownRenderer(theme Theme) {
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStyles(themeMarkdownStyle(theme)),
+		glamour.WithWordWrap(0),
 	)
 	if err != nil {
-		// Fallback: create a basic renderer if custom style fails
+		// Fallback: create a basic renderer if the themed style fails
 		markdownRenderer, _ = glamour.NewTermRenderer(
 			glamour.WithAutoStyle(),
-			glamour.WithWordWrap(80),
+			glamour.WithWordWrap(0),
 		)
+		return
 	}
+	markdownRenderer = renderer
 }
 
 // renderMarkdown renders markdown content using glamour.
 // Falls back to plain text if rendering fails.
 func renderMarkdown(content string) string {
 	if markdownRenderer == nil {
-		initMarkdownRenderer()
+		initMarkdownRenderer(LinearTheme)
 	}
 
 	rendered, err := markdownRenderer.Render(content)

@@ -35,6 +35,7 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 		SetColor(a.theme.SecondaryText).
 		SetSelectable(false)
 	root.AddChild(loadingNode)
+	a.applySelectionStyleToTree(root)
 
 	tree.SetBorder(true).
 		SetTitle(" Navigation ").
