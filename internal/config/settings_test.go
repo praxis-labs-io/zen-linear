@@ -115,6 +115,37 @@ func TestConfigFromSettingsAcceptsAllThemes(t *testing.T) {
 	}
 }
 
+// TestLoadSettingsParsesRoundedBorders verifies the flag loads from JSON and
+// defaults to false.
+func TestLoadSettingsParsesRoundedBorders(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "config.json")
+
+	data := []byte(`{"rounded_borders": true}`)
+	if err := os.WriteFile(settingsPath, data, 0644); err != nil {
+		t.Fatalf("write settings file: %v", err)
+	}
+
+	settings, err := LoadSettings(settingsPath)
+	if err != nil {
+		t.Fatalf("LoadSettings() error: %v", err)
+	}
+	if !settings.RoundedBorders {
+		t.Error("RoundedBorders = false, want true")
+	}
+
+	cfg, err := ConfigFromSettings("test-key", settings)
+	if err != nil {
+		t.Fatalf("ConfigFromSettings() error: %v", err)
+	}
+	if !cfg.RoundedBorders {
+		t.Error("Config.RoundedBorders = false, want true")
+	}
+	if DefaultSettings().RoundedBorders {
+		t.Error("DefaultSettings().RoundedBorders = true, want false")
+	}
+}
+
 // TestConfigFromSettingsValidation checks invalid settings are rejected.
 func TestConfigFromSettingsValidation(t *testing.T) {
 	base := DefaultSettings()

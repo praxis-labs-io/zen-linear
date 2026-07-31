@@ -231,6 +231,7 @@ type SettingsModal struct {
 	themeOptions         []string
 	themeValues          []string
 	densityField         *tview.DropDown
+	roundedBordersField  *tview.Checkbox
 	densityOptions       []string
 	densityValues        []string
 	agentProviderField   *tview.DropDown
@@ -339,6 +340,10 @@ func NewSettingsModal(app *App) *SettingsModal {
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.densityField)
+
+	sm.roundedBordersField = tview.NewCheckbox().
+		SetLabel("Rounded borders")
+	sm.form.AddFormItem(sm.roundedBordersField)
 
 	sm.agentProviderField = tview.NewDropDown().
 		SetLabel("Agent provider").
@@ -452,6 +457,7 @@ func (sm *SettingsModal) Show() {
 	sm.setLogLevelSelection(settings.LogLevel)
 	sm.setThemeSelection(settings.Theme)
 	sm.setDensitySelection(settings.Density)
+	sm.roundedBordersField.SetChecked(settings.RoundedBorders)
 	sm.setAgentProviderSelection(selectedProvider)
 	sm.setAgentSandboxSelection(settings.AgentSandbox)
 	sm.setAgentModelOptionsForProvider(selectedProvider)
@@ -652,6 +658,7 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		LogLevel:       logLevel,
 		Theme:          theme,
 		Density:        density,
+		RoundedBorders: sm.roundedBordersField.IsChecked(),
 		AgentProvider:  agentProvider,
 		AgentSandbox:   agentSandbox,
 		AgentModel:     agentModel,
