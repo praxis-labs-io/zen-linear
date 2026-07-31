@@ -72,6 +72,7 @@ const (
 	GroupByPriority = "priority"
 	GroupByAssignee = "assignee"
 	GroupByCycle    = "cycle"
+	GroupByProject  = "project"
 )
 
 // groupKeyFor returns the group label and ordering rank of an issue along a
@@ -102,6 +103,11 @@ func groupKeyFor(issue *linearapi.Issue, dimension string) (string, int) {
 		}
 		// Recent cycles first.
 		return issue.Cycle.DisplayName(), -issue.Cycle.Number
+	case GroupByProject:
+		if issue.ProjectName == "" {
+			return "No project", 1
+		}
+		return issue.ProjectName, 0
 	default: // GroupByStatus
 		return issue.State, statusRank(issue.State)
 	}
