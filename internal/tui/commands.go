@@ -1050,6 +1050,10 @@ func DefaultCommands(app *App) []Command {
 		}
 		commands = filtered
 	}
+
+	if app != nil {
+		applyCommandKeybindings(commands, app.config.Keybindings)
+	}
 	return commands
 }
 

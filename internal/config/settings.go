@@ -12,52 +12,54 @@ import (
 
 // SettingsFile represents the on-disk JSON with optional fields.
 type SettingsFile struct {
-	APIEndpoint      *string     `json:"api_endpoint"`
-	Timeout          *string     `json:"timeout"`
-	PageSize         *int        `json:"page_size"`
-	CacheTTL         *string     `json:"cache_ttl"`
-	SearchDebounce   *string     `json:"search_debounce"`
-	LogFile          *string     `json:"log_file"`
-	LogLevel         *string     `json:"log_level"`
-	Theme            *string     `json:"theme"`
-	Density          *string     `json:"density"`
-	GroupBy          *string     `json:"group_by"`
-	SubgroupBy       *string     `json:"subgroup_by"`
-	Columns          []string    `json:"columns"`
-	RoundedBorders   *bool       `json:"rounded_borders"`
-	Workspaces       []Workspace `json:"workspaces"`
-	DefaultWorkspace *string     `json:"default_workspace"`
-	AgentProvider    *string     `json:"agent_provider"`
-	AgentSandbox     *string     `json:"agent_sandbox"`
-	AgentModel       *string     `json:"agent_model"`
-	AgentWorkspace   *string     `json:"agent_workspace"`
-	DefaultTeam      *string     `json:"default_team"`
-	DefaultProject   *string     `json:"default_project"`
+	APIEndpoint      *string           `json:"api_endpoint"`
+	Timeout          *string           `json:"timeout"`
+	PageSize         *int              `json:"page_size"`
+	CacheTTL         *string           `json:"cache_ttl"`
+	SearchDebounce   *string           `json:"search_debounce"`
+	LogFile          *string           `json:"log_file"`
+	LogLevel         *string           `json:"log_level"`
+	Theme            *string           `json:"theme"`
+	Density          *string           `json:"density"`
+	GroupBy          *string           `json:"group_by"`
+	SubgroupBy       *string           `json:"subgroup_by"`
+	Columns          []string          `json:"columns"`
+	RoundedBorders   *bool             `json:"rounded_borders"`
+	Workspaces       []Workspace       `json:"workspaces"`
+	DefaultWorkspace *string           `json:"default_workspace"`
+	AgentProvider    *string           `json:"agent_provider"`
+	AgentSandbox     *string           `json:"agent_sandbox"`
+	AgentModel       *string           `json:"agent_model"`
+	AgentWorkspace   *string           `json:"agent_workspace"`
+	Keybindings      map[string]string `json:"keybindings"`
+	DefaultTeam      *string           `json:"default_team"`
+	DefaultProject   *string           `json:"default_project"`
 }
 
 // Settings contains concrete settings values for UI and persistence.
 type Settings struct {
-	APIEndpoint      string      `json:"api_endpoint"`
-	Timeout          string      `json:"timeout"`
-	PageSize         int         `json:"page_size"`
-	CacheTTL         string      `json:"cache_ttl"`
-	SearchDebounce   string      `json:"search_debounce"`
-	LogFile          string      `json:"log_file"`
-	LogLevel         string      `json:"log_level"`
-	Theme            string      `json:"theme"`
-	Density          string      `json:"density"`
-	GroupBy          string      `json:"group_by"`
-	SubgroupBy       string      `json:"subgroup_by"`
-	Columns          []string    `json:"columns,omitempty"`
-	RoundedBorders   bool        `json:"rounded_borders"`
-	Workspaces       []Workspace `json:"workspaces,omitempty"`
-	DefaultWorkspace string      `json:"default_workspace,omitempty"`
-	AgentProvider    string      `json:"agent_provider"`
-	AgentSandbox     string      `json:"agent_sandbox"`
-	AgentModel       string      `json:"agent_model"`
-	AgentWorkspace   string      `json:"agent_workspace"`
-	DefaultTeam      string      `json:"default_team"`
-	DefaultProject   string      `json:"default_project"`
+	APIEndpoint      string            `json:"api_endpoint"`
+	Timeout          string            `json:"timeout"`
+	PageSize         int               `json:"page_size"`
+	CacheTTL         string            `json:"cache_ttl"`
+	SearchDebounce   string            `json:"search_debounce"`
+	LogFile          string            `json:"log_file"`
+	LogLevel         string            `json:"log_level"`
+	Theme            string            `json:"theme"`
+	Density          string            `json:"density"`
+	GroupBy          string            `json:"group_by"`
+	SubgroupBy       string            `json:"subgroup_by"`
+	Columns          []string          `json:"columns,omitempty"`
+	RoundedBorders   bool              `json:"rounded_borders"`
+	Workspaces       []Workspace       `json:"workspaces,omitempty"`
+	DefaultWorkspace string            `json:"default_workspace,omitempty"`
+	AgentProvider    string            `json:"agent_provider"`
+	AgentSandbox     string            `json:"agent_sandbox"`
+	AgentModel       string            `json:"agent_model"`
+	AgentWorkspace   string            `json:"agent_workspace"`
+	Keybindings      map[string]string `json:"keybindings,omitempty"`
+	DefaultTeam      string            `json:"default_team"`
+	DefaultProject   string            `json:"default_project"`
 }
 
 // DefaultSettings returns the default settings for the config file and UI.
@@ -106,6 +108,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		AgentSandbox:     cfg.AgentSandbox,
 		AgentModel:       cfg.AgentModel,
 		AgentWorkspace:   cfg.AgentWorkspace,
+		Keybindings:      cfg.Keybindings,
 		DefaultTeam:      cfg.DefaultTeam,
 		DefaultProject:   cfg.DefaultProject,
 	}
@@ -176,6 +179,10 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		return Config{}, err
 	}
 
+	if err := validateKeybindings(settings.Keybindings, "keybindings"); err != nil {
+		return Config{}, err
+	}
+
 	if err := validateWorkspaces(settings.Workspaces, "workspaces"); err != nil {
 		return Config{}, err
 	}
@@ -201,6 +208,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		AgentSandbox:     settings.AgentSandbox,
 		AgentModel:       settings.AgentModel,
 		AgentWorkspace:   settings.AgentWorkspace,
+		Keybindings:      settings.Keybindings,
 		DefaultTeam:      settings.DefaultTeam,
 		DefaultProject:   settings.DefaultProject,
 	}, nil
@@ -304,6 +312,9 @@ func LoadSettings(path string) (Settings, error) {
 	if file.AgentWorkspace != nil {
 		settings.AgentWorkspace = *file.AgentWorkspace
 	}
+	if file.Keybindings != nil {
+		settings.Keybindings = file.Keybindings
+	}
 	if file.DefaultTeam != nil {
 		settings.DefaultTeam = *file.DefaultTeam
 	}
@@ -392,6 +403,22 @@ func validateTheme(theme string, label string) error {
 	default:
 		return fmt.Errorf("invalid %s value %q: must be linear, high_contrast, color_blind, or rose_pine_moon", label, theme)
 	}
+}
+
+// validateKeybindings validates that every binding maps to a single key and
+// that no key is bound twice.
+func validateKeybindings(bindings map[string]string, label string) error {
+	used := make(map[string]string, len(bindings))
+	for action, key := range bindings {
+		if len([]rune(key)) != 1 {
+			return fmt.Errorf("invalid %s entry %q: key %q must be a single character", label, action, key)
+		}
+		if previous, taken := used[key]; taken {
+			return fmt.Errorf("invalid %s: key %q bound to both %q and %q", label, key, previous, action)
+		}
+		used[key] = action
+	}
+	return nil
 }
 
 // validateColumns validates the issue list column selection.
