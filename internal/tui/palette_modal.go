@@ -11,18 +11,30 @@ import (
 // longer lists scroll.
 const paletteMaxVisibleRows = 12
 
+// newThemedInputField creates an InputField whose inner text area fills with
+// the given background. tview captures the global primitive background at
+// construction time and offers no setter for it afterwards, so without this
+// the field row renders in the default (possibly transparent) background with
+// color chips behind only the typed text.
+func newThemedInputField(fill tcell.Color) *tview.InputField {
+	previous := tview.Styles.PrimitiveBackgroundColor
+	tview.Styles.PrimitiveBackgroundColor = fill
+	field := tview.NewInputField()
+	tview.Styles.PrimitiveBackgroundColor = previous
+	return field
+}
+
 // buildPaletteModal creates and configures the command palette modal overlay.
 func (a *App) buildPaletteModal() *tview.Flex {
 	// Create input field for query with improved styling
-	a.paletteInput = tview.NewInputField()
+	a.paletteInput = newThemedInputField(a.theme.InputBg)
 	a.paletteInput.
 		SetLabel("> ").
 		SetLabelColor(a.theme.Accent).
 		SetFieldWidth(0). // Use full available width
 		SetPlaceholder("Type to filter commands...").
-		SetPlaceholderTextColor(a.theme.SecondaryText).
-		SetFieldBackgroundColor(a.theme.InputBg).
-		SetFieldTextColor(a.theme.Foreground).
+		SetFieldStyle(tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.InputBg)).
+		SetPlaceholderStyle(tcell.StyleDefault.Foreground(a.theme.SecondaryText).Background(a.theme.InputBg)).
 		SetBackgroundColor(a.theme.HeaderBg)
 
 	// Create list for filtered commands
