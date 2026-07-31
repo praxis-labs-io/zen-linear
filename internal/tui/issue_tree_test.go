@@ -339,7 +339,7 @@ func TestBuildGroupedIssueRows(t *testing.T) {
 		{ID: "4", Identifier: "LIN-4", State: "In Progress"},
 	}
 
-	rows, idToIssue := BuildGroupedIssueRows(issues, map[string]bool{})
+	rows, idToIssue := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByNone)
 	if len(idToIssue) != 4 {
 		t.Fatalf("idToIssue size = %d, want 4", len(idToIssue))
 	}
@@ -358,6 +358,42 @@ func TestBuildGroupedIssueRows(t *testing.T) {
 	}
 	if rows[1].IssueID != "4" || rows[3].IssueID != "2" || rows[4].IssueID != "3" || rows[6].IssueID != "1" {
 		t.Errorf("unexpected issue placement: %#v", rows)
+	}
+}
+
+// TestBuildGroupedIssueRowsSubgroups verifies second-level grouping emits
+// nested headers in dimension order.
+func TestBuildGroupedIssueRowsSubgroups(t *testing.T) {
+	issues := []linearapi.Issue{
+		{ID: "1", Identifier: "LIN-1", State: "Todo", Priority: 2},
+		{ID: "2", Identifier: "LIN-2", State: "Todo", Priority: 1},
+		{ID: "3", Identifier: "LIN-3", State: "Done", Priority: 0},
+	}
+
+	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByPriority)
+	// Expect: Todo hdr, Urgent hdr, 2, High hdr, 1, Done hdr, No priority hdr, 3
+	if len(rows) != 8 {
+		t.Fatalf("rows = %d, want 8: %+v", len(rows), rows)
+	}
+	type expectation struct {
+		header string
+		level  int
+	}
+	wantHeaders := map[int]expectation{
+		0: {"Todo", 0},
+		1: {"Urgent", 1},
+		3: {"High", 1},
+		5: {"Done", 0},
+		6: {"No priority", 1},
+	}
+	for index, want := range wantHeaders {
+		row := rows[index]
+		if !row.IsHeader || row.HeaderText != want.header || row.HeaderLevel != want.level {
+			t.Errorf("rows[%d] = %+v, want header %q level %d", index, row, want.header, want.level)
+		}
+	}
+	if rows[2].IssueID != "2" || rows[4].IssueID != "1" || rows[7].IssueID != "3" {
+		t.Errorf("unexpected issue placement: %+v", rows)
 	}
 }
 

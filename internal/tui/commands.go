@@ -288,11 +288,19 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:       "group_by_status",
-			Title:    "Toggle group by status",
-			Keywords: []string{"group", "grouping", "status", "state"},
+			ID:       "group_by",
+			Title:    "Group issues by…",
+			Keywords: []string{"group", "grouping", "status", "priority", "assignee", "cycle"},
 			Run: func(a *App) {
-				a.toggleGroupByStatus()
+				a.showGroupByPicker()
+			},
+		},
+		{
+			ID:       "subgroup_by",
+			Title:    "Subgroup issues by…",
+			Keywords: []string{"subgroup", "group", "grouping", "nested"},
+			Run: func(a *App) {
+				a.showSubgroupByPicker()
 			},
 		},
 		{
