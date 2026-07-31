@@ -33,19 +33,19 @@ func NewMultiSelectModal(app *App) *MultiSelectModal {
 
 	mm.list = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.Background)).
+		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.ModalBackground())).
 		SetSelectedStyle(app.listSelectionStyle()).
 		SetHighlightFullLine(true)
-	mm.list.SetBackgroundColor(app.theme.Background)
+	mm.list.SetBackgroundColor(app.theme.ModalBackground())
 
 	mm.titleView = tview.NewTextView()
 	mm.titleView.SetTextColor(app.theme.Accent)
-	mm.titleView.SetBackgroundColor(app.theme.Background)
+	mm.titleView.SetBackgroundColor(app.theme.ModalBackground())
 
 	helpView := tview.NewTextView()
 	helpView.SetText("Space: toggle | Enter: apply | Esc: cancel")
 	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.Background)
+	helpView.SetBackgroundColor(app.theme.ModalBackground())
 	helpView.SetTextAlign(tview.AlignCenter)
 
 	content := tview.NewFlex().
@@ -53,8 +53,8 @@ func NewMultiSelectModal(app *App) *MultiSelectModal {
 		AddItem(mm.titleView, 1, 0, false).
 		AddItem(mm.list, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
-	content.Box = tview.NewBox().SetBackgroundColor(app.theme.Background)
-	content.SetBackgroundColor(app.theme.Background).
+	content.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	content.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitleColor(app.theme.Foreground)
@@ -69,7 +69,7 @@ func NewMultiSelectModal(app *App) *MultiSelectModal {
 			AddItem(content, 20, 0, true).
 			AddItem(nil, 0, 1, false), 60, 0, true).
 		AddItem(nil, 0, 1, false)
-	mm.modal.SetBackgroundColor(app.theme.Background)
+	mm.modal.SetBackgroundColor(app.theme.ModalBackground())
 
 	return mm
 }
