@@ -254,6 +254,14 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:       "switch_workspace",
+			Title:    "Switch workspace",
+			Keywords: []string{"workspace", "switch", "account", "organization"},
+			Run: func(a *App) {
+				a.showWorkspacePicker()
+			},
+		},
+		{
 			ID:       "edit_prompt_templates",
 			Title:    "Edit agent prompt templates",
 			Keywords: []string{"agent", "prompt", "prompts", "template", "templates"},
