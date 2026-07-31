@@ -67,6 +67,9 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 				}
 				// Update selection and refresh issues
 				a.onNavigationSelected(navNode)
+				// Selecting a view moves focus to the issues list.
+				a.focusedPane = FocusIssues
+				a.updateFocus()
 			}
 		}
 	})
