@@ -32,10 +32,15 @@ func (cm *ConfirmationModal) Show(title, message, confirmLabel string, onConfirm
 		})
 	cm.modal.SetBackgroundColor(cm.app.theme.ModalBackground())
 	cm.modal.SetTextColor(cm.app.theme.Foreground)
-	cm.modal.SetButtonBackgroundColor(cm.app.theme.Accent)
-	cm.modal.SetButtonTextColor(cm.app.theme.SelectionText)
+	// Focus-only accent: the focused button is the single loud element.
+	cm.modal.SetButtonStyle(tcell.StyleDefault.
+		Background(cm.app.theme.ModalBackground()).
+		Foreground(cm.app.theme.SecondaryText))
+	cm.modal.SetButtonActivatedStyle(tcell.StyleDefault.
+		Background(cm.app.theme.Accent).
+		Foreground(cm.app.theme.InverseTextColor()))
 	cm.modal.SetBorder(true).
-		SetBorderColor(cm.app.theme.Accent).
+		SetBorderColor(cm.app.theme.BorderFocus).
 		SetTitle(" " + title + " ").
 		SetTitleColor(cm.app.theme.Foreground)
 
