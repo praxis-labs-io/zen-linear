@@ -99,6 +99,32 @@ type Config struct {
 
 	// DefaultProject selects the project (by name) to open on startup. Requires DefaultTeam.
 	DefaultProject string
+
+	// Workspaces lists Linear workspaces the app can switch between.
+	Workspaces []Workspace
+}
+
+// Workspace describes a switchable Linear workspace. The API key is read from
+// the named environment variable so credentials never live in the config file.
+type Workspace struct {
+	Name      string `json:"name"`
+	APIKeyEnv string `json:"api_key_env"`
+}
+
+// APIKey returns the workspace's API key from the environment.
+func (w Workspace) APIKey() string {
+	return os.Getenv(w.APIKeyEnv)
+}
+
+// FirstAvailableWorkspace returns the first workspace whose API key
+// environment variable is set, for use as the startup default.
+func FirstAvailableWorkspace(workspaces []Workspace) (Workspace, bool) {
+	for _, workspace := range workspaces {
+		if workspace.APIKey() != "" {
+			return workspace, true
+		}
+	}
+	return Workspace{}, false
 }
 
 // LoadFromEnv loads configuration from environment variables.
