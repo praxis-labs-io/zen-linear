@@ -7,14 +7,27 @@ import (
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
 
+// Column order matches Linear's list view: priority, id, state, title,
+// labels, assignee, updated.
+const (
+	rowColPriority = iota
+	rowColID
+	rowColState
+	rowColTitle
+	rowColLabels
+	rowColAssignee
+	rowColUpdated
+)
+
 func TestRenderIssueRow(t *testing.T) {
 	tests := []struct {
-		name      string
-		issue     linearapi.Issue
-		wantLen   int
-		wantID    string
-		wantState string
-		wantCycle string
+		name         string
+		issue        linearapi.Issue
+		wantID       string
+		wantState    string
+		wantPriority string
+		wantAssignee string
+		wantLabels   string
 	}{
 		{
 			name: "normal issue",
@@ -25,27 +38,29 @@ func TestRenderIssueRow(t *testing.T) {
 				State:      "Todo",
 				Assignee:   "John Doe",
 				Priority:   3, // Normal priority
-				Cycle:      &linearapi.CycleRef{ID: "cycle-1", Name: "Launch", Number: 12},
+				Labels:     []linearapi.IssueLabel{{Name: "Bug"}, {Name: "UI"}},
 			},
-			wantLen:   9,
-			wantID:    "LIN-1",
-			wantState: "Todo",
-			wantCycle: "Launch",
+			wantID:       "LIN-1",
+			wantState:    Icons.Todo,
+			wantPriority: Icons.Priority,
+			wantAssignee: "John Doe",
+			wantLabels:   "Bug, UI",
 		},
 		{
-			name: "unassigned issue",
+			name: "unassigned urgent issue",
 			issue: linearapi.Issue{
 				ID:         "test-2",
 				Identifier: "LIN-2",
 				Title:      "Another Issue",
 				State:      "In Progress",
 				Assignee:   "",
-				Priority:   2, // High priority
+				Priority:   1, // Urgent priority
 			},
-			wantLen:   9,
-			wantID:    "LIN-2",
-			wantState: "In Progres", // truncated to 10 chars
-			wantCycle: "-",
+			wantID:       "LIN-2",
+			wantState:    Icons.InProgress,
+			wantPriority: "!",
+			wantAssignee: "-",
+			wantLabels:   "-",
 		},
 		{
 			name: "long identifier truncated",
@@ -55,34 +70,39 @@ func TestRenderIssueRow(t *testing.T) {
 				Title:      "Long ID Issue",
 				State:      "Done",
 				Assignee:   "Jane",
-				Priority:   1, // Urgent priority
-				Cycle:      &linearapi.CycleRef{ID: "cycle-13", Number: 13},
+				Priority:   0, // No priority
 			},
-			wantLen:   9,
-			wantID:    "VERY-LONG-", // truncated to 10 chars
-			wantState: "Done",
-			wantCycle: "Cycle 13",
+			wantID:       "VERY-LONG-", // truncated to 10 chars
+			wantState:    Icons.Done,
+			wantPriority: "-",
+			wantAssignee: "Jane",
+			wantLabels:   "-",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			row := renderIssueRow(tt.issue)
-			if len(row) != tt.wantLen {
-				t.Errorf("renderIssueRow() length = %d, want %d", len(row), tt.wantLen)
+			if len(row) != 7 {
+				t.Fatalf("renderIssueRow() length = %d, want 7", len(row))
 			}
-			if len(row) > 0 && row[0] != tt.wantID {
-				t.Errorf("renderIssueRow()[0] = %q, want %q", row[0], tt.wantID)
+			if row[rowColPriority] != tt.wantPriority {
+				t.Errorf("priority = %q, want %q", row[rowColPriority], tt.wantPriority)
 			}
-			if len(row) > 1 && row[1] != tt.wantState {
-				t.Errorf("renderIssueRow()[1] = %q, want %q", row[1], tt.wantState)
+			if row[rowColID] != tt.wantID {
+				t.Errorf("id = %q, want %q", row[rowColID], tt.wantID)
 			}
-			// Column 2 is now Priority
-			if len(row) > 3 && tt.issue.Assignee == "" && row[3] != "Unassigned" {
-				t.Errorf("renderIssueRow()[3] = %q, want %q", row[3], "Unassigned")
+			if row[rowColState] != tt.wantState {
+				t.Errorf("state = %q, want %q", row[rowColState], tt.wantState)
 			}
-			if len(row) > 4 && row[4] != tt.wantCycle {
-				t.Errorf("renderIssueRow()[4] = %q, want %q", row[4], tt.wantCycle)
+			if row[rowColTitle] != tt.issue.Title {
+				t.Errorf("title = %q, want %q", row[rowColTitle], tt.issue.Title)
+			}
+			if row[rowColLabels] != tt.wantLabels {
+				t.Errorf("labels = %q, want %q", row[rowColLabels], tt.wantLabels)
+			}
+			if row[rowColAssignee] != tt.wantAssignee {
+				t.Errorf("assignee = %q, want %q", row[rowColAssignee], tt.wantAssignee)
 			}
 		})
 	}
@@ -93,33 +113,32 @@ func TestRenderIssueRow_Truncation(t *testing.T) {
 		ID:         "test",
 		Identifier: "ABCDEFGHIJKLMNOP", // 16 chars
 		Title:      "Test",
-		State:      "ABCDEFGHIJKLMNOP", // 16 chars
+		State:      "In Progress",
 		Assignee:   "ABCDEFGHIJKLMNOP", // 16 chars
 		Priority:   1,
-		Cycle:      &linearapi.CycleRef{ID: "cycle-1", Name: "ABCDEFGHIJKLMNOP", Number: 1},
 		UpdatedAt:  time.Now(),
 	}
 
 	row := renderIssueRow(issue)
 
-	// Identifier should be truncated to 10 chars
-	if len(row[0]) > 10 {
-		t.Errorf("Identifier length = %d, want <= 10", len(row[0]))
+	if len(row[rowColID]) > 10 {
+		t.Errorf("Identifier length = %d, want <= 10", len(row[rowColID]))
 	}
-
-	// State should be truncated to 10 chars
-	if len(row[1]) > 10 {
-		t.Errorf("State length = %d, want <= 10", len(row[1]))
+	if len(row[rowColAssignee]) > 14 {
+		t.Errorf("Assignee length = %d, want <= 14", len(row[rowColAssignee]))
 	}
+}
 
-	// Priority is column 2 (no truncation needed for formatted priority)
-	// Assignee should be truncated to 10 chars (now column 3)
-	if len(row[3]) > 10 {
-		t.Errorf("Assignee length = %d, want <= 10", len(row[3]))
+func TestFormatUpdatedAt(t *testing.T) {
+	if got := formatUpdatedAt(time.Time{}); got != "-" {
+		t.Errorf("formatUpdatedAt(zero) = %q, want -", got)
 	}
-
-	// Cycle should be truncated to 10 chars (now column 4)
-	if len(row[4]) > 10 {
-		t.Errorf("Cycle length = %d, want <= 10", len(row[4]))
+	now := time.Date(time.Now().Year(), time.July, 28, 12, 0, 0, 0, time.UTC)
+	if got := formatUpdatedAt(now); got != "Jul 28" {
+		t.Errorf("formatUpdatedAt(current year) = %q, want Jul 28", got)
+	}
+	old := time.Date(2023, time.December, 3, 12, 0, 0, 0, time.UTC)
+	if got := formatUpdatedAt(old); got != "Dec 2023" {
+		t.Errorf("formatUpdatedAt(old year) = %q, want Dec 2023", got)
 	}
 }
