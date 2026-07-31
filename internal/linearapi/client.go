@@ -355,6 +355,7 @@ type Issue struct {
 	TeamID           string
 	ProjectID        string
 	ProjectName      string
+	BranchName       string
 	Cycle            *CycleRef
 	DueDate          *string
 	Estimate         *float64
@@ -1285,6 +1286,7 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 					}
 				}
 				URL        graphql.String
+				BranchName graphql.String
 				ArchivedAt *graphql.String
 				Parent     *struct {
 					ID         graphql.String
@@ -1463,6 +1465,7 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 					}
 				}
 				URL        graphql.String
+				BranchName graphql.String
 				ArchivedAt *graphql.String
 				Parent     *struct {
 					ID         graphql.String
@@ -1839,6 +1842,7 @@ func (c *Client) parseIssueNode(node interface{}) Issue {
 	projectMilestone := parseProjectMilestoneRefValue(v.FieldByName("ProjectMilestone"))
 
 	url := v.FieldByName("URL").String()
+	branchName := reflectStringField(v, "BranchName")
 
 	archivedField := v.FieldByName("ArchivedAt")
 	archived := archivedField.IsValid() && archivedField.Kind() == reflect.Pointer && !archivedField.IsNil()
@@ -1914,6 +1918,7 @@ func (c *Client) parseIssueNode(node interface{}) Issue {
 		Estimate:         estimate,
 		ProjectMilestone: projectMilestone,
 		URL:              url,
+		BranchName:       branchName,
 		Archived:         archived,
 		Labels:           labels,
 		Parent:           parent,
@@ -1998,6 +2003,7 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 				}
 			}
 			URL        graphql.String
+			BranchName graphql.String
 			ArchivedAt *graphql.String
 			Parent     *struct {
 				ID         graphql.String
@@ -2062,6 +2068,7 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 					Title      graphql.String
 					Subtitle   *graphql.String
 					URL        graphql.String
+					BranchName graphql.String
 					SourceType *graphql.String
 					CreatedAt  graphql.String
 					UpdatedAt  graphql.String

@@ -208,6 +208,27 @@ func handleCopyIssueURLCommand(a *App) {
 	a.flashStatus(fmt.Sprintf("Copied issue URL: %s", issue.Identifier))
 }
 
+func handleCopyBranchCommand(a *App) {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	if issue.BranchName == "" {
+		a.flashStatus(fmt.Sprintf("No branch name for %s", issue.Identifier))
+		return
+	}
+	copyFn := a.copyToClipboardFunc
+	if copyFn == nil {
+		copyFn = copyToClipboard
+	}
+	if err := copyFn(issue.BranchName); err != nil {
+		a.updateStatusBarWithError(err)
+		return
+	}
+	a.flashStatus(fmt.Sprintf("Copied branch name: %s", issue.BranchName))
+}
+
 // DefaultCommands returns the default set of commands for the palette.
 func DefaultCommands(app *App) []Command {
 	lookPath := exec.LookPath
@@ -280,6 +301,23 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:       "toggle_expand_all",
+			Title:    "Toggle expand/collapse all sub-issues",
+			Keywords: []string{"toggle", "expand", "collapse", "all", "sub-issues"},
+			Run: func(a *App) {
+				a.issuesMu.RLock()
+				issues := a.issues
+				a.issuesMu.RUnlock()
+				if len(a.expandedState) > 0 {
+					CollapseAll(a.expandedState)
+					a.regroupIssues("Collapsed all sub-issues")
+					return
+				}
+				ExpandAll(a.expandedState, issues)
+				a.regroupIssues("Expanded all sub-issues")
+			},
+		},
+		{
 			ID:       "sort_status",
 			Title:    "Sort by status",
 			Keywords: []string{"sort", "status", "state"},
@@ -325,6 +363,14 @@ func DefaultCommands(app *App) []Command {
 			Keywords:     []string{"copy", "id", "c", "identifier"},
 			ShortcutRune: 'y',
 			Run:          handleCopyIssueIDCommand,
+		},
+		{
+			ID:       "copy_branch",
+			Title:    "Copy branch name",
+			Keywords: []string{"copy", "branch", "git", "checkout"},
+			Run: func(a *App) {
+				handleCopyBranchCommand(a)
+			},
 		},
 		{
 			ID:           "copy_url",
