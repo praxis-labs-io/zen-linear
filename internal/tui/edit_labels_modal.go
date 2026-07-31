@@ -33,9 +33,8 @@ func NewEditLabelsModal(app *App) *EditLabelsModal {
 	// Create list for labels
 	elm.list = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextColor(app.theme.Foreground).
-		SetSelectedBackgroundColor(app.theme.Accent).
-		SetSelectedTextColor(app.theme.SelectionText).
+		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.HeaderBg)).
+		SetSelectedStyle(app.selectionStyle().Bold(false)).
 		SetHighlightFullLine(true)
 	elm.list.SetBackgroundColor(app.theme.HeaderBg)
 
