@@ -52,7 +52,7 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 - `LINEAR_API_KEY` overrides stored OAuth credentials when set.
 - Use `linear-tui auth logout` to revoke (best effort) and delete stored credentials.
 - Settings are stored in `~/.linear-tui/config.json` and created on first start.
-- Keybindings: a `keybindings` map remaps palette command shortcuts by command id (single keys, e.g. `{"refresh": "R", "copy_url": "u"}`); ids match the palette command ids.
+- Keybindings: a `keybindings` map remaps palette command shortcuts by command id (single keys, e.g. `{"refresh": "R", "copy_url": "u"}`); ids match the palette command ids; the global actions `quit`, `open_palette`, and `search` are remappable too.
 - Use the Settings modal from the command palette (`:` -> `Settings`) to edit and apply settings immediately.
 - UI settings in `config.json`: `theme` (`linear`, `high_contrast`, `color_blind`) and `density` (`comfortable`, `compact`).
 - Search settings in `config.json`: `search_debounce` controls the live search debounce delay (default `300ms`).

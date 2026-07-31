@@ -1021,13 +1021,13 @@ func (a *App) bindGlobalKeys() {
 			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
-			case 'q':
+			case a.actionKey("quit", 'q'):
 				a.app.Stop()
 				return nil
-			case ':':
+			case a.actionKey("open_palette", ':'):
 				a.openPalette()
 				return nil
-			case '/':
+			case a.actionKey("search", '/'):
 				a.openSearchPalette()
 				return nil
 			}
