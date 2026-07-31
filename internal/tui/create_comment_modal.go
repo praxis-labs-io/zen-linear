@@ -27,7 +27,7 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 
 	// Create form
 	ccm.form = tview.NewForm()
-	ccm.form.SetBackgroundColor(app.theme.HeaderBg)
+	ccm.form.SetBackgroundColor(app.theme.ModalBackground())
 	ccm.form.SetFieldBackgroundColor(app.theme.InputBg)
 	ccm.form.SetFieldTextColor(app.theme.Foreground)
 	ccm.form.SetButtonBackgroundColor(app.theme.Accent)
@@ -58,13 +58,13 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 	headerView := tview.NewTextView()
 	headerView.SetText("Add Comment")
 	headerView.SetTextColor(app.theme.Accent)
-	headerView.SetBackgroundColor(app.theme.HeaderBg)
+	headerView.SetBackgroundColor(app.theme.ModalBackground())
 
 	// Create help text
 	helpView := tview.NewTextView()
 	helpView.SetText("Esc: cancel • Ctrl+Enter / Cmd+Enter: submit")
 	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.HeaderBg)
+	helpView.SetBackgroundColor(app.theme.ModalBackground())
 	helpView.SetTextAlign(tview.AlignCenter)
 
 	// Build modal content
@@ -73,8 +73,8 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 		AddItem(headerView, 1, 0, false).
 		AddItem(ccm.form, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
-	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
-	modalContent.SetBackgroundColor(app.theme.HeaderBg).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" New Comment ").

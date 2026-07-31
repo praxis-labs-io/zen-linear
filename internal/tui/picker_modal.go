@@ -30,21 +30,21 @@ func NewPickerModal(app *App) *PickerModal {
 	// Create list
 	pm.list = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.Background)).
+		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.ModalBackground())).
 		SetSelectedStyle(app.listSelectionStyle()).
 		SetHighlightFullLine(true)
-	pm.list.SetBackgroundColor(app.theme.Background)
+	pm.list.SetBackgroundColor(app.theme.ModalBackground())
 
 	// Create title
 	pm.titleView = tview.NewTextView()
 	pm.titleView.SetTextColor(app.theme.Accent)
-	pm.titleView.SetBackgroundColor(app.theme.Background)
+	pm.titleView.SetBackgroundColor(app.theme.ModalBackground())
 
 	// Create help text
 	helpText := tview.NewTextView()
 	helpText.SetText("↑↓/j/k: navigate | Enter: select | Esc: cancel")
 	helpText.SetTextColor(app.theme.SecondaryText)
-	helpText.SetBackgroundColor(app.theme.Background)
+	helpText.SetBackgroundColor(app.theme.ModalBackground())
 
 	// Build modal content
 	modalContent := tview.NewFlex().
@@ -52,8 +52,8 @@ func NewPickerModal(app *App) *PickerModal {
 		AddItem(pm.titleView, 1, 0, false).
 		AddItem(pm.list, 0, 1, true).
 		AddItem(helpText, 1, 0, false)
-	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.Background)
-	modalContent.SetBackgroundColor(app.theme.Background).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitleColor(app.theme.Foreground)
@@ -69,7 +69,7 @@ func NewPickerModal(app *App) *PickerModal {
 			AddItem(modalContent, 15, 0, true).
 			AddItem(nil, 0, 1, false), 50, 0, true).
 		AddItem(nil, 0, 1, false)
-	pm.modal.SetBackgroundColor(app.theme.Background)
+	pm.modal.SetBackgroundColor(app.theme.ModalBackground())
 
 	return pm
 }
