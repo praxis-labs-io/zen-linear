@@ -25,6 +25,8 @@ type NavigationNode struct {
 	// StateType filters by workflow state type (e.g. triage), scoped to
 	// TeamID when set.
 	StateType string
+	// IsFolder marks a favorites folder; selecting it toggles expansion.
+	IsFolder bool
 }
 
 // buildNavigationTree creates and configures the navigation tree widget.
@@ -54,6 +56,11 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 		ref := node.GetReference()
 		if ref != nil {
 			if navNode, ok := ref.(*NavigationNode); ok {
+				// Folders only expand and collapse.
+				if navNode.IsFolder {
+					node.SetExpanded(!node.IsExpanded())
+					return
+				}
 				// For team nodes, handle expand/collapse
 				if navNode.IsTeam {
 					a.onTeamExpanded(navNode.TeamID, node)
