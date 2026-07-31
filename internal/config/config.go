@@ -83,6 +83,9 @@ type Config struct {
 	// Density controls the UI spacing density.
 	Density string
 
+	// RoundedBorders draws pane borders with rounded corners.
+	RoundedBorders bool
+
 	// AgentProvider selects the agent CLI provider (cursor or claude).
 	AgentProvider string
 

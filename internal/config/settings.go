@@ -21,6 +21,7 @@ type SettingsFile struct {
 	LogLevel       *string     `json:"log_level"`
 	Theme          *string     `json:"theme"`
 	Density        *string     `json:"density"`
+	RoundedBorders *bool       `json:"rounded_borders"`
 	AgentProvider  *string     `json:"agent_provider"`
 	AgentSandbox   *string     `json:"agent_sandbox"`
 	AgentModel     *string     `json:"agent_model"`
@@ -41,6 +42,7 @@ type Settings struct {
 	LogLevel       string      `json:"log_level"`
 	Theme          string      `json:"theme"`
 	Density        string      `json:"density"`
+	RoundedBorders bool        `json:"rounded_borders"`
 	AgentProvider  string      `json:"agent_provider"`
 	AgentSandbox   string      `json:"agent_sandbox"`
 	AgentModel     string      `json:"agent_model"`
@@ -62,6 +64,7 @@ func DefaultSettings() Settings {
 		LogLevel:       DefaultLogLevel,
 		Theme:          DefaultTheme,
 		Density:        DefaultDensity,
+		RoundedBorders: false,
 		AgentProvider:  DefaultAgentProvider,
 		AgentSandbox:   DefaultAgentSandbox,
 		AgentModel:     "",
@@ -83,6 +86,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		LogLevel:       cfg.LogLevel,
 		Theme:          cfg.Theme,
 		Density:        cfg.Density,
+		RoundedBorders: cfg.RoundedBorders,
 		AgentProvider:  cfg.AgentProvider,
 		AgentSandbox:   cfg.AgentSandbox,
 		AgentModel:     cfg.AgentModel,
@@ -162,6 +166,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		LogLevel:       settings.LogLevel,
 		Theme:          theme,
 		Density:        density,
+		RoundedBorders: settings.RoundedBorders,
 		AgentProvider:  settings.AgentProvider,
 		AgentSandbox:   settings.AgentSandbox,
 		AgentModel:     settings.AgentModel,
@@ -245,6 +250,9 @@ func LoadSettings(path string) (Settings, error) {
 	}
 	if file.Density != nil {
 		settings.Density = *file.Density
+	}
+	if file.RoundedBorders != nil {
+		settings.RoundedBorders = *file.RoundedBorders
 	}
 	if file.AgentProvider != nil {
 		settings.AgentProvider = *file.AgentProvider
