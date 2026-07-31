@@ -312,3 +312,73 @@ func TestBuildIssueRows_ChildrenSortedByIdentifier(t *testing.T) {
 		}
 	}
 }
+
+// TestStatusRank verifies lifecycle ordering, including that "Unstarted" does
+// not match the "started" category.
+func TestStatusRank(t *testing.T) {
+	ordered := []string{"Triage", "Backlog", "Unstarted", "In Progress", "Done", "Canceled"}
+	for i := 1; i < len(ordered); i++ {
+		if statusRank(ordered[i-1]) > statusRank(ordered[i]) {
+			t.Errorf("statusRank(%q)=%d > statusRank(%q)=%d", ordered[i-1], statusRank(ordered[i-1]), ordered[i], statusRank(ordered[i]))
+		}
+	}
+	if statusRank("Unstarted") == statusRank("In Progress") {
+		t.Error("Unstarted must not rank with started states")
+	}
+	if statusRank("In Review") != statusRank("In Progress") {
+		t.Error("In Review should rank with started states")
+	}
+}
+
+// TestBuildGroupedIssueRows verifies headers, group order, and counts.
+func TestBuildGroupedIssueRows(t *testing.T) {
+	issues := []linearapi.Issue{
+		{ID: "1", Identifier: "LIN-1", State: "Done"},
+		{ID: "2", Identifier: "LIN-2", State: "Todo"},
+		{ID: "3", Identifier: "LIN-3", State: "Todo"},
+		{ID: "4", Identifier: "LIN-4", State: "In Progress"},
+	}
+
+	rows, idToIssue := BuildGroupedIssueRows(issues, map[string]bool{})
+	if len(idToIssue) != 4 {
+		t.Fatalf("idToIssue size = %d, want 4", len(idToIssue))
+	}
+	// Expect: [Todo header, 2, 3, In Progress header, 4, Done header, 1]
+	if len(rows) != 7 {
+		t.Fatalf("rows = %d, want 7: %#v", len(rows), rows)
+	}
+	wantHeaders := map[int]string{0: "Todo", 3: "In Progress", 5: "Done"}
+	for index, state := range wantHeaders {
+		if !rows[index].IsHeader || rows[index].HeaderText != state {
+			t.Errorf("rows[%d] = %+v, want header %q", index, rows[index], state)
+		}
+	}
+	if rows[0].HeaderCount != 2 {
+		t.Errorf("Todo header count = %d, want 2", rows[0].HeaderCount)
+	}
+	if rows[1].IssueID != "2" || rows[2].IssueID != "3" || rows[4].IssueID != "4" || rows[6].IssueID != "1" {
+		t.Errorf("unexpected issue placement: %#v", rows)
+	}
+}
+
+// TestNextIssueRow verifies header rows are skipped in both directions.
+func TestNextIssueRow(t *testing.T) {
+	rows := []IssueRow{
+		{IsHeader: true, HeaderText: "Todo"},
+		{IssueID: "a"},
+		{IsHeader: true, HeaderText: "Done"},
+		{IssueID: "b"},
+	}
+	if got := nextIssueRow(rows, 0, 1); got != 2 {
+		t.Errorf("first issue row = %d, want 2", got)
+	}
+	if got := nextIssueRow(rows, 2, 1); got != 4 {
+		t.Errorf("next after row 2 = %d, want 4", got)
+	}
+	if got := nextIssueRow(rows, 4, -1); got != 2 {
+		t.Errorf("previous before row 4 = %d, want 2", got)
+	}
+	if got := nextIssueRow(rows, 4, 1); got != 0 {
+		t.Errorf("past end = %d, want 0", got)
+	}
+}

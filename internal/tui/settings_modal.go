@@ -652,6 +652,9 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		LogLevel:       logLevel,
 		Theme:          theme,
 		Density:        density,
+		// No form field; carry the current value so saving settings never
+		// strips it from the config file.
+		GroupByStatus:  sm.app.config.GroupByStatus,
 		AgentProvider:  agentProvider,
 		AgentSandbox:   agentSandbox,
 		AgentModel:     agentModel,
