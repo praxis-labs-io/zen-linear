@@ -300,7 +300,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		idToIssue:            make(map[string]*linearapi.Issue),
 		myIDToIssue:          make(map[string]*linearapi.Issue),
 		otherIDToIssue:       make(map[string]*linearapi.Issue),
-		activeIssuesSection:  IssuesSectionOther, // Default to Other section
+		activeIssuesSection:  IssuesSectionMy, // Default to My Issues (falls back to Other when empty)
 		agentPromptTemplates: templates,
 		activeWorkspaceName:  workspaceNameForKey(cfg.Workspaces, cfg.LinearAPIKey),
 	}
