@@ -14,12 +14,8 @@ import (
 )
 
 const (
-	defaultAgentModelLabel       = "default (use provider default)"
-	settingsModalWidth           = 110
-	settingsModalScreenMargin    = 4
-	settingsModalHeaderFooterRow = 2
-	settingsFormItemPadding      = 1
-	settingsFormBorderPadding    = 1
+	defaultAgentModelLabel = "default (use provider default)"
+	settingsModalWidth     = 110
 )
 
 // agentModelOption pairs a model id with its display label.
@@ -215,10 +211,7 @@ func agentModelOptionsForProvider(provider string) ([]string, []string) {
 // SettingsModal manages the settings form overlay.
 type SettingsModal struct {
 	app                  *App
-	modal                *tview.Flex
-	modalBody            *tview.Flex
-	modalContent         *tview.Flex
-	form                 *tview.Form
+	fm                   *FormModal
 	endpointField        *tview.InputField
 	timeoutField         *tview.InputField
 	pageSizeField        *tview.InputField
@@ -264,178 +257,40 @@ func NewSettingsModal(app *App) *SettingsModal {
 		agentModelValues:     modelValues,
 	}
 
-	sm.form = tview.NewForm()
-	sm.form.SetItemPadding(settingsFormItemPadding)
-	sm.form.SetBorderPadding(settingsFormBorderPadding, settingsFormBorderPadding, settingsFormBorderPadding, settingsFormBorderPadding)
-	sm.form.SetBackgroundColor(app.theme.ModalBackground())
-	sm.form.SetFieldBackgroundColor(app.theme.InputBg)
-	sm.form.SetFieldTextColor(app.theme.Foreground)
-	sm.form.SetButtonBackgroundColor(app.theme.Accent)
-	sm.form.SetButtonTextColor(app.theme.SelectionText)
-	sm.form.SetLabelColor(app.theme.Foreground)
-	sm.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			sm.Hide()
-			return nil
-		}
-		return event
+	sm.fm = NewFormModal(app, "Settings")
+	sm.fm.SetMaxWidth(settingsModalWidth)
+
+	sm.endpointField = sm.fm.AddInput("API endpoint", "")
+	sm.timeoutField = sm.fm.AddInput("Timeout", "")
+	sm.pageSizeField = sm.fm.AddInput("Page size", "")
+	sm.cacheTTLField = sm.fm.AddInput("Cache TTL", "")
+	sm.searchDebounceField = sm.fm.AddInput("Search debounce", "")
+	sm.logFileField = sm.fm.AddInput("Log file", "")
+
+	sm.logLevelField = sm.fm.AddPicker("Log level", sm.logLevelOptions, 0, nil)
+	sm.themeField = sm.fm.AddPicker("Theme", sm.themeOptions, 0, nil)
+	sm.densityField = sm.fm.AddPicker("Density", sm.densityOptions, 0, nil)
+
+	sm.roundedBordersField = sm.fm.AddCheckbox("Rounded borders", false)
+
+	sm.agentProviderField = sm.fm.AddPicker("Agent provider", sm.agentProviderOptions, 0, func(text string, index int) {
+		_ = index
+		sm.setAgentModelOptionsForProvider(text)
 	})
+	sm.agentSandboxField = sm.fm.AddPicker("Agent sandbox", sm.agentSandboxOptions, 0, nil)
+	sm.agentModelField = sm.fm.AddPicker("Agent model", sm.agentModelOptions, 0, nil)
 
-	sm.endpointField = tview.NewInputField().
-		SetLabel("API endpoint").
-		SetFieldWidth(60)
-	sm.form.AddFormItem(sm.endpointField)
+	sm.agentWorkspaceField = sm.fm.AddInput("Agent workspace (blank uses CWD)", "")
+	sm.defaultTeamField = sm.fm.AddInput("Default team (blank opens All Issues)", "")
+	sm.defaultProjectField = sm.fm.AddInput("Default project (requires default team)", "")
 
-	sm.timeoutField = tview.NewInputField().
-		SetLabel("Timeout").
-		SetFieldWidth(20)
-	sm.form.AddFormItem(sm.timeoutField)
-
-	sm.pageSizeField = tview.NewInputField().
-		SetLabel("Page size").
-		SetFieldWidth(10)
-	sm.form.AddFormItem(sm.pageSizeField)
-
-	sm.cacheTTLField = tview.NewInputField().
-		SetLabel("Cache TTL").
-		SetFieldWidth(20)
-	sm.form.AddFormItem(sm.cacheTTLField)
-
-	sm.searchDebounceField = tview.NewInputField().
-		SetLabel("Search debounce").
-		SetFieldWidth(20)
-	sm.form.AddFormItem(sm.searchDebounceField)
-
-	sm.logFileField = tview.NewInputField().
-		SetLabel("Log file").
-		SetFieldWidth(60)
-	sm.form.AddFormItem(sm.logFileField)
-
-	sm.logLevelField = tview.NewDropDown().
-		SetLabel("Log level").
-		SetOptions(sm.logLevelOptions, nil)
-	sm.logLevelField.SetFieldWidth(20)
-	sm.logLevelField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
-		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
+	sm.fm.AddButtons(
+		FormButton{Label: "Save", OnPress: sm.saveSettings},
+		FormButton{Label: "Cancel", OnPress: sm.Hide},
 	)
-	sm.form.AddFormItem(sm.logLevelField)
-
-	sm.themeField = tview.NewDropDown().
-		SetLabel("Theme").
-		SetOptions(sm.themeOptions, nil)
-	sm.themeField.SetFieldWidth(30)
-	sm.themeField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
-		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
-	)
-	sm.form.AddFormItem(sm.themeField)
-
-	sm.densityField = tview.NewDropDown().
-		SetLabel("Density").
-		SetOptions(sm.densityOptions, nil)
-	sm.densityField.SetFieldWidth(20)
-	sm.densityField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
-		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
-	)
-	sm.form.AddFormItem(sm.densityField)
-
-	sm.roundedBordersField = tview.NewCheckbox().
-		SetLabel("Rounded borders")
-	sm.form.AddFormItem(sm.roundedBordersField)
-
-	sm.agentProviderField = tview.NewDropDown().
-		SetLabel("Agent provider").
-		SetOptions(sm.agentProviderOptions, func(text string, index int) {
-			_ = index
-			sm.setAgentModelOptionsForProvider(text)
-		})
-	sm.agentProviderField.SetFieldWidth(20)
-	sm.agentProviderField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
-		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
-	)
-	sm.form.AddFormItem(sm.agentProviderField)
-
-	sm.agentSandboxField = tview.NewDropDown().
-		SetLabel("Agent sandbox").
-		SetOptions(sm.agentSandboxOptions, nil)
-	sm.agentSandboxField.SetFieldWidth(20)
-	sm.agentSandboxField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
-		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
-	)
-	sm.form.AddFormItem(sm.agentSandboxField)
-
-	sm.agentModelField = tview.NewDropDown().
-		SetLabel("Agent model").
-		SetOptions(sm.agentModelOptions, nil)
-	sm.agentModelField.SetFieldWidth(40)
-	sm.agentModelField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
-		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
-	)
-	sm.form.AddFormItem(sm.agentModelField)
-
-	sm.agentWorkspaceField = tview.NewInputField().
-		SetLabel("Agent workspace (optional; blank uses CWD)").
-		SetFieldWidth(60)
-	sm.form.AddFormItem(sm.agentWorkspaceField)
-
-	sm.defaultTeamField = tview.NewInputField().
-		SetLabel("Default team (key or name; blank opens All Issues)").
-		SetFieldWidth(40)
-	sm.form.AddFormItem(sm.defaultTeamField)
-
-	sm.defaultProjectField = tview.NewInputField().
-		SetLabel("Default project (name; requires default team)").
-		SetFieldWidth(40)
-	sm.form.AddFormItem(sm.defaultProjectField)
-
-	sm.form.AddButton("Save", func() {
-		sm.saveSettings()
-	})
-	sm.form.AddButton("Cancel", func() {
-		sm.Hide()
-	})
-
-	titleView := tview.NewTextView()
-	titleView.SetText("Settings")
-	titleView.SetTextColor(app.theme.Accent)
-	titleView.SetBackgroundColor(app.theme.ModalBackground())
-
-	helpView := tview.NewTextView()
-	helpView.SetText("Tab: next field | Enter: open dropdown | Esc: cancel")
-	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.ModalBackground())
-	helpView.SetTextAlign(tview.AlignCenter)
-
-	sm.modalContent = tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(titleView, 1, 0, false).
-		AddItem(sm.form, 0, 1, true).
-		AddItem(helpView, 1, 0, false)
-	sm.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
-	sm.modalContent.SetBackgroundColor(app.theme.ModalBackground()).
-		SetBorder(true).
-		SetBorderColor(app.theme.Accent).
-		SetTitle(" Settings ").
-		SetTitleColor(app.theme.Foreground)
-	padding := app.density.ModalPadding
-	sm.modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-
-	sm.modalBody = tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(nil, 0, 1, false).
-		AddItem(sm.modalContent, sm.settingsModalHeight(), 0, true).
-		AddItem(nil, 0, 1, false)
-
-	sm.modal = tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(sm.modalBody, settingsModalWidth, 0, true).
-		AddItem(nil, 0, 1, false)
-	sm.modal.SetBackgroundColor(app.theme.Background)
+	sm.fm.SetOnSubmit(sm.saveSettings)
+	sm.fm.SetOnCancel(sm.Hide)
+	sm.fm.SetHint("Esc cancel · Tab next · ⏎ open dropdown · ⌃⏎ save")
 
 	return sm
 }
@@ -466,60 +321,7 @@ func (sm *SettingsModal) Show() {
 	sm.defaultTeamField.SetText(settings.DefaultTeam)
 	sm.defaultProjectField.SetText(settings.DefaultProject)
 
-	sm.updateModalHeight()
-	sm.app.pages.AddPage("settings", sm.modal, true, true)
-	sm.app.pages.SendToFront("settings")
-	sm.app.app.SetFocus(sm.form)
-}
-
-// updateModalHeight recalculates and applies the modal height to fit content.
-func (sm *SettingsModal) updateModalHeight() {
-	if sm.modalBody == nil || sm.modalContent == nil {
-		return
-	}
-	sm.modalBody.ResizeItem(sm.modalContent, sm.settingsModalHeight(), 0)
-}
-
-// settingsModalHeight calculates the modal height with screen-aware clamping.
-func (sm *SettingsModal) settingsModalHeight() int {
-	contentHeight := sm.settingsFormHeight() + settingsModalHeaderFooterRow
-	padding := sm.app.density.ModalPadding
-	totalHeight := contentHeight + padding.Top + padding.Bottom + 2
-	maxHeight := 0
-	if sm.app != nil && sm.app.pages != nil {
-		_, _, _, screenHeight := sm.app.pages.GetRect()
-		if screenHeight > 0 {
-			maxHeight = screenHeight - settingsModalScreenMargin
-			if maxHeight < 1 {
-				maxHeight = screenHeight
-			}
-		}
-	}
-	if maxHeight > 0 && totalHeight > maxHeight {
-		return maxHeight
-	}
-	return totalHeight
-}
-
-// settingsFormHeight computes the form height including padding and buttons.
-func (sm *SettingsModal) settingsFormHeight() int {
-	if sm.form == nil {
-		return 0
-	}
-	itemCount := sm.form.GetFormItemCount()
-	height := settingsFormBorderPadding * 2
-	for i := 0; i < itemCount; i++ {
-		item := sm.form.GetFormItem(i)
-		itemHeight := item.GetFieldHeight()
-		if itemHeight <= 0 {
-			itemHeight = tview.DefaultFormFieldHeight
-		}
-		height += itemHeight + settingsFormItemPadding
-	}
-	if sm.form.GetButtonCount() > 0 {
-		height++
-	}
-	return height
+	sm.fm.Show("settings")
 }
 
 // currentAgentModelValue returns the currently selected model value.
@@ -533,6 +335,12 @@ func (sm *SettingsModal) currentAgentModelValue() string {
 
 // setAgentModelOptionsForProvider updates model options for the given provider.
 func (sm *SettingsModal) setAgentModelOptionsForProvider(provider string) {
+	// The provider picker's initial selection fires during construction,
+	// before the model field exists; the struct literal already holds the
+	// right initial options then.
+	if sm.agentModelField == nil {
+		return
+	}
 	currentValue := sm.currentAgentModelValue()
 	labels, values := agentModelOptionsForProvider(provider)
 	sm.agentModelOptions = labels
@@ -560,17 +368,12 @@ func (sm *SettingsModal) setAgentProviderOptions(options []string) {
 // Hide hides the settings modal.
 func (sm *SettingsModal) Hide() {
 	logger.Debug("tui.settings: hiding settings modal")
-	sm.app.pages.RemovePage("settings")
-	sm.app.updateFocus()
+	sm.fm.Hide("settings")
 }
 
 // HandleKey handles keyboard input for the settings modal.
 func (sm *SettingsModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
-	if event.Key() == tcell.KeyEscape {
-		sm.Hide()
-		return nil
-	}
-	return event
+	return sm.fm.HandleKey(event)
 }
 
 // saveSettings validates input, persists settings, and applies them to the app.
