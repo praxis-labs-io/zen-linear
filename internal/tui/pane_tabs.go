@@ -34,6 +34,10 @@ func (a *App) jumpToSection(section IssuesSection, row int) {
 		return
 	}
 	table.Select(row, 0)
+	if row <= 1 {
+		// Reset any stale scroll offset when landing at the top of a tab.
+		table.SetOffset(0, 0)
+	}
 	if issue := a.getIssueFromRowForSection(row, a.activeIssuesSection); issue != nil {
 		a.onIssueSelected(*issue)
 	}
