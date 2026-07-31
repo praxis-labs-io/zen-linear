@@ -49,7 +49,7 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 
 	// Create form
 	cm.form = tview.NewForm()
-	cm.form.SetBackgroundColor(app.theme.HeaderBg)
+	cm.form.SetBackgroundColor(app.theme.ModalBackground())
 	cm.form.SetFieldBackgroundColor(app.theme.InputBg)
 	cm.form.SetFieldTextColor(app.theme.Foreground)
 	cm.form.SetButtonBackgroundColor(app.theme.Accent)
@@ -81,7 +81,7 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	}
 	cm.assigneeField.SetFieldWidth(50)
 	cm.assigneeField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 
@@ -102,7 +102,7 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	}
 	cm.cycleField.SetFieldWidth(50)
 	cm.cycleField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 
@@ -120,7 +120,7 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	}
 	cm.priorityField.SetFieldWidth(50)
 	cm.priorityField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 
@@ -150,18 +150,18 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 	cm.headerView = tview.NewTextView()
 	cm.headerView.SetText("Create New Issue")
 	cm.headerView.SetTextColor(app.theme.Accent)
-	cm.headerView.SetBackgroundColor(app.theme.HeaderBg)
+	cm.headerView.SetBackgroundColor(app.theme.ModalBackground())
 
 	cm.parentView = tview.NewTextView()
 	cm.parentView.SetText("")
 	cm.parentView.SetTextColor(app.theme.SecondaryText)
-	cm.parentView.SetBackgroundColor(app.theme.HeaderBg)
+	cm.parentView.SetBackgroundColor(app.theme.ModalBackground())
 
 	// Create help text
 	helpView := tview.NewTextView()
 	helpView.SetText("Tab: next field • Enter: open dropdown • Esc: cancel")
 	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.HeaderBg)
+	helpView.SetBackgroundColor(app.theme.ModalBackground())
 	helpView.SetTextAlign(tview.AlignCenter)
 
 	// Build modal content
@@ -171,8 +171,8 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 		AddItem(cm.parentView, 1, 0, false).
 		AddItem(cm.form, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
-	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
-	modalContent.SetBackgroundColor(app.theme.HeaderBg).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" New Issue ").

@@ -37,16 +37,16 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 
 	pm.list = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.Background)).
+		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.ModalBackground())).
 		SetSelectedStyle(app.listSelectionStyle()).
 		SetHighlightFullLine(true)
-	pm.list.SetBackgroundColor(app.theme.Background)
+	pm.list.SetBackgroundColor(app.theme.ModalBackground())
 	pm.list.SetChangedFunc(func(index int, _ string, _ string, _ rune) {
 		pm.selectTemplate(index)
 	})
 
 	pm.form = tview.NewForm()
-	pm.form.SetBackgroundColor(app.theme.Background)
+	pm.form.SetBackgroundColor(app.theme.ModalBackground())
 	pm.form.SetFieldBackgroundColor(app.theme.InputBg)
 	pm.form.SetFieldTextColor(app.theme.Foreground)
 	pm.form.SetButtonBackgroundColor(app.theme.Accent)
@@ -88,12 +88,12 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	titleView := tview.NewTextView()
 	titleView.SetText("Edit Agent Prompts")
 	titleView.SetTextColor(app.theme.Accent)
-	titleView.SetBackgroundColor(app.theme.Background)
+	titleView.SetBackgroundColor(app.theme.ModalBackground())
 
 	pm.helpView = tview.NewTextView()
 	pm.helpView.SetText("a: add | d: delete | Ctrl+S: save | Esc: cancel")
 	pm.helpView.SetTextColor(app.theme.SecondaryText)
-	pm.helpView.SetBackgroundColor(app.theme.Background)
+	pm.helpView.SetBackgroundColor(app.theme.ModalBackground())
 	pm.helpView.SetTextAlign(tview.AlignCenter)
 
 	body := tview.NewFlex().
@@ -105,8 +105,8 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 		AddItem(titleView, 1, 0, false).
 		AddItem(body, 0, 1, true).
 		AddItem(pm.helpView, 1, 0, false)
-	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.Background)
-	modalContent.SetBackgroundColor(app.theme.Background).
+	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" Agent Prompts ").
@@ -122,7 +122,7 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 			AddItem(modalContent, promptTemplatesModalHeight, 0, true).
 			AddItem(nil, 0, 1, false), promptTemplatesModalWidth, 0, true).
 		AddItem(nil, 0, 1, false)
-	pm.modal.SetBackgroundColor(app.theme.Background)
+	pm.modal.SetBackgroundColor(app.theme.ModalBackground())
 
 	return pm
 }

@@ -267,7 +267,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 	sm.form = tview.NewForm()
 	sm.form.SetItemPadding(settingsFormItemPadding)
 	sm.form.SetBorderPadding(settingsFormBorderPadding, settingsFormBorderPadding, settingsFormBorderPadding, settingsFormBorderPadding)
-	sm.form.SetBackgroundColor(app.theme.HeaderBg)
+	sm.form.SetBackgroundColor(app.theme.ModalBackground())
 	sm.form.SetFieldBackgroundColor(app.theme.InputBg)
 	sm.form.SetFieldTextColor(app.theme.Foreground)
 	sm.form.SetButtonBackgroundColor(app.theme.Accent)
@@ -316,7 +316,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.logLevelOptions, nil)
 	sm.logLevelField.SetFieldWidth(20)
 	sm.logLevelField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.logLevelField)
@@ -326,7 +326,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.themeOptions, nil)
 	sm.themeField.SetFieldWidth(30)
 	sm.themeField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.themeField)
@@ -336,7 +336,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.densityOptions, nil)
 	sm.densityField.SetFieldWidth(20)
 	sm.densityField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.densityField)
@@ -353,7 +353,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		})
 	sm.agentProviderField.SetFieldWidth(20)
 	sm.agentProviderField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.agentProviderField)
@@ -363,7 +363,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.agentSandboxOptions, nil)
 	sm.agentSandboxField.SetFieldWidth(20)
 	sm.agentSandboxField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.agentSandboxField)
@@ -373,7 +373,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		SetOptions(sm.agentModelOptions, nil)
 	sm.agentModelField.SetFieldWidth(40)
 	sm.agentModelField.SetListStyles(
-		tcell.StyleDefault.Background(app.theme.HeaderBg).Foreground(app.theme.Foreground),
+		tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground),
 		tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.SelectionText),
 	)
 	sm.form.AddFormItem(sm.agentModelField)
@@ -403,12 +403,12 @@ func NewSettingsModal(app *App) *SettingsModal {
 	titleView := tview.NewTextView()
 	titleView.SetText("Settings")
 	titleView.SetTextColor(app.theme.Accent)
-	titleView.SetBackgroundColor(app.theme.HeaderBg)
+	titleView.SetBackgroundColor(app.theme.ModalBackground())
 
 	helpView := tview.NewTextView()
 	helpView.SetText("Tab: next field | Enter: open dropdown | Esc: cancel")
 	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.HeaderBg)
+	helpView.SetBackgroundColor(app.theme.ModalBackground())
 	helpView.SetTextAlign(tview.AlignCenter)
 
 	sm.modalContent = tview.NewFlex().
@@ -416,8 +416,8 @@ func NewSettingsModal(app *App) *SettingsModal {
 		AddItem(titleView, 1, 0, false).
 		AddItem(sm.form, 0, 1, true).
 		AddItem(helpView, 1, 0, false)
-	sm.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.HeaderBg)
-	sm.modalContent.SetBackgroundColor(app.theme.HeaderBg).
+	sm.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
+	sm.modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" Settings ").

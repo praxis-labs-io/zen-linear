@@ -35,27 +35,27 @@ func (a *App) buildPaletteModal() *tview.Flex {
 		SetPlaceholder("Type to filter commands...").
 		SetFieldStyle(tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.InputBg)).
 		SetPlaceholderStyle(tcell.StyleDefault.Foreground(a.theme.SecondaryText).Background(a.theme.InputBg)).
-		SetBackgroundColor(a.theme.Background)
+		SetBackgroundColor(a.theme.ModalBackground())
 
 	// Create list for filtered commands
 	a.paletteList = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextStyle(tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.Background)).
+		SetMainTextStyle(tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.ModalBackground())).
 		SetSelectedStyle(a.listSelectionStyle()).
 		SetHighlightFullLine(true)
-	a.paletteList.SetBackgroundColor(a.theme.Background)
+	a.paletteList.SetBackgroundColor(a.theme.ModalBackground())
 
 	// Create help text with better formatting
 	helpText := tview.NewTextView()
 	helpText.SetText("↑↓ Navigate  •  Enter Execute  •  Esc Close").
 		SetTextColor(a.theme.SecondaryText).
-		SetBackgroundColor(a.theme.Background)
+		SetBackgroundColor(a.theme.ModalBackground())
 	helpText.SetTextAlign(tview.AlignCenter)
 
 	// Build modal content with better spacing
 	// Add a small spacer before input for visual breathing room
-	spacerTop := tview.NewBox().SetBackgroundColor(a.theme.Background)
-	spacerBottom := tview.NewBox().SetBackgroundColor(a.theme.Background)
+	spacerTop := tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
+	spacerBottom := tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
 
 	a.paletteModalContent = tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -64,10 +64,10 @@ func (a *App) buildPaletteModal() *tview.Flex {
 		AddItem(a.paletteList, 0, 1, false).
 		AddItem(spacerBottom, a.density.PaletteSpacerLines, 0, false).
 		AddItem(helpText, 1, 0, false)
-	a.paletteModalContent.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
+	a.paletteModalContent.Box = tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
 	// Set border and styling - must be set after creating the flex but before adding to parent
 	a.paletteModalContent.
-		SetBackgroundColor(a.theme.Background).
+		SetBackgroundColor(a.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(a.theme.Accent).
 		SetBorderPadding(0, 0, 0, 0). // No padding - content uses full width
@@ -160,12 +160,12 @@ func (a *App) updatePaletteList() {
 	helpText := tview.NewTextView()
 	helpText.SetText("↑↓ Navigate  •  Enter Execute  •  Esc Close").
 		SetTextColor(a.theme.SecondaryText).
-		SetBackgroundColor(a.theme.Background)
+		SetBackgroundColor(a.theme.ModalBackground())
 	helpText.SetTextAlign(tview.AlignCenter)
 
 	// Add spacers for visual breathing room
-	spacerTop := tview.NewBox().SetBackgroundColor(a.theme.Background)
-	spacerBottom := tview.NewBox().SetBackgroundColor(a.theme.Background)
+	spacerTop := tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
+	spacerBottom := tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
 
 	// Rebuild modalContent with the capped list height
 	a.paletteModalContent = tview.NewFlex().
@@ -175,10 +175,10 @@ func (a *App) updatePaletteList() {
 		AddItem(a.paletteList, listRows, 0, false).
 		AddItem(spacerBottom, a.density.PaletteSpacerLines, 0, false).
 		AddItem(helpText, 1, 0, false)
-	a.paletteModalContent.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
+	a.paletteModalContent.Box = tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
 	// Set border and styling - must be set after creating the flex but before adding to parent
 	a.paletteModalContent.
-		SetBackgroundColor(a.theme.Background).
+		SetBackgroundColor(a.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(a.theme.Accent).
 		SetBorderPadding(0, 0, 0, 0). // No padding - content uses full width
