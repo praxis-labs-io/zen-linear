@@ -304,6 +304,9 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		activeIssuesSection:  IssuesSectionMy, // Default to My Issues (falls back to Other when empty)
 		agentPromptTemplates: templates,
 		activeWorkspaceName:  workspaceNameForKey(cfg.Workspaces, cfg.LinearAPIKey),
+		// Details opens on demand (Enter or the palette toggle); the list
+		// gets the room.
+		detailsHidden: true,
 	}
 
 	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
