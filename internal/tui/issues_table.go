@@ -338,6 +338,20 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					}
 				}
 				return nil
+			case 'H':
+				// Scroll columns left.
+				rowOffset, columnOffset := table.GetOffset()
+				if columnOffset > 0 {
+					table.SetOffset(rowOffset, columnOffset-1)
+				}
+				return nil
+			case 'L':
+				// Scroll columns right.
+				rowOffset, columnOffset := table.GetOffset()
+				if columnOffset < 6 {
+					table.SetOffset(rowOffset, columnOffset+1)
+				}
+				return nil
 			case ' ':
 				// Space toggles expand/collapse
 				row, _ := table.GetSelection()
