@@ -300,3 +300,22 @@ func assertSettingsEqual(t *testing.T, got Settings, want Settings) {
 		t.Errorf("Settings mismatch: got %+v, want %+v", got, want)
 	}
 }
+
+// TestValidateKeybindings verifies single-key values and duplicate rejection.
+func TestValidateKeybindings(t *testing.T) {
+	settings := DefaultSettings()
+	settings.Keybindings = map[string]string{"refresh": "R", "copy_id": "c"}
+	if _, err := ConfigFromSettings("test-key", settings); err != nil {
+		t.Fatalf("ConfigFromSettings() error for valid keybindings: %v", err)
+	}
+
+	settings.Keybindings = map[string]string{"refresh": "ctrl-r"}
+	if _, err := ConfigFromSettings("test-key", settings); err == nil {
+		t.Error("expected error for multi-character key")
+	}
+
+	settings.Keybindings = map[string]string{"refresh": "x", "archive": "x"}
+	if _, err := ConfigFromSettings("test-key", settings); err == nil {
+		t.Error("expected error for duplicate key")
+	}
+}
