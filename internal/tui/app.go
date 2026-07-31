@@ -158,6 +158,9 @@ type App struct {
 	// UI components
 	pages                  *tview.Pages
 	mainLayout             *tview.Flex
+	contentFlex            *tview.Flex
+	navigationHidden       bool
+	detailsHidden          bool
 	navigationTree         *tview.TreeView
 	navNodeOriginalText    map[*tview.TreeNode]string
 	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
@@ -953,7 +956,7 @@ func (a *App) buildLayout() {
 	a.statusBar = a.buildStatusBar()
 
 	// Create horizontal split: navigation (20%) | issues (50%) | details (30%)
-	contentFlex := tview.NewFlex().
+	a.contentFlex = tview.NewFlex().
 		AddItem(a.navigationTree, 0, 2, true).
 		AddItem(a.issuesColumn, 0, 5, false).
 		AddItem(a.detailsView, 0, 3, false)
@@ -961,7 +964,7 @@ func (a *App) buildLayout() {
 	// Create vertical layout: content + status bar
 	a.mainLayout = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(contentFlex, 0, 1, true).
+		AddItem(a.contentFlex, 0, 1, true).
 		AddItem(a.statusBar, 1, 1, false)
 
 	// Build palette modal
@@ -1355,6 +1358,11 @@ func (a *App) cyclePanesBackward() {
 
 // updateFocus updates the focus state of all panes.
 func (a *App) updateFocus() {
+	// Hidden panes cannot take focus; fall back to the issues column.
+	if (a.focusedPane == FocusNavigation && a.navigationHidden) ||
+		(a.focusedPane == FocusDetails && a.detailsHidden) {
+		a.focusedPane = FocusIssues
+	}
 	switch a.focusedPane {
 	case FocusNavigation:
 		a.app.SetFocus(a.navigationTree)
