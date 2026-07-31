@@ -313,6 +313,28 @@ func TestLoadSettingsParsesWorkspaces(t *testing.T) {
 	assertSettingsEqual(t, settings, expected)
 }
 
+// TestStartupWorkspace verifies the configured default wins when its key is
+// available and falls back to the first available workspace otherwise.
+func TestStartupWorkspace(t *testing.T) {
+	t.Setenv("LINEAR_KEY_A", "k-a")
+	t.Setenv("LINEAR_KEY_B", "k-b")
+	workspaces := []Workspace{
+		{Name: "Acme", APIKeyEnv: "LINEAR_KEY_A"},
+		{Name: "Side", APIKeyEnv: "LINEAR_KEY_B"},
+		{Name: "Ghost", APIKeyEnv: "LINEAR_KEY_UNSET"},
+	}
+
+	if workspace, ok := StartupWorkspace(workspaces, "side"); !ok || workspace.Name != "Side" {
+		t.Errorf("StartupWorkspace(side) = %+v, %v; want Side", workspace, ok)
+	}
+	if workspace, ok := StartupWorkspace(workspaces, "Ghost"); !ok || workspace.Name != "Acme" {
+		t.Errorf("StartupWorkspace(Ghost, key unset) = %+v, %v; want Acme fallback", workspace, ok)
+	}
+	if workspace, ok := StartupWorkspace(workspaces, ""); !ok || workspace.Name != "Acme" {
+		t.Errorf("StartupWorkspace(empty) = %+v, %v; want Acme", workspace, ok)
+	}
+}
+
 // TestFirstAvailableWorkspace verifies startup default selection skips
 // workspaces whose env var is unset.
 func TestFirstAvailableWorkspace(t *testing.T) {
