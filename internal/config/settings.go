@@ -21,6 +21,7 @@ type SettingsFile struct {
 	LogLevel       *string     `json:"log_level"`
 	Theme          *string     `json:"theme"`
 	Density        *string     `json:"density"`
+	GroupByStatus  *bool       `json:"group_by_status"`
 	RoundedBorders *bool       `json:"rounded_borders"`
 	AgentProvider  *string     `json:"agent_provider"`
 	AgentSandbox   *string     `json:"agent_sandbox"`
@@ -42,6 +43,7 @@ type Settings struct {
 	LogLevel       string      `json:"log_level"`
 	Theme          string      `json:"theme"`
 	Density        string      `json:"density"`
+	GroupByStatus  bool        `json:"group_by_status"`
 	RoundedBorders bool        `json:"rounded_borders"`
 	AgentProvider  string      `json:"agent_provider"`
 	AgentSandbox   string      `json:"agent_sandbox"`
@@ -64,6 +66,7 @@ func DefaultSettings() Settings {
 		LogLevel:       DefaultLogLevel,
 		Theme:          DefaultTheme,
 		Density:        DefaultDensity,
+		GroupByStatus:  false,
 		RoundedBorders: false,
 		AgentProvider:  DefaultAgentProvider,
 		AgentSandbox:   DefaultAgentSandbox,
@@ -86,6 +89,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		LogLevel:       cfg.LogLevel,
 		Theme:          cfg.Theme,
 		Density:        cfg.Density,
+		GroupByStatus:  cfg.GroupByStatus,
 		RoundedBorders: cfg.RoundedBorders,
 		AgentProvider:  cfg.AgentProvider,
 		AgentSandbox:   cfg.AgentSandbox,
@@ -166,6 +170,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		LogLevel:       settings.LogLevel,
 		Theme:          theme,
 		Density:        density,
+		GroupByStatus:  settings.GroupByStatus,
 		RoundedBorders: settings.RoundedBorders,
 		AgentProvider:  settings.AgentProvider,
 		AgentSandbox:   settings.AgentSandbox,
@@ -253,6 +258,9 @@ func LoadSettings(path string) (Settings, error) {
 	}
 	if file.RoundedBorders != nil {
 		settings.RoundedBorders = *file.RoundedBorders
+	}
+	if file.GroupByStatus != nil {
+		settings.GroupByStatus = *file.GroupByStatus
 	}
 	if file.AgentProvider != nil {
 		settings.AgentProvider = *file.AgentProvider
