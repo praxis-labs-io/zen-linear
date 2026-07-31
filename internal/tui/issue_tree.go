@@ -67,12 +67,13 @@ func BuildIssueRows(issues []linearapi.Issue, expanded map[string]bool) ([]Issue
 
 // Grouping dimensions supported by the grouped list view.
 const (
-	GroupByNone     = ""
-	GroupByStatus   = "status"
-	GroupByPriority = "priority"
-	GroupByAssignee = "assignee"
-	GroupByCycle    = "cycle"
-	GroupByProject  = "project"
+	GroupByNone      = ""
+	GroupByStatus    = "status"
+	GroupByPriority  = "priority"
+	GroupByAssignee  = "assignee"
+	GroupByCycle     = "cycle"
+	GroupByProject   = "project"
+	GroupByMilestone = "milestone"
 )
 
 // groupKeyFor returns the group label and ordering rank of an issue along a
@@ -108,6 +109,12 @@ func groupKeyFor(issue *linearapi.Issue, dimension string) (string, int) {
 			return "No project", 1
 		}
 		return issue.ProjectName, 0
+	case GroupByMilestone:
+		if issue.ProjectMilestone == nil || issue.ProjectMilestone.Name == "" {
+			return "No milestone", 1_000_000
+		}
+		// Milestones order by their project-defined sort order.
+		return issue.ProjectMilestone.Name, int(issue.ProjectMilestone.SortOrder)
 	default: // GroupByStatus
 		return issue.State, statusRank(issue.State)
 	}

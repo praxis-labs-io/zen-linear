@@ -1996,6 +1996,7 @@ func groupDimensionPickerItems() []PickerItem {
 		{ID: GroupByAssignee, Label: "Assignee"},
 		{ID: GroupByCycle, Label: "Cycle"},
 		{ID: GroupByProject, Label: "Project"},
+		{ID: GroupByMilestone, Label: "Milestone"},
 	}
 }
 
