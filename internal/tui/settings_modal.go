@@ -667,8 +667,9 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		DefaultProject: strings.TrimSpace(sm.defaultProjectField.GetText()),
 		// The form has no fields for these; carry the current values through
 		// so saving settings never strips them from the config file.
-		GroupByStatus: sm.app.config.GroupByStatus,
-		Workspaces:    sm.app.config.Workspaces,
+		Workspaces:       sm.app.config.Workspaces,
+		DefaultWorkspace: sm.app.config.DefaultWorkspace,
+		GroupByStatus:    sm.app.config.GroupByStatus,
 	}
 	return settings, nil
 }

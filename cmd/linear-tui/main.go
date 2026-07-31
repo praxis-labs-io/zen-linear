@@ -108,9 +108,10 @@ func runTUI() int {
 
 	apiKey := os.Getenv(config.LinearAPIKeyEnv)
 	if apiKey == "" {
-		// With no explicit key, default to the first configured workspace whose
-		// key env var is set; stored OAuth credentials remain the fallback.
-		if workspace, ok := config.FirstAvailableWorkspace(settings.Workspaces); ok {
+		// With no explicit key, use the configured default workspace (or the
+		// first whose key env var is set); OAuth credentials remain the
+		// fallback.
+		if workspace, ok := config.StartupWorkspace(settings.Workspaces, settings.DefaultWorkspace); ok {
 			apiKey = workspace.APIKey()
 		}
 	}
