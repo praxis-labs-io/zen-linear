@@ -1167,6 +1167,17 @@ func (a *App) bindGlobalKeys() {
 	})
 }
 
+// runCommandShortcut fires the palette command bound to the rune, if any.
+func (a *App) runCommandShortcut(r rune) bool {
+	for _, cmd := range a.paletteCtrl.commands {
+		if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r {
+			cmd.Run(a)
+			return true
+		}
+	}
+	return false
+}
+
 // handleNavigationKey handles keyboard input when navigation pane is focused.
 func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
@@ -1175,10 +1186,18 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 		a.updateFocus()
 		return nil
 	case tcell.KeyRune:
-		if event.Rune() == 'l' {
+		switch r := event.Rune(); r {
+		case 'l':
 			a.focusedPane = FocusIssues
 			a.updateFocus()
 			return nil
+		case 'j', 'k', 'g', 'G', 'h':
+			// Tree movement keys stay with the tree.
+		default:
+			// Command shortcuts work from the navigation pane too.
+			if a.runCommandShortcut(r) {
+				return nil
+			}
 		}
 	}
 	return event
@@ -1222,11 +1241,8 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		// Handle command shortcuts (plain letters) - skip navigation keys
 		if r != 'j' && r != 'k' { // j/k are handled by table for up/down
-			for _, cmd := range a.paletteCtrl.commands {
-				if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r {
-					cmd.Run(a)
-					return nil
-				}
+			if a.runCommandShortcut(r) {
+				return nil
 			}
 		}
 	}
