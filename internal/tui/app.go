@@ -614,24 +614,44 @@ func parseLogLevel(level string) logger.LogLevel {
 // navigation tree. It reports whether default navigation started the initial
 // issue refresh.
 func (a *App) loadNavigationData(ctx context.Context) bool {
-	teams, err := a.cache.GetTeams(ctx)
-	if err != nil {
-		logger.ErrorWithErr(err, "tui.app: failed to load teams")
+	var teams []linearapi.Team
+	var favorites []linearapi.Favorite
+	var teamsErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		teams, teamsErr = a.cache.GetTeams(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		fetched, err := a.api.ListFavorites(ctx)
+		if err != nil {
+			// Favorites only enhance the tree; render it without them on failure.
+			logger.ErrorWithErr(err, "tui.app: failed to load favorites")
+			return
+		}
+		favorites = fetched
+	}()
+	wg.Wait()
+
+	if teamsErr != nil {
+		logger.ErrorWithErr(teamsErr, "tui.app: failed to load teams")
 		a.app.QueueUpdateDraw(func() {
-			a.updateStatusBarWithError(err)
+			a.updateStatusBarWithError(teamsErr)
 		})
 		return false
 	}
 
-	logger.Debug("tui.app: loaded teams count=%d", len(teams))
+	logger.Debug("tui.app: loaded teams count=%d favorites_count=%d", len(teams), len(favorites))
 	a.app.QueueUpdateDraw(func() {
-		a.rebuildNavigationTree(teams)
+		a.rebuildNavigationTree(teams, favorites)
 	})
 	return a.applyDefaultNavigation(ctx, teams)
 }
 
 // rebuildNavigationTree rebuilds the navigation tree with real data.
-func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
+func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearapi.Favorite) {
 	root := tview.NewTreeNode("Linear").
 		SetColor(a.theme.Accent).
 		SetSelectable(false)
@@ -642,6 +662,8 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team) {
 		SetReference(&NavigationNode{ID: "all", Text: "All Issues"}).
 		SetExpanded(true)
 	root.AddChild(allIssues)
+
+	a.appendFavoritesSection(root, favorites)
 
 	// Add teams
 	for _, team := range teams {
@@ -1976,7 +1998,24 @@ func (a *App) toggleIssueExpanded(issueID string) {
 
 // onNavigationSelected handles when a navigation item is selected.
 func (a *App) onNavigationSelected(node *NavigationNode) {
-	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v is_cycle=%v", node.ID, node.Text, node.IsTeam, node.IsProject, node.IsCycle)
+	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v is_cycle=%v is_issue=%v", node.ID, node.Text, node.IsTeam, node.IsProject, node.IsCycle, node.IsIssue)
+
+	// A favorited issue is not a filter of its own: scope to its team and ask
+	// the refresh to land on the issue via the target-issue plumbing.
+	if node.IsIssue {
+		a.selectedNavigation = &NavigationNode{
+			ID:     node.TeamID,
+			Text:   node.Text,
+			TeamID: node.TeamID,
+			IsTeam: true,
+		}
+		if node.TeamID != "" {
+			go a.preloadTeamMetadataFunc(node.TeamID)
+		}
+		go a.refreshIssuesWithFocusChange(false, node.IssueID)
+		return
+	}
+
 	a.selectedNavigation = node
 
 	// Update selected team metadata for commands and create-issue defaults.

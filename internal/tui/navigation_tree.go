@@ -14,10 +14,12 @@ type NavigationNode struct {
 	IsProject bool
 	IsStatus  bool
 	IsCycle   bool
+	IsIssue   bool
 	StateID   string
 	StateName string
 	CycleID   string
 	CycleName string
+	IssueID   string
 }
 
 // buildNavigationTree creates and configures the navigation tree widget.
