@@ -215,10 +215,11 @@ type App struct {
 	expandedState  map[string]bool             // Expanded state for parent issues (shared across sections)
 
 	// Filter/sort state
-	searchQuery   string
-	richFilters   IssueFilters
-	sortField     SortField
-	statusMessage string
+	searchQuery     string
+	richFilters     IssueFilters
+	sortField       SortField
+	collapsedGroups map[string]bool
+	statusMessage   string
 
 	searchDebounceTimer      *time.Timer
 	searchDebounceMu         sync.Mutex
@@ -661,6 +662,7 @@ func (a *App) resetCachedState() {
 	a.workflowStates = nil
 	a.teamCycles = nil
 	a.richFilters = IssueFilters{}
+	a.collapsedGroups = make(map[string]bool)
 	a.searchQuery = ""
 	a.cancelSearchDebounce()
 	a.activeIssuesSection = IssuesSectionOther
@@ -2007,7 +2009,49 @@ func (a *App) buildIssueRowsFor(issues []linearapi.Issue) ([]IssueRow, map[strin
 	if a.config.GroupBy == GroupByNone {
 		return BuildIssueRows(issues, a.expandedState)
 	}
-	return BuildGroupedIssueRows(issues, a.expandedState, a.config.GroupBy, a.config.SubgroupBy)
+	return BuildGroupedIssueRows(issues, a.expandedState, a.config.GroupBy, a.config.SubgroupBy, a.collapsedGroups)
+}
+
+// toggleGroupCollapse collapses or expands a group header and keeps the
+// header selected after the rebuild.
+func (a *App) toggleGroupCollapse(section IssuesSection, header IssueRow) {
+	if header.HeaderKey == "" {
+		return
+	}
+	if a.collapsedGroups == nil {
+		a.collapsedGroups = make(map[string]bool)
+	}
+	a.collapsedGroups[header.HeaderKey] = !a.collapsedGroups[header.HeaderKey]
+
+	a.issuesMu.RLock()
+	targetIssueID := ""
+	if a.selectedIssue != nil {
+		targetIssueID = a.selectedIssue.ID
+	}
+	a.issuesMu.RUnlock()
+	selectedIssue := a.rebuildIssuesTables(targetIssueID)
+	a.issuesMu.Lock()
+	a.selectedIssue = selectedIssue
+	a.issuesMu.Unlock()
+	a.updateDetailsView()
+
+	// Re-select the toggled header so repeated presses toggle in place.
+	var table *tview.Table
+	switch section {
+	case IssuesSectionMy:
+		table = a.myIssuesTable
+	case IssuesSectionOther:
+		table = a.otherIssuesTable
+	}
+	if table == nil {
+		return
+	}
+	for index, row := range a.rowsForSection(section) {
+		if row.IsHeader && row.HeaderKey == header.HeaderKey {
+			table.Select(index+1, 0)
+			break
+		}
+	}
 }
 
 // regroupIssues rebuilds the tables after a grouping change, keeping the
