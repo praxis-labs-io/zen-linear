@@ -14,7 +14,7 @@ type AgentPromptTemplatesModal struct {
 	app           *App
 	modal         *tview.Flex
 	list          *tview.List
-	form          *tview.Form
+	fm            *FormModal
 	nameField     *tview.InputField
 	promptField   *tview.TextArea
 	helpView      *tview.TextView
@@ -45,70 +45,36 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 		pm.selectTemplate(index)
 	})
 
-	pm.form = tview.NewForm()
-	pm.form.SetBackgroundColor(app.theme.ModalBackground())
-	pm.form.SetFieldBackgroundColor(app.theme.InputBg)
-	pm.form.SetFieldTextColor(app.theme.Foreground)
-	pm.form.SetButtonBackgroundColor(app.theme.Accent)
-	pm.form.SetButtonTextColor(app.theme.SelectionText)
-	pm.form.SetLabelColor(app.theme.Foreground)
-	pm.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			pm.Hide()
-			return nil
-		}
-		return event
-	})
-
-	pm.nameField = tview.NewInputField().
-		SetLabel("Name").
-		SetFieldWidth(40)
-	pm.form.AddFormItem(pm.nameField)
-
-	pm.form.AddTextArea("Prompt", "", 70, 8, 0, nil)
-	if item := pm.form.GetFormItemByLabel("Prompt"); item != nil {
-		if textArea, ok := item.(*tview.TextArea); ok {
-			pm.promptField = textArea
-		}
-	}
-
-	pm.form.AddButton("Add", func() {
-		pm.addTemplate()
-	})
-	pm.form.AddButton("Delete", func() {
-		pm.deleteSelected()
-	})
-	pm.form.AddButton("Save", func() {
-		pm.saveTemplates()
-	})
-	pm.form.AddButton("Cancel", func() {
-		pm.Hide()
-	})
-
-	titleView := tview.NewTextView()
-	titleView.SetText("Edit Agent Prompts")
-	titleView.SetTextColor(app.theme.Accent)
-	titleView.SetBackgroundColor(app.theme.ModalBackground())
+	pm.fm = NewFormModal(app, "Agent Prompts")
+	pm.nameField = pm.fm.AddInput("Name", "")
+	pm.promptField = pm.fm.AddTextArea("Prompt", "", 8)
+	pm.fm.AddButtons(
+		FormButton{Label: "Add", OnPress: pm.addTemplate},
+		FormButton{Label: "Delete", OnPress: pm.deleteSelected},
+		FormButton{Label: "Save", OnPress: pm.saveTemplates},
+		FormButton{Label: "Cancel", OnPress: pm.Hide},
+	)
+	pm.fm.SetOnSubmit(pm.saveTemplates)
+	pm.fm.SetOnCancel(pm.Hide)
 
 	pm.helpView = tview.NewTextView()
-	pm.helpView.SetText("a: add | d: delete | Ctrl+S: save | Esc: cancel")
+	pm.helpView.SetText("a add · d delete · ⌃S save · Esc cancel")
 	pm.helpView.SetTextColor(app.theme.SecondaryText)
 	pm.helpView.SetBackgroundColor(app.theme.ModalBackground())
-	pm.helpView.SetTextAlign(tview.AlignCenter)
 
 	body := tview.NewFlex().
 		AddItem(pm.list, 0, 1, true).
-		AddItem(pm.form, 0, 2, false)
+		AddItem(nil, 2, 0, false).
+		AddItem(pm.fm.ContentBody(), 0, 2, false)
 
 	modalContent := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(titleView, 1, 0, false).
 		AddItem(body, 0, 1, true).
 		AddItem(pm.helpView, 1, 0, false)
 	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
 	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
-		SetBorderColor(app.theme.Accent).
+		SetBorderColor(app.theme.BorderFocus).
 		SetTitle(" Agent Prompts ").
 		SetTitleColor(app.theme.Foreground)
 	padding := app.density.ModalPadding
@@ -154,6 +120,8 @@ func (pm *AgentPromptTemplatesModal) Hide() {
 
 // HandleKey handles keyboard input for the prompt templates modal.
 func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
+	listFocused := pm.app.app.GetFocus() == pm.list
+
 	switch event.Key() {
 	case tcell.KeyEscape:
 		pm.Hide()
@@ -162,8 +130,8 @@ func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.Eve
 		pm.saveTemplates()
 		return nil
 	case tcell.KeyTab:
-		if pm.app.app.GetFocus() == pm.list {
-			pm.app.app.SetFocus(pm.form)
+		if listFocused {
+			pm.app.app.SetFocus(pm.nameField)
 			return nil
 		}
 	case tcell.KeyBacktab:
@@ -173,7 +141,9 @@ func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.Eve
 		}
 	}
 
-	if event.Key() == tcell.KeyRune {
+	// The add/delete shortcuts only fire from the list; in the form they
+	// must stay typeable characters.
+	if listFocused && event.Key() == tcell.KeyRune {
 		switch event.Rune() {
 		case 'a':
 			pm.addTemplate()
@@ -183,8 +153,10 @@ func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.Eve
 			return nil
 		}
 	}
-
-	return event
+	if listFocused {
+		return event
+	}
+	return pm.fm.HandleKey(event)
 }
 
 func (pm *AgentPromptTemplatesModal) refreshList() {

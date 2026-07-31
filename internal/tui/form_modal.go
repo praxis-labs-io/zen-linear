@@ -492,6 +492,20 @@ func (fm *FormModal) Hide(pageName string) {
 // Root returns the fullscreen wrapper for pages.
 func (fm *FormModal) Root() *tview.Flex { return fm.root }
 
+// ContentBody returns the rows-plus-buttons column without the modal shell,
+// for modals that compose the form beside other panes (prompt templates).
+// The embedding modal owns the border, sizing, and hint line.
+func (fm *FormModal) ContentBody() *tview.Flex {
+	body := tview.NewFlex().SetDirection(tview.FlexRow)
+	body.SetBackgroundColor(fm.app.theme.ModalBackground())
+	body.AddItem(fm.rowsBox, 0, 1, true)
+	if fm.buttonsRow != nil {
+		body.AddItem(nil, 1, 0, false)
+		body.AddItem(fm.buttonsRow, 1, 0, false)
+	}
+	return body
+}
+
 // Focus returns keyboard focus to the form's current field — used when an
 // overlay (e.g. a picker) closes over a stacked form modal.
 func (fm *FormModal) Focus() {
