@@ -19,19 +19,20 @@ type IssueRow struct {
 	HeaderCount int    // Number of top-level issues in the group
 }
 
-// statusRank orders workflow states by lifecycle category, mirroring Linear:
-// triage, backlog, unstarted, started, completed, canceled. The state type is
-// not fetched, so the category is derived from the state name.
+// statusRank orders workflow states by lifecycle category the way Linear's
+// grouped list does: triage, started, unstarted, backlog, completed,
+// canceled. The state type is not fetched, so the category is derived from
+// the state name.
 func statusRank(state string) int {
 	lowerState := strings.ToLower(state)
 	switch {
 	case strings.Contains(lowerState, "triage"):
 		return 0
-	case strings.Contains(lowerState, "backlog"):
-		return 1
 	case strings.Contains(lowerState, "unstarted"):
 		return 2
 	case strings.Contains(lowerState, "progress") || strings.Contains(lowerState, "review") || strings.Contains(lowerState, "started"):
+		return 1
+	case strings.Contains(lowerState, "backlog"):
 		return 3
 	case strings.Contains(lowerState, "done") || strings.Contains(lowerState, "complete"):
 		return 4

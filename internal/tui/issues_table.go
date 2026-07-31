@@ -459,7 +459,7 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 				SetTextColor(iconColor).
 				SetSelectable(false))
 			table.SetCell(row, 3, tview.NewTableCell(fmt.Sprintf("%s (%d)", issueRow.HeaderText, issueRow.HeaderCount)).
-				SetTextColor(theme.HeaderText).
+				SetTextColor(theme.Foreground).
 				SetAttributes(tcell.AttrBold).
 				SetSelectable(false))
 			continue
@@ -553,6 +553,11 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			selectedRow = 1
 		}
 		table.Select(selectedRow, 0)
+		if selectedRow <= nextIssueRow(rows, 0, 1) {
+			// Selection sits at the top of the list: reset any stale scroll
+			// offset so the leading group header stays visible.
+			table.SetOffset(0, 0)
+		}
 	} else {
 		// Show empty state message
 		for column := 0; column < 7; column++ {
