@@ -464,15 +464,15 @@ func (a *App) applyThemeToComponents() {
 
 	if a.myIssuesTable != nil {
 		a.applyIssuesTableTheme(a.myIssuesTable)
-		renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, a.selectedIssueID(IssuesSectionMy), a.theme)
+		renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, a.selectedIssueID(IssuesSectionMy), a.theme, a.issueColumns())
 	}
 	if a.otherIssuesTable != nil {
 		a.applyIssuesTableTheme(a.otherIssuesTable)
-		renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, a.selectedIssueID(IssuesSectionOther), a.theme)
+		renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, a.selectedIssueID(IssuesSectionOther), a.theme, a.issueColumns())
 	}
 	if a.allIssuesTable != nil {
 		a.applyIssuesTableTheme(a.allIssuesTable)
-		renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, a.selectedIssueID(IssuesSectionAll), a.theme)
+		renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, a.selectedIssueID(IssuesSectionAll), a.theme, a.issueColumns())
 	}
 
 	if a.detailsDescriptionView != nil {
@@ -1878,9 +1878,9 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	// Show the active tab (after target selection may have switched it).
 	a.updateIssuesColumnLayout()
 
-	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
-	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
-	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme)
+	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
+	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
+	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme, a.issueColumns())
 
 	// Select issue and update details.
 	var selectedIssue *linearapi.Issue
@@ -1958,6 +1958,15 @@ func (a *App) sortIssuesLocally() {
 	case SortByStatus:
 		sortIssuesByStatus(a.issues)
 	}
+}
+
+// issueColumns returns the configured issue list columns, or the default
+// Linear-style layout.
+func (a *App) issueColumns() []string {
+	if len(a.config.Columns) == 0 {
+		return DefaultIssueColumns
+	}
+	return a.config.Columns
 }
 
 // buildIssueRowsFor builds table rows for an issue list, honoring the
@@ -2154,9 +2163,9 @@ func (a *App) toggleIssueExpanded(issueID string) {
 		}
 	}
 
-	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme)
-	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme)
-	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme)
+	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
+	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
+	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme, a.issueColumns())
 }
 
 // onNavigationSelected handles when a navigation item is selected.
