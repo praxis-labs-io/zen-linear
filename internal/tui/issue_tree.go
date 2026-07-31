@@ -19,6 +19,8 @@ type IssueRow struct {
 	HeaderCount     int    // Number of top-level issues in the group
 	HeaderDimension string // Grouping dimension the header belongs to
 	HeaderLevel     int    // 0 for group headers, 1 for subgroup headers
+	HeaderKey       string // Stable identity for collapse tracking
+	HeaderCollapsed bool   // True when the group's rows are hidden
 }
 
 // statusRank orders workflow states by lifecycle category the way Linear's
@@ -147,7 +149,7 @@ func groupTopLevel(topLevel []*linearapi.Issue, dimension string) ([]string, map
 // header row per group — like Linear's grouped list view — and optionally
 // sub-grouped along a second dimension beneath each header. Hierarchy behaves
 // as in BuildIssueRows; a parent's subtree stays under the parent's group.
-func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, groupBy string, subgroupBy string) ([]IssueRow, map[string]*linearapi.Issue) {
+func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, groupBy string, subgroupBy string, collapsed map[string]bool) ([]IssueRow, map[string]*linearapi.Issue) {
 	idToIssue, topLevel, childrenByParent := indexIssues(issues)
 	if groupBy == GroupByNone {
 		return appendIssueRows(nil, topLevel, childrenByParent, expanded), idToIssue
@@ -160,12 +162,18 @@ func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, g
 	order, groups := groupTopLevel(topLevel, groupBy)
 	for _, label := range order {
 		group := groups[label]
+		key := groupBy + "\x1f" + label
 		rows = append(rows, IssueRow{
 			IsHeader:        true,
 			HeaderText:      label,
 			HeaderCount:     len(group),
 			HeaderDimension: groupBy,
+			HeaderKey:       key,
+			HeaderCollapsed: collapsed[key],
 		})
+		if collapsed[key] {
+			continue
+		}
 		if subgroupBy == GroupByNone {
 			rows = appendIssueRows(rows, group, childrenByParent, expanded)
 			continue
@@ -173,13 +181,19 @@ func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, g
 		subOrder, subGroups := groupTopLevel(group, subgroupBy)
 		for _, subLabel := range subOrder {
 			subGroup := subGroups[subLabel]
+			subKey := key + "\x1f" + subgroupBy + "\x1f" + subLabel
 			rows = append(rows, IssueRow{
 				IsHeader:        true,
 				HeaderText:      subLabel,
 				HeaderCount:     len(subGroup),
 				HeaderDimension: subgroupBy,
 				HeaderLevel:     1,
+				HeaderKey:       subKey,
+				HeaderCollapsed: collapsed[subKey],
 			})
+			if collapsed[subKey] {
+				continue
+			}
 			rows = appendIssueRows(rows, subGroup, childrenByParent, expanded)
 		}
 	}

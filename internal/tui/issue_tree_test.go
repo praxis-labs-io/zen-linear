@@ -339,7 +339,7 @@ func TestBuildGroupedIssueRows(t *testing.T) {
 		{ID: "4", Identifier: "LIN-4", State: "In Progress"},
 	}
 
-	rows, idToIssue := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByNone)
+	rows, idToIssue := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByNone, nil)
 	if len(idToIssue) != 4 {
 		t.Fatalf("idToIssue size = %d, want 4", len(idToIssue))
 	}
@@ -370,7 +370,7 @@ func TestBuildGroupedIssueRowsSubgroups(t *testing.T) {
 		{ID: "3", Identifier: "LIN-3", State: "Done", Priority: 0},
 	}
 
-	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByPriority)
+	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByPriority, nil)
 	// Expect: Todo hdr, Urgent hdr, 2, High hdr, 1, Done hdr, No priority hdr, 3
 	if len(rows) != 8 {
 		t.Fatalf("rows = %d, want 8: %+v", len(rows), rows)
@@ -416,5 +416,27 @@ func TestNextIssueRow(t *testing.T) {
 	}
 	if got := nextIssueRow(rows, 4, 1); got != 0 {
 		t.Errorf("past end = %d, want 0", got)
+	}
+}
+
+// TestBuildGroupedIssueRowsCollapse verifies collapsed groups hide their rows
+// while keeping the header, with subgroups collapsing independently.
+func TestBuildGroupedIssueRowsCollapse(t *testing.T) {
+	issues := []linearapi.Issue{
+		{ID: "1", Identifier: "LIN-1", State: "Todo"},
+		{ID: "2", Identifier: "LIN-2", State: "Done"},
+	}
+
+	collapsed := map[string]bool{"status\x1fTodo": true}
+	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByNone, collapsed)
+	// Expect: Todo header (collapsed, no rows), Done header, LIN-2
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d, want 3: %+v", len(rows), rows)
+	}
+	if !rows[0].IsHeader || !rows[0].HeaderCollapsed || rows[0].HeaderCount != 1 {
+		t.Errorf("collapsed header = %+v", rows[0])
+	}
+	if rows[2].IssueID != "2" {
+		t.Errorf("rows[2] = %+v, want LIN-2", rows[2])
 	}
 }

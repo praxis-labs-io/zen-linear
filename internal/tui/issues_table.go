@@ -300,6 +300,10 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 
 	// Handle selection (Enter to open details or toggle expand)
 	table.SetSelectedFunc(func(row, _ int) {
+		if rows := a.rowsForSection(section); row >= 1 && row <= len(rows) && rows[row-1].IsHeader {
+			a.toggleGroupCollapse(section, rows[row-1])
+			return
+		}
 		issue := a.getIssueFromRowForSection(row, section)
 		if issue == nil {
 			return
@@ -331,6 +335,10 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			return a.handleIssuesTableRune(table, section, event)
 		case tcell.KeyEnter:
 			row, _ := table.GetSelection()
+			if rows := a.rowsForSection(section); row >= 1 && row <= len(rows) && rows[row-1].IsHeader {
+				a.toggleGroupCollapse(section, rows[row-1])
+				return nil
+			}
 			issue := a.getIssueFromRowForSection(row, section)
 			if issue == nil {
 				return nil
@@ -350,7 +358,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			return nil
 		case tcell.KeyDown:
 			row, _ := table.GetSelection()
-			if next := nextIssueRow(a.rowsForSection(section), row, 1); next > 0 {
+			if next := row + 1; next <= len(a.rowsForSection(section)) {
 				table.Select(next, 0)
 				if issue := a.getIssueFromRowForSection(next, section); issue != nil {
 					a.onIssueSelected(*issue)
@@ -371,7 +379,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			return nil
 		case tcell.KeyUp:
 			row, _ := table.GetSelection()
-			if previous := nextIssueRow(a.rowsForSection(section), row, -1); previous > 0 {
+			if previous := row - 1; previous >= 1 {
 				selectIssueRow(table, a.rowsForSection(section), previous)
 				if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
 					a.onIssueSelected(*issue)
@@ -422,7 +430,7 @@ func scrollIssueColumns(table *tview.Table, key rune) {
 // reachable (they are not selectable, so scrolling alone never reveals them).
 func selectIssueRow(table *tview.Table, rows []IssueRow, row int) {
 	table.Select(row, 0)
-	if row == nextIssueRow(rows, 0, 1) {
+	if row <= nextIssueRow(rows, 0, 1) {
 		table.SetOffset(0, 0)
 	}
 }
@@ -443,7 +451,7 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 	switch event.Rune() {
 	case 'j':
 		row, _ := table.GetSelection()
-		if next := nextIssueRow(a.rowsForSection(section), row, 1); next > 0 {
+		if next := row + 1; next <= len(a.rowsForSection(section)) {
 			table.Select(next, 0)
 			if issue := a.getIssueFromRowForSection(next, section); issue != nil {
 				a.onIssueSelected(*issue)
@@ -464,7 +472,7 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 		return nil
 	case 'k':
 		row, _ := table.GetSelection()
-		if previous := nextIssueRow(a.rowsForSection(section), row, -1); previous > 0 {
+		if previous := row - 1; previous >= 1 {
 			selectIssueRow(table, a.rowsForSection(section), previous)
 			if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
 				a.onIssueSelected(*issue)
@@ -552,6 +560,10 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 	case ' ':
 		// Space toggles expand/collapse
 		row, _ := table.GetSelection()
+		if rows := a.rowsForSection(section); row >= 1 && row <= len(rows) && rows[row-1].IsHeader {
+			a.toggleGroupCollapse(section, rows[row-1])
+			return nil
+		}
 		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
 			if len(issue.Children) > 0 {
 				a.toggleIssueExpanded(issue.ID)
@@ -605,7 +617,7 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 
 		if issueRow.IsHeader {
 			for column := range columns {
-				table.SetCell(row, column, tview.NewTableCell("").SetSelectable(false))
+				table.SetCell(row, column, tview.NewTableCell("").SetSelectable(true))
 			}
 			labelIndex := columnIndex(columns, ColumnTitle, 0)
 			if stateIndex := columnIndex(columns, ColumnState, -1); stateIndex >= 0 && stateIndex != labelIndex {
@@ -613,8 +625,12 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 				if icon != "" {
 					table.SetCell(row, stateIndex, tview.NewTableCell(icon).
 						SetTextColor(iconColor).
-						SetSelectable(false))
+						SetSelectable(true))
 				}
+			}
+			indicator := "▾ "
+			if issueRow.HeaderCollapsed {
+				indicator = "▸ "
 			}
 			indent := strings.Repeat("  ", issueRow.HeaderLevel)
 			// Group labels read distinctly from issue titles: accent for the
@@ -623,10 +639,10 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			if issueRow.HeaderLevel > 0 {
 				labelColor = theme.HeaderText
 			}
-			table.SetCell(row, labelIndex, tview.NewTableCell(fmt.Sprintf("%s%s (%d)", indent, issueRow.HeaderText, issueRow.HeaderCount)).
+			table.SetCell(row, labelIndex, tview.NewTableCell(fmt.Sprintf("%s%s%s (%d)", indent, indicator, issueRow.HeaderText, issueRow.HeaderCount)).
 				SetTextColor(labelColor).
 				SetAttributes(tcell.AttrBold).
-				SetSelectable(false))
+				SetSelectable(true))
 			continue
 		}
 
