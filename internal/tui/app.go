@@ -1833,15 +1833,11 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
 
 	// Build hierarchical tree rows for each section, grouped when enabled.
-	buildRows := BuildIssueRows
-	if a.config.GroupByStatus {
-		buildRows = BuildGroupedIssueRows
-	}
-	a.myIssueRows, a.myIDToIssue = buildRows(myIssues, a.expandedState)
-	a.otherIssueRows, a.otherIDToIssue = buildRows(otherIssues, a.expandedState)
+	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues)
+	a.otherIssueRows, a.otherIDToIssue = a.buildIssueRowsFor(otherIssues)
 
 	// The All Issues tab renders the full list.
-	a.issueRows, a.idToIssue = buildRows(issues, a.expandedState)
+	a.issueRows, a.idToIssue = a.buildIssueRowsFor(issues)
 
 	// Render the tables.
 	var selectedMyIssueID, selectedOtherIssueID, selectedAllIssueID string
@@ -1947,11 +1943,18 @@ func (a *App) sortIssuesLocally() {
 	}
 }
 
-// toggleGroupByStatus switches the issues list between a flat list and
-// Linear-style status groups, keeping the current selection.
-func (a *App) toggleGroupByStatus() {
-	a.config.GroupByStatus = !a.config.GroupByStatus
+// buildIssueRowsFor builds table rows for an issue list, honoring the
+// configured grouping dimensions.
+func (a *App) buildIssueRowsFor(issues []linearapi.Issue) ([]IssueRow, map[string]*linearapi.Issue) {
+	if a.config.GroupBy == GroupByNone {
+		return BuildIssueRows(issues, a.expandedState)
+	}
+	return BuildGroupedIssueRows(issues, a.expandedState, a.config.GroupBy, a.config.SubgroupBy)
+}
 
+// regroupIssues rebuilds the tables after a grouping change, keeping the
+// current selection.
+func (a *App) regroupIssues(message string) {
 	a.issuesMu.RLock()
 	targetIssueID := ""
 	if a.selectedIssue != nil {
@@ -1964,12 +1967,59 @@ func (a *App) toggleGroupByStatus() {
 	a.selectedIssue = selectedIssue
 	a.issuesMu.Unlock()
 	a.updateDetailsView()
+	a.flashStatus(message)
+}
 
-	if a.config.GroupByStatus {
-		a.flashStatus("Grouped by status")
-	} else {
-		a.flashStatus("Grouping off")
+// groupDimensionPickerItems lists the grouping dimensions for the pickers.
+func groupDimensionPickerItems() []PickerItem {
+	return []PickerItem{
+		{ID: GroupByNone, Label: "None"},
+		{ID: GroupByStatus, Label: "Status"},
+		{ID: GroupByPriority, Label: "Priority"},
+		{ID: GroupByAssignee, Label: "Assignee"},
+		{ID: GroupByCycle, Label: "Cycle"},
 	}
+}
+
+// showGroupByPicker selects the primary grouping dimension.
+func (a *App) showGroupByPicker() {
+	a.pickerActive = true
+	a.pickerModal.Show("Group Issues By", groupDimensionPickerItems(), func(item PickerItem) {
+		a.pickerActive = false
+		a.config.GroupBy = item.ID
+		if a.config.SubgroupBy == item.ID {
+			a.config.SubgroupBy = GroupByNone
+		}
+		if item.ID == GroupByNone {
+			a.regroupIssues("Grouping off")
+		} else {
+			a.regroupIssues("Grouped by " + item.Label)
+		}
+	})
+}
+
+// showSubgroupByPicker selects the secondary grouping dimension.
+func (a *App) showSubgroupByPicker() {
+	if a.config.GroupBy == GroupByNone {
+		a.flashStatus("Set a grouping first (Group issues by…)")
+		return
+	}
+	items := make([]PickerItem, 0, 4)
+	for _, item := range groupDimensionPickerItems() {
+		if item.ID != a.config.GroupBy {
+			items = append(items, item)
+		}
+	}
+	a.pickerActive = true
+	a.pickerModal.Show("Subgroup Issues By", items, func(item PickerItem) {
+		a.pickerActive = false
+		a.config.SubgroupBy = item.ID
+		if item.ID == GroupByNone {
+			a.regroupIssues("Subgrouping off")
+		} else {
+			a.regroupIssues("Subgrouped by " + item.Label)
+		}
+	})
 }
 
 // sortIssuesByPriority sorts issues by priority using Linear's priority semantics.
@@ -2061,15 +2111,11 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	issues := a.issues
 	a.issuesMu.RUnlock()
 	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
-	buildRows := BuildIssueRows
-	if a.config.GroupByStatus {
-		buildRows = BuildGroupedIssueRows
-	}
-	a.myIssueRows, a.myIDToIssue = buildRows(myIssues, a.expandedState)
-	a.otherIssueRows, a.otherIDToIssue = buildRows(otherIssues, a.expandedState)
+	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues)
+	a.otherIssueRows, a.otherIDToIssue = a.buildIssueRowsFor(otherIssues)
 
 	// The All Issues tab renders the full list.
-	a.issueRows, a.idToIssue = buildRows(issues, a.expandedState)
+	a.issueRows, a.idToIssue = a.buildIssueRowsFor(issues)
 
 	// Update layout
 	a.updateIssuesColumnLayout()

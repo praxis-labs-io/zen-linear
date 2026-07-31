@@ -658,6 +658,10 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		LogLevel:       logLevel,
 		Theme:          theme,
 		Density:        density,
+		// No form fields; carry the current values so saving settings never
+		// strips them from the config file.
+		GroupBy:        sm.app.config.GroupBy,
+		SubgroupBy:     sm.app.config.SubgroupBy,
 		RoundedBorders: sm.roundedBordersField.IsChecked(),
 		AgentProvider:  agentProvider,
 		AgentSandbox:   agentSandbox,
@@ -669,7 +673,6 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		// so saving settings never strips them from the config file.
 		Workspaces:       sm.app.config.Workspaces,
 		DefaultWorkspace: sm.app.config.DefaultWorkspace,
-		GroupByStatus:    sm.app.config.GroupByStatus,
 	}
 	return settings, nil
 }

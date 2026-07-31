@@ -21,16 +21,17 @@ type SettingsFile struct {
 	LogLevel         *string     `json:"log_level"`
 	Theme            *string     `json:"theme"`
 	Density          *string     `json:"density"`
-	GroupByStatus    *bool       `json:"group_by_status"`
+	GroupBy          *string     `json:"group_by"`
+	SubgroupBy       *string     `json:"subgroup_by"`
 	RoundedBorders   *bool       `json:"rounded_borders"`
+	Workspaces       []Workspace `json:"workspaces"`
+	DefaultWorkspace *string     `json:"default_workspace"`
 	AgentProvider    *string     `json:"agent_provider"`
 	AgentSandbox     *string     `json:"agent_sandbox"`
 	AgentModel       *string     `json:"agent_model"`
 	AgentWorkspace   *string     `json:"agent_workspace"`
 	DefaultTeam      *string     `json:"default_team"`
 	DefaultProject   *string     `json:"default_project"`
-	Workspaces       []Workspace `json:"workspaces"`
-	DefaultWorkspace *string     `json:"default_workspace"`
 }
 
 // Settings contains concrete settings values for UI and persistence.
@@ -44,16 +45,17 @@ type Settings struct {
 	LogLevel         string      `json:"log_level"`
 	Theme            string      `json:"theme"`
 	Density          string      `json:"density"`
-	GroupByStatus    bool        `json:"group_by_status"`
+	GroupBy          string      `json:"group_by"`
+	SubgroupBy       string      `json:"subgroup_by"`
 	RoundedBorders   bool        `json:"rounded_borders"`
+	Workspaces       []Workspace `json:"workspaces,omitempty"`
+	DefaultWorkspace string      `json:"default_workspace,omitempty"`
 	AgentProvider    string      `json:"agent_provider"`
 	AgentSandbox     string      `json:"agent_sandbox"`
 	AgentModel       string      `json:"agent_model"`
 	AgentWorkspace   string      `json:"agent_workspace"`
 	DefaultTeam      string      `json:"default_team"`
 	DefaultProject   string      `json:"default_project"`
-	Workspaces       []Workspace `json:"workspaces,omitempty"`
-	DefaultWorkspace string      `json:"default_workspace,omitempty"`
 }
 
 // DefaultSettings returns the default settings for the config file and UI.
@@ -68,7 +70,8 @@ func DefaultSettings() Settings {
 		LogLevel:       DefaultLogLevel,
 		Theme:          DefaultTheme,
 		Density:        DefaultDensity,
-		GroupByStatus:  false,
+		GroupBy:        "",
+		SubgroupBy:     "",
 		RoundedBorders: false,
 		AgentProvider:  DefaultAgentProvider,
 		AgentSandbox:   DefaultAgentSandbox,
@@ -91,16 +94,17 @@ func SettingsFromConfig(cfg Config) Settings {
 		LogLevel:         cfg.LogLevel,
 		Theme:            cfg.Theme,
 		Density:          cfg.Density,
-		GroupByStatus:    cfg.GroupByStatus,
+		GroupBy:          cfg.GroupBy,
+		SubgroupBy:       cfg.SubgroupBy,
 		RoundedBorders:   cfg.RoundedBorders,
+		Workspaces:       cfg.Workspaces,
+		DefaultWorkspace: cfg.DefaultWorkspace,
 		AgentProvider:    cfg.AgentProvider,
 		AgentSandbox:     cfg.AgentSandbox,
 		AgentModel:       cfg.AgentModel,
 		AgentWorkspace:   cfg.AgentWorkspace,
 		DefaultTeam:      cfg.DefaultTeam,
 		DefaultProject:   cfg.DefaultProject,
-		Workspaces:       cfg.Workspaces,
-		DefaultWorkspace: cfg.DefaultWorkspace,
 	}
 }
 
@@ -158,6 +162,13 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		return Config{}, err
 	}
 
+	if err := validateGroupDimension(settings.GroupBy, "group_by"); err != nil {
+		return Config{}, err
+	}
+	if err := validateGroupDimension(settings.SubgroupBy, "subgroup_by"); err != nil {
+		return Config{}, err
+	}
+
 	if err := validateWorkspaces(settings.Workspaces, "workspaces"); err != nil {
 		return Config{}, err
 	}
@@ -173,16 +184,17 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		LogLevel:         settings.LogLevel,
 		Theme:            theme,
 		Density:          density,
-		GroupByStatus:    settings.GroupByStatus,
+		GroupBy:          settings.GroupBy,
+		SubgroupBy:       settings.SubgroupBy,
 		RoundedBorders:   settings.RoundedBorders,
+		Workspaces:       settings.Workspaces,
+		DefaultWorkspace: settings.DefaultWorkspace,
 		AgentProvider:    settings.AgentProvider,
 		AgentSandbox:     settings.AgentSandbox,
 		AgentModel:       settings.AgentModel,
 		AgentWorkspace:   settings.AgentWorkspace,
 		DefaultTeam:      settings.DefaultTeam,
 		DefaultProject:   settings.DefaultProject,
-		Workspaces:       settings.Workspaces,
-		DefaultWorkspace: settings.DefaultWorkspace,
 	}, nil
 }
 
@@ -260,11 +272,14 @@ func LoadSettings(path string) (Settings, error) {
 	if file.Density != nil {
 		settings.Density = *file.Density
 	}
+	if file.GroupBy != nil {
+		settings.GroupBy = *file.GroupBy
+	}
+	if file.SubgroupBy != nil {
+		settings.SubgroupBy = *file.SubgroupBy
+	}
 	if file.RoundedBorders != nil {
 		settings.RoundedBorders = *file.RoundedBorders
-	}
-	if file.GroupByStatus != nil {
-		settings.GroupByStatus = *file.GroupByStatus
 	}
 	if file.AgentProvider != nil {
 		settings.AgentProvider = *file.AgentProvider
@@ -365,6 +380,16 @@ func validateTheme(theme string, label string) error {
 		return nil
 	default:
 		return fmt.Errorf("invalid %s value %q: must be linear, high_contrast, color_blind, or rose_pine_moon", label, theme)
+	}
+}
+
+// validateGroupDimension validates the allowed grouping dimensions.
+func validateGroupDimension(dimension string, label string) error {
+	switch dimension {
+	case "", "status", "priority", "assignee", "cycle":
+		return nil
+	default:
+		return fmt.Errorf("invalid %s value %q: must be status, priority, assignee, cycle, or empty", label, dimension)
 	}
 }
 
