@@ -254,9 +254,10 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:       "switch_workspace",
-			Title:    "Switch workspace",
-			Keywords: []string{"workspace", "switch", "account", "organization"},
+			ID:           "switch_workspace",
+			Title:        "Switch workspace",
+			Keywords:     []string{"workspace", "switch", "account", "organization"},
+			ShortcutRune: 'W',
 			Run: func(a *App) {
 				a.showWorkspacePicker()
 			},
