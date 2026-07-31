@@ -163,6 +163,7 @@ type App struct {
 	navigationHidden       bool
 	detailsHidden          bool
 	layoutMode             layoutMode
+	palettePreviousPane    FocusTarget
 	navigationTree         *tview.TreeView
 	navNodeOriginalText    map[*tview.TreeNode]string
 	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
@@ -1531,6 +1532,9 @@ func (a *App) openPalette() {
 	a.updatePaletteList()
 	a.pages.ShowPage("palette")
 	a.pages.SendToFront("palette")
+	if a.focusedPane != FocusPalette {
+		a.palettePreviousPane = a.focusedPane
+	}
 	a.focusedPane = FocusPalette
 	a.updateFocus()
 }
@@ -1546,6 +1550,9 @@ func (a *App) openSearchPalette() {
 	a.paletteModalContent.SetTitle(" Search Issues ")
 	a.pages.ShowPage("palette")
 	a.pages.SendToFront("palette")
+	if a.focusedPane != FocusPalette {
+		a.palettePreviousPane = a.focusedPane
+	}
 	a.focusedPane = FocusPalette
 	a.updateFocus()
 }
@@ -1555,7 +1562,8 @@ func (a *App) closePalette() {
 	a.cancelSearchDebounce()
 	a.paletteCtrl.SetSearchMode(false)
 	a.pages.HidePage("palette")
-	a.focusedPane = FocusNavigation
+	// Restore focus to the pane the palette was opened from.
+	a.focusedPane = a.palettePreviousPane
 	a.updateFocus()
 }
 
