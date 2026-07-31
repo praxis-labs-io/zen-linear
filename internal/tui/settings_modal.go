@@ -668,6 +668,9 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		AgentSandbox:   agentSandbox,
 		AgentModel:     agentModel,
 		AgentWorkspace: strings.TrimSpace(sm.agentWorkspaceField.GetText()),
+		// No form field; carry the current value so saving settings never
+		// strips it from the config file.
+		Keybindings:    sm.app.config.Keybindings,
 		DefaultTeam:    strings.TrimSpace(sm.defaultTeamField.GetText()),
 		DefaultProject: strings.TrimSpace(sm.defaultProjectField.GetText()),
 		// The form has no fields for these; carry the current values through
