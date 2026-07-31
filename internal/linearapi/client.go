@@ -1382,7 +1382,6 @@ func (c *Client) searchIssues(ctx context.Context, params FetchIssuesParams) ([]
 }
 
 // searchIssuesPage fetches a single page of issues using Linear's searchIssues query.
-//
 func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {
@@ -1681,7 +1680,6 @@ type issueQueryNode struct {
 }
 
 // fetchIssuesWithFilterPage fetches a single page of issues using the standard issues query.
-//
 func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {
