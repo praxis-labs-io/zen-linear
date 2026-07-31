@@ -1,12 +1,12 @@
-# linear-tui
+# zen-linear
 
 A terminal interface for Linear, built with Go and tview.
 
-This is a fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui)
-by [@roeyazroel](https://github.com/roeyazroel), who built the foundation this
+zen-linear is an opinionated fork of
+[linear-tui](https://github.com/roeyazroel/linear-tui) by
+[@roeyazroel](https://github.com/roeyazroel), who built the foundation this
 runs on: the Linear API client, OAuth, the pane layout, and the agent
-integration. Fixes and features from this fork are offered upstream where they
-fit.
+integration. Fixes and features are offered upstream where they fit.
 
 ## Screenshots
 
@@ -48,8 +48,8 @@ Appearance
 
 Requires Go 1.24 or later.
 
-    git clone https://github.com/Drucial/linear-tui.git
-    cd linear-tui
+    git clone https://github.com/Drucial/zen-linear.git
+    cd zen-linear
     go build -o ~/.local/bin/linear-tui ./cmd/linear-tui
 
 Authenticate with `linear-tui auth login`, or set per-workspace API keys as
