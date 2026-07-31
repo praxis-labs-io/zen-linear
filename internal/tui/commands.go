@@ -208,6 +208,31 @@ func handleCopyIssueURLCommand(a *App) {
 	a.flashStatus(fmt.Sprintf("Copied issue URL: %s", issue.Identifier))
 }
 
+func handleOpenGitHubCommand(a *App) {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	for _, attachment := range issue.Attachments {
+		if !strings.Contains(strings.ToLower(attachment.SourceType), "github") &&
+			!strings.Contains(attachment.URL, "github.com") {
+			continue
+		}
+		openFn := a.openURLFunc
+		if openFn == nil {
+			openFn = openURL
+		}
+		if err := openFn(attachment.URL); err != nil {
+			a.updateStatusBarWithError(err)
+			return
+		}
+		a.flashStatus(fmt.Sprintf("Opened GitHub: %s", attachment.URL))
+		return
+	}
+	a.flashStatus(fmt.Sprintf("No GitHub link on %s", issue.Identifier))
+}
+
 func handleCopyBranchCommand(a *App) {
 	issue := a.GetSelectedIssue()
 	if issue == nil {
@@ -363,6 +388,14 @@ func DefaultCommands(app *App) []Command {
 			Keywords:     []string{"copy", "id", "c", "identifier"},
 			ShortcutRune: 'y',
 			Run:          handleCopyIssueIDCommand,
+		},
+		{
+			ID:       "open_github",
+			Title:    "Open GitHub link",
+			Keywords: []string{"open", "github", "pull", "pr"},
+			Run: func(a *App) {
+				handleOpenGitHubCommand(a)
+			},
 		},
 		{
 			ID:       "copy_branch",
