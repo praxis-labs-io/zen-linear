@@ -27,6 +27,7 @@ A terminal user interface (TUI) for Linear built with Go and tview.
 - Status management (change status, assign/unassign)
 - Search and filtering
 - Sorting (by updated, created, priority, or status)
+- Configurable issue list columns — `columns` in `config.json` orders and selects from: priority, id, state, title, labels, assignee, updated, cycle, due, estimate, milestone
 - Optional grouping and subgrouping (status, priority, assignee, cycle, project, milestone) like Linear's list view — `group_by` and `subgroup_by` in `config.json`, or the `Group issues by…` and `Subgroup issues by…` commands
 - My Issues vs Other Issues sections
 - Agent runs via command palette (Claude or Cursor Agent)

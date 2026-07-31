@@ -656,6 +656,7 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		// strips them from the config file.
 		GroupBy:        sm.app.config.GroupBy,
 		SubgroupBy:     sm.app.config.SubgroupBy,
+		Columns:        sm.app.config.Columns,
 		AgentProvider:  agentProvider,
 		AgentSandbox:   agentSandbox,
 		AgentModel:     agentModel,

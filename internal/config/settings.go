@@ -12,44 +12,46 @@ import (
 
 // SettingsFile represents the on-disk JSON with optional fields.
 type SettingsFile struct {
-	APIEndpoint    *string `json:"api_endpoint"`
-	Timeout        *string `json:"timeout"`
-	PageSize       *int    `json:"page_size"`
-	CacheTTL       *string `json:"cache_ttl"`
-	SearchDebounce *string `json:"search_debounce"`
-	LogFile        *string `json:"log_file"`
-	LogLevel       *string `json:"log_level"`
-	Theme          *string `json:"theme"`
-	Density        *string `json:"density"`
-	GroupBy        *string `json:"group_by"`
-	SubgroupBy     *string `json:"subgroup_by"`
-	AgentProvider  *string `json:"agent_provider"`
-	AgentSandbox   *string `json:"agent_sandbox"`
-	AgentModel     *string `json:"agent_model"`
-	AgentWorkspace *string `json:"agent_workspace"`
-	DefaultTeam    *string `json:"default_team"`
-	DefaultProject *string `json:"default_project"`
+	APIEndpoint    *string  `json:"api_endpoint"`
+	Timeout        *string  `json:"timeout"`
+	PageSize       *int     `json:"page_size"`
+	CacheTTL       *string  `json:"cache_ttl"`
+	SearchDebounce *string  `json:"search_debounce"`
+	LogFile        *string  `json:"log_file"`
+	LogLevel       *string  `json:"log_level"`
+	Theme          *string  `json:"theme"`
+	Density        *string  `json:"density"`
+	GroupBy        *string  `json:"group_by"`
+	SubgroupBy     *string  `json:"subgroup_by"`
+	Columns        []string `json:"columns"`
+	AgentProvider  *string  `json:"agent_provider"`
+	AgentSandbox   *string  `json:"agent_sandbox"`
+	AgentModel     *string  `json:"agent_model"`
+	AgentWorkspace *string  `json:"agent_workspace"`
+	DefaultTeam    *string  `json:"default_team"`
+	DefaultProject *string  `json:"default_project"`
 }
 
 // Settings contains concrete settings values for UI and persistence.
 type Settings struct {
-	APIEndpoint    string `json:"api_endpoint"`
-	Timeout        string `json:"timeout"`
-	PageSize       int    `json:"page_size"`
-	CacheTTL       string `json:"cache_ttl"`
-	SearchDebounce string `json:"search_debounce"`
-	LogFile        string `json:"log_file"`
-	LogLevel       string `json:"log_level"`
-	Theme          string `json:"theme"`
-	Density        string `json:"density"`
-	GroupBy        string `json:"group_by"`
-	SubgroupBy     string `json:"subgroup_by"`
-	AgentProvider  string `json:"agent_provider"`
-	AgentSandbox   string `json:"agent_sandbox"`
-	AgentModel     string `json:"agent_model"`
-	AgentWorkspace string `json:"agent_workspace"`
-	DefaultTeam    string `json:"default_team"`
-	DefaultProject string `json:"default_project"`
+	APIEndpoint    string   `json:"api_endpoint"`
+	Timeout        string   `json:"timeout"`
+	PageSize       int      `json:"page_size"`
+	CacheTTL       string   `json:"cache_ttl"`
+	SearchDebounce string   `json:"search_debounce"`
+	LogFile        string   `json:"log_file"`
+	LogLevel       string   `json:"log_level"`
+	Theme          string   `json:"theme"`
+	Density        string   `json:"density"`
+	GroupBy        string   `json:"group_by"`
+	SubgroupBy     string   `json:"subgroup_by"`
+	Columns        []string `json:"columns,omitempty"`
+	AgentProvider  string   `json:"agent_provider"`
+	AgentSandbox   string   `json:"agent_sandbox"`
+	AgentModel     string   `json:"agent_model"`
+	AgentWorkspace string   `json:"agent_workspace"`
+	DefaultTeam    string   `json:"default_team"`
+	DefaultProject string   `json:"default_project"`
 }
 
 // DefaultSettings returns the default settings for the config file and UI.
@@ -89,6 +91,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		Density:        cfg.Density,
 		GroupBy:        cfg.GroupBy,
 		SubgroupBy:     cfg.SubgroupBy,
+		Columns:        cfg.Columns,
 		AgentProvider:  cfg.AgentProvider,
 		AgentSandbox:   cfg.AgentSandbox,
 		AgentModel:     cfg.AgentModel,
@@ -159,6 +162,10 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		return Config{}, err
 	}
 
+	if err := validateColumns(settings.Columns, "columns"); err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		LinearAPIKey:   apiKey,
 		APIEndpoint:    settings.APIEndpoint,
@@ -172,6 +179,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		Density:        density,
 		GroupBy:        settings.GroupBy,
 		SubgroupBy:     settings.SubgroupBy,
+		Columns:        settings.Columns,
 		AgentProvider:  settings.AgentProvider,
 		AgentSandbox:   settings.AgentSandbox,
 		AgentModel:     settings.AgentModel,
@@ -260,6 +268,9 @@ func LoadSettings(path string) (Settings, error) {
 	}
 	if file.SubgroupBy != nil {
 		settings.SubgroupBy = *file.SubgroupBy
+	}
+	if file.Columns != nil {
+		settings.Columns = file.Columns
 	}
 	if file.AgentProvider != nil {
 		settings.AgentProvider = *file.AgentProvider
@@ -355,6 +366,26 @@ func validateTheme(theme string, label string) error {
 	default:
 		return fmt.Errorf("invalid %s value %q: must be linear, high_contrast, or color_blind", label, theme)
 	}
+}
+
+// validateColumns validates the issue list column selection.
+func validateColumns(columns []string, label string) error {
+	known := map[string]bool{
+		"priority": true, "id": true, "state": true, "title": true,
+		"labels": true, "assignee": true, "updated": true,
+		"cycle": true, "due": true, "estimate": true, "milestone": true,
+	}
+	seen := make(map[string]bool, len(columns))
+	for _, column := range columns {
+		if !known[column] {
+			return fmt.Errorf("invalid %s entry %q: unknown column", label, column)
+		}
+		if seen[column] {
+			return fmt.Errorf("invalid %s entry %q: duplicate column", label, column)
+		}
+		seen[column] = true
+	}
+	return nil
 }
 
 // validateGroupDimension validates the allowed grouping dimensions.
