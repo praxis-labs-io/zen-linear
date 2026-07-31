@@ -8,8 +8,7 @@ import (
 // EditTitleModal manages the edit title form overlay.
 type EditTitleModal struct {
 	app        *App
-	modal      *tview.Flex
-	form       *tview.Form
+	fm         *FormModal
 	titleField *tview.InputField
 	issueID    string
 	onUpdate   func(issueID, title string)
@@ -17,89 +16,23 @@ type EditTitleModal struct {
 
 // NewEditTitleModal creates a new edit title modal.
 func NewEditTitleModal(app *App) *EditTitleModal {
-	etm := &EditTitleModal{
-		app: app,
-	}
-
-	// Create form
-	etm.form = tview.NewForm()
-	etm.form.SetBackgroundColor(app.theme.ModalBackground())
-	etm.form.SetFieldBackgroundColor(app.theme.InputBg)
-	etm.form.SetFieldTextColor(app.theme.Foreground)
-	etm.form.SetButtonBackgroundColor(app.theme.Accent)
-	etm.form.SetButtonTextColor(app.theme.SelectionText)
-	etm.form.SetLabelColor(app.theme.Foreground)
-	etm.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			etm.Hide()
-			return nil
-		}
-		return event
-	})
-
-	// Add title field
-	etm.titleField = tview.NewInputField()
-	etm.titleField.SetLabel("Title: ")
-	etm.titleField.SetFieldWidth(40)
-	etm.titleField.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			etm.Hide()
-			return nil
-		}
-		return event
-	})
-	etm.form.AddFormItem(etm.titleField)
-
-	// Add buttons
-	etm.form.AddButton("Update", func() {
+	etm := &EditTitleModal{app: app}
+	etm.fm = NewFormModal(app, "Edit Title")
+	etm.titleField = etm.fm.AddInput("Title", "")
+	submit := func() {
 		title := etm.titleField.GetText()
 		etm.Hide()
 		if etm.onUpdate != nil && title != "" && etm.issueID != "" {
 			etm.onUpdate(etm.issueID, title)
 		}
-	})
-	etm.form.AddButton("Cancel", func() {
-		etm.Hide()
-	})
-
-	// Create title
-	titleView := tview.NewTextView()
-	titleView.SetText("Edit Issue Title")
-	titleView.SetTextColor(app.theme.Accent)
-	titleView.SetBackgroundColor(app.theme.ModalBackground())
-
-	helpView := tview.NewTextView()
-	helpView.SetText("Esc: cancel • Enter: submit")
-	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.ModalBackground())
-	helpView.SetTextAlign(tview.AlignCenter)
-
-	// Build modal content
-	modalContent := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(titleView, 1, 0, false).
-		AddItem(etm.form, 0, 1, true).
-		AddItem(helpView, 1, 0, false)
-	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
-	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
-		SetBorder(true).
-		SetBorderColor(app.theme.Accent).
-		SetTitle(" Edit Title ").
-		SetTitleColor(app.theme.Foreground)
-	padding := app.density.ModalPadding
-	modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-
-	// Center the modal on screen
-	etm.modal = tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().
-			SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(modalContent, 9, 0, true).
-			AddItem(nil, 0, 1, false), 60, 0, true).
-		AddItem(nil, 0, 1, false)
-	etm.modal.SetBackgroundColor(app.theme.Background)
-
+	}
+	etm.fm.AddButtons(
+		FormButton{Label: "Update", OnPress: submit},
+		FormButton{Label: "Cancel", OnPress: etm.Hide},
+	)
+	etm.fm.SetOnSubmit(submit)
+	etm.fm.SetOnCancel(etm.Hide)
+	etm.fm.SetHint("Esc cancel · ⏎ next · ⌃⏎ submit")
 	return etm
 }
 
@@ -107,31 +40,21 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 func (etm *EditTitleModal) Show(issueID, currentTitle string, onUpdate func(issueID, title string)) {
 	etm.issueID = issueID
 	etm.onUpdate = onUpdate
-
-	// Set current title in field
 	etm.titleField.SetText(currentTitle)
-
-	etm.app.pages.AddPage("edit_title", etm.modal, true, true)
-	etm.app.pages.SendToFront("edit_title")
-	etm.app.app.SetFocus(etm.form)
+	etm.fm.Show("edit_title")
 }
 
 // Hide hides the edit title modal.
 func (etm *EditTitleModal) Hide() {
-	etm.app.pages.RemovePage("edit_title")
-	etm.app.updateFocus()
+	etm.fm.Hide("edit_title")
 }
 
 // HandleKey handles keyboard input for the edit title modal.
 func (etm *EditTitleModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
-	if event.Key() == tcell.KeyEscape {
-		etm.Hide()
-		return nil
-	}
-	return event
+	return etm.fm.HandleKey(event)
 }
 
 // GetModal returns the modal flex for adding to pages.
 func (etm *EditTitleModal) GetModal() *tview.Flex {
-	return etm.modal
+	return etm.fm.Root()
 }

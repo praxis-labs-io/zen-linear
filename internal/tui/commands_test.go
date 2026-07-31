@@ -51,17 +51,16 @@ func TestEditDescriptionCommandFocusesModalNotNav(t *testing.T) {
 }
 
 // TestEditDescriptionModalShowResetsFocusToTextArea verifies reopening the
-// modal focuses the description field even after a prior submit left the
-// form's internal focus on a button.
+// modal focuses the description field even after a prior submit left focus
+// on a button.
 func TestEditDescriptionModalShowResetsFocusToTextArea(t *testing.T) {
 	app := newUXTestApp()
 	modal := app.editDescriptionModal
-	modal.form.SetFocus(1)
+	app.app.SetFocus(modal.fm.order[len(modal.fm.order)-1])
 
 	modal.Show("issue-1", "text", func(issueID, description string) {})
 
-	focusedItem, _ := modal.form.GetFocusedItemIndex()
-	if focusedItem != 0 {
-		t.Fatalf("focused form item = %d, want 0 for Description", focusedItem)
+	if app.app.GetFocus() != modal.bodyField {
+		t.Fatal("Show did not focus the description field")
 	}
 }
