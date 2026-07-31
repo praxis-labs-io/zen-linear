@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/rivo/tview"
 )
@@ -17,6 +18,8 @@ func (a *App) tableForSection(section IssuesSection) *tview.Table {
 		return a.myIssuesTable
 	case IssuesSectionOther:
 		return a.otherIssuesTable
+	case IssuesSectionAll:
+		return a.allIssuesTable
 	}
 	return nil
 }
@@ -37,24 +40,44 @@ func (a *App) jumpToSection(section IssuesSection, row int) {
 	a.updateFocus()
 }
 
-// cycleIssuesSection switches between the My Issues and Other Issues tabs,
-// keeping each tab's own selection.
-func (a *App) cycleIssuesSection() {
-	target := IssuesSectionMy
-	rows := a.myIssueRows
-	if a.activeIssuesSection == IssuesSectionMy {
-		target = IssuesSectionOther
-		rows = a.otherIssueRows
+// sectionRows returns the row model backing a section.
+func (a *App) sectionRows(section IssuesSection) []IssueRow {
+	switch section {
+	case IssuesSectionMy:
+		return a.myIssueRows
+	case IssuesSectionOther:
+		return a.otherIssueRows
+	case IssuesSectionAll:
+		return a.issueRows
 	}
-	if len(rows) == 0 {
+	return nil
+}
+
+// cycleIssuesSection cycles the My, Other, and All tabs, skipping empty ones
+// and keeping each tab's own selection.
+func (a *App) cycleIssuesSection() {
+	order := []IssuesSection{IssuesSectionMy, IssuesSectionOther, IssuesSectionAll}
+	current := 0
+	for i, section := range order {
+		if section == a.activeIssuesSection {
+			current = i
+			break
+		}
+	}
+	for step := 1; step < len(order); step++ {
+		target := order[(current+step)%len(order)]
+		rows := a.sectionRows(target)
+		if len(rows) == 0 {
+			continue
+		}
+		table := a.tableForSection(target)
+		row, _ := table.GetSelection()
+		if row < 1 || row > len(rows) {
+			row = 1
+		}
+		a.jumpToSection(target, row)
 		return
 	}
-	table := a.tableForSection(target)
-	row, _ := table.GetSelection()
-	if row < 1 || row > len(rows) {
-		row = 1
-	}
-	a.jumpToSection(target, row)
 }
 
 // issuesTabsTitle renders the tab strip for the issues pane border.
@@ -63,12 +86,14 @@ func (a *App) issuesTabsTitle(focused bool) string {
 	if focused {
 		prefix = " ▶ "
 	}
-	if len(a.myIssueRows) == 0 {
-		return prefix + fmt.Sprintf("Other Issues (%d) ", len(a.otherIssueRows))
+	var segments []string
+	if len(a.myIssueRows) > 0 {
+		segments = append(segments, a.tabSegment(fmt.Sprintf("My (%d)", len(a.myIssueRows)), a.activeIssuesSection == IssuesSectionMy, focused))
 	}
-	my := a.tabSegment(fmt.Sprintf("My Issues (%d)", len(a.myIssueRows)), a.activeIssuesSection == IssuesSectionMy, focused)
-	other := a.tabSegment(fmt.Sprintf("Other Issues (%d)", len(a.otherIssueRows)), a.activeIssuesSection == IssuesSectionOther, focused)
-	return prefix + my + " · " + other + " "
+	segments = append(segments,
+		a.tabSegment(fmt.Sprintf("Other (%d)", len(a.otherIssueRows)), a.activeIssuesSection == IssuesSectionOther, focused),
+		a.tabSegment(fmt.Sprintf("All (%d)", len(a.issueRows)), a.activeIssuesSection == IssuesSectionAll, focused))
+	return prefix + strings.Join(segments, " · ") + " "
 }
 
 // detailsTabsTitle renders the tab strip for the details pane border.

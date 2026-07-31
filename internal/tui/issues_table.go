@@ -154,6 +154,7 @@ type IssuesSection int
 const (
 	IssuesSectionMy IssuesSection = iota
 	IssuesSectionOther
+	IssuesSectionAll
 )
 
 // buildIssuesTable creates and configures an issues table widget with the given title.
@@ -398,6 +399,8 @@ func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 		return a.myIssueRows
 	case IssuesSectionOther:
 		return a.otherIssueRows
+	case IssuesSectionAll:
+		return a.issueRows
 	}
 	return nil
 }
@@ -424,6 +427,9 @@ func (a *App) getIssueFromRowForSection(row int, section IssuesSection) *lineara
 	case IssuesSectionOther:
 		rows = a.otherIssueRows
 		idToIssue = a.otherIDToIssue
+	case IssuesSectionAll:
+		rows = a.issueRows
+		idToIssue = a.idToIssue
 	}
 	return getIssueFromRowModel(row, rows, idToIssue)
 }
@@ -436,6 +442,8 @@ func (a *App) getRowForIssueInSection(issueID string, section IssuesSection) int
 		rows = a.myIssueRows
 	case IssuesSectionOther:
 		rows = a.otherIssueRows
+	case IssuesSectionAll:
+		rows = a.issueRows
 	}
 	return getRowForIssueModel(issueID, rows)
 }
