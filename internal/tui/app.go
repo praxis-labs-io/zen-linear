@@ -184,6 +184,7 @@ type App struct {
 	createIssueModal       *CreateIssueModal
 	createCommentModal     *CreateCommentModal
 	editTitleModal         *EditTitleModal
+	editDescriptionModal   *EditDescriptionModal
 	editLabelsModal        *EditLabelsModal
 	textInputModal         *TextInputModal
 	multiSelectModal       *MultiSelectModal
@@ -528,6 +529,7 @@ func (a *App) rebuildModals() {
 	a.createIssueModal = NewCreateIssueModal(a)
 	a.createCommentModal = NewCreateCommentModal(a)
 	a.editTitleModal = NewEditTitleModal(a)
+	a.editDescriptionModal = NewEditDescriptionModal(a)
 	a.editLabelsModal = NewEditLabelsModal(a)
 	a.textInputModal = NewTextInputModal(a)
 	a.multiSelectModal = NewMultiSelectModal(a)
@@ -993,6 +995,7 @@ func (a *App) buildLayout() {
 	a.createIssueModal = NewCreateIssueModal(a)
 	a.createCommentModal = NewCreateCommentModal(a)
 	a.editTitleModal = NewEditTitleModal(a)
+	a.editDescriptionModal = NewEditDescriptionModal(a)
 	a.editLabelsModal = NewEditLabelsModal(a)
 	a.textInputModal = NewTextInputModal(a)
 	a.multiSelectModal = NewMultiSelectModal(a)
@@ -1043,6 +1046,11 @@ func (a *App) bindGlobalKeys() {
 		// Check if edit title modal is visible and handle its keys
 		if a.pages.HasPage("edit_title") && a.editTitleModal != nil {
 			return a.editTitleModal.HandleKey(event)
+		}
+
+		// Check if edit description modal is visible and handle its keys
+		if a.pages.HasPage("edit_description") && a.editDescriptionModal != nil {
+			return a.editDescriptionModal.HandleKey(event)
 		}
 
 		// Check if edit labels modal is visible and handle its keys
@@ -2855,6 +2863,53 @@ func (a *App) ShowEditTitleModal() {
 				logger.Info("tui.app: updated issue title issue=%s", issue.Identifier)
 				a.flashStatus(fmt.Sprintf("Updated title for %s", issue.Identifier))
 				go a.refreshIssues(issueID)
+			})
+		}()
+	})
+}
+
+// ShowEditDescriptionModal shows the edit description modal for the selected
+// issue. Submitting empty text clears the description.
+func (a *App) ShowEditDescriptionModal() {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		return
+	}
+
+	a.editDescriptionModal.Show(issue.ID, issue.Description, func(issueID, description string) {
+		go func() {
+			ctx := context.Background()
+			_, err := a.api.UpdateIssue(ctx, linearapi.UpdateIssueInput{
+				ID:          issueID,
+				Description: &description,
+			})
+			a.QueueUpdateDraw(func() {
+				if err != nil {
+					logger.ErrorWithErr(err, "tui.app: failed to update issue description issue=%s", issue.Identifier)
+					a.updateStatusBarWithError(err)
+					return
+				}
+				logger.Info("tui.app: updated issue description issue=%s", issue.Identifier)
+				a.flashStatus(fmt.Sprintf("Updated description for %s", issue.Identifier))
+
+				// Refetch the full issue so the details pane shows the new
+				// description without losing comments.
+				a.fetchingIssueID = issueID
+				go func() {
+					fullIssue, fetchErr := a.api.FetchIssueByID(ctx, issueID)
+					a.QueueUpdateDraw(func() {
+						if a.fetchingIssueID == issueID {
+							if fetchErr != nil {
+								logger.ErrorWithErr(fetchErr, "tui.app: failed to refresh issue after description update issue=%s", issueID)
+								return
+							}
+							a.issuesMu.Lock()
+							a.selectedIssue = &fullIssue
+							a.issuesMu.Unlock()
+							a.updateDetailsView()
+						}
+					})
+				}()
 			})
 		}()
 	})
