@@ -12,40 +12,42 @@ import (
 
 // SettingsFile represents the on-disk JSON with optional fields.
 type SettingsFile struct {
-	APIEndpoint    *string `json:"api_endpoint"`
-	Timeout        *string `json:"timeout"`
-	PageSize       *int    `json:"page_size"`
-	CacheTTL       *string `json:"cache_ttl"`
-	SearchDebounce *string `json:"search_debounce"`
-	LogFile        *string `json:"log_file"`
-	LogLevel       *string `json:"log_level"`
-	Theme          *string `json:"theme"`
-	Density        *string `json:"density"`
-	AgentProvider  *string `json:"agent_provider"`
-	AgentSandbox   *string `json:"agent_sandbox"`
-	AgentModel     *string `json:"agent_model"`
-	AgentWorkspace *string `json:"agent_workspace"`
-	DefaultTeam    *string `json:"default_team"`
-	DefaultProject *string `json:"default_project"`
+	APIEndpoint    *string     `json:"api_endpoint"`
+	Timeout        *string     `json:"timeout"`
+	PageSize       *int        `json:"page_size"`
+	CacheTTL       *string     `json:"cache_ttl"`
+	SearchDebounce *string     `json:"search_debounce"`
+	LogFile        *string     `json:"log_file"`
+	LogLevel       *string     `json:"log_level"`
+	Theme          *string     `json:"theme"`
+	Density        *string     `json:"density"`
+	AgentProvider  *string     `json:"agent_provider"`
+	AgentSandbox   *string     `json:"agent_sandbox"`
+	AgentModel     *string     `json:"agent_model"`
+	AgentWorkspace *string     `json:"agent_workspace"`
+	DefaultTeam    *string     `json:"default_team"`
+	DefaultProject *string     `json:"default_project"`
+	Workspaces     []Workspace `json:"workspaces"`
 }
 
 // Settings contains concrete settings values for UI and persistence.
 type Settings struct {
-	APIEndpoint    string `json:"api_endpoint"`
-	Timeout        string `json:"timeout"`
-	PageSize       int    `json:"page_size"`
-	CacheTTL       string `json:"cache_ttl"`
-	SearchDebounce string `json:"search_debounce"`
-	LogFile        string `json:"log_file"`
-	LogLevel       string `json:"log_level"`
-	Theme          string `json:"theme"`
-	Density        string `json:"density"`
-	AgentProvider  string `json:"agent_provider"`
-	AgentSandbox   string `json:"agent_sandbox"`
-	AgentModel     string `json:"agent_model"`
-	AgentWorkspace string `json:"agent_workspace"`
-	DefaultTeam    string `json:"default_team"`
-	DefaultProject string `json:"default_project"`
+	APIEndpoint    string      `json:"api_endpoint"`
+	Timeout        string      `json:"timeout"`
+	PageSize       int         `json:"page_size"`
+	CacheTTL       string      `json:"cache_ttl"`
+	SearchDebounce string      `json:"search_debounce"`
+	LogFile        string      `json:"log_file"`
+	LogLevel       string      `json:"log_level"`
+	Theme          string      `json:"theme"`
+	Density        string      `json:"density"`
+	AgentProvider  string      `json:"agent_provider"`
+	AgentSandbox   string      `json:"agent_sandbox"`
+	AgentModel     string      `json:"agent_model"`
+	AgentWorkspace string      `json:"agent_workspace"`
+	DefaultTeam    string      `json:"default_team"`
+	DefaultProject string      `json:"default_project"`
+	Workspaces     []Workspace `json:"workspaces,omitempty"`
 }
 
 // DefaultSettings returns the default settings for the config file and UI.
@@ -87,6 +89,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		AgentWorkspace: cfg.AgentWorkspace,
 		DefaultTeam:    cfg.DefaultTeam,
 		DefaultProject: cfg.DefaultProject,
+		Workspaces:     cfg.Workspaces,
 	}
 }
 
@@ -144,6 +147,10 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		return Config{}, err
 	}
 
+	if err := validateWorkspaces(settings.Workspaces, "workspaces"); err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		LinearAPIKey:   apiKey,
 		APIEndpoint:    settings.APIEndpoint,
@@ -161,6 +168,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		AgentWorkspace: settings.AgentWorkspace,
 		DefaultTeam:    settings.DefaultTeam,
 		DefaultProject: settings.DefaultProject,
+		Workspaces:     settings.Workspaces,
 	}, nil
 }
 
@@ -256,6 +264,9 @@ func LoadSettings(path string) (Settings, error) {
 	if file.DefaultProject != nil {
 		settings.DefaultProject = *file.DefaultProject
 	}
+	if file.Workspaces != nil {
+		settings.Workspaces = file.Workspaces
+	}
 
 	return settings, nil
 }
@@ -332,6 +343,27 @@ func validateTheme(theme string, label string) error {
 	default:
 		return fmt.Errorf("invalid %s value %q: must be linear, high_contrast, color_blind, or rose_pine_moon", label, theme)
 	}
+}
+
+// validateWorkspaces validates workspace entries: every entry needs a name and
+// an API key environment variable, and names must be unique.
+func validateWorkspaces(workspaces []Workspace, label string) error {
+	seen := make(map[string]bool, len(workspaces))
+	for i, workspace := range workspaces {
+		name := strings.TrimSpace(workspace.Name)
+		if name == "" {
+			return fmt.Errorf("invalid %s entry %d: name is required", label, i)
+		}
+		if strings.TrimSpace(workspace.APIKeyEnv) == "" {
+			return fmt.Errorf("invalid %s entry %q: api_key_env is required", label, name)
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			return fmt.Errorf("invalid %s entry %q: duplicate workspace name", label, name)
+		}
+		seen[key] = true
+	}
+	return nil
 }
 
 // validateDensity validates the allowed density values.

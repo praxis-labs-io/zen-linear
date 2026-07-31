@@ -1,0 +1,85 @@
+package tui
+
+import (
+	"fmt"
+
+	"github.com/roeyazroel/linear-tui/internal/config"
+	"github.com/roeyazroel/linear-tui/internal/logger"
+)
+
+// workspaceNameForKey returns the name of the workspace whose API key matches
+// the given token, or "" when none matches (explicit key or OAuth session).
+func workspaceNameForKey(workspaces []config.Workspace, token string) string {
+	if token == "" {
+		return ""
+	}
+	for _, workspace := range workspaces {
+		if workspace.APIKey() == token {
+			return workspace.Name
+		}
+	}
+	return ""
+}
+
+// workspacePickerItems builds picker entries, marking the active workspace.
+func workspacePickerItems(workspaces []config.Workspace, active string) []PickerItem {
+	items := make([]PickerItem, 0, len(workspaces))
+	for _, workspace := range workspaces {
+		label := workspace.Name
+		if workspace.Name == active {
+			label += " (active)"
+		}
+		items = append(items, PickerItem{ID: workspace.Name, Label: label})
+	}
+	return items
+}
+
+// showWorkspacePicker opens the workspace selection modal.
+func (a *App) showWorkspacePicker() {
+	if len(a.config.Workspaces) == 0 {
+		a.flashStatus("No workspaces configured — add a workspaces list to config.json")
+		return
+	}
+	a.pickerActive = true
+	items := workspacePickerItems(a.config.Workspaces, a.activeWorkspaceName)
+	a.pickerModal.Show("Switch Workspace", items, func(item PickerItem) {
+		a.pickerActive = false
+		a.switchWorkspace(item.ID)
+	})
+}
+
+// switchWorkspace swaps the API client to the named workspace's key and
+// reloads all data through the settings-apply path.
+func (a *App) switchWorkspace(name string) {
+	if name == a.activeWorkspaceName {
+		a.flashStatus(fmt.Sprintf("Already on %s", name))
+		return
+	}
+
+	var workspace config.Workspace
+	found := false
+	for _, candidate := range a.config.Workspaces {
+		if candidate.Name == name {
+			workspace = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		a.flashStatus(fmt.Sprintf("Unknown workspace %q", name))
+		return
+	}
+
+	key := workspace.APIKey()
+	if key == "" {
+		a.flashStatus(fmt.Sprintf("%s is not set — cannot switch to %s", workspace.APIKeyEnv, workspace.Name))
+		return
+	}
+
+	logger.Info("tui.workspace: switching workspace name=%s", workspace.Name)
+	a.activeWorkspaceName = workspace.Name
+	newCfg := a.config
+	newCfg.LinearAPIKey = key
+	a.applySettings(newCfg)
+	a.flashStatus(fmt.Sprintf("Switched to %s", workspace.Name))
+}
