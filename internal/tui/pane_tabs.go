@@ -55,9 +55,10 @@ func (a *App) sectionRows(section IssuesSection) []IssueRow {
 	return nil
 }
 
-// cycleIssuesSection cycles the My, Other, and All tabs, skipping empty ones
-// and keeping each tab's own selection.
-func (a *App) cycleIssuesSection() {
+// cycleIssuesSection cycles the My, Other, and All tabs in the given
+// direction (+1 forward, -1 backward), skipping empty tabs and keeping each
+// tab's own selection.
+func (a *App) cycleIssuesSection(direction int) {
 	order := []IssuesSection{IssuesSectionMy, IssuesSectionOther, IssuesSectionAll}
 	current := 0
 	for i, section := range order {
@@ -67,7 +68,7 @@ func (a *App) cycleIssuesSection() {
 		}
 	}
 	for step := 1; step < len(order); step++ {
-		target := order[(current+step)%len(order)]
+		target := order[((current+step*direction)%len(order)+len(order))%len(order)]
 		rows := a.sectionRows(target)
 		if len(rows) == 0 {
 			continue
