@@ -485,8 +485,14 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 					SetSelectable(false))
 			}
 			indent := strings.Repeat("  ", issueRow.HeaderLevel)
+			// Group labels read distinctly from issue titles: accent for the
+			// main level, subtle header color for subgroups.
+			labelColor := theme.Accent
+			if issueRow.HeaderLevel > 0 {
+				labelColor = theme.HeaderText
+			}
 			table.SetCell(row, 3, tview.NewTableCell(fmt.Sprintf("%s%s (%d)", indent, issueRow.HeaderText, issueRow.HeaderCount)).
-				SetTextColor(theme.Foreground).
+				SetTextColor(labelColor).
 				SetAttributes(tcell.AttrBold).
 				SetSelectable(false))
 			continue
