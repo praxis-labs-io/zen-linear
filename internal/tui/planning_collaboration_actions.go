@@ -81,7 +81,7 @@ func (a *App) showSetDueDateModal() {
 	if issue.DueDate != nil {
 		initial = *issue.DueDate
 	}
-	a.textInputModal.Show("Set Due Date", "YYYY-MM-DD: ", initial, func(value string) {
+	a.textInputModal.ShowWithContext("Set Due Date", "YYYY-MM-DD: ", initial, a.issueContextLine(*issue), func(value string) {
 		if err := validateLinearDate(value); err != nil {
 			a.updateStatusBarWithError(err)
 			return
@@ -114,7 +114,7 @@ func (a *App) showEditEstimateModal() {
 	if issue.Estimate != nil {
 		initial = formatEstimate(issue.Estimate)
 	}
-	a.textInputModal.Show("Edit Estimate", "Points: ", initial, func(value string) {
+	a.textInputModal.ShowWithContext("Edit Estimate", "Points: ", initial, a.issueContextLine(*issue), func(value string) {
 		a.editEstimateForSelectedIssue(value)
 	})
 }
@@ -150,6 +150,10 @@ func (a *App) showProjectMilestonePicker(title string, onSelect func(linearapi.P
 	if !ok {
 		return
 	}
+	contextLine := ""
+	if issue := a.GetSelectedIssue(); issue != nil {
+		contextLine = a.issueContextLine(*issue)
+	}
 	go func() {
 		milestones, err := a.cache.GetProjectMilestones(context.Background(), projectID)
 		a.QueueUpdateDraw(func() {
@@ -172,7 +176,7 @@ func (a *App) showProjectMilestonePicker(title string, onSelect func(linearapi.P
 				byID[milestone.ID] = milestone
 			}
 			a.pickerActive = true
-			a.pickerModal.Show(title, items, func(item PickerItem) {
+			a.pickerModal.ShowWithContext(title, contextLine, items, func(item PickerItem) {
 				a.pickerActive = false
 				if onSelect != nil {
 					onSelect(byID[item.ID])
@@ -246,7 +250,7 @@ func (a *App) showFilterIssuesPicker() {
 }
 
 func (a *App) showAssigneeFilter() {
-	a.ShowUserPicker(func(userID string) {
+	a.ShowUserPicker("", func(userID string) {
 		a.richFilters.AssigneeID = userID
 		a.richFilters.AssigneeName = userDisplayNameByID(a.teamUsers, userID)
 		a.applyFiltersAndRefresh("Applied assignee filter")
@@ -282,7 +286,7 @@ func (a *App) showLabelFilter() {
 }
 
 func (a *App) showStatusFilter() {
-	a.ShowStatusPicker(func(stateID string) {
+	a.ShowStatusPicker("", func(stateID string) {
 		a.richFilters.StateID = stateID
 		a.richFilters.StateName = workflowStateNameByID(a.workflowStates, stateID)
 		a.applyFiltersAndRefresh("Applied status filter")
@@ -330,7 +334,7 @@ func (a *App) showProjectFilterWithProjects(projects []linearapi.Project) {
 }
 
 func (a *App) showCycleFilter() {
-	a.ShowCyclePicker(func(cycleID string) {
+	a.ShowCyclePicker("", func(cycleID string) {
 		a.richFilters.CycleID = cycleID
 		a.richFilters.CycleName = cycleNameByID(a.teamCycles, cycleID)
 		a.applyFiltersAndRefresh("Applied cycle filter")
@@ -433,9 +437,10 @@ func (a *App) showAddIssueRelationPicker() {
 		return
 	}
 	a.pickerActive = true
-	a.pickerModal.Show("Relation Type", issueRelationTypeLabels, func(item PickerItem) {
+	contextLine := a.issueContextLine(*issue)
+	a.pickerModal.ShowWithContext("Relation Type", contextLine, issueRelationTypeLabels, func(item PickerItem) {
 		a.pickerActive = false
-		a.textInputModal.Show("Related Issue", "Issue ID: ", "", func(targetIssueID string) {
+		a.textInputModal.ShowWithContext("Related Issue", "Issue ID: ", "", contextLine, func(targetIssueID string) {
 			a.createIssueRelationForSelectedIssue(item.ID, targetIssueID)
 		})
 	})
@@ -491,7 +496,7 @@ func (a *App) showRemoveIssueRelationPicker() {
 		})
 	}
 	a.pickerActive = true
-	a.pickerModal.Show("Remove Relation", items, func(item PickerItem) {
+	a.pickerModal.ShowWithContext("Remove Relation", a.issueContextLine(*issue), items, func(item PickerItem) {
 		a.pickerActive = false
 		a.deleteIssueRelationForSelectedIssue(item.ID)
 	})
@@ -623,7 +628,7 @@ func (a *App) runAttachmentAction(title string, action func(linearapi.Attachment
 		items = append(items, PickerItem{ID: attachment.ID, Label: label})
 	}
 	a.pickerActive = true
-	a.pickerModal.Show(title, items, func(item PickerItem) {
+	a.pickerModal.ShowWithContext(title, a.issueContextLine(*issue), items, func(item PickerItem) {
 		a.pickerActive = false
 		action(byID[item.ID])
 	})

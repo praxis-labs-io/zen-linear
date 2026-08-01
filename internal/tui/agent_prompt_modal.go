@@ -57,9 +57,11 @@ func NewAgentPromptModal(app *App) *AgentPromptModal {
 	return am
 }
 
-// Show displays the prompt modal.
-func (am *AgentPromptModal) Show(onSubmit func(prompt string, workspace string)) {
+// Show displays the prompt modal. contextLine names the issue the agent will
+// be asked about.
+func (am *AgentPromptModal) Show(contextLine string, onSubmit func(prompt string, workspace string)) {
 	am.onSubmit = onSubmit
+	am.fm.SetContext(contextLine)
 	defaultPrompt := ""
 	if am.templateField != nil && len(am.templatePrompts) > 0 {
 		am.templateField.SetCurrentOption(0)

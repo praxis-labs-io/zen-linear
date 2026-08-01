@@ -96,6 +96,38 @@ func TestDetailsCommentsTabAlwaysVisibleWithCount(t *testing.T) {
 	}
 }
 
+func TestIssueContextLineShownInModals(t *testing.T) {
+	app := newUXTestApp()
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ZEN-9", Title: "A very important thing"}
+	line := app.issueContextLine(issue)
+	if !strings.Contains(line, "ZEN-9") || !strings.Contains(line, "A very important thing") {
+		t.Fatalf("issueContextLine = %q, want identifier and title", line)
+	}
+
+	longTitle := strings.Repeat("long ", 20)
+	if truncated := app.issueContextLine(linearapi.Issue{Identifier: "ZEN-10", Title: longTitle}); !strings.Contains(truncated, "…") {
+		t.Fatalf("issueContextLine did not truncate a long title: %q", truncated)
+	}
+
+	// Issue-scoped shows carry the line; generic shows clear it.
+	app.textInputModal.ShowWithContext("Set Due Date", "YYYY-MM-DD: ", "", line, func(string) {})
+	if got := app.textInputModal.fm.contextText; got != line {
+		t.Fatalf("text input context = %q, want %q", got, line)
+	}
+	app.textInputModal.Hide()
+	app.textInputModal.Show("Filter Due Date", "YYYY-MM-DD: ", "", func(string) {})
+	if got := app.textInputModal.fm.contextText; got != "" {
+		t.Fatalf("filter context = %q, want empty", got)
+	}
+	app.textInputModal.Hide()
+
+	app.pickerModal.ShowWithContext("Select Status", line, []PickerItem{{ID: "s", Label: "Todo"}}, func(PickerItem) {})
+	if got := app.pickerModal.contextView.GetText(true); !strings.Contains(got, "ZEN-9") {
+		t.Fatalf("picker context = %q, want the issue line", got)
+	}
+	app.pickerModal.Hide()
+}
+
 func TestSettingsModalShowsAndBuildsSearchDebounceSetting(t *testing.T) {
 	app := newUXTestApp()
 	app.config.SearchDebounce = 450 * time.Millisecond
@@ -199,7 +231,7 @@ func TestEditLabelsModalShowsFocusAndTogglesWithSpaceAndT(t *testing.T) {
 		{ID: "bug", Name: "Bug"},
 		{ID: "feature", Name: "Feature"},
 	}
-	modal.Show("issue-1", nil, labels, func(_ string, labelIDs []string) {
+	modal.Show("issue-1", nil, labels, "ZEN-1 · Test issue", func(_ string, labelIDs []string) {
 		saved = append([]string(nil), labelIDs...)
 	})
 
@@ -253,7 +285,7 @@ func TestShowParentIssuePickerExcludesSelectedIssueAndDescendants(t *testing.T) 
 	}
 	app.issuesMu.Unlock()
 
-	app.ShowParentIssuePicker(func(parentID string) {})
+	app.ShowParentIssuePicker("", func(parentID string) {})
 
 	if len(app.pickerModal.items) != 1 {
 		t.Fatalf("picker item count = %d, want 1", len(app.pickerModal.items))

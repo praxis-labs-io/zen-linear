@@ -2065,6 +2065,17 @@ func (a *App) sortIssuesLocally() {
 	}
 }
 
+// issueContextLine renders "ID · Title" for issue-scoped modals, so every
+// form names the issue it modifies the same way.
+func (a *App) issueContextLine(issue linearapi.Issue) string {
+	title := []rune(strings.TrimSpace(issue.Title))
+	const maxTitleRunes = 48
+	if len(title) > maxTitleRunes {
+		title = append(title[:maxTitleRunes-1], '…')
+	}
+	return fmt.Sprintf("%s%s[-] %s%s[-]", a.themeTags.Accent, issue.Identifier, a.themeTags.SecondaryText, string(title))
+}
+
 // issueColumns returns the configured issue list columns, or the default
 // Linear-style layout.
 func (a *App) issueColumns() []string {
@@ -2604,8 +2615,9 @@ func (a *App) loadPickerData(
 	}()
 }
 
-// ShowStatusPicker shows a picker for workflow states.
-func (a *App) ShowStatusPicker(onSelect func(stateID string)) {
+// ShowStatusPicker shows a picker for workflow states. contextLine names the
+// issue being modified; empty for non-issue uses like filters.
+func (a *App) ShowStatusPicker(contextLine string, onSelect func(stateID string)) {
 	logger.Debug("tui.app: showing status picker")
 	states := a.workflowStates
 	if len(states) == 0 {
@@ -2621,15 +2633,15 @@ func (a *App) ShowStatusPicker(onSelect func(stateID string)) {
 				return nil
 			},
 			func() {
-				a.showStatusPickerWithStates(a.workflowStates, onSelect)
+				a.showStatusPickerWithStates(a.workflowStates, contextLine, onSelect)
 			},
 		)
 		return
 	}
-	a.showStatusPickerWithStates(states, onSelect)
+	a.showStatusPickerWithStates(states, contextLine, onSelect)
 }
 
-func (a *App) showStatusPickerWithStates(states []linearapi.WorkflowState, onSelect func(stateID string)) {
+func (a *App) showStatusPickerWithStates(states []linearapi.WorkflowState, contextLine string, onSelect func(stateID string)) {
 	items := make([]PickerItem, 0, len(states))
 	for _, state := range states {
 		items = append(items, PickerItem{
@@ -2639,14 +2651,15 @@ func (a *App) showStatusPickerWithStates(states []linearapi.WorkflowState, onSel
 	}
 
 	a.pickerActive = true
-	a.pickerModal.Show("Select Status", items, func(item PickerItem) {
+	a.pickerModal.ShowWithContext("Select Status", contextLine, items, func(item PickerItem) {
 		a.pickerActive = false
 		onSelect(item.ID)
 	})
 }
 
-// ShowUserPicker shows a picker for team users.
-func (a *App) ShowUserPicker(onSelect func(userID string)) {
+// ShowUserPicker shows a picker for team users. contextLine names the issue
+// being modified; empty for non-issue uses like filters.
+func (a *App) ShowUserPicker(contextLine string, onSelect func(userID string)) {
 	logger.Debug("tui.app: showing user picker")
 	users := a.teamUsers
 	if len(users) == 0 {
@@ -2662,15 +2675,15 @@ func (a *App) ShowUserPicker(onSelect func(userID string)) {
 				return nil
 			},
 			func() {
-				a.showUserPickerWithUsers(a.teamUsers, onSelect)
+				a.showUserPickerWithUsers(a.teamUsers, contextLine, onSelect)
 			},
 		)
 		return
 	}
-	a.showUserPickerWithUsers(users, onSelect)
+	a.showUserPickerWithUsers(users, contextLine, onSelect)
 }
 
-func (a *App) showUserPickerWithUsers(users []linearapi.User, onSelect func(userID string)) {
+func (a *App) showUserPickerWithUsers(users []linearapi.User, contextLine string, onSelect func(userID string)) {
 	items := make([]PickerItem, 0, len(users))
 	for _, user := range users {
 		label := user.Name
@@ -2684,14 +2697,15 @@ func (a *App) showUserPickerWithUsers(users []linearapi.User, onSelect func(user
 	}
 
 	a.pickerActive = true
-	a.pickerModal.Show("Select Assignee", items, func(item PickerItem) {
+	a.pickerModal.ShowWithContext("Select Assignee", contextLine, items, func(item PickerItem) {
 		a.pickerActive = false
 		onSelect(item.ID)
 	})
 }
 
-// ShowCyclePicker shows a picker for team cycles.
-func (a *App) ShowCyclePicker(onSelect func(cycleID string)) {
+// ShowCyclePicker shows a picker for team cycles. contextLine names the
+// issue being modified; empty for non-issue uses like filters.
+func (a *App) ShowCyclePicker(contextLine string, onSelect func(cycleID string)) {
 	logger.Debug("tui.app: showing cycle picker")
 	cycles := a.teamCycles
 	if len(cycles) == 0 {
@@ -2708,15 +2722,15 @@ func (a *App) ShowCyclePicker(onSelect func(cycleID string)) {
 				return nil
 			},
 			func() {
-				a.showCyclePickerWithCycles(a.teamCycles, onSelect)
+				a.showCyclePickerWithCycles(a.teamCycles, contextLine, onSelect)
 			},
 		)
 		return
 	}
-	a.showCyclePickerWithCycles(cycles, onSelect)
+	a.showCyclePickerWithCycles(cycles, contextLine, onSelect)
 }
 
-func (a *App) showCyclePickerWithCycles(cycles []linearapi.Cycle, onSelect func(cycleID string)) {
+func (a *App) showCyclePickerWithCycles(cycles []linearapi.Cycle, contextLine string, onSelect func(cycleID string)) {
 	items := make([]PickerItem, 0, len(cycles))
 	for _, cycle := range cycles {
 		label := cycle.DisplayName()
@@ -2735,15 +2749,16 @@ func (a *App) showCyclePickerWithCycles(cycles []linearapi.Cycle, onSelect func(
 	}
 
 	a.pickerActive = true
-	a.pickerModal.Show("Select Cycle", items, func(item PickerItem) {
+	a.pickerModal.ShowWithContext("Select Cycle", contextLine, items, func(item PickerItem) {
 		a.pickerActive = false
 		onSelect(item.ID)
 	})
 }
 
 // ShowParentIssuePicker shows a picker for selecting a parent issue.
-// It lists all top-level issues (issues without a parent) from the current list.
-func (a *App) ShowParentIssuePicker(onSelect func(parentID string)) {
+// It lists all top-level issues (issues without a parent) from the current
+// list. contextLine names the issue being reparented.
+func (a *App) ShowParentIssuePicker(contextLine string, onSelect func(parentID string)) {
 	// Filter to only show issues that could be parents (no parent themselves)
 	a.issuesMu.RLock()
 	issues := a.issues
@@ -2768,7 +2783,7 @@ func (a *App) ShowParentIssuePicker(onSelect func(parentID string)) {
 	logger.Debug("tui.app: parent issue picker items count=%d", len(items))
 
 	a.pickerActive = true
-	a.pickerModal.Show("Select Parent Issue", items, func(item PickerItem) {
+	a.pickerModal.ShowWithContext("Select Parent Issue", contextLine, items, func(item PickerItem) {
 		a.pickerActive = false
 		onSelect(item.ID)
 	})
@@ -2897,7 +2912,7 @@ func (a *App) ShowEditTitleModal() {
 		return
 	}
 
-	a.editTitleModal.Show(issue.ID, issue.Title, func(issueID, title string) {
+	a.editTitleModal.Show(issue.ID, issue.Title, a.issueContextLine(*issue), func(issueID, title string) {
 		go func() {
 			ctx := context.Background()
 			_, err := a.api.UpdateIssue(ctx, linearapi.UpdateIssueInput{
@@ -2926,7 +2941,7 @@ func (a *App) ShowEditDescriptionModal() {
 		return
 	}
 
-	a.editDescriptionModal.Show(issue.ID, issue.Description, func(issueID, description string) {
+	a.editDescriptionModal.Show(issue.ID, issue.Description, a.issueContextLine(*issue), func(issueID, description string) {
 		go func() {
 			ctx := context.Background()
 			_, err := a.api.UpdateIssue(ctx, linearapi.UpdateIssueInput{
@@ -3003,7 +3018,7 @@ func (a *App) ShowEditLabelsModal() {
 		logger.Debug("tui.app: loaded labels issue=%s count=%d", issue.Identifier, len(availableLabels))
 
 		a.QueueUpdateDraw(func() {
-			a.editLabelsModal.Show(issue.ID, currentLabelIDs, availableLabels, func(issueID string, labelIDs []string) {
+			a.editLabelsModal.Show(issue.ID, currentLabelIDs, availableLabels, a.issueContextLine(*issue), func(issueID string, labelIDs []string) {
 				go func() {
 					ctx := context.Background()
 					_, err := a.api.UpdateIssue(ctx, linearapi.UpdateIssueInput{

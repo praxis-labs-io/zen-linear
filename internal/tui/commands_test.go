@@ -58,7 +58,7 @@ func TestEditDescriptionModalShowResetsFocusToTextArea(t *testing.T) {
 	modal := app.editDescriptionModal
 	app.app.SetFocus(modal.fm.order[len(modal.fm.order)-1])
 
-	modal.Show("issue-1", "text", func(issueID, description string) {})
+	modal.Show("issue-1", "text", "ZEN-1 · Test issue", func(issueID, description string) {})
 
 	if app.app.GetFocus() != modal.bodyField {
 		t.Fatal("Show did not focus the description field")

@@ -10,11 +10,12 @@ import (
 
 // EditLabelsModal manages a multi-select modal for editing issue labels.
 type EditLabelsModal struct {
-	app       *App
-	modal     *tview.Flex
-	list      *tview.List
-	titleView *tview.TextView
-	helpView  *tview.TextView
+	app         *App
+	modal       *tview.Flex
+	list        *tview.List
+	titleView   *tview.TextView
+	contextView *tview.TextView
+	helpView    *tview.TextView
 
 	// State
 	issueID         string
@@ -44,6 +45,11 @@ func NewEditLabelsModal(app *App) *EditLabelsModal {
 	elm.titleView.SetTextColor(app.theme.Accent)
 	elm.titleView.SetBackgroundColor(app.theme.ModalBackground())
 
+	// Issue context line under the title.
+	elm.contextView = tview.NewTextView()
+	elm.contextView.SetDynamicColors(true)
+	elm.contextView.SetBackgroundColor(app.theme.ModalBackground())
+
 	// Create help text
 	elm.helpView = tview.NewTextView()
 	elm.helpView.SetText("Space: toggle | Enter: save | Esc: cancel")
@@ -55,6 +61,7 @@ func NewEditLabelsModal(app *App) *EditLabelsModal {
 	modalContent := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(elm.titleView, 1, 0, false).
+		AddItem(elm.contextView, 1, 0, false).
 		AddItem(elm.list, 0, 1, true).
 		AddItem(elm.helpView, 1, 0, false)
 	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
@@ -80,11 +87,13 @@ func NewEditLabelsModal(app *App) *EditLabelsModal {
 	return elm
 }
 
-// Show displays the edit labels modal with available labels and current selections.
-func (elm *EditLabelsModal) Show(issueID string, currentLabelIDs []string, availableLabels []linearapi.IssueLabel, onSave func(issueID string, labelIDs []string)) {
+// Show displays the edit labels modal with available labels and current
+// selections. contextLine names the issue under the title.
+func (elm *EditLabelsModal) Show(issueID string, currentLabelIDs []string, availableLabels []linearapi.IssueLabel, contextLine string, onSave func(issueID string, labelIDs []string)) {
 	elm.issueID = issueID
 	elm.availableLabels = availableLabels
 	elm.onSave = onSave
+	elm.contextView.SetText(contextLine)
 
 	// Initialize selected IDs from current labels
 	elm.selectedIDs = make(map[string]bool)

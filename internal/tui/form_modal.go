@@ -43,6 +43,8 @@ type FormModal struct {
 	rowsBox        *tview.Flex
 	buttonsRow     *tview.Flex
 	hintView       *tview.TextView
+	contextView    *tview.TextView
+	contextText    string
 	rows           []formRow
 	order          []tview.Primitive
 	buttons        []*tview.Button
@@ -90,6 +92,10 @@ func NewFormModal(app *App, title string) *FormModal {
 	fm.hintView.SetBackgroundColor(app.theme.ModalBackground())
 	fm.hintView.SetTextAlign(tview.AlignCenter)
 
+	fm.contextView = tview.NewTextView()
+	fm.contextView.SetDynamicColors(true)
+	fm.contextView.SetBackgroundColor(app.theme.ModalBackground())
+
 	fm.frame = tview.NewFlex().SetDirection(tview.FlexRow)
 	// tview.NewFlex marks its Box dontClear, leaving the layer beneath
 	// visible through every cell the children don't paint. A fresh Box
@@ -125,6 +131,13 @@ func (fm *FormModal) SetTitle(title string) {
 
 // SetHint sets the dim hint line inside the bottom border.
 func (fm *FormModal) SetHint(hint string) { fm.hintView.SetText(hint) }
+
+// SetContext sets the issue line pinned above the fields, so the form names
+// the issue it modifies. An empty string hides the line.
+func (fm *FormModal) SetContext(text string) {
+	fm.contextText = text
+	fm.contextView.SetText(text)
+}
 
 // SetRowLabel retitles a field's caps label (some modals relabel per Show).
 func (fm *FormModal) SetRowLabel(rowIdx int, label string) {
@@ -491,6 +504,9 @@ func (fm *FormModal) chromeHeight() int {
 	if fm.buttonsRow != nil {
 		chrome += 2 // blank spacer + button row
 	}
+	if fm.contextText != "" {
+		chrome += 2 // context line + gap
+	}
 	return chrome
 }
 
@@ -599,6 +615,10 @@ func (fm *FormModal) layout() {
 	fm.applyRowWindow(heights, avail)
 
 	fm.frame.Clear()
+	if fm.contextText != "" {
+		fm.frame.AddItem(fm.contextView, 1, 0, false)
+		fm.frame.AddItem(nil, 1, 0, false)
+	}
 	fm.frame.AddItem(fm.rowsBox, 0, 1, true)
 	if fm.buttonsRow != nil {
 		fm.frame.AddItem(nil, 1, 0, false)

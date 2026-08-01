@@ -27,9 +27,15 @@ func NewTextInputModal(app *App) *TextInputModal {
 
 // Show displays the text input modal.
 func (tm *TextInputModal) Show(title, label, initial string, onSubmit func(string)) {
+	tm.ShowWithContext(title, label, initial, "", onSubmit)
+}
+
+// ShowWithContext also pins an issue context line above the field.
+func (tm *TextInputModal) ShowWithContext(title, label, initial, contextLine string, onSubmit func(string)) {
 	tm.onSubmit = onSubmit
 	tm.fm.SetTitle(title)
 	tm.fm.SetRowLabel(0, label)
+	tm.fm.SetContext(contextLine)
 	tm.input.SetText(initial)
 	tm.fm.Show("text_input")
 }
