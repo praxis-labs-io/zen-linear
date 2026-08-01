@@ -66,15 +66,21 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	pm.helpView.SetText("⏎ edit · a add · d delete · ⇧Tab back to list · ⌃S save · Esc cancel")
 	pm.helpView.SetTextColor(app.theme.SecondaryText)
 	pm.helpView.SetBackgroundColor(app.theme.ModalBackground())
+	pm.helpView.SetTextAlign(tview.AlignCenter)
 
 	body := tview.NewFlex().
 		AddItem(pm.list, 0, 1, true).
 		AddItem(nil, 2, 0, false).
 		AddItem(pm.fm.ContentBody(), 0, 2, false)
 
+	// Standard form footer, spanning both panes: centered buttons, a gap,
+	// then the centered hint.
 	modalContent := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(body, 0, 1, true).
+		AddItem(nil, 1, 0, false).
+		AddItem(pm.fm.ButtonsRow(), 1, 0, false).
+		AddItem(nil, 1, 0, false).
 		AddItem(pm.helpView, 1, 0, false)
 	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
 	modalContent.SetBackgroundColor(app.theme.ModalBackground()).

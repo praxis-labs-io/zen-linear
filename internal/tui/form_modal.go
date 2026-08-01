@@ -295,8 +295,8 @@ func (fm *FormModal) layoutPickers(modalWidth int) {
 	}
 }
 
-// AddCheckbox appends a toggle in the same caps-label-over-framed-field
-// unit as every other control.
+// AddCheckbox appends an inline toggle: one row with the box beside its caps
+// label. A framed unit would give a one-cell control a field-sized shell.
 func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 	theme := fm.app.theme
 
@@ -311,7 +311,33 @@ func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 		Foreground(theme.InverseTextColor()))
 	box.SetBackgroundColor(theme.ModalBackground())
 
-	fm.addFramedRow(label, box, 1, false)
+	labelView := tview.NewTextView()
+	labelView.SetText(strings.ToUpper(label))
+	labelView.SetTextColor(theme.SecondaryText)
+	labelView.SetBackgroundColor(theme.ModalBackground())
+
+	line := tview.NewFlex()
+	line.SetBackgroundColor(theme.ModalBackground())
+	line.AddItem(box, 3, 0, true)
+	line.AddItem(nil, 1, 0, false)
+	line.AddItem(labelView, 0, 1, false)
+
+	// A blank lead-in keeps the single-line unit from crowding the framed
+	// field above it.
+	container := tview.NewFlex().SetDirection(tview.FlexRow)
+	container.SetBackgroundColor(theme.ModalBackground())
+	container.AddItem(nil, 1, 0, false)
+	container.AddItem(line, 1, 0, true)
+
+	fm.pickerRow = nil
+	fm.appendRow(formRow{
+		container:  container,
+		height:     2,
+		minHeight:  2,
+		focusables: []tview.Primitive{box},
+		labelView:  labelView,
+	})
+	fm.registerFocusable(box, len(fm.rows)-1)
 	return box
 }
 
@@ -601,19 +627,19 @@ func (fm *FormModal) Hide(pageName string) {
 // Root returns the fullscreen wrapper for pages.
 func (fm *FormModal) Root() *tview.Flex { return fm.root }
 
-// ContentBody returns the rows-plus-buttons column without the modal shell,
+// ContentBody returns the field rows without the modal shell or buttons,
 // for modals that compose the form beside other panes (prompt templates).
-// The embedding modal owns the border, sizing, and hint line.
+// The embedding modal owns the border, sizing, button row, and hint line.
 func (fm *FormModal) ContentBody() *tview.Flex {
 	body := tview.NewFlex().SetDirection(tview.FlexRow)
 	body.SetBackgroundColor(fm.app.theme.ModalBackground())
 	body.AddItem(fm.rowsBox, 0, 1, true)
-	if fm.buttonsRow != nil {
-		body.AddItem(nil, 1, 0, false)
-		body.AddItem(fm.buttonsRow, 1, 0, false)
-	}
 	return body
 }
+
+// ButtonsRow returns the centered button row for composed modals that place
+// it themselves. Nil until AddButtons is called.
+func (fm *FormModal) ButtonsRow() *tview.Flex { return fm.buttonsRow }
 
 // Focus returns keyboard focus to the form's current field — used when an
 // overlay (e.g. a picker) closes over a stacked form modal.
