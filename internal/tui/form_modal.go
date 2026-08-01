@@ -295,7 +295,8 @@ func (fm *FormModal) layoutPickers(modalWidth int) {
 	}
 }
 
-// AddCheckbox appends a one-row toggle with its caps label beside it.
+// AddCheckbox appends a toggle in the same caps-label-over-framed-field
+// unit as every other control.
 func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 	theme := fm.app.theme
 
@@ -310,30 +311,7 @@ func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 		Foreground(theme.InverseTextColor()))
 	box.SetBackgroundColor(theme.ModalBackground())
 
-	labelView := tview.NewTextView()
-	labelView.SetText(strings.ToUpper(label))
-	labelView.SetTextColor(theme.SecondaryText)
-	labelView.SetBackgroundColor(theme.ModalBackground())
-
-	container := tview.NewFlex()
-	container.SetBackgroundColor(theme.ModalBackground())
-	container.AddItem(box, 3, 0, true)
-	container.AddItem(nil, 2, 0, false)
-	container.AddItem(labelView, 0, 1, false)
-
-	wrapper := tview.NewFlex().SetDirection(tview.FlexRow)
-	wrapper.SetBackgroundColor(theme.ModalBackground())
-	wrapper.AddItem(container, 1, 0, true)
-
-	fm.pickerRow = nil
-	fm.appendRow(formRow{
-		container:  wrapper,
-		height:     1,
-		minHeight:  1,
-		focusables: []tview.Primitive{box},
-		labelView:  labelView,
-	})
-	fm.registerFocusable(box, len(fm.rows)-1)
+	fm.addFramedRow(label, box, 1, false)
 	return box
 }
 
@@ -642,6 +620,14 @@ func (fm *FormModal) ContentBody() *tview.Flex {
 func (fm *FormModal) Focus() {
 	if p := fm.focusedPrimitive(); p != nil {
 		fm.app.app.SetFocus(p)
+	}
+}
+
+// BlurFrames clears every field's focus highlight — for composed modals
+// where focus can leave the form (e.g. the prompt-templates list).
+func (fm *FormModal) BlurFrames() {
+	for _, frame := range fm.frameOf {
+		frame.SetBorderColor(fm.app.theme.Border)
 	}
 }
 
