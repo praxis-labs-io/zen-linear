@@ -30,6 +30,8 @@ func (a *App) tableForSection(section IssuesSection) *tview.Table {
 		return a.otherIssuesTable
 	case IssuesSectionAll:
 		return a.allIssuesTable
+	case IssuesSectionSearch:
+		return a.searchResultsTable
 	}
 	return nil
 }
@@ -37,6 +39,15 @@ func (a *App) tableForSection(section IssuesSection) *tview.Table {
 // jumpToSection makes the given section the visible issues tab and selects a
 // row in it.
 func (a *App) jumpToSection(section IssuesSection, row int) {
+	if section == IssuesSectionSearch {
+		// Entering the Search tab always lands on its input; Down/Enter
+		// reach the results.
+		a.activeIssuesSection = section
+		a.searchInputFocused = true
+		a.updateIssuesColumnLayout()
+		a.updateFocus()
+		return
+	}
 	a.activeIssuesSection = section
 	a.updateIssuesColumnLayout()
 	table := a.tableForSection(a.activeIssuesSection)
@@ -61,6 +72,8 @@ func (a *App) sectionRows(section IssuesSection) []IssueRow {
 		return a.otherIssueRows
 	case IssuesSectionAll:
 		return a.issueRows
+	case IssuesSectionSearch:
+		return a.searchIssueRows
 	}
 	return nil
 }
@@ -69,7 +82,7 @@ func (a *App) sectionRows(section IssuesSection) []IssueRow {
 // direction (+1 forward, -1 backward), skipping empty tabs and keeping each
 // tab's own selection.
 func (a *App) cycleIssuesSection(direction int) {
-	order := []IssuesSection{IssuesSectionMy, IssuesSectionOther, IssuesSectionAll}
+	order := []IssuesSection{IssuesSectionMy, IssuesSectionOther, IssuesSectionAll, IssuesSectionSearch}
 	current := 0
 	for i, section := range order {
 		if section == a.effectiveIssuesSection() {
@@ -80,7 +93,9 @@ func (a *App) cycleIssuesSection(direction int) {
 	for step := 1; step < len(order); step++ {
 		target := order[((current+step*direction)%len(order)+len(order))%len(order)]
 		rows := a.sectionRows(target)
-		if len(rows) == 0 {
+		// The Search tab stays reachable while empty: its body is the input
+		// plus a placeholder, not rows.
+		if len(rows) == 0 && target != IssuesSectionSearch {
 			continue
 		}
 		table := a.tableForSection(target)
@@ -107,6 +122,11 @@ func (a *App) issuesTabsTitle(focused bool) string {
 	segments = append(segments,
 		a.tabSegment(fmt.Sprintf("Other (%d)", len(a.otherIssueRows)), shown == IssuesSectionOther, focused),
 		a.tabSegment(fmt.Sprintf("All (%d)", len(a.issueRows)), shown == IssuesSectionAll, focused))
+	searchLabel := "Search"
+	if len(a.searchIssueRows) > 0 {
+		searchLabel = fmt.Sprintf("Search (%d)", len(a.searchIssueRows))
+	}
+	segments = append(segments, a.tabSegment(searchLabel, shown == IssuesSectionSearch, focused))
 	return prefix + strings.Join(segments, " · ") + " "
 }
 

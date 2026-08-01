@@ -6,11 +6,10 @@ import (
 
 // PaletteController manages the command palette filtering and selection logic.
 type PaletteController struct {
-	commands     []Command
-	query        string
-	cursor       int
-	filtered     []Command
-	isSearchMode bool
+	commands []Command
+	query    string
+	cursor   int
+	filtered []Command
 	// issueContext ranks issue-scoped commands first when the palette was
 	// opened from an issue-focused pane, and last otherwise.
 	issueContext bool
@@ -38,9 +37,7 @@ var issueScopedCommands = map[string]bool{
 // issue-focused pane, reordering results accordingly.
 func (p *PaletteController) SetIssueContext(issueContext bool) {
 	p.issueContext = issueContext
-	if !p.isSearchMode {
-		p.filterCommands()
-	}
+	p.filterCommands()
 }
 
 // rankByContext stable-partitions commands so the contextually relevant scope
@@ -70,9 +67,7 @@ func NewPaletteController(commands []Command) *PaletteController {
 // SetQuery sets the search query and filters commands.
 func (p *PaletteController) SetQuery(q string) {
 	p.query = q
-	if !p.isSearchMode {
-		p.filterCommands()
-	}
+	p.filterCommands()
 	p.cursor = 0
 }
 
@@ -88,9 +83,6 @@ func (p *PaletteController) Filtered() []Command {
 
 // Selected returns the currently selected command and whether one is selected.
 func (p *PaletteController) Selected() (Command, bool) {
-	if p.isSearchMode {
-		return Command{}, false
-	}
 	if len(p.filtered) == 0 || p.cursor < 0 || p.cursor >= len(p.filtered) {
 		return Command{}, false
 	}
@@ -136,23 +128,6 @@ func (p *PaletteController) Reset() {
 	p.query = ""
 	p.cursor = 0
 	p.filtered = p.rankByContext(p.commands)
-	p.isSearchMode = false
-}
-
-// SetSearchMode sets whether the palette is in search mode.
-// In search mode, the query is used for issue search, not command filtering.
-func (p *PaletteController) SetSearchMode(mode bool) {
-	p.isSearchMode = mode
-	if mode {
-		p.filtered = nil
-	} else {
-		p.filtered = p.rankByContext(p.commands)
-	}
-}
-
-// IsSearchMode returns whether the palette is in search mode.
-func (p *PaletteController) IsSearchMode() bool {
-	return p.isSearchMode
 }
 
 // filterCommands filters commands based on the query.

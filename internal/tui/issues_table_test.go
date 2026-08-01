@@ -142,3 +142,29 @@ func TestFormatUpdatedAt(t *testing.T) {
 		t.Errorf("formatUpdatedAt(old year) = %q, want Dec 2023", got)
 	}
 }
+
+func TestBuildFlatSearchRowsPreservesOrder(t *testing.T) {
+	parent := linearapi.Issue{ID: "parent", Identifier: "ABC-1", Title: "Parent", State: "Todo"}
+	child := linearapi.Issue{
+		ID: "child", Identifier: "ABC-2", Title: "Child", State: "Todo",
+		Parent: &linearapi.IssueRef{ID: "parent"},
+	}
+	// Relevance order puts the child first; flat rows must keep it there
+	// instead of re-nesting it under its parent.
+	rows, idToIssue := buildFlatSearchRows([]linearapi.Issue{child, parent})
+
+	if len(rows) != 2 {
+		t.Fatalf("len(rows) = %d, want 2", len(rows))
+	}
+	if rows[0].IssueID != "child" || rows[1].IssueID != "parent" {
+		t.Fatalf("row order = %q, %q; want child, parent", rows[0].IssueID, rows[1].IssueID)
+	}
+	for _, row := range rows {
+		if row.IsHeader || row.Level != 0 || row.HasChildren {
+			t.Fatalf("row %q not flat: %+v", row.IssueID, row)
+		}
+	}
+	if idToIssue["child"] == nil || idToIssue["parent"] == nil {
+		t.Fatal("idToIssue missing entries")
+	}
+}

@@ -207,7 +207,6 @@ func (a *App) applyFiltersAndRefresh(message string) {
 
 func (a *App) clearFilters() {
 	a.richFilters = IssueFilters{}
-	a.searchQuery = ""
 	a.applyFiltersAndRefresh("Cleared filters")
 }
 
@@ -220,7 +219,6 @@ func (a *App) showFilterIssuesPicker() {
 		{ID: "cycle", Label: "Cycle"},
 		{ID: "due", Label: "Due date"},
 		{ID: "estimate", Label: "Estimate"},
-		{ID: "text", Label: "Text search"},
 		{ID: "clear", Label: "Clear filters"},
 	}
 	a.pickerActive = true
@@ -241,8 +239,6 @@ func (a *App) showFilterIssuesPicker() {
 			a.showDueDateFilter()
 		case "estimate":
 			a.showEstimateFilter()
-		case "text":
-			a.showTextFilter()
 		case "clear":
 			a.clearFilters()
 		}
@@ -363,13 +359,6 @@ func (a *App) showEstimateFilter() {
 		}
 		a.richFilters.Estimate = linearapi.NumberFilter{Eq: &estimate}
 		a.applyFiltersAndRefresh("Applied estimate filter")
-	})
-}
-
-func (a *App) showTextFilter() {
-	a.textInputModal.Show("Filter Text", "Search: ", a.searchQuery, func(value string) {
-		a.searchQuery = strings.TrimSpace(value)
-		a.applyFiltersAndRefresh("Applied text filter")
 	})
 }
 
