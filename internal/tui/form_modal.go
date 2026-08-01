@@ -27,7 +27,6 @@ type formRow struct {
 	minHeight  int
 	flexible   bool
 	focusables []tview.Primitive
-	frame      *tview.Flex
 	labelView  *tview.TextView
 }
 
@@ -47,6 +46,7 @@ type FormModal struct {
 	rows       []formRow
 	order      []tview.Primitive
 	buttons    []*tview.Button
+	frameOf    map[tview.Primitive]*tview.Flex
 	pickerRow  *pickerRowState
 	focusIdx   int
 	scrollTop  int
@@ -63,7 +63,7 @@ type pickerRowState struct {
 
 // NewFormModal creates an empty form modal shell with the given border title.
 func NewFormModal(app *App, title string) *FormModal {
-	fm := &FormModal{app: app, title: title}
+	fm := &FormModal{app: app, title: title, frameOf: make(map[tview.Primitive]*tview.Flex)}
 
 	fm.rowsBox = tview.NewFlex().SetDirection(tview.FlexRow)
 	fm.rowsBox.SetBackgroundColor(app.theme.ModalBackground())
@@ -83,8 +83,10 @@ func NewFormModal(app *App, title string) *FormModal {
 		SetBorderColor(app.theme.BorderFocus).
 		SetTitle(" " + title + " ").
 		SetTitleColor(app.theme.Foreground)
+	// Vertical space comes from the row layout itself; only the horizontal
+	// padding is kept so fields don't touch the border.
 	padding := app.density.ModalPadding
-	fm.frame.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	fm.frame.SetBorderPadding(0, 0, padding.Left, padding.Right)
 	fm.frame.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		return fm.HandleKey(event)
 	})
@@ -157,12 +159,15 @@ func (fm *FormModal) AddPicker(label string, options []string, selected int, onC
 		SetFieldTextColor(theme.Foreground)
 	// The closed-but-focused field has its own style, defaulting to the
 	// bright tview palette that swallows the text on themed backgrounds.
+	// The frame border carries the focus cue, like the text fields.
 	dd.SetFocusedStyle(tcell.StyleDefault.
-		Background(theme.InputBg).
+		Background(theme.ModalBackground()).
 		Foreground(theme.Foreground))
 	dd.SetFieldWidth(0)
+	// The open menu has no border access, so a contrasting fill sets it
+	// apart from the panel instead.
 	dd.SetListStyles(
-		tcell.StyleDefault.Background(theme.ModalBackground()).Foreground(theme.Foreground),
+		tcell.StyleDefault.Background(theme.InputBg).Foreground(theme.Foreground),
 		tcell.StyleDefault.Background(theme.Accent).Foreground(theme.InverseTextColor()),
 	)
 	dd.SetBackgroundColor(theme.ModalBackground())
@@ -175,6 +180,13 @@ func (fm *FormModal) AddPicker(label string, options []string, selected int, onC
 	labelView.SetTextColor(theme.SecondaryText)
 	labelView.SetBackgroundColor(theme.ModalBackground())
 
+	frame := tview.NewFlex().SetDirection(tview.FlexRow)
+	frame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
+	frame.AddItem(dd, 0, 1, true)
+	frame.SetBackgroundColor(theme.ModalBackground()).
+		SetBorder(true).
+		SetBorderColor(theme.Border)
+
 	if fm.pickerRow == nil {
 		labels := tview.NewFlex()
 		labels.SetBackgroundColor(theme.ModalBackground())
@@ -184,12 +196,12 @@ func (fm *FormModal) AddPicker(label string, options []string, selected int, onC
 		container := tview.NewFlex().SetDirection(tview.FlexRow)
 		container.SetBackgroundColor(theme.ModalBackground())
 		container.AddItem(labels, 1, 0, false)
-		container.AddItem(values, 1, 0, true)
+		container.AddItem(values, 3, 0, true)
 
 		fm.appendRow(formRow{
 			container: container,
-			height:    2,
-			minHeight: 2,
+			height:    4,
+			minHeight: 4,
 		})
 		fm.pickerRow = &pickerRowState{labels: labels, values: values, rowIdx: len(fm.rows) - 1}
 	} else {
@@ -198,9 +210,10 @@ func (fm *FormModal) AddPicker(label string, options []string, selected int, onC
 	}
 
 	fm.pickerRow.labels.AddItem(labelView, 0, 1, false)
-	fm.pickerRow.values.AddItem(dd, 0, 1, true)
+	fm.pickerRow.values.AddItem(frame, 0, 1, true)
 	rowIdx := fm.pickerRow.rowIdx
 	fm.rows[rowIdx].focusables = append(fm.rows[rowIdx].focusables, dd)
+	fm.frameOf[dd] = frame
 	fm.registerFocusable(dd, rowIdx)
 	return dd
 }
@@ -295,13 +308,13 @@ func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRo
 		minHeight:  1 + formTextAreaMinRows + 2,
 		flexible:   flexible,
 		focusables: []tview.Primitive{editor},
-		frame:      editorFrame,
 		labelView:  labelView,
 	}
 	if !flexible {
 		row.minHeight = row.height
 	}
 	fm.appendRow(row)
+	fm.frameOf[editor] = editorFrame
 	fm.registerFocusable(editor, len(fm.rows)-1)
 }
 
@@ -328,21 +341,11 @@ func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
 			break
 		}
 	}
-	for _, row := range fm.rows {
-		if row.frame == nil {
-			continue
-		}
-		focused := false
-		for _, f := range row.focusables {
-			if f == p {
-				focused = true
-				break
-			}
-		}
-		if focused {
-			row.frame.SetBorderColor(fm.app.theme.BorderFocus)
+	for widget, frame := range fm.frameOf {
+		if widget == p {
+			frame.SetBorderColor(fm.app.theme.BorderFocus)
 		} else {
-			row.frame.SetBorderColor(fm.app.theme.Border)
+			frame.SetBorderColor(fm.app.theme.Border)
 		}
 	}
 	if rowIdx >= 0 {
@@ -364,8 +367,8 @@ func (fm *FormModal) AddButtons(buttons ...FormButton) {
 		}
 		btn := tview.NewButton(spec.Label)
 		btn.SetStyle(tcell.StyleDefault.
-			Foreground(theme.SecondaryText).
-			Background(theme.ModalBackground()))
+			Foreground(theme.Foreground).
+			Background(theme.InputBg))
 		btn.SetActivatedStyle(tcell.StyleDefault.
 			Foreground(theme.InverseTextColor()).
 			Background(theme.Accent))
@@ -387,11 +390,10 @@ func (fm *FormModal) effectiveMaxWidth() int {
 	return formModalDefaultMaxWidth
 }
 
-// chromeHeight counts the non-row lines inside the modal: border, padding,
-// the blank-plus-buttons block when present, and the always-reserved hint.
+// chromeHeight counts the non-row lines inside the modal: border, the
+// blank-plus-buttons block when present, and the gap plus hint line.
 func (fm *FormModal) chromeHeight() int {
-	padding := fm.app.density.ModalPadding
-	chrome := 2 + padding.Top + padding.Bottom + 1 // border + padding + hint
+	chrome := 2 + 1 + 1 // border + gap + hint
 	if fm.buttonsRow != nil {
 		chrome += 2 // blank spacer + button row
 	}
@@ -507,6 +509,7 @@ func (fm *FormModal) layout() {
 		fm.frame.AddItem(nil, 1, 0, false)
 		fm.frame.AddItem(fm.buttonsRow, 1, 0, false)
 	}
+	fm.frame.AddItem(nil, 1, 0, false)
 	fm.frame.AddItem(fm.hintView, 1, 0, false)
 
 	column := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -610,16 +613,27 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		fm.focusStep(-1)
 		return nil
 	case tcell.KeyDown:
-		// Textareas keep vertical arrows for cursor movement.
-		if _, ok := fm.focusedPrimitive().(*tview.TextArea); !ok {
-			fm.focusStep(1)
-			return nil
+		// Textareas keep vertical arrows for cursor movement until the
+		// cursor sits on the boundary line; then the arrow leaves the field.
+		if ta, ok := fm.focusedPrimitive().(*tview.TextArea); ok {
+			if textAreaCursorOnLastLine(ta) {
+				fm.focusStep(1)
+				return nil
+			}
+			return event
 		}
+		fm.focusStep(1)
+		return nil
 	case tcell.KeyUp:
-		if _, ok := fm.focusedPrimitive().(*tview.TextArea); !ok {
-			fm.focusStep(-1)
-			return nil
+		if ta, ok := fm.focusedPrimitive().(*tview.TextArea); ok {
+			if textAreaCursorOnFirstLine(ta) {
+				fm.focusStep(-1)
+				return nil
+			}
+			return event
 		}
+		fm.focusStep(-1)
+		return nil
 	case tcell.KeyLeft:
 		if _, ok := fm.focusedPrimitive().(*tview.Button); ok {
 			fm.focusStep(-1)
@@ -643,6 +657,25 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 	return event
+}
+
+// textAreaCursorRow returns the line the cursor selection starts on.
+func textAreaCursorRow(ta *tview.TextArea) int {
+	fromRow, fromColumn, toRow, toColumn := ta.GetCursor()
+	_ = fromColumn
+	_ = toRow
+	_ = toColumn
+	return fromRow
+}
+
+// textAreaCursorOnFirstLine reports whether the cursor sits on line one.
+func textAreaCursorOnFirstLine(ta *tview.TextArea) bool {
+	return textAreaCursorRow(ta) == 0
+}
+
+// textAreaCursorOnLastLine reports whether the cursor sits on the last line.
+func textAreaCursorOnLastLine(ta *tview.TextArea) bool {
+	return textAreaCursorRow(ta) >= strings.Count(ta.GetText(), "\n")
 }
 
 // focusedPrimitive returns the widget the tab order considers focused.

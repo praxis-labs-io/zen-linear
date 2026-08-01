@@ -81,8 +81,8 @@ func TestFormModalConsecutivePickersShareARow(t *testing.T) {
 	if len(fm.rows) != 2 {
 		t.Fatalf("rows = %d, want 2 (input row + one shared picker row)", len(fm.rows))
 	}
-	if h := fm.rows[1].height; h != 2 {
-		t.Fatalf("picker row height = %d, want 2", h)
+	if h := fm.rows[1].height; h != 4 {
+		t.Fatalf("picker row height = %d, want 4 (label + framed value)", h)
 	}
 	for i, dd := range []tview.Primitive{a, c, p} {
 		if fm.order[1+i] != dd {
@@ -126,8 +126,7 @@ func TestFormModalHeightFitsContentAndClampsToScreen(t *testing.T) {
 	fm.AddTextArea("Body", "", 10) // 13 rows, flexible (min 6)
 	fm.AddButtons(FormButton{Label: "OK"})
 
-	pad := app.density.ModalPadding
-	chrome := 1 + 1 + 1 + 2 + pad.Top + pad.Bottom // blank + buttons + hint + border + padding
+	chrome := 1 + 1 + 1 + 1 + 2 // blank + buttons + gap + hint + border
 	if got, want := fm.contentHeight(100), 4+13+chrome; got != want {
 		t.Fatalf("unclamped height = %d, want %d", got, want)
 	}
