@@ -18,6 +18,10 @@ const (
 	IconChildPrefix = "└─"
 )
 
+// priorityLabels names each Linear priority. The index is the priority value,
+// so pickers can map a selection straight onto the API field.
+var priorityLabels = []string{"No priority", "Urgent", "High", "Normal", "Low"}
+
 // formatPriority renders a priority as an arrow glyph — up for high, equals
 // for normal, down for low, triangle for urgent — all single-cell text
 // presentation so rows stay aligned (no emoji-width variance).

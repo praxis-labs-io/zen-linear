@@ -48,17 +48,6 @@ func statusRank(state string) int {
 	}
 }
 
-// sortIssuesByStatus sorts issues by workflow state category, then state name.
-func sortIssuesByStatus(issues []linearapi.Issue) {
-	sort.SliceStable(issues, func(i, j int) bool {
-		ri, rj := statusRank(issues[i].State), statusRank(issues[j].State)
-		if ri != rj {
-			return ri < rj
-		}
-		return issues[i].State < issues[j].State
-	})
-}
-
 // BuildIssueRows constructs a flattened list of rows for table rendering.
 // It builds a hierarchical view where parent issues can be expanded/collapsed.
 // Returns the rows and a map for quick issue lookup by ID.

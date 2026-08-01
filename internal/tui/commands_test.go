@@ -1,8 +1,12 @@
 package tui
 
 import (
+	"context"
+	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
 
@@ -18,6 +22,68 @@ func TestFormatShortcutPreservesCase(t *testing.T) {
 	if got := FormatShortcut(0); got != "" {
 		t.Errorf("FormatShortcut(0) = %q, want empty", got)
 	}
+}
+
+// TestSortByPickerAppliesWholeOrdering drives the sort picker: one row is one
+// complete ordering, and the status bar names what is in effect.
+func TestSortByPickerAppliesWholeOrdering(t *testing.T) {
+	for _, tc := range []struct {
+		label      string
+		wantFields []SortField
+		wantConfig []string
+		wantStatus string
+	}{
+		{label: "Status, then priority", wantFields: []SortField{SortByStatus, SortByPriority}, wantConfig: []string{"status", "priority"}, wantStatus: "Sort: status → priority"},
+		{label: "Priority", wantFields: []SortField{SortByPriority}, wantConfig: []string{"priority"}, wantStatus: "Sort: priority"},
+	} {
+		t.Run(tc.label, func(t *testing.T) {
+			app := newUXTestApp()
+			refreshDone := installRefreshCompletionHook(app)
+			app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+				return linearapi.IssuePage{}, nil
+			}
+
+			app.showSortByPicker()
+			selectPickerItem(t, app, tc.label)
+
+			if !reflect.DeepEqual(app.sortFields, tc.wantFields) {
+				t.Fatalf("sort chain = %v, want %v", app.sortFields, tc.wantFields)
+			}
+			if !app.sortOverridden {
+				t.Fatal("sortOverridden = false, want the manual choice to outrank the view")
+			}
+			// Without this an in-app settings save rewrites the file from
+			// config and silently reverts the pick.
+			if !reflect.DeepEqual(app.config.SortBy, tc.wantConfig) {
+				t.Fatalf("config.SortBy = %v, want %v", app.config.SortBy, tc.wantConfig)
+			}
+			waitForRefreshCompletion(t, refreshDone)
+
+			app.updateStatusBar()
+			if got := app.statusBar.GetText(true); !strings.Contains(got, tc.wantStatus) {
+				t.Fatalf("status bar = %q, want it to name %q", got, tc.wantStatus)
+			}
+		})
+	}
+}
+
+// selectPickerItem moves to a row and presses Enter, the way the picker is
+// actually driven. Going through HandleKey keeps the list index, the item
+// slice, and the dismissal in the test's path.
+func selectPickerItem(t *testing.T, app *App, label string) {
+	t.Helper()
+	for index, item := range app.pickerModal.items {
+		if item.Label != label {
+			continue
+		}
+		app.pickerModal.list.SetCurrentItem(index)
+		app.pickerModal.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+		if app.pages.HasPage("picker") {
+			t.Fatalf("picker still on the page stack after selecting %q", label)
+		}
+		return
+	}
+	t.Fatalf("picker has no %q item: %#v", label, app.pickerModal.items)
 }
 
 // TestEditDescriptionCommandFocusesModalNotNav reproduces the palette flow:

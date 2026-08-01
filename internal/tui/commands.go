@@ -326,24 +326,6 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:       "sort_updated",
-			Title:    "Sort by updated",
-			Keywords: []string{"sort", "updated", "recent"},
-			// No shortcut - ⌘+1/2/3 conflicts with terminal tab switching
-			Run: func(a *App) {
-				a.setSortField(SortByUpdatedAt)
-			},
-		},
-		{
-			ID:       "sort_created",
-			Title:    "Sort by created",
-			Keywords: []string{"sort", "created", "new"},
-			// No shortcut - ⌘+1/2/3 conflicts with terminal tab switching
-			Run: func(a *App) {
-				a.setSortField(SortByCreatedAt)
-			},
-		},
-		{
 			ID:       "toggle_expand_all",
 			Title:    "Toggle expand/collapse all sub-issues",
 			Keywords: []string{"toggle", "expand", "collapse", "all", "sub-issues"},
@@ -361,11 +343,11 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:       "sort_status",
-			Title:    "Sort by status",
-			Keywords: []string{"sort", "status", "state"},
+			ID:       "sort_by",
+			Title:    "Sort issues by…",
+			Keywords: []string{"sort", "order", "status", "priority", "updated", "created"},
 			Run: func(a *App) {
-				a.setSortField(SortByStatus)
+				a.showSortByPicker()
 			},
 		},
 		{
@@ -382,15 +364,6 @@ func DefaultCommands(app *App) []Command {
 			Keywords: []string{"subgroup", "group", "grouping", "nested"},
 			Run: func(a *App) {
 				a.showSubgroupByPicker()
-			},
-		},
-		{
-			ID:       "sort_priority",
-			Title:    "Sort by priority",
-			Keywords: []string{"sort", "priority", "urgent"},
-			// No shortcut - ⌘+1/2/3 conflicts with terminal tab switching
-			Run: func(a *App) {
-				a.setSortField(SortByPriority)
 			},
 		},
 		{
@@ -450,6 +423,14 @@ func DefaultCommands(app *App) []Command {
 			Keywords: []string{"due", "date", "deadline", "clear", "remove"},
 			Run: func(a *App) {
 				a.clearDueDateForSelectedIssue()
+			},
+		},
+		{
+			ID:       "set_priority",
+			Title:    "Set priority",
+			Keywords: []string{"priority", "urgent", "high", "normal", "low", "set"},
+			Run: func(a *App) {
+				a.showSetPriorityPicker()
 			},
 		},
 		{

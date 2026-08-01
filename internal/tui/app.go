@@ -221,10 +221,13 @@ type App struct {
 	expandedState  map[string]bool             // Expanded state for parent issues (shared across sections)
 
 	// Filter/sort state
-	richFilters     IssueFilters
-	sortField       SortField
-	collapsedGroups map[string]bool
-	statusMessage   string
+	richFilters IssueFilters
+	sortFields  []SortField
+	// configuredSortFields is the chain sort_by asked for at startup, kept so
+	// the picker can offer it back after a session override.
+	configuredSortFields []SortField
+	collapsedGroups      map[string]bool
+	statusMessage        string
 
 	// Display settings of the active custom view, overriding config until
 	// the user picks another list. The overridden flags keep in-session
@@ -322,7 +325,8 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		density:              density,
 		pages:                tview.NewPages(),
 		focusedPane:          FocusNavigation,
-		sortField:            SortByUpdatedAt,
+		sortFields:           parseSortFields(cfg.SortBy),
+		configuredSortFields: parseSortFields(cfg.SortBy),
 		expandedState:        make(map[string]bool),
 		navNodeOriginalText:  make(map[*tview.TreeNode]string),
 		idToIssue:            make(map[string]*linearapi.Issue),
@@ -1717,12 +1721,15 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 	}
 
 	allowFocus := allowFocusChange
+	// Snapshot the chain here: setSortFields reassigns it on the UI thread
+	// while this goroutine runs.
+	orderBy := string(a.sortFields[0])
 	go func() {
 		ctx := context.Background()
 
 		params := linearapi.FetchIssuesParams{
 			First:   a.config.PageSize,
-			OrderBy: string(a.sortField),
+			OrderBy: orderBy,
 		}
 		a.applyRichFiltersToParams(&params)
 
@@ -2034,12 +2041,14 @@ func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
 		existing[issue.ID] = true
 	}
 
-	a.sortIssuesLocally()
-
+	// Read the selection before sorting: selectedIssue can point into the
+	// a.issues backing array, which the in-place sort reorders under it.
 	targetIssueID := ""
 	if a.selectedIssue != nil {
 		targetIssueID = a.selectedIssue.ID
 	}
+
+	a.sortIssuesLocally()
 	a.issuesMu.Unlock()
 
 	selectedIssue := a.rebuildIssuesTables(targetIssueID)
@@ -2054,15 +2063,11 @@ func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
 	a.updateStatusBar()
 }
 
-// sortIssuesLocally applies sort orders the Linear API cannot provide.
-// Callers must hold issuesMu.
+// sortIssuesLocally applies the sort chain. The API can only order by one
+// timestamp, so every field past the first, and priority and status at any
+// position, are resolved here. Callers must hold issuesMu.
 func (a *App) sortIssuesLocally() {
-	switch a.effectiveSortField() {
-	case SortByPriority:
-		sortIssuesByPriority(a.issues)
-	case SortByStatus:
-		sortIssuesByStatus(a.issues)
-	}
+	sortIssuesByFields(a.issues, a.effectiveSortFields())
 }
 
 // issueContextLine renders "ID · Title" for issue-scoped modals, so every
@@ -2155,6 +2160,16 @@ func (a *App) regroupIssues(message string) {
 	a.flashStatus(message)
 }
 
+// showSortByPicker selects the list ordering. Every row is a whole ordering,
+// so one keystroke settles it.
+func (a *App) showSortByPicker() {
+	a.pickerActive = true
+	a.pickerModal.Show("Sort Issues By", sortOrderingPickerItems(a.configuredSortFields), func(item PickerItem) {
+		a.pickerActive = false
+		a.setSortFields(parseSortFields(strings.Split(item.ID, ",")))
+	})
+}
+
 // groupDimensionPickerItems lists the grouping dimensions for the pickers.
 func groupDimensionPickerItems() []PickerItem {
 	return []PickerItem{
@@ -2210,21 +2225,6 @@ func (a *App) showSubgroupByPicker() {
 		} else {
 			a.regroupIssues("Subgrouped by " + item.Label)
 		}
-	})
-}
-
-// sortIssuesByPriority sorts issues by priority using Linear's priority semantics.
-func sortIssuesByPriority(issues []linearapi.Issue) {
-	sort.SliceStable(issues, func(i, j int) bool {
-		pi, pj := issues[i].Priority, issues[j].Priority
-		// Map 0 (no priority) to a high value so it sorts last.
-		if pi == 0 {
-			pi = 5
-		}
-		if pj == 0 {
-			pj = 5
-		}
-		return pi < pj
 	})
 }
 
@@ -2389,12 +2389,26 @@ func (a *App) preloadTeamMetadata(teamID string) {
 	})
 }
 
-// setSortField sets the sort field and refreshes issues. A manual sort
-// choice outranks the active view's ordering for the session.
-func (a *App) setSortField(field SortField) {
-	logger.Debug("tui.app: setting sort field field=%s", field)
-	a.sortField = field
+// setSortFields sets the sort chain and refreshes issues. A manual sort
+// choice outranks the active view's ordering for the session, and follows the
+// grouping pickers in updating the in-memory config so a later settings save
+// records the choice instead of reverting it.
+func (a *App) setSortFields(fields []SortField) {
+	if len(fields) == 0 {
+		return
+	}
+	logger.Debug("tui.app: setting sort chain fields=%s", sortChainLabel(fields))
+	a.sortFields = fields
 	a.sortOverridden = true
+	a.config.SortBy = sortConfigNames(fields)
+
+	// Reorder what is already loaded before the refresh, so the list matches
+	// the status bar even when the fetch fails.
+	a.issuesMu.Lock()
+	a.sortIssuesLocally()
+	a.issuesMu.Unlock()
+	a.regroupIssues("")
+
 	// Run in goroutine to avoid deadlock when called from tview callbacks
 	go a.refreshIssues()
 }
@@ -2451,6 +2465,8 @@ func (a *App) updateStatusBar() {
 
 	sep := fmt.Sprintf("%s | [-]", a.themeTags.Border)
 
+	sortText := fmt.Sprintf("%sSort: %s[-]", a.themeTags.SecondaryText, sortChainLabel(a.effectiveSortFields()))
+
 	parts := []string{helpText}
 	if navText != "" {
 		parts = append(parts, navText)
@@ -2458,6 +2474,7 @@ func (a *App) updateStatusBar() {
 	if filterText != "" {
 		parts = append(parts, filterText)
 	}
+	parts = append(parts, sortText)
 	if a.statusMessage != "" {
 		parts = append(parts, fmt.Sprintf("%s%s[-]", a.themeTags.Accent, a.statusMessage))
 	}

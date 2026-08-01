@@ -246,6 +246,20 @@ func TestConfigFromSettingsValidation(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid sort_by field",
+			mutate: func(settings Settings) Settings {
+				settings.SortBy = []string{"status", "labels"}
+				return settings
+			},
+		},
+		{
+			name: "duplicate sort_by field",
+			mutate: func(settings Settings) Settings {
+				settings.SortBy = []string{"status", "status"}
+				return settings
+			},
+		},
+		{
 			name: "invalid agent sandbox",
 			mutate: func(settings Settings) Settings {
 				settings.AgentSandbox = "maybe"
@@ -451,6 +465,63 @@ func TestSettingsFromConfigCarriesDefaultNavigation(t *testing.T) {
 	}
 	if settings.DefaultProject != "Website" {
 		t.Errorf("DefaultProject = %q, want %q", settings.DefaultProject, "Website")
+	}
+}
+
+// TestSortByRoundTrip verifies the sort chain survives load, config, and the
+// trip back to settings.
+func TestSortByRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "config.json")
+
+	data := []byte(`{"sort_by":["status","priority"]}`)
+	if err := os.WriteFile(settingsPath, data, 0644); err != nil {
+		t.Fatalf("write settings file: %v", err)
+	}
+
+	settings, err := LoadSettings(settingsPath)
+	if err != nil {
+		t.Fatalf("LoadSettings() error: %v", err)
+	}
+
+	expected := DefaultSettings()
+	expected.SortBy = []string{"status", "priority"}
+	assertSettingsEqual(t, settings, expected)
+
+	cfg, err := ConfigFromSettings("test-key", settings)
+	if err != nil {
+		t.Fatalf("ConfigFromSettings() error: %v", err)
+	}
+	if !reflect.DeepEqual(cfg.SortBy, []string{"status", "priority"}) {
+		t.Errorf("SortBy = %v, want [status priority]", cfg.SortBy)
+	}
+	if !reflect.DeepEqual(SettingsFromConfig(cfg).SortBy, cfg.SortBy) {
+		t.Errorf("SettingsFromConfig dropped sort_by: %v", SettingsFromConfig(cfg).SortBy)
+	}
+}
+
+// TestValidateSortByMatchesParserSpellings verifies the validator accepts
+// every spelling the TUI parser handles. A stricter validator would abort
+// startup on a config the app is written to understand.
+func TestValidateSortByMatchesParserSpellings(t *testing.T) {
+	for _, fields := range [][]string{
+		{"status", "priority"},
+		{"createdAt"},
+		{"updatedAt", "priority"},
+		{"Status", " priority "},
+	} {
+		if err := validateSortBy(fields, "sort_by"); err != nil {
+			t.Errorf("validateSortBy(%v) = %v, want accepted", fields, err)
+		}
+	}
+
+	for _, fields := range [][]string{
+		{"labels"},
+		{"updated", "updatedAt"},
+	} {
+		if err := validateSortBy(fields, "sort_by"); err == nil {
+			t.Errorf("validateSortBy(%v) = nil, want rejected", fields)
+		}
 	}
 }
 

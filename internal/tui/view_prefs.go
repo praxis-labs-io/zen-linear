@@ -107,11 +107,12 @@ func (a *App) effectiveSubgroupBy() string {
 	return a.config.SubgroupBy
 }
 
-// effectiveSortField returns the sort in effect: the active view's, unless
-// the user overrode sorting this session.
-func (a *App) effectiveSortField() SortField {
+// effectiveSortFields returns the sort chain in effect: the active view's,
+// unless the user overrode sorting this session. A view carries a single
+// ordering, so it yields a one-field chain.
+func (a *App) effectiveSortFields() []SortField {
 	if !a.sortOverridden && a.viewPrefs != nil && a.viewPrefs.hasSort {
-		return a.viewPrefs.sortField
+		return []SortField{a.viewPrefs.sortField}
 	}
-	return a.sortField
+	return a.sortFields
 }

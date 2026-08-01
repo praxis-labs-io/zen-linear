@@ -139,8 +139,8 @@ func TestRefreshAppliesCustomViewPreferences(t *testing.T) {
 	if app.effectiveGroupBy() != GroupByStatus || app.effectiveSubgroupBy() != GroupByPriority {
 		t.Fatalf("effective grouping = %q/%q, want status/priority", app.effectiveGroupBy(), app.effectiveSubgroupBy())
 	}
-	if app.effectiveSortField() != SortByPriority {
-		t.Fatalf("effective sort = %q, want priority", app.effectiveSortField())
+	if chain := app.effectiveSortFields(); len(chain) != 1 || chain[0] != SortByPriority {
+		t.Fatalf("effective sort chain = %v, want priority alone", app.effectiveSortFields())
 	}
 	if len(app.issueRows) == 0 || !app.issueRows[0].IsHeader {
 		t.Fatalf("issueRows[0] = %+v, want a group header from the view's grouping", app.issueRows)
