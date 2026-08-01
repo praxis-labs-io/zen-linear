@@ -345,7 +345,7 @@ func (sm *SettingsModal) setAgentModelOptionsForProvider(provider string) {
 	labels, values := agentModelOptionsForProvider(provider)
 	sm.agentModelOptions = labels
 	sm.agentModelValues = values
-	sm.agentModelField.SetOptions(sm.agentModelOptions, nil)
+	sm.fm.SetPickerOptions(sm.agentModelField, sm.agentModelOptions, nil)
 	if currentValue != "" {
 		sm.setAgentModelSelection(currentValue)
 		return
@@ -359,7 +359,7 @@ func (sm *SettingsModal) setAgentProviderOptions(options []string) {
 	if sm.agentProviderField == nil {
 		return
 	}
-	sm.agentProviderField.SetOptions(sm.agentProviderOptions, func(text string, index int) {
+	sm.fm.SetPickerOptions(sm.agentProviderField, sm.agentProviderOptions, func(text string, index int) {
 		_ = index
 		sm.setAgentModelOptionsForProvider(text)
 	})

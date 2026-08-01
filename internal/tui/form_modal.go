@@ -47,6 +47,7 @@ type FormModal struct {
 	order      []tview.Primitive
 	buttons    []*tview.Button
 	frameOf    map[tview.Primitive]*tview.Flex
+	pickerMeta map[*tview.DropDown]*pickerState
 	pickerRow  *pickerRowState
 	focusIdx   int
 	scrollTop  int
@@ -59,11 +60,25 @@ type pickerRowState struct {
 	labels *tview.Flex
 	values *tview.Flex
 	rowIdx int
+	dds    []*tview.DropDown
+}
+
+// pickerState remembers a dropdown's options and layout width so the field
+// and its menu can be sized to the frame (tview sizes both to the longest
+// option by default).
+type pickerState struct {
+	options    []string
+	fieldWidth int
 }
 
 // NewFormModal creates an empty form modal shell with the given border title.
 func NewFormModal(app *App, title string) *FormModal {
-	fm := &FormModal{app: app, title: title, frameOf: make(map[tview.Primitive]*tview.Flex)}
+	fm := &FormModal{
+		app:        app,
+		title:      title,
+		frameOf:    make(map[tview.Primitive]*tview.Flex),
+		pickerMeta: make(map[*tview.DropDown]*pickerState),
+	}
 
 	fm.rowsBox = tview.NewFlex().SetDirection(tview.FlexRow)
 	fm.rowsBox.SetBackgroundColor(app.theme.ModalBackground())
@@ -211,11 +226,73 @@ func (fm *FormModal) AddPicker(label string, options []string, selected int, onC
 
 	fm.pickerRow.labels.AddItem(labelView, 0, 1, false)
 	fm.pickerRow.values.AddItem(frame, 0, 1, true)
+	fm.pickerRow.dds = append(fm.pickerRow.dds, dd)
 	rowIdx := fm.pickerRow.rowIdx
 	fm.rows[rowIdx].focusables = append(fm.rows[rowIdx].focusables, dd)
 	fm.frameOf[dd] = frame
+	fm.pickerMeta[dd] = &pickerState{options: append([]string(nil), options...)}
 	fm.registerFocusable(dd, rowIdx)
 	return dd
+}
+
+// SetPickerOptions replaces a picker's options. Modals must use this instead
+// of DropDown.SetOptions so the field and menu keep filling the frame.
+func (fm *FormModal) SetPickerOptions(dd *tview.DropDown, options []string, onChange func(text string, index int)) {
+	dd.SetOptions(options, onChange)
+	if meta, ok := fm.pickerMeta[dd]; ok {
+		meta.options = append([]string(nil), options...)
+		fm.applyPickerWidth(dd, meta)
+	}
+}
+
+// applyPickerWidth sizes the closed field to the frame and pads the menu
+// rows out to the same width (tview offers no direct menu-width control).
+func (fm *FormModal) applyPickerWidth(dd *tview.DropDown, meta *pickerState) {
+	if meta.fieldWidth <= 0 {
+		return
+	}
+	dd.SetFieldWidth(meta.fieldWidth)
+	longest := 0
+	for _, option := range meta.options {
+		if w := len(option); w > longest {
+			longest = w
+		}
+	}
+	pad := meta.fieldWidth - longest
+	if pad < 0 {
+		pad = 0
+	}
+	dd.SetTextOptions("", strings.Repeat(" ", pad), "", "", "")
+}
+
+// layoutPickers computes each picker's frame-interior width for the current
+// modal width and applies it. Called from layout().
+func (fm *FormModal) layoutPickers(modalWidth int) {
+	padding := fm.app.density.ModalPadding
+	rowInner := modalWidth - 2 - padding.Left - padding.Right
+	for _, row := range fm.rows {
+		var dds []*tview.DropDown
+		for _, focusable := range row.focusables {
+			if dd, ok := focusable.(*tview.DropDown); ok {
+				dds = append(dds, dd)
+			}
+		}
+		if len(dds) == 0 {
+			continue
+		}
+		// Columns split the row evenly with 2-cell gaps; each frame spends
+		// 2 more cells on its border.
+		colWidth := (rowInner-2*(len(dds)-1))/len(dds) - 2
+		if colWidth < 1 {
+			colWidth = 1
+		}
+		for _, dd := range dds {
+			if meta, ok := fm.pickerMeta[dd]; ok {
+				meta.fieldWidth = colWidth
+				fm.applyPickerWidth(dd, meta)
+			}
+		}
+	}
 }
 
 // AddCheckbox appends a one-row toggle with its caps label beside it.
@@ -494,6 +571,7 @@ func (fm *FormModal) layout() {
 		width = limit
 	}
 	height := fm.contentHeight(screenH)
+	fm.layoutPickers(width)
 
 	heights := fm.rowHeights(screenH)
 	rowsTotal := 0
@@ -635,12 +713,16 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		fm.focusStep(-1)
 		return nil
 	case tcell.KeyLeft:
-		if _, ok := fm.focusedPrimitive().(*tview.Button); ok {
+		// Buttons and closed pickers navigate sideways; text fields keep
+		// horizontal arrows for the cursor.
+		switch fm.focusedPrimitive().(type) {
+		case *tview.Button, *tview.DropDown:
 			fm.focusStep(-1)
 			return nil
 		}
 	case tcell.KeyRight:
-		if _, ok := fm.focusedPrimitive().(*tview.Button); ok {
+		switch fm.focusedPrimitive().(type) {
+		case *tview.Button, *tview.DropDown:
 			fm.focusStep(1)
 			return nil
 		}

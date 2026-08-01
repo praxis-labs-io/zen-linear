@@ -132,8 +132,8 @@ func (cm *CreateIssueModal) ShowWithOptions(options CreateIssueModalOptions, onC
 	cm.priorityField.SetCurrentOption(3)
 
 	// Show modal first with loading state for async fields.
-	cm.assigneeField.SetOptions([]string{"Loading..."}, nil)
-	cm.cycleField.SetOptions([]string{"Loading..."}, nil)
+	cm.fm.SetPickerOptions(cm.assigneeField, []string{"Loading..."}, nil)
+	cm.fm.SetPickerOptions(cm.cycleField, []string{"Loading..."}, nil)
 	cm.fm.Show("create_issue")
 
 	// Load users asynchronously
@@ -154,7 +154,7 @@ func (cm *CreateIssueModal) loadUsers() {
 		loadedUsers, err := cm.app.FetchTeamUsers(cm.teamID)
 		if err != nil {
 			cm.app.app.QueueUpdateDraw(func() {
-				cm.assigneeField.SetOptions([]string{"Unassigned", "(Failed to load users)"}, nil)
+				cm.fm.SetPickerOptions(cm.assigneeField, []string{"Unassigned", "(Failed to load users)"}, nil)
 			})
 			return
 		}
@@ -176,7 +176,7 @@ func (cm *CreateIssueModal) populateAssigneeDropdown(users []linearapi.User) {
 		assigneeOptions = append(assigneeOptions, displayName)
 		cm.cachedUsers = append(cm.cachedUsers, struct{ ID, Name string }{user.ID, displayName})
 	}
-	cm.assigneeField.SetOptions(assigneeOptions, func(_ string, index int) {
+	cm.fm.SetPickerOptions(cm.assigneeField, assigneeOptions, func(_ string, index int) {
 		if index == 0 {
 			cm.assigneeID = ""
 			cm.assigneeName = ""
@@ -200,7 +200,7 @@ func (cm *CreateIssueModal) loadCycles() {
 		loadedCycles, err := cm.app.FetchTeamCycles(cm.teamID)
 		if err != nil {
 			cm.app.app.QueueUpdateDraw(func() {
-				cm.cycleField.SetOptions([]string{"No cycle", "(Failed to load cycles)"}, nil)
+				cm.fm.SetPickerOptions(cm.cycleField, []string{"No cycle", "(Failed to load cycles)"}, nil)
 			})
 			return
 		}
@@ -230,7 +230,7 @@ func (cm *CreateIssueModal) populateCycleDropdown(cycles []linearapi.Cycle) {
 			selectedIndex = len(cycleOptions) - 1
 		}
 	}
-	cm.cycleField.SetOptions(cycleOptions, func(_ string, index int) {
+	cm.fm.SetPickerOptions(cm.cycleField, cycleOptions, func(_ string, index int) {
 		if index == 0 {
 			cm.cycleID = ""
 			cm.cycleName = ""
