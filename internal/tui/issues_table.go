@@ -341,7 +341,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			return nil
 		case tcell.KeyDown:
 			row, _ := table.GetSelection()
-			if next := row + 1; next <= len(a.rowsForSection(section)) {
+			if next := nextSelectableRow(a.rowsForSection(section), row, 1); next > 0 {
 				table.Select(next, 0)
 				if issue := a.getIssueFromRowForSection(next, section); issue != nil {
 					a.onIssueSelected(*issue)
@@ -362,7 +362,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 			return nil
 		case tcell.KeyUp:
 			row, _ := table.GetSelection()
-			if previous := row - 1; previous >= 1 {
+			if previous := nextSelectableRow(a.rowsForSection(section), row, -1); previous > 0 {
 				selectIssueRow(table, a.rowsForSection(section), previous)
 				if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
 					a.onIssueSelected(*issue)
@@ -426,10 +426,22 @@ func selectIssueRow(table *tview.Table, rows []IssueRow, row int) {
 }
 
 // nextIssueRow returns the next table row holding an issue in the given
-// direction, skipping status group headers. Returns 0 when none remains.
+// direction, skipping group headers and spacer rows. Returns 0 when none
+// remains.
 func nextIssueRow(rows []IssueRow, from int, delta int) int {
 	for row := from + delta; row >= 1 && row <= len(rows); row += delta {
-		if !rows[row-1].IsHeader {
+		if !rows[row-1].IsHeader && !rows[row-1].IsSpacer {
+			return row
+		}
+	}
+	return 0
+}
+
+// nextSelectableRow returns the next selectable table row (issue or header)
+// in the given direction, skipping spacer rows. Returns 0 when none remains.
+func nextSelectableRow(rows []IssueRow, from int, delta int) int {
+	for row := from + delta; row >= 1 && row <= len(rows); row += delta {
+		if !rows[row-1].IsSpacer {
 			return row
 		}
 	}
@@ -441,7 +453,7 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 	switch event.Rune() {
 	case 'j':
 		row, _ := table.GetSelection()
-		if next := row + 1; next <= len(a.rowsForSection(section)) {
+		if next := nextSelectableRow(a.rowsForSection(section), row, 1); next > 0 {
 			table.Select(next, 0)
 			if issue := a.getIssueFromRowForSection(next, section); issue != nil {
 				a.onIssueSelected(*issue)
@@ -462,7 +474,7 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 		return nil
 	case 'k':
 		row, _ := table.GetSelection()
-		if previous := row - 1; previous >= 1 {
+		if previous := nextSelectableRow(a.rowsForSection(section), row, -1); previous > 0 {
 			selectIssueRow(table, a.rowsForSection(section), previous)
 			if issue := a.getIssueFromRowForSection(previous, section); issue != nil {
 				a.onIssueSelected(*issue)
@@ -642,6 +654,13 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 	// Add issue rows using the hierarchical structure
 	for i, issueRow := range rows {
 		row := i + 1
+
+		if issueRow.IsSpacer {
+			for column := range columns {
+				table.SetCell(row, column, tview.NewTableCell("").SetSelectable(false))
+			}
+			continue
+		}
 
 		if issueRow.IsHeader {
 			for column := range columns {

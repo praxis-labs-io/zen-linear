@@ -15,6 +15,7 @@ type IssueRow struct {
 	HasChildren     bool   // True if this issue has children (same as IsParent for now)
 	IsExpanded      bool   // True if children are shown (only meaningful when HasChildren is true)
 	IsHeader        bool   // True for a group header row (no issue)
+	IsSpacer        bool   // True for a blank gap row above a header (no issue, not selectable)
 	HeaderText      string // Group label for header rows
 	HeaderCount     int    // Number of top-level issues in the group
 	HeaderDimension string // Grouping dimension the header belongs to
@@ -163,6 +164,10 @@ func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, g
 	for _, label := range order {
 		group := groups[label]
 		key := groupBy + "\x1f" + label
+		// Groups breathe: a gap row above every header except the first.
+		if len(rows) > 0 {
+			rows = append(rows, IssueRow{IsSpacer: true})
+		}
 		rows = append(rows, IssueRow{
 			IsHeader:        true,
 			HeaderText:      label,
@@ -182,6 +187,10 @@ func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, g
 		for _, subLabel := range subOrder {
 			subGroup := subGroups[subLabel]
 			subKey := key + "\x1f" + subgroupBy + "\x1f" + subLabel
+			// Subgroups gap too, except directly under their group header.
+			if last := rows[len(rows)-1]; !(last.IsHeader && last.HeaderLevel == 0) {
+				rows = append(rows, IssueRow{IsSpacer: true})
+			}
 			rows = append(rows, IssueRow{
 				IsHeader:        true,
 				HeaderText:      subLabel,
