@@ -71,6 +71,7 @@ func NewFormModal(app *App, title string) *FormModal {
 	fm.hintView = tview.NewTextView()
 	fm.hintView.SetTextColor(app.theme.SecondaryText)
 	fm.hintView.SetBackgroundColor(app.theme.ModalBackground())
+	fm.hintView.SetTextAlign(tview.AlignCenter)
 
 	fm.frame = tview.NewFlex().SetDirection(tview.FlexRow)
 	// tview.NewFlex marks its Box dontClear, leaving the layer beneath
@@ -154,6 +155,11 @@ func (fm *FormModal) AddPicker(label string, options []string, selected int, onC
 		SetOptions(options, onChange).
 		SetFieldBackgroundColor(theme.ModalBackground()).
 		SetFieldTextColor(theme.Foreground)
+	// The closed-but-focused field has its own style, defaulting to the
+	// bright tview palette that swallows the text on themed backgrounds.
+	dd.SetFocusedStyle(tcell.StyleDefault.
+		Background(theme.InputBg).
+		Foreground(theme.Foreground))
 	dd.SetFieldWidth(0)
 	dd.SetListStyles(
 		tcell.StyleDefault.Background(theme.ModalBackground()).Foreground(theme.Foreground),
@@ -204,8 +210,14 @@ func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 	theme := fm.app.theme
 
 	box := tview.NewCheckbox().SetChecked(checked)
-	box.SetFieldBackgroundColor(theme.InputBg)
-	box.SetFieldTextColor(theme.Foreground)
+	fieldStyle := tcell.StyleDefault.Background(theme.InputBg).Foreground(theme.Foreground)
+	box.SetUncheckedStyle(fieldStyle)
+	box.SetCheckedStyle(fieldStyle)
+	// Like DropDown, the focused checkbox has its own style with a bright
+	// unusable default; the accent marks focus, matching the buttons.
+	box.SetActivatedStyle(tcell.StyleDefault.
+		Background(theme.Accent).
+		Foreground(theme.InverseTextColor()))
 	box.SetBackgroundColor(theme.ModalBackground())
 
 	labelView := tview.NewTextView()
@@ -333,16 +345,6 @@ func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
 			row.frame.SetBorderColor(fm.app.theme.Border)
 		}
 	}
-	// Pickers have no frame; the focused one gets the input fill instead.
-	for _, candidate := range fm.order {
-		if dd, ok := candidate.(*tview.DropDown); ok {
-			if dd == p {
-				dd.SetFieldBackgroundColor(fm.app.theme.InputBg)
-			} else {
-				dd.SetFieldBackgroundColor(fm.app.theme.ModalBackground())
-			}
-		}
-	}
 	if rowIdx >= 0 {
 		fm.ensureVisible(rowIdx)
 	}
@@ -355,6 +357,7 @@ func (fm *FormModal) AddButtons(buttons ...FormButton) {
 	fm.pickerRow = nil
 	fm.buttonsRow = tview.NewFlex()
 	fm.buttonsRow.SetBackgroundColor(theme.ModalBackground())
+	fm.buttonsRow.AddItem(nil, 0, 1, false)
 	for i, spec := range buttons {
 		if i > 0 {
 			fm.buttonsRow.AddItem(nil, 3, 0, false)
@@ -606,6 +609,27 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyBacktab:
 		fm.focusStep(-1)
 		return nil
+	case tcell.KeyDown:
+		// Textareas keep vertical arrows for cursor movement.
+		if _, ok := fm.focusedPrimitive().(*tview.TextArea); !ok {
+			fm.focusStep(1)
+			return nil
+		}
+	case tcell.KeyUp:
+		if _, ok := fm.focusedPrimitive().(*tview.TextArea); !ok {
+			fm.focusStep(-1)
+			return nil
+		}
+	case tcell.KeyLeft:
+		if _, ok := fm.focusedPrimitive().(*tview.Button); ok {
+			fm.focusStep(-1)
+			return nil
+		}
+	case tcell.KeyRight:
+		if _, ok := fm.focusedPrimitive().(*tview.Button); ok {
+			fm.focusStep(1)
+			return nil
+		}
 	case tcell.KeyEnter:
 		if event.Modifiers()&tcell.ModCtrl != 0 || event.Modifiers()&tcell.ModMeta != 0 {
 			if fm.onSubmit != nil {
