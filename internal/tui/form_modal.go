@@ -35,24 +35,25 @@ type formRow struct {
 // It owns the shell, tab order, and shared keys so individual modals only
 // declare fields and callbacks.
 type FormModal struct {
-	app        *App
-	title      string
-	maxWidth   int
-	root       *tview.Flex
-	frame      *tview.Flex
-	rowsBox    *tview.Flex
-	buttonsRow *tview.Flex
-	hintView   *tview.TextView
-	rows       []formRow
-	order      []tview.Primitive
-	buttons    []*tview.Button
-	frameOf    map[tview.Primitive]*tview.Flex
-	pickerMeta map[*tview.DropDown]*pickerState
-	pickerRow  *pickerRowState
-	focusIdx   int
-	scrollTop  int
-	onCancel   func()
-	onSubmit   func()
+	app            *App
+	title          string
+	maxWidth       int
+	root           *tview.Flex
+	frame          *tview.Flex
+	rowsBox        *tview.Flex
+	buttonsRow     *tview.Flex
+	hintView       *tview.TextView
+	rows           []formRow
+	order          []tview.Primitive
+	buttons        []*tview.Button
+	frameOf        map[tview.Primitive]*tview.Flex
+	pickerMeta     map[*tview.DropDown]*pickerState
+	checkboxLabels map[*tview.Checkbox]*tview.TextView
+	pickerRow      *pickerRowState
+	focusIdx       int
+	scrollTop      int
+	onCancel       func()
+	onSubmit       func()
 }
 
 // pickerRowState tracks the open shared row consecutive pickers pack into.
@@ -74,10 +75,11 @@ type pickerState struct {
 // NewFormModal creates an empty form modal shell with the given border title.
 func NewFormModal(app *App, title string) *FormModal {
 	fm := &FormModal{
-		app:        app,
-		title:      title,
-		frameOf:    make(map[tview.Primitive]*tview.Flex),
-		pickerMeta: make(map[*tview.DropDown]*pickerState),
+		app:            app,
+		title:          title,
+		frameOf:        make(map[tview.Primitive]*tview.Flex),
+		pickerMeta:     make(map[*tview.DropDown]*pickerState),
+		checkboxLabels: make(map[*tview.Checkbox]*tview.TextView),
 	}
 
 	fm.rowsBox = tview.NewFlex().SetDirection(tview.FlexRow)
@@ -311,32 +313,35 @@ func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 		Foreground(theme.InverseTextColor()))
 	box.SetBackgroundColor(theme.ModalBackground())
 
+	caps := strings.ToUpper(label)
 	labelView := tview.NewTextView()
-	labelView.SetText(strings.ToUpper(label))
+	labelView.SetText(caps)
 	labelView.SetTextColor(theme.SecondaryText)
 	labelView.SetBackgroundColor(theme.ModalBackground())
 
 	line := tview.NewFlex()
 	line.SetBackgroundColor(theme.ModalBackground())
+	line.AddItem(labelView, len(caps)+2, 0, false)
 	line.AddItem(box, 3, 0, true)
-	line.AddItem(nil, 1, 0, false)
-	line.AddItem(labelView, 0, 1, false)
+	line.AddItem(nil, 0, 1, false)
 
-	// A blank lead-in keeps the single-line unit from crowding the framed
-	// field above it.
+	// Blank lines either side keep the single-line unit from crowding the
+	// framed fields around it.
 	container := tview.NewFlex().SetDirection(tview.FlexRow)
 	container.SetBackgroundColor(theme.ModalBackground())
 	container.AddItem(nil, 1, 0, false)
 	container.AddItem(line, 1, 0, true)
+	container.AddItem(nil, 1, 0, false)
 
 	fm.pickerRow = nil
 	fm.appendRow(formRow{
 		container:  container,
-		height:     2,
-		minHeight:  2,
+		height:     3,
+		minHeight:  3,
 		focusables: []tview.Primitive{box},
 		labelView:  labelView,
 	})
+	fm.checkboxLabels[box] = labelView
 	fm.registerFocusable(box, len(fm.rows)-1)
 	return box
 }
@@ -427,6 +432,14 @@ func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
 			frame.SetBorderColor(fm.app.theme.BorderFocus)
 		} else {
 			frame.SetBorderColor(fm.app.theme.Border)
+		}
+	}
+	// Inline checkboxes have no frame; the whole line lights up instead.
+	for box, label := range fm.checkboxLabels {
+		if box == p {
+			label.SetTextColor(fm.app.theme.Foreground)
+		} else {
+			label.SetTextColor(fm.app.theme.SecondaryText)
 		}
 	}
 	if rowIdx >= 0 {

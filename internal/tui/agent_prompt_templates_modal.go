@@ -44,10 +44,22 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	pm.list.SetChangedFunc(func(index int, _ string, _ string, _ rune) {
 		pm.selectTemplate(index)
 	})
-	// Focus can leave the form for the list; without this the last form
-	// field keeps its focused border.
+
+	// The list lives in its own bordered box, lit like a field on focus.
+	listFrame := tview.NewFlex().SetDirection(tview.FlexRow)
+	listFrame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
+	listFrame.AddItem(pm.list, 0, 1, true)
+	listFrame.SetBackgroundColor(app.theme.ModalBackground()).
+		SetBorder(true).
+		SetBorderColor(app.theme.Border)
 	pm.list.SetFocusFunc(func() {
+		// Focus can leave the form for the list; without this the last
+		// form field keeps its focused border.
 		pm.fm.BlurFrames()
+		listFrame.SetBorderColor(app.theme.BorderFocus)
+	})
+	pm.list.SetBlurFunc(func() {
+		listFrame.SetBorderColor(app.theme.Border)
 	})
 
 	pm.fm = NewFormModal(app, "Agent Prompts")
@@ -63,25 +75,30 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	pm.fm.SetOnCancel(pm.Hide)
 
 	pm.helpView = tview.NewTextView()
-	pm.helpView.SetText("⏎ edit · a add · d delete · ⇧Tab back to list · ⌃S save · Esc cancel")
+	pm.helpView.SetText("⏎ edit · a add · d delete\n⇧Tab list · ⌃S save · Esc cancel")
 	pm.helpView.SetTextColor(app.theme.SecondaryText)
 	pm.helpView.SetBackgroundColor(app.theme.ModalBackground())
 	pm.helpView.SetTextAlign(tview.AlignCenter)
 
-	body := tview.NewFlex().
-		AddItem(pm.list, 0, 1, true).
-		AddItem(nil, 2, 0, false).
-		AddItem(pm.fm.ContentBody(), 0, 2, false)
-
-	// Standard form footer, spanning both panes: centered buttons, a gap,
-	// then the centered hint.
-	modalContent := tview.NewFlex().
+	// Left column: the list with its hints beneath. Right column: the form
+	// with its buttons at the bottom.
+	leftColumn := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(body, 0, 1, true).
+		AddItem(listFrame, 0, 1, true).
+		AddItem(nil, 1, 0, false).
+		AddItem(pm.helpView, 2, 0, false)
+
+	rightColumn := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(pm.fm.ContentBody(), 0, 1, false).
 		AddItem(nil, 1, 0, false).
 		AddItem(pm.fm.ButtonsRow(), 1, 0, false).
-		AddItem(nil, 1, 0, false).
-		AddItem(pm.helpView, 1, 0, false)
+		AddItem(nil, 1, 0, false)
+
+	modalContent := tview.NewFlex().
+		AddItem(leftColumn, 0, 1, true).
+		AddItem(nil, 2, 0, false).
+		AddItem(rightColumn, 0, 2, false)
 	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
 	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
