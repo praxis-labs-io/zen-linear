@@ -142,9 +142,9 @@ var RosePineMoonTheme = Theme{
 	InputBg:       tcell.NewRGBColor(57, 53, 82),    // #393552 overlay
 	InverseText:   tcell.NewRGBColor(35, 33, 54),    // #232136 base
 
-	StatusTodo:       tcell.NewRGBColor(110, 106, 134), // #6E6A86 muted
+	StatusTodo:       tcell.NewRGBColor(62, 143, 176),  // #3E8FB0 pine
 	StatusInProgress: tcell.NewRGBColor(246, 193, 119), // #F6C177 gold
-	StatusReview:     tcell.NewRGBColor(62, 143, 176),  // #3E8FB0 pine
+	StatusReview:     tcell.NewRGBColor(76, 183, 130),  // #4CB782 green; the Rose Pine palette has no green
 	StatusDone:       tcell.NewRGBColor(156, 207, 216), // #9CCFD8 foam
 	StatusCanceled:   tcell.NewRGBColor(235, 111, 146), // #EB6F92 love
 }
