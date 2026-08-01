@@ -226,6 +226,13 @@ type App struct {
 	collapsedGroups map[string]bool
 	statusMessage   string
 
+	// Display settings of the active custom view, overriding config until
+	// the user picks another list. The overridden flags keep in-session
+	// manual grouping/sort choices ahead of the view's. UI-thread only.
+	viewPrefs          *viewDisplayPrefs
+	groupingOverridden bool
+	sortOverridden     bool
+
 	// Search tab state, independent from the main issues list. All fields
 	// are read and written on the UI thread only.
 	searchQuery         string
@@ -260,6 +267,7 @@ type App struct {
 	// Lazy loading helpers (overridable in tests)
 	fetchIssuesPage         func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error)
 	fetchIssueByID          func(context.Context, string) (linearapi.Issue, error)
+	fetchViewPrefsFunc      func(context.Context, string) (*linearapi.ViewPreferencesValues, error)
 	queueUpdateDraw         func(func())
 	updateIssueFunc         func(context.Context, linearapi.UpdateIssueInput) (linearapi.Issue, error)
 	createIssueRelationFunc func(context.Context, linearapi.CreateIssueRelationInput) (linearapi.IssueRelation, error)
@@ -332,6 +340,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
 	app.fetchIssuesPage = api.FetchIssuesPage
 	app.fetchIssueByID = api.FetchIssueByID
+	app.fetchViewPrefsFunc = api.FetchCustomViewPreferences
 	app.updateIssueFunc = api.UpdateIssue
 	app.createIssueRelationFunc = api.CreateIssueRelation
 	app.deleteIssueRelationFunc = api.DeleteIssueRelation
@@ -412,6 +421,7 @@ func (a *App) applySettings(newCfg config.Config) {
 	a.cache = cache.NewTeamCache(a.api, newCfg.CacheTTL)
 	a.fetchIssuesPage = a.api.FetchIssuesPage
 	a.fetchIssueByID = a.api.FetchIssueByID
+	a.fetchViewPrefsFunc = a.api.FetchCustomViewPreferences
 	a.updateIssueFunc = a.api.UpdateIssue
 	a.createIssueRelationFunc = a.api.CreateIssueRelation
 	a.deleteIssueRelationFunc = a.api.DeleteIssueRelation
@@ -694,6 +704,9 @@ func (a *App) resetCachedState() {
 	a.teamCycles = nil
 	a.richFilters = IssueFilters{}
 	a.collapsedGroups = make(map[string]bool)
+	a.viewPrefs = nil
+	a.groupingOverridden = false
+	a.sortOverridden = false
 	a.searchQuery = ""
 	a.clearSearchResults()
 	if a.searchInput != nil {
@@ -1741,6 +1754,27 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			fetchPage = a.api.FetchIssuesPage
 		}
 
+		// A custom view carries its own display settings; fetch them first
+		// so the issue query can use the view's sort. Failures fall back to
+		// the configured defaults.
+		var prefs *viewDisplayPrefs
+		if params.CustomViewID != "" {
+			fetchPrefs := a.fetchViewPrefsFunc
+			if fetchPrefs == nil {
+				fetchPrefs = a.api.FetchCustomViewPreferences
+			}
+			values, prefsErr := fetchPrefs(ctx, params.CustomViewID)
+			if prefsErr != nil {
+				logger.ErrorWithErr(prefsErr, "tui.app: failed to fetch view preferences view_id=%s", params.CustomViewID)
+			} else if values != nil {
+				logger.Debug("tui.app: view preferences view_id=%s grouping=%q subgrouping=%q ordering=%q direction=%q", params.CustomViewID, values.IssueGrouping, values.IssueSubGrouping, values.ViewOrdering, values.ViewOrderingDirection)
+				prefs = resolveViewPrefs(values)
+			}
+			if prefs != nil && prefs.hasSort && !a.sortOverridden {
+				params.OrderBy = string(prefs.sortField)
+			}
+		}
+
 		pageCount := 0
 		fetchedCount := 0
 		logger.Debug("tui.app: refreshing issues team_id=%s project_id=%s state_id=%s cycle_id=%s assignee_id=%s labels=%d", params.TeamID, params.ProjectID, params.StateID, params.CycleID, params.AssigneeID, len(params.LabelIDs))
@@ -1768,6 +1802,9 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		fetchedCount += len(page.Issues)
 		a.QueueUpdateDraw(func() {
 			logger.Debug("tui.app: fetched issues page=%d count=%d", pageCount, len(page.Issues))
+			// Install (or clear) the active view's display settings with
+			// the list they belong to.
+			a.viewPrefs = prefs
 			a.updateIssuesData(page.Issues, targetIssueID)
 			if allowFocus {
 				// Ensure focus is on issues table after initial load
@@ -2020,7 +2057,7 @@ func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
 // sortIssuesLocally applies sort orders the Linear API cannot provide.
 // Callers must hold issuesMu.
 func (a *App) sortIssuesLocally() {
-	switch a.sortField {
+	switch a.effectiveSortField() {
 	case SortByPriority:
 		sortIssuesByPriority(a.issues)
 	case SortByStatus:
@@ -2038,12 +2075,13 @@ func (a *App) issueColumns() []string {
 }
 
 // buildIssueRowsFor builds table rows for an issue list, honoring the
-// configured grouping dimensions.
+// grouping dimensions in effect (the active view's, else config).
 func (a *App) buildIssueRowsFor(issues []linearapi.Issue) ([]IssueRow, map[string]*linearapi.Issue) {
-	if a.config.GroupBy == GroupByNone {
+	groupBy := a.effectiveGroupBy()
+	if groupBy == GroupByNone {
 		return BuildIssueRows(issues, a.expandedState)
 	}
-	return BuildGroupedIssueRows(issues, a.expandedState, a.config.GroupBy, a.config.SubgroupBy, a.collapsedGroups)
+	return BuildGroupedIssueRows(issues, a.expandedState, groupBy, a.effectiveSubgroupBy(), a.collapsedGroups)
 }
 
 // toggleGroupCollapse collapses or expands a group header and keeps the
@@ -2124,6 +2162,9 @@ func (a *App) showGroupByPicker() {
 	a.pickerActive = true
 	a.pickerModal.Show("Group Issues By", groupDimensionPickerItems(), func(item PickerItem) {
 		a.pickerActive = false
+		// A manual grouping choice outranks the active view's for the
+		// session.
+		a.groupingOverridden = true
 		a.config.GroupBy = item.ID
 		if a.config.SubgroupBy == item.ID {
 			a.config.SubgroupBy = GroupByNone
@@ -2151,6 +2192,7 @@ func (a *App) showSubgroupByPicker() {
 	a.pickerActive = true
 	a.pickerModal.Show("Subgroup Issues By", items, func(item PickerItem) {
 		a.pickerActive = false
+		a.groupingOverridden = true
 		a.config.SubgroupBy = item.ID
 		if item.ID == GroupByNone {
 			a.regroupIssues("Subgrouping off")
@@ -2283,6 +2325,11 @@ func (a *App) toggleIssueExpanded(issueID string) {
 func (a *App) onNavigationSelected(node *NavigationNode) {
 	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v is_cycle=%v is_issue=%v", node.ID, node.Text, node.IsTeam, node.IsProject, node.IsCycle, node.IsIssue)
 
+	// A new list starts fresh: its own view settings apply again until the
+	// user overrides them.
+	a.groupingOverridden = false
+	a.sortOverridden = false
+
 	// A favorited issue is not a filter of its own: scope to its team and ask
 	// the refresh to land on the issue via the target-issue plumbing.
 	if node.IsIssue {
@@ -2331,10 +2378,12 @@ func (a *App) preloadTeamMetadata(teamID string) {
 	})
 }
 
-// setSortField sets the sort field and refreshes issues.
+// setSortField sets the sort field and refreshes issues. A manual sort
+// choice outranks the active view's ordering for the session.
 func (a *App) setSortField(field SortField) {
 	logger.Debug("tui.app: setting sort field field=%s", field)
 	a.sortField = field
+	a.sortOverridden = true
 	// Run in goroutine to avoid deadlock when called from tview callbacks
 	go a.refreshIssues()
 }

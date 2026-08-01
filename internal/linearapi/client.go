@@ -1531,6 +1531,81 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 	}, nil
 }
 
+// ViewPreferencesValues carries the display settings of a custom view.
+// Values are Linear's raw strings; empty means the setting is unset.
+type ViewPreferencesValues struct {
+	IssueGrouping         string
+	IssueSubGrouping      string
+	ViewOrdering          string
+	ViewOrderingDirection string
+}
+
+// viewPreferencesSelection is the shared GraphQL selection for one layer of
+// view preferences.
+type viewPreferencesSelection struct {
+	IssueGrouping         graphql.String
+	IssueSubGrouping      graphql.String
+	ViewOrdering          graphql.String
+	ViewOrderingDirection graphql.String
+}
+
+// FetchCustomViewPreferences fetches the effective display settings of a
+// custom view. Linear's computed viewPreferencesValues drops layers (a
+// subgrouping stored on the organization layer comes back "none"), so the
+// user, organization, and computed layers are fetched and merged here, most
+// specific first. Returns nil when the view has no preferences at all.
+func (c *Client) FetchCustomViewPreferences(ctx context.Context, viewID string) (*ViewPreferencesValues, error) {
+	var query struct {
+		CustomView struct {
+			UserViewPreferences *struct {
+				Preferences viewPreferencesSelection
+			}
+			OrganizationViewPreferences *struct {
+				Preferences viewPreferencesSelection
+			}
+			ViewPreferencesValues *viewPreferencesSelection
+		} `graphql:"customView(id: $id)"`
+	}
+
+	variables := map[string]interface{}{
+		"id": graphql.String(viewID),
+	}
+
+	if err := c.client.Query(ctx, &query, variables); err != nil {
+		logger.ErrorWithErr(err, "linearapi.client: fetchCustomViewPreferences failed view_id=%s", viewID)
+		return nil, fmt.Errorf("fetch custom view preferences: %w", err)
+	}
+
+	var layers []viewPreferencesSelection
+	if query.CustomView.UserViewPreferences != nil {
+		layers = append(layers, query.CustomView.UserViewPreferences.Preferences)
+	}
+	if query.CustomView.OrganizationViewPreferences != nil {
+		layers = append(layers, query.CustomView.OrganizationViewPreferences.Preferences)
+	}
+	if query.CustomView.ViewPreferencesValues != nil {
+		layers = append(layers, *query.CustomView.ViewPreferencesValues)
+	}
+	if len(layers) == 0 {
+		return nil, nil
+	}
+
+	firstSet := func(pick func(viewPreferencesSelection) graphql.String) string {
+		for _, layer := range layers {
+			if value := string(pick(layer)); value != "" {
+				return value
+			}
+		}
+		return ""
+	}
+	return &ViewPreferencesValues{
+		IssueGrouping:         firstSet(func(l viewPreferencesSelection) graphql.String { return l.IssueGrouping }),
+		IssueSubGrouping:      firstSet(func(l viewPreferencesSelection) graphql.String { return l.IssueSubGrouping }),
+		ViewOrdering:          firstSet(func(l viewPreferencesSelection) graphql.String { return l.ViewOrdering }),
+		ViewOrderingDirection: firstSet(func(l viewPreferencesSelection) graphql.String { return l.ViewOrderingDirection }),
+	}, nil
+}
+
 // fetchIssuesWithFilter fetches issues using the standard issues query with filters.
 func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
 	// Determine if client-side sorting is needed.
@@ -1583,6 +1658,13 @@ func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesPar
 		afterCursor = &cursor
 	}
 
+	// Linear API only supports "createdAt" and "updatedAt" for
+	// PaginationOrderBy; other sorts happen client-side.
+	orderBy := PaginationOrderBy(params.OrderBy)
+	if orderBy != OrderByCreatedAt && orderBy != OrderByUpdatedAt {
+		orderBy = OrderByUpdatedAt
+	}
+
 	var query struct {
 		CustomView struct {
 			Issues struct {
@@ -1591,14 +1673,15 @@ func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesPar
 					HasNextPage graphql.Boolean
 					EndCursor   graphql.String
 				}
-			} `graphql:"issues(first: $first, after: $after)"`
+			} `graphql:"issues(first: $first, after: $after, orderBy: $orderBy)"`
 		} `graphql:"customView(id: $id)"`
 	}
 
 	variables := map[string]interface{}{
-		"id":    graphql.String(params.CustomViewID),
-		"first": graphql.Int(first),
-		"after": afterCursor,
+		"id":      graphql.String(params.CustomViewID),
+		"first":   graphql.Int(first),
+		"after":   afterCursor,
+		"orderBy": orderBy,
 	}
 
 	if err := c.client.Query(ctx, &query, variables); err != nil {
