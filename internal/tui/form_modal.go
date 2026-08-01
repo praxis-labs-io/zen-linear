@@ -664,6 +664,45 @@ func (fm *FormModal) focusStep(delta int) {
 	fm.app.app.SetFocus(fm.order[fm.focusIdx])
 }
 
+// focusRowStep moves keyboard focus vertically: to the first widget of the
+// next or previous row, with the button row as the last stop. Widgets that
+// share a row (pickers, buttons) are one stop, not several.
+func (fm *FormModal) focusRowStep(delta int) {
+	var stops []tview.Primitive
+	for _, row := range fm.rows {
+		if len(row.focusables) > 0 {
+			stops = append(stops, row.focusables[0])
+		}
+	}
+	if len(fm.buttons) > 0 {
+		stops = append(stops, fm.buttons[0])
+	}
+	if len(stops) == 0 {
+		return
+	}
+
+	current := 0
+	focused := fm.focusedPrimitive()
+	if _, isButton := focused.(*tview.Button); isButton {
+		current = len(stops) - 1
+	} else {
+	rows:
+		for _, row := range fm.rows {
+			for _, f := range row.focusables {
+				if f == focused {
+					break rows
+				}
+			}
+			if len(row.focusables) > 0 {
+				current++
+			}
+		}
+	}
+
+	next := (current + delta + len(stops)) % len(stops)
+	fm.app.app.SetFocus(stops[next])
+}
+
 // HandleKey implements the shared form keys. It is called from the app-level
 // modal dispatcher (a parent's InputCapture never sees keys sent to a focused
 // child, so routing lives here).
@@ -695,22 +734,22 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		// cursor sits on the boundary line; then the arrow leaves the field.
 		if ta, ok := fm.focusedPrimitive().(*tview.TextArea); ok {
 			if textAreaCursorOnLastLine(ta) {
-				fm.focusStep(1)
+				fm.focusRowStep(1)
 				return nil
 			}
 			return event
 		}
-		fm.focusStep(1)
+		fm.focusRowStep(1)
 		return nil
 	case tcell.KeyUp:
 		if ta, ok := fm.focusedPrimitive().(*tview.TextArea); ok {
 			if textAreaCursorOnFirstLine(ta) {
-				fm.focusStep(-1)
+				fm.focusRowStep(-1)
 				return nil
 			}
 			return event
 		}
-		fm.focusStep(-1)
+		fm.focusRowStep(-1)
 		return nil
 	case tcell.KeyLeft:
 		// Buttons and closed pickers navigate sideways; text fields keep
