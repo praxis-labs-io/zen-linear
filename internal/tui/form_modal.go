@@ -73,6 +73,10 @@ func NewFormModal(app *App, title string) *FormModal {
 	fm.hintView.SetBackgroundColor(app.theme.ModalBackground())
 
 	fm.frame = tview.NewFlex().SetDirection(tview.FlexRow)
+	// tview.NewFlex marks its Box dontClear, leaving the layer beneath
+	// visible through every cell the children don't paint. A fresh Box
+	// restores the background fill so the modal is opaque like the palette.
+	fm.frame.Box = tview.NewBox()
 	fm.frame.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.BorderFocus).
@@ -262,6 +266,7 @@ func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRo
 	labelView.SetBackgroundColor(theme.ModalBackground())
 
 	editorFrame := tview.NewFlex().SetDirection(tview.FlexRow)
+	editorFrame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
 	editorFrame.AddItem(editor, 0, 1, true)
 	editorFrame.SetBackgroundColor(theme.ModalBackground()).
 		SetBorder(true).
