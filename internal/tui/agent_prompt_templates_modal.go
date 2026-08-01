@@ -44,6 +44,11 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	pm.list.SetChangedFunc(func(index int, _ string, _ string, _ rune) {
 		pm.selectTemplate(index)
 	})
+	// Focus can leave the form for the list; without this the last form
+	// field keeps its focused border.
+	pm.list.SetFocusFunc(func() {
+		pm.fm.BlurFrames()
+	})
 
 	pm.fm = NewFormModal(app, "Agent Prompts")
 	pm.nameField = pm.fm.AddInput("Name", "")
@@ -58,7 +63,7 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	pm.fm.SetOnCancel(pm.Hide)
 
 	pm.helpView = tview.NewTextView()
-	pm.helpView.SetText("a add · d delete · ⌃S save · Esc cancel")
+	pm.helpView.SetText("⏎ edit · a add · d delete · ⇧Tab back to list · ⌃S save · Esc cancel")
 	pm.helpView.SetTextColor(app.theme.SecondaryText)
 	pm.helpView.SetBackgroundColor(app.theme.ModalBackground())
 
@@ -129,6 +134,12 @@ func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.Eve
 	case tcell.KeyCtrlS:
 		pm.saveTemplates()
 		return nil
+	case tcell.KeyEnter, tcell.KeyRight:
+		// Enter (or right) on a template is edit mode: jump to its fields.
+		if listFocused {
+			pm.app.app.SetFocus(pm.nameField)
+			return nil
+		}
 	case tcell.KeyTab:
 		if listFocused {
 			pm.app.app.SetFocus(pm.nameField)
