@@ -36,10 +36,12 @@ func NewEditTitleModal(app *App) *EditTitleModal {
 	return etm
 }
 
-// Show displays the edit title modal.
-func (etm *EditTitleModal) Show(issueID, currentTitle string, onUpdate func(issueID, title string)) {
+// Show displays the edit title modal. contextLine names the issue above the
+// field.
+func (etm *EditTitleModal) Show(issueID, currentTitle, contextLine string, onUpdate func(issueID, title string)) {
 	etm.issueID = issueID
 	etm.onUpdate = onUpdate
+	etm.fm.SetContext(contextLine)
 	etm.titleField.SetText(currentTitle)
 	etm.fm.Show("edit_title")
 }

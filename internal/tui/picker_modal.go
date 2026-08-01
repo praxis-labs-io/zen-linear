@@ -13,12 +13,14 @@ type PickerItem struct {
 
 // PickerModal manages a picker overlay for selecting from a list of items.
 type PickerModal struct {
-	app       *App
-	modal     *tview.Flex
-	list      *tview.List
-	titleView *tview.TextView
-	items     []PickerItem
-	onSelect  func(item PickerItem)
+	app         *App
+	modal       *tview.Flex
+	content     *tview.Flex
+	list        *tview.List
+	titleView   *tview.TextView
+	contextView *tview.TextView
+	items       []PickerItem
+	onSelect    func(item PickerItem)
 }
 
 // NewPickerModal creates a new picker modal.
@@ -40,6 +42,11 @@ func NewPickerModal(app *App) *PickerModal {
 	pm.titleView.SetTextColor(app.theme.Accent)
 	pm.titleView.SetBackgroundColor(app.theme.ModalBackground())
 
+	// Issue context line, shown only when a Show passes one.
+	pm.contextView = tview.NewTextView()
+	pm.contextView.SetDynamicColors(true)
+	pm.contextView.SetBackgroundColor(app.theme.ModalBackground())
+
 	// Create help text
 	helpText := tview.NewTextView()
 	helpText.SetText("↑↓/j/k: navigate | Enter: select | Esc: cancel")
@@ -50,6 +57,7 @@ func NewPickerModal(app *App) *PickerModal {
 	modalContent := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(pm.titleView, 1, 0, false).
+		AddItem(pm.contextView, 0, 0, false).
 		AddItem(pm.list, 0, 1, true).
 		AddItem(helpText, 1, 0, false)
 	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
@@ -59,6 +67,7 @@ func NewPickerModal(app *App) *PickerModal {
 		SetTitleColor(app.theme.Foreground)
 	padding := app.density.ModalPadding
 	modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	pm.content = modalContent
 
 	// Center the modal on screen
 	pm.modal = tview.NewFlex().
@@ -76,10 +85,21 @@ func NewPickerModal(app *App) *PickerModal {
 
 // Show displays the picker modal with the given title and items.
 func (pm *PickerModal) Show(title string, items []PickerItem, onSelect func(item PickerItem)) {
+	pm.ShowWithContext(title, "", items, onSelect)
+}
+
+// ShowWithContext also pins an issue context line between title and list.
+func (pm *PickerModal) ShowWithContext(title, contextLine string, items []PickerItem, onSelect func(item PickerItem)) {
 	pm.items = items
 	pm.onSelect = onSelect
 
 	pm.titleView.SetText(title)
+	pm.contextView.SetText(contextLine)
+	contextHeight := 0
+	if contextLine != "" {
+		contextHeight = 1
+	}
+	pm.content.ResizeItem(pm.contextView, contextHeight, 0)
 	pm.list.Clear()
 
 	for index, item := range items {

@@ -40,10 +40,12 @@ func NewCreateCommentModal(app *App) *CreateCommentModal {
 	return ccm
 }
 
-// Show displays the create comment modal.
-func (ccm *CreateCommentModal) Show(issueID string, onCreate func(issueID, body string)) {
+// Show displays the create comment modal. contextLine names the issue above
+// the field.
+func (ccm *CreateCommentModal) Show(issueID, contextLine string, onCreate func(issueID, body string)) {
 	ccm.issueID = issueID
 	ccm.onCreate = onCreate
+	ccm.fm.SetContext(contextLine)
 	ccm.bodyField.SetText("", true)
 	ccm.fm.Show("create_comment")
 }

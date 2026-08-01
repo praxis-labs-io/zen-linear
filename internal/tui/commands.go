@@ -56,7 +56,7 @@ func handleAskAgent(a *App) {
 	}
 
 	issueID := issue.ID
-	a.agentPromptModal.Show(func(prompt string, workspace string) {
+	a.agentPromptModal.Show(a.issueContextLine(*issue), func(prompt string, workspace string) {
 		prompt = strings.TrimSpace(prompt)
 		if prompt == "" {
 			return
@@ -720,7 +720,7 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				a.ShowStatusPicker(func(stateID string) {
+				a.ShowStatusPicker(a.issueContextLine(*issue), func(stateID string) {
 					go func() {
 						ctx := context.Background()
 						_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
@@ -752,7 +752,7 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				a.ShowCyclePicker(func(cycleID string) {
+				a.ShowCyclePicker(a.issueContextLine(*issue), func(cycleID string) {
 					runIssueUpdateCommand(a, issue, linearapi.UpdateIssueInput{CycleID: &cycleID}, "set cycle", fmt.Sprintf("Set cycle for %s", issue.Identifier))
 				})
 			},
@@ -802,7 +802,7 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				a.ShowUserPicker(func(userID string) {
+				a.ShowUserPicker(a.issueContextLine(*issue), func(userID string) {
 					runIssueUpdateCommand(a, issue, linearapi.UpdateIssueInput{AssigneeID: &userID}, "assign issue to user", fmt.Sprintf("Assigned %s", issue.Identifier))
 				})
 			},
@@ -1040,7 +1040,7 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("Cannot set parent on issue with sub-issues")
 					return
 				}
-				a.ShowParentIssuePicker(func(parentID string) {
+				a.ShowParentIssuePicker(a.issueContextLine(*issue), func(parentID string) {
 					go func() {
 						ctx := context.Background()
 						_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
@@ -1114,7 +1114,7 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				a.createCommentModal.Show(issue.ID, a.handleCreateComment)
+				a.createCommentModal.Show(issue.ID, a.issueContextLine(*issue), a.handleCreateComment)
 			},
 		},
 	}

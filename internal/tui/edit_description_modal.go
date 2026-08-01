@@ -38,9 +38,11 @@ func NewEditDescriptionModal(app *App) *EditDescriptionModal {
 }
 
 // Show displays the edit description modal prefilled with the current text.
-func (edm *EditDescriptionModal) Show(issueID, currentDescription string, onUpdate func(issueID, description string)) {
+// contextLine names the issue above the field.
+func (edm *EditDescriptionModal) Show(issueID, currentDescription, contextLine string, onUpdate func(issueID, description string)) {
 	edm.issueID = issueID
 	edm.onUpdate = onUpdate
+	edm.fm.SetContext(contextLine)
 	edm.bodyField.SetText(currentDescription, true)
 	edm.fm.Show("edit_description")
 }
