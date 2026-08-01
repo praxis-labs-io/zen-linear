@@ -65,6 +65,37 @@ func TestOpenSearchTabFocusesInput(t *testing.T) {
 	}
 }
 
+func TestDetailsCommentsTabAlwaysVisibleWithCount(t *testing.T) {
+	app := newUXTestApp()
+
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
+	app.issuesMu.Lock()
+	app.selectedIssue = &issue
+	app.issuesMu.Unlock()
+	app.updateDetailsView()
+
+	if !app.detailsCommentsVisible {
+		t.Fatal("comments tab hidden for an issue without comments")
+	}
+	if title := app.detailsTabsTitle(false); !strings.Contains(title, "Comments (0)") {
+		t.Fatalf("details tab strip = %q, want a Comments (0) segment", title)
+	}
+
+	issue.Comments = []linearapi.Comment{{ID: "c-1", Body: "hi"}, {ID: "c-2", Body: "again"}}
+	app.updateDetailsView()
+	if title := app.detailsTabsTitle(false); !strings.Contains(title, "Comments (2)") {
+		t.Fatalf("details tab strip = %q, want a Comments (2) segment", title)
+	}
+
+	app.issuesMu.Lock()
+	app.selectedIssue = nil
+	app.issuesMu.Unlock()
+	app.updateDetailsView()
+	if app.detailsCommentsVisible {
+		t.Fatal("comments tab shown with no issue selected")
+	}
+}
+
 func TestSettingsModalShowsAndBuildsSearchDebounceSetting(t *testing.T) {
 	app := newUXTestApp()
 	app.config.SearchDebounce = 450 * time.Millisecond
