@@ -140,8 +140,18 @@ func (a *App) detailsTabsTitle(focused bool) string {
 		return prefix + "Details "
 	}
 	details := a.tabSegment("Details", !a.focusedDetailsView, focused)
-	comments := a.tabSegment("Comments", a.focusedDetailsView, focused)
+	comments := a.tabSegment(fmt.Sprintf("Comments (%d)", a.selectedIssueCommentCount()), a.focusedDetailsView, focused)
 	return prefix + details + " · " + comments + " "
+}
+
+// selectedIssueCommentCount returns how many comments the selected issue has.
+func (a *App) selectedIssueCommentCount() int {
+	a.issuesMu.RLock()
+	defer a.issuesMu.RUnlock()
+	if a.selectedIssue == nil {
+		return 0
+	}
+	return len(a.selectedIssue.Comments)
 }
 
 // tabSegment colors one tab label: the active tab follows focus, inactive

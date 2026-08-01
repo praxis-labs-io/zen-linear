@@ -122,11 +122,13 @@ func (a *App) updateDetailsView() {
 	a.issuesMu.RLock()
 	selectedIssue := a.selectedIssue
 	a.issuesMu.RUnlock()
-	hasComments := selectedIssue != nil && len(selectedIssue.Comments) > 0
-	a.setDetailsCommentsVisibility(hasComments)
+	// The Comments tab is always reachable for a selected issue; an issue
+	// without comments shows the empty state.
+	a.setDetailsCommentsVisibility(selectedIssue != nil)
 	if selectedIssue == nil {
 		a.detailsDescriptionView.SetText(fmt.Sprintf("%sNo issue selected. Select an issue from the list to view details.[-]", a.themeTags.SecondaryText))
 		a.detailsCommentsView.SetText("")
+		a.updateAllPaneTitles()
 		if a.focusedPane == FocusDetails && !a.detailsCommentsVisible {
 			a.updateFocus()
 		}
@@ -325,7 +327,7 @@ func (a *App) updateDetailsView() {
 	}
 
 	a.detailsCommentsView.ScrollToBeginning()
-	if a.focusedPane == FocusDetails && !a.detailsCommentsVisible {
-		a.updateFocus()
-	}
+	// Comments arrive with the async full-issue fetch; refresh the tab strip
+	// so its count tracks what just rendered.
+	a.updateAllPaneTitles()
 }

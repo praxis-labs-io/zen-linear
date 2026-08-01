@@ -399,6 +399,14 @@ func TestSearchTabTypingDebouncesLatestQuery(t *testing.T) {
 	if !app.searchInputFocused {
 		t.Fatal("search input lost focus during live search")
 	}
+
+	// Wait for the result callback to finish before the test returns: it
+	// renders through tview globals the next test's NewApp rewrites.
+	waitForCondition(t, time.Second, func() bool {
+		app.uiUpdateMu.Lock()
+		defer app.uiUpdateMu.Unlock()
+		return !app.searchLoading
+	})
 }
 
 func TestSearchTabEnterMovesFocusToResults(t *testing.T) {
