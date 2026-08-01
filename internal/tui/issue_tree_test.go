@@ -343,20 +343,25 @@ func TestBuildGroupedIssueRows(t *testing.T) {
 	if len(idToIssue) != 4 {
 		t.Fatalf("idToIssue size = %d, want 4", len(idToIssue))
 	}
-	// Expect: [In Progress header, 4, Todo header, 2, 3, Done header, 1]
-	if len(rows) != 7 {
-		t.Fatalf("rows = %d, want 7: %#v", len(rows), rows)
+	// Expect: [In Progress header, 4, gap, Todo header, 2, 3, gap, Done header, 1]
+	if len(rows) != 9 {
+		t.Fatalf("rows = %d, want 9: %#v", len(rows), rows)
 	}
-	wantHeaders := map[int]string{0: "In Progress", 2: "Todo", 5: "Done"}
+	wantHeaders := map[int]string{0: "In Progress", 3: "Todo", 7: "Done"}
 	for index, state := range wantHeaders {
 		if !rows[index].IsHeader || rows[index].HeaderText != state {
 			t.Errorf("rows[%d] = %+v, want header %q", index, rows[index], state)
 		}
 	}
-	if rows[2].HeaderCount != 2 {
-		t.Errorf("Todo header count = %d, want 2", rows[2].HeaderCount)
+	for _, index := range []int{2, 6} {
+		if !rows[index].IsSpacer {
+			t.Errorf("rows[%d] = %+v, want a spacer above the header", index, rows[index])
+		}
 	}
-	if rows[1].IssueID != "4" || rows[3].IssueID != "2" || rows[4].IssueID != "3" || rows[6].IssueID != "1" {
+	if rows[3].HeaderCount != 2 {
+		t.Errorf("Todo header count = %d, want 2", rows[3].HeaderCount)
+	}
+	if rows[1].IssueID != "4" || rows[4].IssueID != "2" || rows[5].IssueID != "3" || rows[8].IssueID != "1" {
 		t.Errorf("unexpected issue placement: %#v", rows)
 	}
 }
@@ -371,9 +376,11 @@ func TestBuildGroupedIssueRowsSubgroups(t *testing.T) {
 	}
 
 	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByPriority, nil)
-	// Expect: Todo hdr, Urgent hdr, 2, High hdr, 1, Done hdr, No priority hdr, 3
-	if len(rows) != 8 {
-		t.Fatalf("rows = %d, want 8: %+v", len(rows), rows)
+	// Expect: Todo hdr, Urgent hdr, 2, gap, High hdr, 1, gap, Done hdr,
+	// No priority hdr, 3. The first subgroup sits flush under its group
+	// header; later subgroups get a gap.
+	if len(rows) != 10 {
+		t.Fatalf("rows = %d, want 10: %+v", len(rows), rows)
 	}
 	type expectation struct {
 		header string
@@ -382,9 +389,9 @@ func TestBuildGroupedIssueRowsSubgroups(t *testing.T) {
 	wantHeaders := map[int]expectation{
 		0: {"Todo", 0},
 		1: {"Urgent", 1},
-		3: {"High", 1},
-		5: {"Done", 0},
-		6: {"No priority", 1},
+		4: {"High", 1},
+		7: {"Done", 0},
+		8: {"No priority", 1},
 	}
 	for index, want := range wantHeaders {
 		row := rows[index]
@@ -392,30 +399,61 @@ func TestBuildGroupedIssueRowsSubgroups(t *testing.T) {
 			t.Errorf("rows[%d] = %+v, want header %q level %d", index, row, want.header, want.level)
 		}
 	}
-	if rows[2].IssueID != "2" || rows[4].IssueID != "1" || rows[7].IssueID != "3" {
+	for _, index := range []int{3, 6} {
+		if !rows[index].IsSpacer {
+			t.Errorf("rows[%d] = %+v, want a spacer above the header", index, rows[index])
+		}
+	}
+	if rows[2].IssueID != "2" || rows[5].IssueID != "1" || rows[9].IssueID != "3" {
 		t.Errorf("unexpected issue placement: %+v", rows)
 	}
 }
 
-// TestNextIssueRow verifies header rows are skipped in both directions.
+// TestNextIssueRow verifies header and spacer rows are skipped in both
+// directions.
 func TestNextIssueRow(t *testing.T) {
 	rows := []IssueRow{
 		{IsHeader: true, HeaderText: "Todo"},
 		{IssueID: "a"},
+		{IsSpacer: true},
 		{IsHeader: true, HeaderText: "Done"},
 		{IssueID: "b"},
 	}
 	if got := nextIssueRow(rows, 0, 1); got != 2 {
 		t.Errorf("first issue row = %d, want 2", got)
 	}
-	if got := nextIssueRow(rows, 2, 1); got != 4 {
-		t.Errorf("next after row 2 = %d, want 4", got)
+	if got := nextIssueRow(rows, 2, 1); got != 5 {
+		t.Errorf("next after row 2 = %d, want 5", got)
 	}
-	if got := nextIssueRow(rows, 4, -1); got != 2 {
-		t.Errorf("previous before row 4 = %d, want 2", got)
+	if got := nextIssueRow(rows, 5, -1); got != 2 {
+		t.Errorf("previous before row 5 = %d, want 2", got)
 	}
-	if got := nextIssueRow(rows, 4, 1); got != 0 {
+	if got := nextIssueRow(rows, 5, 1); got != 0 {
 		t.Errorf("past end = %d, want 0", got)
+	}
+}
+
+// TestNextSelectableRow verifies movement stops on headers but skips gap
+// spacers.
+func TestNextSelectableRow(t *testing.T) {
+	rows := []IssueRow{
+		{IsHeader: true, HeaderText: "Todo"},
+		{IssueID: "a"},
+		{IsSpacer: true},
+		{IsHeader: true, HeaderText: "Done"},
+		{IssueID: "b"},
+	}
+	if got := nextSelectableRow(rows, 2, 1); got != 4 {
+		t.Errorf("next below row 2 = %d, want the Done header at 4", got)
+	}
+	if got := nextSelectableRow(rows, 4, -1); got != 2 {
+		t.Errorf("next above row 4 = %d, want issue row 2", got)
+	}
+	if got := nextSelectableRow(rows, 5, 1); got != 0 {
+		t.Errorf("past end = %d, want 0", got)
+	}
+	if got := nextSelectableRow(rows, 1, -1); got != 0 {
+		t.Errorf("before start = %d, want 0", got)
 	}
 }
 
@@ -429,14 +467,17 @@ func TestBuildGroupedIssueRowsCollapse(t *testing.T) {
 
 	collapsed := map[string]bool{"status\x1fTodo": true}
 	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByNone, collapsed)
-	// Expect: Todo header (collapsed, no rows), Done header, LIN-2
-	if len(rows) != 3 {
-		t.Fatalf("rows = %d, want 3: %+v", len(rows), rows)
+	// Expect: Todo header (collapsed, no rows), gap, Done header, LIN-2
+	if len(rows) != 4 {
+		t.Fatalf("rows = %d, want 4: %+v", len(rows), rows)
 	}
 	if !rows[0].IsHeader || !rows[0].HeaderCollapsed || rows[0].HeaderCount != 1 {
 		t.Errorf("collapsed header = %+v", rows[0])
 	}
-	if rows[2].IssueID != "2" {
-		t.Errorf("rows[2] = %+v, want LIN-2", rows[2])
+	if !rows[1].IsSpacer {
+		t.Errorf("rows[1] = %+v, want a spacer between the groups", rows[1])
+	}
+	if rows[3].IssueID != "2" {
+		t.Errorf("rows[3] = %+v, want LIN-2", rows[3])
 	}
 }

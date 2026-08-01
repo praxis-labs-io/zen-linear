@@ -117,11 +117,11 @@ func (a *App) issuesTabsTitle(focused bool) string {
 	shown := a.effectiveIssuesSection()
 	var segments []string
 	if len(a.myIssueRows) > 0 {
-		segments = append(segments, a.tabSegment(fmt.Sprintf("My (%d)", len(a.myIssueRows)), shown == IssuesSectionMy, focused))
+		segments = append(segments, a.tabSegment(fmt.Sprintf("My (%d)", tabRowCount(a.myIssueRows)), shown == IssuesSectionMy, focused))
 	}
 	segments = append(segments,
-		a.tabSegment(fmt.Sprintf("Other (%d)", len(a.otherIssueRows)), shown == IssuesSectionOther, focused),
-		a.tabSegment(fmt.Sprintf("All (%d)", len(a.issueRows)), shown == IssuesSectionAll, focused))
+		a.tabSegment(fmt.Sprintf("Other (%d)", tabRowCount(a.otherIssueRows)), shown == IssuesSectionOther, focused),
+		a.tabSegment(fmt.Sprintf("All (%d)", tabRowCount(a.issueRows)), shown == IssuesSectionAll, focused))
 	searchLabel := "Search"
 	if len(a.searchIssueRows) > 0 {
 		searchLabel = fmt.Sprintf("Search (%d)", len(a.searchIssueRows))
@@ -152,6 +152,18 @@ func (a *App) selectedIssueCommentCount() int {
 		return 0
 	}
 	return len(a.selectedIssue.Comments)
+}
+
+// tabRowCount counts a tab's rows excluding gap spacers, so the tab strip
+// numbers stay unchanged by group spacing.
+func tabRowCount(rows []IssueRow) int {
+	count := 0
+	for _, row := range rows {
+		if !row.IsSpacer {
+			count++
+		}
+	}
+	return count
 }
 
 // tabSegment colors one tab label: the active tab follows focus, inactive
