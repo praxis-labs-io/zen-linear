@@ -165,65 +165,6 @@ func TestPaletteController_Reset(t *testing.T) {
 	}
 }
 
-func TestPaletteController_SearchMode(t *testing.T) {
-	commands := []Command{
-		{ID: "1", Title: "Command 1"},
-		{ID: "2", Title: "Command 2"},
-	}
-
-	pc := NewPaletteController(commands)
-
-	// Initially not in search mode
-	if pc.IsSearchMode() {
-		t.Error("Initially IsSearchMode() = true, want false")
-	}
-
-	// Enable search mode
-	pc.SetSearchMode(true)
-	if !pc.IsSearchMode() {
-		t.Error("After SetSearchMode(true), IsSearchMode() = false, want true")
-	}
-
-	// In search mode, Selected should return false
-	_, ok := pc.Selected()
-	if ok {
-		t.Error("In search mode, Selected() should return false")
-	}
-
-	// In search mode, filtered list should be nil/empty
-	if pc.Filtered() != nil {
-		t.Error("In search mode, Filtered() should be nil")
-	}
-
-	// Disable search mode
-	pc.SetSearchMode(false)
-	if pc.IsSearchMode() {
-		t.Error("After SetSearchMode(false), IsSearchMode() = true, want false")
-	}
-
-	// After disabling, filtered should have commands again
-	if len(pc.Filtered()) != len(commands) {
-		t.Errorf("After disabling search mode, Filtered() length = %d, want %d", len(pc.Filtered()), len(commands))
-	}
-}
-
-func TestPaletteController_QueryInSearchMode(t *testing.T) {
-	commands := []Command{
-		{ID: "1", Title: "Command 1"},
-	}
-
-	pc := NewPaletteController(commands)
-	pc.SetSearchMode(true)
-	pc.SetQuery("test search query")
-
-	if pc.Query() != "test search query" {
-		t.Errorf("Query() = %q, want %q", pc.Query(), "test search query")
-	}
-
-	// Query should be preserved even though we're in search mode
-	// (the query is used for issue search, not command filtering)
-}
-
 func TestPaletteController_CaseInsensitiveFilter(t *testing.T) {
 	commands := []Command{
 		{ID: "1", Title: "UPPERCASE Command", Keywords: []string{"UPPER"}},

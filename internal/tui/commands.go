@@ -281,16 +281,7 @@ func DefaultCommands(app *App) []Command {
 			Keywords:        []string{"search", "find", "s", "/"},
 			ShortcutDisplay: "/", // Handled globally, not via ShortcutRune
 			Run: func(a *App) {
-				a.openSearchPalette()
-			},
-		},
-		{
-			ID:              "clear_search",
-			Title:           "Clear search",
-			Keywords:        []string{"clear", "reset"},
-			ShortcutDisplay: "Esc", // Handled globally via Escape key
-			Run: func(a *App) {
-				a.setSearchQuery("")
+				a.openSearchTab()
 			},
 		},
 		{
@@ -571,14 +562,6 @@ func DefaultCommands(app *App) []Command {
 			Keywords: []string{"filter", "estimate", "points"},
 			Run: func(a *App) {
 				a.showEstimateFilter()
-			},
-		},
-		{
-			ID:       "filter_text",
-			Title:    "Filter by text search",
-			Keywords: []string{"filter", "text", "search"},
-			Run: func(a *App) {
-				a.showTextFilter()
 			},
 		},
 		{

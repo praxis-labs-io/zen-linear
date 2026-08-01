@@ -170,6 +170,11 @@ type App struct {
 	myIssuesTable          *tview.Table
 	otherIssuesTable       *tview.Table
 	allIssuesTable         *tview.Table
+	searchInput            *tview.InputField
+	searchResultsTable     *tview.Table
+	searchPanel            *tview.Flex     // Search tab shell: input row + body
+	searchBody             *tview.Flex     // Swappable slot: results table or placeholder
+	searchPlaceholder      *tview.TextView // Centered empty/loading/error message
 	issuesColumn           *tview.Flex     // Vertical flex containing My/Other tables
 	detailsView            *tview.Flex     // Flex container for details (description + comments)
 	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
@@ -216,15 +221,26 @@ type App struct {
 	expandedState  map[string]bool             // Expanded state for parent issues (shared across sections)
 
 	// Filter/sort state
-	searchQuery     string
 	richFilters     IssueFilters
 	sortField       SortField
 	collapsedGroups map[string]bool
 	statusMessage   string
 
+	// Search tab state, independent from the main issues list. All fields
+	// are read and written on the UI thread only.
+	searchQuery         string
+	searchIssues        []linearapi.Issue
+	searchIssueRows     []IssueRow
+	searchIDToIssue     map[string]*linearapi.Issue
+	searchInputFocused  bool // sub-focus within FocusIssues + Search tab
+	searchLoading       bool
+	searchErr           error
+	searchReturnSection IssuesSection // tab to return to on Esc from an empty input
+
 	searchDebounceTimer      *time.Timer
 	searchDebounceMu         sync.Mutex
 	searchDebounceGeneration atomic.Int64
+	searchFetchGeneration    atomic.Int64
 
 	// Cached metadata for currently selected team
 	currentUser    *linearapi.User
@@ -304,6 +320,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		idToIssue:            make(map[string]*linearapi.Issue),
 		myIDToIssue:          make(map[string]*linearapi.Issue),
 		otherIDToIssue:       make(map[string]*linearapi.Issue),
+		searchIDToIssue:      make(map[string]*linearapi.Issue),
 		activeIssuesSection:  IssuesSectionMy, // Default to My Issues (falls back to Other when empty)
 		agentPromptTemplates: templates,
 		activeWorkspaceName:  workspaceNameForKey(cfg.Workspaces, cfg.LinearAPIKey),
@@ -481,6 +498,14 @@ func (a *App) applyThemeToComponents() {
 		a.applyIssuesTableTheme(a.allIssuesTable)
 		renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, a.selectedIssueID(IssuesSectionAll), a.theme, a.issueColumns())
 	}
+	if a.searchPanel != nil {
+		// Rebuild the panel so the input picks up the new InputBg (tview
+		// bakes it at construction), then restyle and re-render the results.
+		a.applyIssuesTableTheme(a.searchResultsTable)
+		a.buildSearchPanel()
+		renderIssuesTableModel(a.searchResultsTable, a.searchIssueRows, a.searchIDToIssue, a.selectedIssueID(IssuesSectionSearch), a.theme, a.issueColumns())
+		a.updateIssuesColumnLayout()
+	}
 
 	if a.detailsDescriptionView != nil {
 		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground).
@@ -629,6 +654,10 @@ func (a *App) selectedIssueID(section IssuesSection) string {
 		table = a.myIssuesTable
 	case IssuesSectionOther:
 		table = a.otherIssuesTable
+	case IssuesSectionAll:
+		table = a.allIssuesTable
+	case IssuesSectionSearch:
+		table = a.searchResultsTable
 	}
 	if table == nil {
 		return ""
@@ -666,7 +695,14 @@ func (a *App) resetCachedState() {
 	a.richFilters = IssueFilters{}
 	a.collapsedGroups = make(map[string]bool)
 	a.searchQuery = ""
+	a.clearSearchResults()
+	if a.searchInput != nil {
+		a.searchInput.SetText("")
+	}
+	a.updateSearchBody()
 	a.cancelSearchDebounce()
+	a.searchInputFocused = false
+	a.searchReturnSection = IssuesSectionMy
 	a.activeIssuesSection = IssuesSectionOther
 	a.expandedState = make(map[string]bool)
 
@@ -963,6 +999,7 @@ func (a *App) buildLayout() {
 	a.myIssuesTable = a.buildIssuesTable(" My Issues ", IssuesSectionMy)
 	a.otherIssuesTable = a.buildIssuesTable(" Other Issues ", IssuesSectionOther)
 	a.allIssuesTable = a.buildIssuesTable(" All Issues ", IssuesSectionAll)
+	a.buildSearchPanel()
 	// Create vertical flex for issues column
 	a.issuesColumn = tview.NewFlex().SetDirection(tview.FlexRow)
 	// Initially show only Other Issues table (My Issues will be added when issues are loaded)
@@ -1091,14 +1128,14 @@ func (a *App) bindGlobalKeys() {
 			return a.handlePaletteKey(event)
 		}
 
+		// The search input owns keys next, so typed letters reach the field
+		// instead of firing global or pane shortcuts.
+		if a.searchInputActive() {
+			return a.handleSearchInputKey(event)
+		}
+
 		// Global shortcuts (only when not in palette)
 		switch event.Key() {
-		case tcell.KeyEscape:
-			// Clear search if active (when not in modals/palette)
-			if a.searchQuery != "" {
-				a.setSearchQuery("")
-				return nil
-			}
 		case tcell.KeyCtrlC:
 			a.app.Stop()
 			return nil
@@ -1159,7 +1196,7 @@ func (a *App) bindGlobalKeys() {
 				a.openPalette()
 				return nil
 			case a.actionKey("search", '/'):
-				a.openSearchPalette()
+				a.openSearchTab()
 				return nil
 			}
 		}
@@ -1217,6 +1254,12 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 // handleIssuesKey handles keyboard input when issues pane is focused.
 func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
+	case tcell.KeyEscape:
+		// Esc in the search results returns to the search input.
+		if a.effectiveIssuesSection() == IssuesSectionSearch {
+			a.focusSearchInput()
+			return nil
+		}
 	case tcell.KeyLeft:
 		a.focusedPane = FocusNavigation
 		a.updateFocus()
@@ -1294,25 +1337,9 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEscape:
-		if a.paletteCtrl.IsSearchMode() {
-			// In search mode, clear search and close palette
-			a.cancelSearchDebounce()
-			a.closePaletteUI()
-			a.setSearchQuery("")
-			return nil
-		}
 		a.closePalette()
 		return nil
 	case tcell.KeyEnter:
-		if a.paletteCtrl.IsSearchMode() {
-			// In search mode, submit the search query
-			query := a.paletteCtrl.Query()
-			a.cancelSearchDebounce()
-			a.closePaletteUI()      // Close UI without changing focus
-			a.setSearchQuery(query) // This will set focus to issues pane
-			return nil
-		}
-		// In command mode, execute the selected command
 		if cmd, ok := a.paletteCtrl.Selected(); ok {
 			a.closePalette()
 			cmd.Run(a)
@@ -1320,38 +1347,26 @@ func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case tcell.KeyUp:
-		if !a.paletteCtrl.IsSearchMode() {
-			a.paletteCtrl.MoveCursorUp()
-			a.updatePaletteList()
-		}
+		a.paletteCtrl.MoveCursorUp()
+		a.updatePaletteList()
 		return nil
 	case tcell.KeyDown:
-		if !a.paletteCtrl.IsSearchMode() {
-			a.paletteCtrl.MoveCursorDown()
-			a.updatePaletteList()
-		}
+		a.paletteCtrl.MoveCursorDown()
+		a.updatePaletteList()
 		return nil
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		query := a.paletteCtrl.Query()
 		if len(query) > 0 {
 			a.paletteCtrl.SetQuery(query[:len(query)-1])
 			a.paletteInput.SetText(a.paletteCtrl.Query())
-			if a.paletteCtrl.IsSearchMode() {
-				a.scheduleSearchDebounce(a.paletteCtrl.Query())
-			} else {
-				a.updatePaletteList()
-			}
+			a.updatePaletteList()
 		}
 		return nil
 	case tcell.KeyRune:
 		query := a.paletteCtrl.Query() + string(event.Rune())
 		a.paletteCtrl.SetQuery(query)
 		a.paletteInput.SetText(query)
-		if a.paletteCtrl.IsSearchMode() {
-			a.scheduleSearchDebounce(query)
-		} else {
-			a.updatePaletteList()
-		}
+		a.updatePaletteList()
 		return nil
 	}
 	return event
@@ -1364,15 +1379,22 @@ func (a *App) cyclePanesForward() {
 	switch a.focusedPane {
 	case FocusNavigation:
 		a.focusedPane = FocusIssues
-		// Set to My Issues if available, otherwise Other Issues
-		if len(a.myIssueRows) > 0 {
-			a.activeIssuesSection = IssuesSectionMy
-		} else {
-			a.activeIssuesSection = IssuesSectionOther
+		// Set to My Issues if available, otherwise Other Issues. The Search
+		// tab keeps its place: tabbing away and back must not clear it.
+		if a.activeIssuesSection != IssuesSectionSearch {
+			if len(a.myIssueRows) > 0 {
+				a.activeIssuesSection = IssuesSectionMy
+			} else {
+				a.activeIssuesSection = IssuesSectionOther
+			}
 		}
 	case FocusIssues:
-		// If both My and Other issues exist, switch between them
-		if len(a.myIssueRows) > 0 && len(a.otherIssueRows) > 0 {
+		switch {
+		case a.activeIssuesSection == IssuesSectionSearch:
+			// The Search tab is a single section; no My/Other shuffle.
+			a.focusedPane = FocusDetails
+			a.focusedDetailsView = false
+		case len(a.myIssueRows) > 0 && len(a.otherIssueRows) > 0:
 			if a.activeIssuesSection == IssuesSectionMy {
 				// Switch from My Issues to Other Issues
 				a.activeIssuesSection = IssuesSectionOther
@@ -1381,7 +1403,7 @@ func (a *App) cyclePanesForward() {
 				a.focusedPane = FocusDetails
 				a.focusedDetailsView = false // Start with description
 			}
-		} else {
+		default:
 			// Only one section exists, move to Details
 			a.focusedPane = FocusDetails
 			a.focusedDetailsView = false // Start with description
@@ -1402,8 +1424,11 @@ func (a *App) cyclePanesBackward() {
 		a.focusedPane = FocusDetails
 		a.focusedDetailsView = false // Start with description
 	case FocusIssues:
-		// If both My and Other issues exist, switch between them
-		if len(a.myIssueRows) > 0 && len(a.otherIssueRows) > 0 {
+		switch {
+		case a.activeIssuesSection == IssuesSectionSearch:
+			// The Search tab is a single section; no My/Other shuffle.
+			a.focusedPane = FocusNavigation
+		case len(a.myIssueRows) > 0 && len(a.otherIssueRows) > 0:
 			if a.activeIssuesSection == IssuesSectionOther {
 				// Switch from Other Issues to My Issues
 				a.activeIssuesSection = IssuesSectionMy
@@ -1411,17 +1436,20 @@ func (a *App) cyclePanesBackward() {
 				// Switch from My Issues to Navigation pane
 				a.focusedPane = FocusNavigation
 			}
-		} else {
+		default:
 			// Only one section exists, move to Navigation
 			a.focusedPane = FocusNavigation
 		}
 	case FocusDetails:
 		a.focusedPane = FocusIssues
-		// Set to My Issues if available, otherwise Other Issues (consistent with forward cycle)
-		if len(a.myIssueRows) > 0 {
-			a.activeIssuesSection = IssuesSectionMy
-		} else {
-			a.activeIssuesSection = IssuesSectionOther
+		// Set to My Issues if available, otherwise Other Issues (consistent
+		// with forward cycle). The Search tab keeps its place.
+		if a.activeIssuesSection != IssuesSectionSearch {
+			if len(a.myIssueRows) > 0 {
+				a.activeIssuesSection = IssuesSectionMy
+			} else {
+				a.activeIssuesSection = IssuesSectionOther
+			}
 		}
 		// FocusPalette is excluded from cycling
 	}
@@ -1446,6 +1474,7 @@ func (a *App) updateFocus() {
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchPanel.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles
@@ -1455,7 +1484,15 @@ func (a *App) updateFocus() {
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
-		if table := a.tableForSection(a.effectiveIssuesSection()); table != nil {
+		a.searchPanel.SetBorderColor(a.theme.Border)
+		if a.effectiveIssuesSection() == IssuesSectionSearch {
+			a.searchPanel.SetBorderColor(a.theme.BorderFocus)
+			if a.searchInputFocused {
+				a.app.SetFocus(a.searchInput)
+			} else {
+				a.app.SetFocus(a.searchResultsTable)
+			}
+		} else if table := a.tableForSection(a.effectiveIssuesSection()); table != nil {
 			a.app.SetFocus(table)
 			table.SetBorderColor(a.theme.BorderFocus)
 		}
@@ -1483,6 +1520,7 @@ func (a *App) updateFocus() {
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchPanel.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusPalette:
@@ -1491,6 +1529,7 @@ func (a *App) updateFocus() {
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchPanel.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles
@@ -1519,6 +1558,10 @@ func (a *App) updateAllPaneTitles() {
 	a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
 	a.allIssuesTable.SetTitle(issuesTitle)
 	a.allIssuesTable.SetTitleColor(a.theme.Foreground)
+	if a.searchPanel != nil {
+		a.searchPanel.SetTitle(issuesTitle)
+		a.searchPanel.SetTitleColor(a.theme.Foreground)
+	}
 
 	// Update Details pane tab strip
 	isDetailsFocused := a.focusedPane == FocusDetails
@@ -1550,40 +1593,12 @@ func (a *App) openPalette() {
 	a.updateFocus()
 }
 
-// openSearchPalette opens the palette in search mode.
-func (a *App) openSearchPalette() {
-	a.paletteCtrl.SetSearchMode(true)
-	a.paletteCtrl.SetQuery(a.searchQuery)
-	a.paletteInput.SetText(a.searchQuery)
-	a.paletteInput.SetLabel("/ ")
-	a.paletteInput.SetPlaceholder("Type to search issues...")
-	a.paletteList.Clear()
-	a.paletteModalContent.SetTitle(" Search Issues ")
-	a.pages.ShowPage("palette")
-	a.pages.SendToFront("palette")
-	if a.focusedPane != FocusPalette {
-		a.palettePreviousPane = a.focusedPane
-	}
-	a.focusedPane = FocusPalette
-	a.updateFocus()
-}
-
 // closePalette closes the command palette overlay.
 func (a *App) closePalette() {
-	a.cancelSearchDebounce()
-	a.paletteCtrl.SetSearchMode(false)
 	a.pages.HidePage("palette")
 	// Restore focus to the pane the palette was opened from.
 	a.focusedPane = a.palettePreviousPane
 	a.updateFocus()
-}
-
-// closePaletteUI closes the palette UI without changing focus.
-// This is used when focus will be set by the caller (e.g., after search).
-func (a *App) closePaletteUI() {
-	a.cancelSearchDebounce()
-	a.paletteCtrl.SetSearchMode(false)
-	a.pages.HidePage("palette")
 }
 
 func (a *App) searchDebounceDelay() time.Duration {
@@ -1606,10 +1621,10 @@ func (a *App) scheduleSearchDebounce(query string) {
 			return
 		}
 		a.QueueUpdateDraw(func() {
-			if generation != a.searchDebounceGeneration.Load() || !a.paletteCtrl.IsSearchMode() {
+			if generation != a.searchDebounceGeneration.Load() {
 				return
 			}
-			a.setSearchQueryWithFocusChange(query, false)
+			a.performIssueSearch(query)
 		})
 	})
 	a.searchDebounceMu.Unlock()
@@ -1694,7 +1709,6 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 
 		params := linearapi.FetchIssuesParams{
 			First:   a.config.PageSize,
-			Search:  a.searchQuery,
 			OrderBy: string(a.sortField),
 		}
 		a.applyRichFiltersToParams(&params)
@@ -1729,7 +1743,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 
 		pageCount := 0
 		fetchedCount := 0
-		logger.Debug("tui.app: refreshing issues team_id=%s project_id=%s state_id=%s cycle_id=%s assignee_id=%s labels=%d search=%s", params.TeamID, params.ProjectID, params.StateID, params.CycleID, params.AssigneeID, len(params.LabelIDs), params.Search)
+		logger.Debug("tui.app: refreshing issues team_id=%s project_id=%s state_id=%s cycle_id=%s assignee_id=%s labels=%d", params.TeamID, params.ProjectID, params.StateID, params.CycleID, params.AssigneeID, len(params.LabelIDs))
 		page, err := fetchPage(ctx, params, nil)
 		if err != nil {
 			a.QueueUpdateDraw(func() {
@@ -1842,8 +1856,13 @@ func (a *App) updateIssuesColumnLayout() {
 	a.issuesColumn.Clear()
 
 	// Without any My Issues, that tab disappears (without forgetting the
-	// active choice: My re-applies once it has rows).
-	a.issuesColumn.AddItem(a.tableForSection(a.effectiveIssuesSection()), 0, 1, false)
+	// active choice: My re-applies once it has rows). The Search tab mounts
+	// its input-plus-results panel instead of a bare table.
+	if a.effectiveIssuesSection() == IssuesSectionSearch {
+		a.issuesColumn.AddItem(a.searchPanel, 0, 1, false)
+	} else {
+		a.issuesColumn.AddItem(a.tableForSection(a.effectiveIssuesSection()), 0, 1, false)
+	}
 
 	// Update all pane titles to reflect current state
 	a.updateAllPaneTitles()
@@ -1866,6 +1885,12 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 	a.issuesMu.Unlock()
 
 	selectedIssue := a.rebuildIssuesTables(targetIssueID)
+	if a.activeIssuesSection == IssuesSectionSearch {
+		// A background refresh must not overwrite the search result the
+		// user is browsing.
+		a.updateStatusBar()
+		return
+	}
 	if selectedIssue != nil {
 		a.onIssueSelected(*selectedIssue)
 	} else {
@@ -1901,16 +1926,17 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	var selectedMyIssueID, selectedOtherIssueID, selectedAllIssueID string
 	if targetIssueID != "" {
 		selectedAllIssueID = targetIssueID
-		// Check which section contains the target issue; the All tab shows
-		// everything, so it stays active when selected.
+		// Check which section contains the target issue; the All and Search
+		// tabs show their own lists, so they stay active when selected.
+		sectionPinned := a.activeIssuesSection == IssuesSectionAll || a.activeIssuesSection == IssuesSectionSearch
 		if _, ok := a.myIDToIssue[targetIssueID]; ok {
 			selectedMyIssueID = targetIssueID
-			if a.activeIssuesSection != IssuesSectionAll {
+			if !sectionPinned {
 				a.activeIssuesSection = IssuesSectionMy
 			}
 		} else if _, ok := a.otherIDToIssue[targetIssueID]; ok {
 			selectedOtherIssueID = targetIssueID
-			if a.activeIssuesSection != IssuesSectionAll {
+			if !sectionPinned {
 				a.activeIssuesSection = IssuesSectionOther
 			}
 		}
@@ -1934,8 +1960,8 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	}
 
 	// If no target issue, default to the first issue row (skipping group
-	// headers, which carry no issue).
-	if selectedIssue == nil {
+	// headers, which carry no issue). The Search tab keeps its own selection.
+	if selectedIssue == nil && a.activeIssuesSection != IssuesSectionSearch {
 		if first := nextIssueRow(a.myIssueRows, 0, 1); first > 0 {
 			if issue, ok := a.myIDToIssue[a.myIssueRows[first-1].IssueID]; ok {
 				selectedIssue = issue
@@ -2235,14 +2261,15 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	// Render the tables, selecting the toggled issue
 	var selectedMyIssueID, selectedOtherIssueID string
 	selectedAllIssueID := issueID
+	sectionPinned := a.activeIssuesSection == IssuesSectionAll || a.activeIssuesSection == IssuesSectionSearch
 	if _, ok := a.myIDToIssue[issueID]; ok {
 		selectedMyIssueID = issueID
-		if a.activeIssuesSection != IssuesSectionAll {
+		if !sectionPinned {
 			a.activeIssuesSection = IssuesSectionMy
 		}
 	} else if _, ok := a.otherIDToIssue[issueID]; ok {
 		selectedOtherIssueID = issueID
-		if a.activeIssuesSection != IssuesSectionAll {
+		if !sectionPinned {
 			a.activeIssuesSection = IssuesSectionOther
 		}
 	}
@@ -2304,25 +2331,6 @@ func (a *App) preloadTeamMetadata(teamID string) {
 	})
 }
 
-// setSearchQuery sets the search query and refreshes issues.
-func (a *App) setSearchQuery(query string) {
-	a.cancelSearchDebounce()
-	a.setSearchQueryWithFocusChange(query, true)
-}
-
-func (a *App) setSearchQueryWithFocusChange(query string, allowFocusChange bool) {
-	trimmedQuery := strings.TrimSpace(query)
-	logger.Debug("tui.app: setting search query query=%s", trimmedQuery)
-	a.searchQuery = trimmedQuery
-	// Set focus to issues pane when searching
-	if allowFocusChange {
-		a.focusedPane = FocusIssues
-	}
-	a.updateFocus()
-	// Run in goroutine to avoid deadlock when called from tview callbacks
-	go a.refreshIssuesWithFocusChange(allowFocusChange)
-}
-
 // setSortField sets the sort field and refreshes issues.
 func (a *App) setSortField(field SortField) {
 	logger.Debug("tui.app: setting sort field field=%s", field)
@@ -2368,10 +2376,6 @@ func (a *App) updateStatusBar() {
 		navText = fmt.Sprintf("%s%s[-]", a.themeTags.Accent, label)
 	}
 
-	searchText := ""
-	if a.searchQuery != "" {
-		searchText = fmt.Sprintf("%s🔍 %s[-]", a.themeTags.Warning, a.searchQuery)
-	}
 	filterText := ""
 	if !a.richFilters.Empty() {
 		filterText = fmt.Sprintf("%sFilters: %s[-]", a.themeTags.Warning, a.richFilters.Summary())
@@ -2390,9 +2394,6 @@ func (a *App) updateStatusBar() {
 	parts := []string{helpText}
 	if navText != "" {
 		parts = append(parts, navText)
-	}
-	if searchText != "" {
-		parts = append(parts, searchText)
 	}
 	if filterText != "" {
 		parts = append(parts, filterText)

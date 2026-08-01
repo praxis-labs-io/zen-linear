@@ -275,6 +275,7 @@ const (
 	IssuesSectionMy IssuesSection = iota
 	IssuesSectionOther
 	IssuesSectionAll
+	IssuesSectionSearch
 )
 
 // buildIssuesTable creates and configures an issues table widget with the given title.
@@ -378,6 +379,9 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					}
 				}
 				a.updateFocus()
+			} else if section == IssuesSectionSearch {
+				// At top of search results - return to the search input
+				a.focusSearchInput()
 			}
 			return nil
 		}
@@ -394,6 +398,8 @@ func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 		return a.otherIssueRows
 	case IssuesSectionAll:
 		return a.issueRows
+	case IssuesSectionSearch:
+		return a.searchIssueRows
 	}
 	return nil
 }
@@ -473,6 +479,9 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 				}
 			}
 			a.updateFocus()
+		} else if section == IssuesSectionSearch {
+			// At top of search results - return to the search input
+			a.focusSearchInput()
 		}
 		return nil
 	case 'g':
@@ -497,6 +506,9 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 		}
 		return nil
 	case 'l':
+		if section == IssuesSectionSearch {
+			return nil // search results are a flat list
+		}
 		// Expand current parent issue
 		row, _ := table.GetSelection()
 		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
@@ -507,6 +519,9 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 		}
 		return nil
 	case 'h':
+		if section == IssuesSectionSearch {
+			return nil // search results are a flat list
+		}
 		// Collapse current parent issue, or go to parent if on child
 		row, _ := table.GetSelection()
 		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
@@ -545,6 +560,9 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 		scrollIssueColumns(table, 'L')
 		return nil
 	case ' ':
+		if section == IssuesSectionSearch {
+			return nil // search results are a flat list
+		}
 		// Space toggles expand/collapse
 		row, _ := table.GetSelection()
 		if rows := a.rowsForSection(section); row >= 1 && row <= len(rows) && rows[row-1].IsHeader {
@@ -576,6 +594,9 @@ func (a *App) getIssueFromRowForSection(row int, section IssuesSection) *lineara
 	case IssuesSectionAll:
 		rows = a.issueRows
 		idToIssue = a.idToIssue
+	case IssuesSectionSearch:
+		rows = a.searchIssueRows
+		idToIssue = a.searchIDToIssue
 	}
 	return getIssueFromRowModel(row, rows, idToIssue)
 }
@@ -590,8 +611,23 @@ func (a *App) getRowForIssueInSection(issueID string, section IssuesSection) int
 		rows = a.otherIssueRows
 	case IssuesSectionAll:
 		rows = a.issueRows
+	case IssuesSectionSearch:
+		rows = a.searchIssueRows
 	}
 	return getRowForIssueModel(issueID, rows)
+}
+
+// buildFlatSearchRows maps search results 1:1 to rows, preserving the API's
+// relevance order: no grouping, no parent/child nesting.
+func buildFlatSearchRows(issues []linearapi.Issue) ([]IssueRow, map[string]*linearapi.Issue) {
+	rows := make([]IssueRow, 0, len(issues))
+	idToIssue := make(map[string]*linearapi.Issue, len(issues))
+	for i := range issues {
+		issue := &issues[i]
+		rows = append(rows, IssueRow{IssueID: issue.ID})
+		idToIssue[issue.ID] = issue
+	}
+	return rows, idToIssue
 }
 
 // renderIssuesTableModel renders a table with the given rows and issue lookup map.

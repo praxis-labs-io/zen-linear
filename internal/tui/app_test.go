@@ -320,7 +320,25 @@ func TestRefreshIssues_IncludesCycleID(t *testing.T) {
 	waitForRefreshCompletion(t, refreshDone)
 }
 
-func TestSearchPaletteTypingDebouncesLatestQuery(t *testing.T) {
+// waitForSearchRows waits until the Search tab holds the given number of
+// result rows. Reads go through uiUpdateMu, the lock the immediate
+// queueUpdateDraw stub applies around search-result updates.
+func waitForSearchRows(t *testing.T, app *App, want int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		app.uiUpdateMu.Lock()
+		got := len(app.searchIssueRows)
+		app.uiUpdateMu.Unlock()
+		if got == want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d search result rows", want)
+}
+
+func TestSearchTabTypingDebouncesLatestQuery(t *testing.T) {
 	cfg := config.Config{
 		PageSize:       1,
 		CacheTTL:       time.Minute,
@@ -328,20 +346,24 @@ func TestSearchPaletteTypingDebouncesLatestQuery(t *testing.T) {
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
-	refreshDone := installRefreshCompletionHook(app)
+	// A selected team must not scope the search: it is workspace-wide.
+	app.selectedNavigation = &NavigationNode{ID: "team-1", TeamID: "team-1", IsTeam: true}
 
 	called := make(chan linearapi.FetchIssuesParams, 4)
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		if after != nil {
+			t.Errorf("search fetched a follow-up page; want first page only")
+		}
 		select {
 		case called <- params:
 		default:
 		}
-		return linearapi.IssuePage{Issues: []linearapi.Issue{}, HasNext: false}, nil
+		return linearapi.IssuePage{Issues: []linearapi.Issue{}, HasNext: true}, nil
 	}
 
-	app.openSearchPalette()
-	app.handlePaletteKey(tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone))
-	app.handlePaletteKey(tcell.NewEventKey(tcell.KeyRune, 'b', tcell.ModNone))
+	app.openSearchTab()
+	app.searchInput.SetText("a")
+	app.searchInput.SetText("ab")
 
 	select {
 	case params := <-called:
@@ -358,13 +380,11 @@ func TestSearchPaletteTypingDebouncesLatestQuery(t *testing.T) {
 	if params.Search != "ab" {
 		t.Fatalf("Search = %q, want latest query %q", params.Search, "ab")
 	}
-	waitForRefreshCompletion(t, refreshDone)
-
-	if app.focusedPane != FocusPalette {
-		t.Fatalf("focusedPane = %v, want FocusPalette", app.focusedPane)
+	if params.TeamID != "" {
+		t.Fatalf("TeamID = %q, want empty for workspace-wide search", params.TeamID)
 	}
-	if !app.paletteCtrl.IsSearchMode() {
-		t.Fatal("palette search mode cleared during live search")
+	if params.First != cfg.PageSize {
+		t.Fatalf("First = %d, want %d", params.First, cfg.PageSize)
 	}
 
 	select {
@@ -372,53 +392,243 @@ func TestSearchPaletteTypingDebouncesLatestQuery(t *testing.T) {
 		t.Fatalf("unexpected extra fetch after debounce fired with search %q", params.Search)
 	case <-time.After(120 * time.Millisecond):
 	}
+
+	if app.activeIssuesSection != IssuesSectionSearch {
+		t.Fatalf("activeIssuesSection = %v, want IssuesSectionSearch", app.activeIssuesSection)
+	}
+	if !app.searchInputFocused {
+		t.Fatal("search input lost focus during live search")
+	}
 }
 
-func TestSearchPaletteEnterFlushesPendingDebounce(t *testing.T) {
+func TestSearchTabEnterMovesFocusToResults(t *testing.T) {
 	cfg := config.Config{
 		PageSize:       1,
 		CacheTTL:       time.Minute,
-		SearchDebounce: 250 * time.Millisecond,
+		SearchDebounce: 20 * time.Millisecond,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
-	refreshDone := installRefreshCompletionHook(app)
 
-	called := make(chan linearapi.FetchIssuesParams, 4)
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "Search hit", State: "Todo"}
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
-		select {
-		case called <- params:
-		default:
+		return linearapi.IssuePage{Issues: []linearapi.Issue{issue}}, nil
+	}
+	// Hold the detail fetch until assertions are done so its immediate
+	// queueUpdateDraw stub cannot run concurrently with them.
+	releaseDetails := make(chan struct{})
+	defer close(releaseDetails)
+	app.fetchIssueByID = func(ctx context.Context, id string) (linearapi.Issue, error) {
+		<-releaseDetails
+		return issue, nil
+	}
+
+	app.openSearchTab()
+	app.searchInput.SetText("hit")
+	waitForSearchRows(t, app, 1)
+
+	app.handleSearchInputKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+
+	if app.searchInputFocused {
+		t.Fatal("searchInputFocused = true after Enter, want focus on results")
+	}
+	app.issuesMu.RLock()
+	selected := app.selectedIssue
+	app.issuesMu.RUnlock()
+	if selected == nil || selected.ID != "issue-1" {
+		t.Fatalf("selectedIssue = %+v, want issue-1", selected)
+	}
+}
+
+func TestSearchStaleResultsDropped(t *testing.T) {
+	cfg := config.Config{
+		PageSize:       5,
+		CacheTTL:       time.Minute,
+		SearchDebounce: 10 * time.Millisecond,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	issueA := linearapi.Issue{ID: "issue-a", Identifier: "ABC-1", Title: "Stale", State: "Todo"}
+	issueB := linearapi.Issue{ID: "issue-b", Identifier: "ABC-2", Title: "Fresh", State: "Todo"}
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		if params.Search == "stale" {
+			close(firstStarted)
+			<-releaseFirst
+			return linearapi.IssuePage{Issues: []linearapi.Issue{issueA}}, nil
 		}
-		return linearapi.IssuePage{Issues: []linearapi.Issue{}, HasNext: false}, nil
+		return linearapi.IssuePage{Issues: []linearapi.Issue{issueB}}, nil
 	}
 
-	app.openSearchPalette()
-	app.handlePaletteKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
-	app.handlePaletteKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	app.openSearchTab()
+	app.performIssueSearch("stale")
+	<-firstStarted
+	app.performIssueSearch("fresh")
+	waitForSearchRows(t, app, 1)
+	close(releaseFirst)
 
-	var params linearapi.FetchIssuesParams
-	select {
-	case params = <-called:
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("timed out waiting for immediate enter search fetch")
+	// Give the stale response a chance to land (it must be discarded).
+	time.Sleep(50 * time.Millisecond)
+	app.uiUpdateMu.Lock()
+	defer app.uiUpdateMu.Unlock()
+	if len(app.searchIssueRows) != 1 || app.searchIssueRows[0].IssueID != "issue-b" {
+		t.Fatalf("searchIssueRows = %+v, want the fresh result only", app.searchIssueRows)
 	}
-	if params.Search != "x" {
-		t.Fatalf("Search = %q, want %q", params.Search, "x")
-	}
-	waitForRefreshCompletion(t, refreshDone)
+}
 
-	if app.focusedPane != FocusIssues {
-		t.Fatalf("focusedPane = %v, want FocusIssues", app.focusedPane)
+func TestSearchEmptyQueryClearsWithoutFetch(t *testing.T) {
+	cfg := config.Config{
+		PageSize:       5,
+		CacheTTL:       time.Minute,
+		SearchDebounce: 10 * time.Millisecond,
 	}
-	if app.paletteCtrl.IsSearchMode() {
-		t.Fatal("palette search mode still active after enter submit")
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	var fetches atomic.Int64
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "Hit", State: "Todo"}
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		fetches.Add(1)
+		return linearapi.IssuePage{Issues: []linearapi.Issue{issue}}, nil
 	}
 
-	select {
-	case params := <-called:
-		t.Fatalf("pending debounce was not canceled; extra search %q", params.Search)
-	case <-time.After(300 * time.Millisecond):
+	app.openSearchTab()
+	app.performIssueSearch("hit")
+	waitForSearchRows(t, app, 1)
+
+	app.performIssueSearch("")
+	waitForSearchRows(t, app, 0)
+	time.Sleep(30 * time.Millisecond)
+	if got := fetches.Load(); got != 1 {
+		t.Fatalf("fetch count = %d, want 1 (empty query must not hit the API)", got)
+	}
+}
+
+func TestSearchTabTypedLettersReachInput(t *testing.T) {
+	cfg := config.Config{
+		PageSize:       1,
+		CacheTTL:       time.Minute,
+		SearchDebounce: time.Hour, // keep the debounce from firing mid-test
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	app.openSearchTab()
+	if !app.searchInputActive() {
+		t.Fatal("searchInputActive() = false after openSearchTab")
+	}
+
+	// The quit shortcut must pass through to the input instead of stopping
+	// the app.
+	event := tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone)
+	if got := app.handleSearchInputKey(event); got != event {
+		t.Fatalf("handleSearchInputKey(q) = %v, want the event passed through", got)
+	}
+}
+
+func TestSearchTabRemappedTabKeysCycleOutOfInput(t *testing.T) {
+	cfg := config.Config{
+		PageSize:    1,
+		CacheTTL:    time.Minute,
+		Keybindings: map[string]string{"tab_next": "]", "tab_prev": "["},
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
+	app.otherIssueRows, app.otherIDToIssue = buildFlatSearchRows([]linearapi.Issue{issue})
+	// Hold the detail fetch until assertions are done so its immediate
+	// queueUpdateDraw stub cannot run concurrently with them.
+	releaseDetails := make(chan struct{})
+	defer close(releaseDetails)
+	app.fetchIssueByID = func(ctx context.Context, id string) (linearapi.Issue, error) {
+		<-releaseDetails
+		return issue, nil
+	}
+
+	app.openSearchTab()
+	if got := app.handleSearchInputKey(tcell.NewEventKey(tcell.KeyRune, ']', tcell.ModNone)); got != nil {
+		t.Fatal("tab_next rune leaked through to the search input")
+	}
+	if app.activeIssuesSection == IssuesSectionSearch {
+		t.Fatal("tab_next did not cycle out of the Search tab")
+	}
+	if app.searchInput.GetText() != "" {
+		t.Fatalf("search input text = %q, want empty (rune must not be typed)", app.searchInput.GetText())
+	}
+}
+
+func TestSearchEscOnEmptyInputReturnsToPreviousTab(t *testing.T) {
+	cfg := config.Config{
+		PageSize:       1,
+		CacheTTL:       time.Minute,
+		SearchDebounce: 10 * time.Millisecond,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+	app.activeIssuesSection = IssuesSectionAll
+
+	app.openSearchTab()
+	if app.searchReturnSection != IssuesSectionAll {
+		t.Fatalf("searchReturnSection = %v, want IssuesSectionAll", app.searchReturnSection)
+	}
+
+	app.handleSearchInputKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	if app.activeIssuesSection != IssuesSectionAll {
+		t.Fatalf("activeIssuesSection = %v, want IssuesSectionAll after Esc", app.activeIssuesSection)
+	}
+	if app.searchInputFocused {
+		t.Fatal("searchInputFocused = true after leaving the tab")
+	}
+}
+
+func TestCycleIssuesSectionReachesEmptySearchTab(t *testing.T) {
+	cfg := config.Config{
+		PageSize: 1,
+		CacheTTL: time.Minute,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
+	app.otherIssueRows, app.otherIDToIssue = buildFlatSearchRows([]linearapi.Issue{issue})
+	app.activeIssuesSection = IssuesSectionOther
+
+	app.cycleIssuesSection(1)
+	if app.activeIssuesSection != IssuesSectionSearch {
+		t.Fatalf("activeIssuesSection = %v, want IssuesSectionSearch (empty Search tab must stay reachable)", app.activeIssuesSection)
+	}
+	if !app.searchInputFocused {
+		t.Fatal("entering the Search tab must focus its input")
+	}
+}
+
+func TestResetCachedStateClearsSearch(t *testing.T) {
+	cfg := config.Config{
+		PageSize:       5,
+		CacheTTL:       time.Minute,
+		SearchDebounce: 10 * time.Millisecond,
+	}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "Hit", State: "Todo"}
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		return linearapi.IssuePage{Issues: []linearapi.Issue{issue}}, nil
+	}
+
+	app.openSearchTab()
+	app.performIssueSearch("hit")
+	waitForSearchRows(t, app, 1)
+
+	app.resetCachedState()
+	if len(app.searchIssueRows) != 0 || len(app.searchIssues) != 0 {
+		t.Fatalf("search state not cleared: rows=%d issues=%d", len(app.searchIssueRows), len(app.searchIssues))
+	}
+	if app.searchInput.GetText() != "" {
+		t.Fatalf("search input text = %q, want empty", app.searchInput.GetText())
 	}
 }
 

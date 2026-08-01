@@ -43,16 +43,25 @@ func TestPaletteController_FilterCommandsMatchesAllQueryTokens(t *testing.T) {
 	}
 }
 
-func TestOpenSearchPaletteUsesSearchSpecificChrome(t *testing.T) {
+func TestOpenSearchTabFocusesInput(t *testing.T) {
 	app := newUXTestApp()
 
-	app.openSearchPalette()
+	app.openSearchTab()
 
-	if got := app.paletteModalContent.GetTitle(); got != " Search Issues " {
-		t.Fatalf("palette title = %q, want %q", got, " Search Issues ")
+	if app.activeIssuesSection != IssuesSectionSearch {
+		t.Fatalf("activeIssuesSection = %v, want IssuesSectionSearch", app.activeIssuesSection)
 	}
-	if got := app.paletteInput.GetLabel(); got != "/ " {
-		t.Fatalf("palette input label = %q, want %q", got, "/ ")
+	if app.focusedPane != FocusIssues {
+		t.Fatalf("focusedPane = %v, want FocusIssues", app.focusedPane)
+	}
+	if !app.searchInputFocused {
+		t.Fatal("searchInputFocused = false, want the input focused")
+	}
+	if got := app.searchInput.GetLabel(); got != "/ " {
+		t.Fatalf("search input label = %q, want %q", got, "/ ")
+	}
+	if !strings.Contains(app.issuesTabsTitle(true), "Search") {
+		t.Fatalf("issues tab strip %q missing the Search tab", app.issuesTabsTitle(true))
 	}
 }
 

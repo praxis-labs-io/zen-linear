@@ -104,7 +104,7 @@ func TestUpdateDetailsView_IncludesPlanningAndCollaboration(t *testing.T) {
 	}
 }
 
-func TestRefreshIssues_AppliesRichFiltersWithNavigationAndSearch(t *testing.T) {
+func TestRefreshIssues_AppliesRichFiltersWithNavigation(t *testing.T) {
 	cfg := config.Config{
 		PageSize: 1,
 		CacheTTL: time.Minute,
@@ -114,7 +114,6 @@ func TestRefreshIssues_AppliesRichFiltersWithNavigationAndSearch(t *testing.T) {
 	refreshDone := installRefreshCompletionHook(app)
 
 	estimate := 3.0
-	app.searchQuery = "database"
 	app.richFilters = IssueFilters{
 		AssigneeID: "user-1",
 		LabelIDs:   []string{"label-1", "label-2"},
@@ -146,8 +145,8 @@ func TestRefreshIssues_AppliesRichFiltersWithNavigationAndSearch(t *testing.T) {
 		if params.TeamID != "team-1" || params.ProjectID != "project-1" {
 			t.Fatalf("navigation params = team %q project %q, want team-1 project-1", params.TeamID, params.ProjectID)
 		}
-		if params.Search != "database" {
-			t.Fatalf("Search = %q, want database", params.Search)
+		if params.Search != "" {
+			t.Fatalf("Search = %q, want empty (main tabs never search)", params.Search)
 		}
 		if params.AssigneeID != "user-1" {
 			t.Fatalf("AssigneeID = %q, want user-1", params.AssigneeID)
@@ -186,7 +185,7 @@ func TestDefaultCommands_IncludesPlanningCommandsWithoutReactions(t *testing.T) 
 		"list_project_milestones", "set_milestone", "clear_milestone",
 		"filter_issues", "clear_filters", "filter_assignee", "filter_labels",
 		"filter_status", "filter_project", "filter_cycle", "filter_due_date",
-		"filter_estimate", "filter_text",
+		"filter_estimate",
 		"add_issue_relation", "remove_issue_relation", "subscribe_issue", "unsubscribe_issue",
 		"open_attachment", "copy_attachment_url",
 	} {
