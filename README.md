@@ -65,6 +65,7 @@ options added by this fork:
       "rounded_borders": true,
       "group_by": "status",
       "subgroup_by": "",
+      "sort_by": ["status", "priority"],
       "columns": ["priority", "id", "state", "title", "labels", "assignee", "updated"],
       "default_workspace": "Work",
       "workspaces": [
@@ -81,6 +82,9 @@ options added by this fork:
   title, labels, assignee, updated, cycle, due, estimate, milestone
 - `group_by` and `subgroup_by` take status, priority, assignee, cycle,
   project, or milestone
+- `sort_by` takes status, priority, updated, or created. Order matters: the
+  first field decides, the rest break ties. Omit it to sort by most recently
+  updated
 - `workspaces` reads keys from the named env vars. Keys are never stored in
   the file
 - `keybindings` remaps palette commands by id, the global quit, open_palette,

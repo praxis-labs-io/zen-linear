@@ -182,6 +182,7 @@ func TestDefaultCommands_IncludesPlanningCommandsWithoutReactions(t *testing.T) 
 
 	for _, id := range []string{
 		"set_due_date", "clear_due_date", "edit_estimate", "clear_estimate",
+		"set_priority",
 		"list_project_milestones", "set_milestone", "clear_milestone",
 		"filter_issues", "clear_filters", "filter_assignee", "filter_labels",
 		"filter_status", "filter_project", "filter_cycle", "filter_due_date",
@@ -192,6 +193,59 @@ func TestDefaultCommands_IncludesPlanningCommandsWithoutReactions(t *testing.T) 
 		if !ids[id] {
 			t.Fatalf("command %q missing from DefaultCommands", id)
 		}
+	}
+}
+
+func TestSetPriorityPickerDispatchesSelectedPriority(t *testing.T) {
+	for _, tc := range []struct {
+		label string
+		want  int
+	}{
+		{label: "Urgent", want: 1},
+		{label: "No priority", want: 0},
+	} {
+		app := newUXTestApp()
+		refreshDone := installRefreshCompletionHook(app)
+		app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+			return linearapi.IssuePage{}, nil
+		}
+		app.issuesMu.Lock()
+		app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Current"}
+		app.issuesMu.Unlock()
+
+		called := make(chan linearapi.UpdateIssueInput, 1)
+		app.updateIssueFunc = func(ctx context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
+			called <- input
+			return linearapi.Issue{ID: input.ID}, nil
+		}
+
+		app.showSetPriorityPicker()
+
+		if len(app.pickerModal.items) != len(priorityLabels) {
+			t.Fatalf("picker item count = %d, want %d", len(app.pickerModal.items), len(priorityLabels))
+		}
+		// The selection moves out from under an open picker on a background
+		// refresh; the write must still land on the issue the picker named.
+		app.issuesMu.Lock()
+		app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Moved on"}
+		app.issuesMu.Unlock()
+		selectPickerItem(t, app, tc.label)
+
+		select {
+		case input := <-called:
+			if input.Priority == nil {
+				t.Fatal("Priority = nil, want a value")
+			}
+			if *input.Priority != tc.want {
+				t.Fatalf("Priority = %d, want %d", *input.Priority, tc.want)
+			}
+			if input.ID != "issue-1" {
+				t.Fatalf("issue ID = %q, want issue-1", input.ID)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for priority update")
+		}
+		waitForRefreshCompletion(t, refreshDone)
 	}
 }
 

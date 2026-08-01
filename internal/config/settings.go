@@ -23,6 +23,7 @@ type SettingsFile struct {
 	Density          *string           `json:"density"`
 	GroupBy          *string           `json:"group_by"`
 	SubgroupBy       *string           `json:"subgroup_by"`
+	SortBy           []string          `json:"sort_by"`
 	Columns          []string          `json:"columns"`
 	RoundedBorders   *bool             `json:"rounded_borders"`
 	Workspaces       []Workspace       `json:"workspaces"`
@@ -49,6 +50,7 @@ type Settings struct {
 	Density          string            `json:"density"`
 	GroupBy          string            `json:"group_by"`
 	SubgroupBy       string            `json:"subgroup_by"`
+	SortBy           []string          `json:"sort_by,omitempty"`
 	Columns          []string          `json:"columns,omitempty"`
 	RoundedBorders   bool              `json:"rounded_borders"`
 	Workspaces       []Workspace       `json:"workspaces,omitempty"`
@@ -100,6 +102,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		Density:          cfg.Density,
 		GroupBy:          cfg.GroupBy,
 		SubgroupBy:       cfg.SubgroupBy,
+		SortBy:           cfg.SortBy,
 		Columns:          cfg.Columns,
 		RoundedBorders:   cfg.RoundedBorders,
 		Workspaces:       cfg.Workspaces,
@@ -175,6 +178,10 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		return Config{}, err
 	}
 
+	if err := validateSortBy(settings.SortBy, "sort_by"); err != nil {
+		return Config{}, err
+	}
+
 	if err := validateColumns(settings.Columns, "columns"); err != nil {
 		return Config{}, err
 	}
@@ -200,6 +207,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		Density:          density,
 		GroupBy:          settings.GroupBy,
 		SubgroupBy:       settings.SubgroupBy,
+		SortBy:           settings.SortBy,
 		Columns:          settings.Columns,
 		RoundedBorders:   settings.RoundedBorders,
 		Workspaces:       settings.Workspaces,
@@ -293,6 +301,9 @@ func LoadSettings(path string) (Settings, error) {
 	}
 	if file.SubgroupBy != nil {
 		settings.SubgroupBy = *file.SubgroupBy
+	}
+	if file.SortBy != nil {
+		settings.SortBy = file.SortBy
 	}
 	if file.Columns != nil {
 		settings.Columns = file.Columns
@@ -437,6 +448,30 @@ func validateColumns(columns []string, label string) error {
 			return fmt.Errorf("invalid %s entry %q: duplicate column", label, column)
 		}
 		seen[column] = true
+	}
+	return nil
+}
+
+// validateSortBy validates the issue list sort chain. Order matters: the
+// first field decides, later fields break ties. Names are matched the way the
+// UI parses them, case and spacing insensitive, with the API spellings of the
+// timestamps accepted alongside the short ones.
+func validateSortBy(fields []string, label string) error {
+	canonical := map[string]string{
+		"status": "status", "priority": "priority",
+		"updated": "updated", "updatedat": "updated",
+		"created": "created", "createdat": "created",
+	}
+	seen := make(map[string]bool, len(fields))
+	for _, field := range fields {
+		name, known := canonical[strings.ToLower(strings.TrimSpace(field))]
+		if !known {
+			return fmt.Errorf("invalid %s entry %q: must be status, priority, updated, or created", label, field)
+		}
+		if seen[name] {
+			return fmt.Errorf("invalid %s entry %q: duplicate sort field", label, field)
+		}
+		seen[name] = true
 	}
 	return nil
 }

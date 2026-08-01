@@ -91,6 +91,11 @@ type Config struct {
 	// SubgroupBy adds a second grouping level beneath GroupBy groups.
 	SubgroupBy string
 
+	// SortBy orders the issues list by one or more dimensions
+	// (status, priority, updated, created). The first field decides, later
+	// fields break ties. Empty sorts by most recently updated.
+	SortBy []string
+
 	// Columns selects and orders the issue list columns. Empty uses the
 	// default Linear-style layout.
 	Columns []string

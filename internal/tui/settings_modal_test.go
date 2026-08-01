@@ -14,6 +14,7 @@ func TestSettingsFormRoundTripPreservesConfig(t *testing.T) {
 	app := newUXTestApp()
 	app.config.GroupBy = "status"
 	app.config.SubgroupBy = "project"
+	app.config.SortBy = []string{"status", "priority"}
 	app.config.Columns = []string{"priority", "id", "title"}
 	app.config.Keybindings = map[string]string{"switch_workspace": "w"}
 	app.config.Workspaces = []config.Workspace{{Name: "Zenterm", APIKeyEnv: "LINEAR_API_KEY_FAKE"}}
@@ -27,6 +28,9 @@ func TestSettingsFormRoundTripPreservesConfig(t *testing.T) {
 	}
 	if settings.GroupBy != "status" || settings.SubgroupBy != "project" {
 		t.Fatalf("grouping stripped on save: group_by=%q subgroup_by=%q", settings.GroupBy, settings.SubgroupBy)
+	}
+	if len(settings.SortBy) != 2 || settings.SortBy[0] != "status" || settings.SortBy[1] != "priority" {
+		t.Fatalf("sort chain stripped on save: %v", settings.SortBy)
 	}
 	if len(settings.Columns) != 3 {
 		t.Fatalf("columns stripped on save: %v", settings.Columns)

@@ -46,13 +46,19 @@ func parseEstimateInput(value string) (float64, error) {
 	return estimate, nil
 }
 
+// runIssueUpdate applies an update to the issue named in input.ID, falling
+// back to the current selection. Callers that open a modal first should set
+// the ID when they open it: a background refresh can move the selection while
+// the modal is up, and the write must land on the issue the modal named.
 func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage string) {
-	issue := a.GetSelectedIssue()
-	if issue == nil {
-		a.flashStatus("No issue selected")
-		return
+	if input.ID == "" {
+		issue := a.GetSelectedIssue()
+		if issue == nil {
+			a.flashStatus("No issue selected")
+			return
+		}
+		input.ID = issue.ID
 	}
-	input.ID = issue.ID
 	updateIssue := a.updateIssueFunc
 	if updateIssue == nil {
 		updateIssue = a.api.UpdateIssue
@@ -61,14 +67,14 @@ func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage st
 		_, err := updateIssue(context.Background(), input)
 		a.QueueUpdateDraw(func() {
 			if err != nil {
-				logger.ErrorWithErr(err, "tui.planning: issue update failed issue=%s", issue.Identifier)
+				logger.ErrorWithErr(err, "tui.planning: issue update failed issue_id=%s", issueID)
 				a.updateStatusBarWithError(err)
 				return
 			}
 			a.flashStatus(successMessage)
 			go a.refreshIssues(issueID)
 		})
-	}(issue.ID)
+	}(input.ID)
 }
 
 func (a *App) showSetDueDateModal() {
@@ -130,6 +136,31 @@ func (a *App) editEstimateForSelectedIssue(value string) {
 
 func (a *App) clearEstimateForSelectedIssue() {
 	a.runIssueUpdate(linearapi.UpdateIssueInput{ClearEstimate: true}, "Cleared estimate")
+}
+
+func (a *App) showSetPriorityPicker() {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	items := make([]PickerItem, 0, len(priorityLabels))
+	for value, label := range priorityLabels {
+		items = append(items, PickerItem{ID: strconv.Itoa(value), Label: label})
+	}
+	// The picker names this issue, so the write targets it even if a refresh
+	// moves the selection while the picker is open.
+	issueID := issue.ID
+	a.pickerActive = true
+	a.pickerModal.ShowWithContext("Set Priority", a.issueContextLine(*issue), items, func(item PickerItem) {
+		a.pickerActive = false
+		priority, err := strconv.Atoi(item.ID)
+		if err != nil {
+			a.updateStatusBarWithError(err)
+			return
+		}
+		a.runIssueUpdate(linearapi.UpdateIssueInput{ID: issueID, Priority: &priority}, "Set priority: "+item.Label)
+	})
 }
 
 func (a *App) selectedIssueProjectID() (string, bool) {

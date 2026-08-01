@@ -72,8 +72,7 @@ func NewCreateIssueModal(app *App) *CreateIssueModal {
 			cm.cycleName = cycle.Name
 		}
 	})
-	priorities := []string{"No priority", "Urgent", "High", "Normal", "Low"}
-	cm.priorityField = cm.fm.AddPicker("Priority", priorities, 3, func(option string, index int) {
+	cm.priorityField = cm.fm.AddPicker("Priority", priorityLabels, 3, func(option string, index int) {
 		cm.priority = index
 		cm.priorityLabel = option
 	})
