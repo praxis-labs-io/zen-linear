@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/config"
-	"github.com/Drucial/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/config"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 func TestRenderIssueRow_IncludesPlanningFields(t *testing.T) {

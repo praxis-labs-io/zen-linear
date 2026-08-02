@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/Drucial/zen-linear/internal/config"
+	"github.com/zen-linear/zen-linear/internal/config"
 )
 
 func switcherTestWorkspaces() []config.Workspace {

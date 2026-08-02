@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/auth/oauth"
+	"github.com/zen-linear/zen-linear/internal/auth/oauth"
 )
 
 // LoginOptions configures the browser PKCE login flow.

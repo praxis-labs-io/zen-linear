@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/logger"
 	"github.com/shurcooL/graphql"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // parseTime safely parses an RFC3339 time string, returning zero time on error.

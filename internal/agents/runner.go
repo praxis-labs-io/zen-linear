@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Drucial/zen-linear/internal/logger"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 const (

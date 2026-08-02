@@ -1,9 +1,9 @@
 package tui
 
 import (
-	"github.com/Drucial/zen-linear/internal/linearapi"
-	"github.com/Drucial/zen-linear/internal/logger"
 	"github.com/rivo/tview"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // favoriteLeafNode maps one favorite onto a navigation node, or nil for

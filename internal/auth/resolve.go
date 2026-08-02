@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/auth/oauth"
-	"github.com/Drucial/zen-linear/internal/config"
+	"github.com/zen-linear/zen-linear/internal/auth/oauth"
+	"github.com/zen-linear/zen-linear/internal/config"
 )
 
 // Resolve selects an API token: LINEAR_API_KEY overrides stored OAuth credentials.

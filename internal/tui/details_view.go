@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
 	"github.com/charmbracelet/glamour"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // markdownRenderer is a shared glamour renderer for markdown content.

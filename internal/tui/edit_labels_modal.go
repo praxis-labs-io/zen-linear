@@ -3,9 +3,9 @@ package tui
 import (
 	"sort"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // EditLabelsModal manages a multi-select modal for editing issue labels.

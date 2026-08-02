@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/config"
-	"github.com/Drucial/zen-linear/internal/linearapi"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/zen-linear/zen-linear/internal/config"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 func newUXTestApp() *App {

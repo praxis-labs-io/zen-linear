@@ -9,7 +9,7 @@ Go/tview adaptation of the feature-complete process. This is a downstream copy
 of `~/.claude/skills/ship-feature/SKILL.md`; edit the source and copy out, never
 edit this file directly.
 
-Applies to fork feature work shipping to `origin` (Drucial/zen-linear) `main`.
+Applies to fork feature work shipping to `origin` (zen-linear/zen-linear) `main`.
 Upstream `feature/*` branches follow CLAUDE.md's upstream PR discipline instead,
 not this skill.
 
@@ -52,8 +52,8 @@ requestable one. Both failures read like Copilot is unavailable; it isn't. Use
 the GraphQL `requestReviews` mutation with the Bot's node id:
 
 ```bash
-PR_ID=$(gh api graphql -f query='query { repository(owner:"Drucial",name:"zen-linear"){ pullRequest(number:NNN){ id } } }' --jq '.data.repository.pullRequest.id')
-BOT_ID=$(gh api graphql -f query='query { repository(owner:"Drucial",name:"zen-linear"){ suggestedActors(capabilities:[CAN_BE_ASSIGNED],first:20){ nodes{ ... on Bot { id login } } } } }' --jq '.data.repository.suggestedActors.nodes[] | select(.login=="copilot-swe-agent") | .id')
+PR_ID=$(gh api graphql -f query='query { repository(owner:"zen-linear",name:"zen-linear"){ pullRequest(number:NNN){ id } } }' --jq '.data.repository.pullRequest.id')
+BOT_ID=$(gh api graphql -f query='query { repository(owner:"zen-linear",name:"zen-linear"){ suggestedActors(capabilities:[CAN_BE_ASSIGNED],first:20){ nodes{ ... on Bot { id login } } } } }' --jq '.data.repository.suggestedActors.nodes[] | select(.login=="copilot-swe-agent") | .id')
 gh api graphql -f query='mutation($pr:ID!,$bot:ID!){ requestReviews(input:{pullRequestId:$pr, botIds:[$bot], union:true}){ pullRequest{ reviewRequests(first:10){ nodes{ requestedReviewer{ ... on Bot { login } } } } } } }' -f pr="$PR_ID" -f bot="$BOT_ID"
 ```
 

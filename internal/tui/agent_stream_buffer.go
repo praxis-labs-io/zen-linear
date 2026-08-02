@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Drucial/zen-linear/internal/agents"
+	"github.com/zen-linear/zen-linear/internal/agents"
 )
 
 // StreamLineKind identifies the type of a streaming output line.

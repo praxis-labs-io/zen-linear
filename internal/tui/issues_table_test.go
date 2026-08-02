@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // Column order matches Linear's list view: priority, id, state, title,

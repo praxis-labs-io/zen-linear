@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // newFavoritesTestApp returns an app whose favorites mutations are stubbed and

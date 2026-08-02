@@ -50,7 +50,7 @@ Appearance
 
 Requires Go 1.24 or later.
 
-    git clone https://github.com/Drucial/zen-linear.git
+    git clone https://github.com/zen-linear/zen-linear.git
     cd zen-linear
     go build -o ~/.local/bin/zen-linear ./cmd/zen-linear
 

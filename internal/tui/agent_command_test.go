@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/agents"
-	"github.com/Drucial/zen-linear/internal/config"
-	"github.com/Drucial/zen-linear/internal/linearapi"
 	"github.com/gdamore/tcell/v2"
+	"github.com/zen-linear/zen-linear/internal/agents"
+	"github.com/zen-linear/zen-linear/internal/config"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // TestAskAgentCommand_ShowsModalsAndStreams verifies the command flow.

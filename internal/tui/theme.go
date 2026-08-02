@@ -3,8 +3,8 @@ package tui
 import (
 	"fmt"
 
-	"github.com/Drucial/zen-linear/internal/config"
 	"github.com/gdamore/tcell/v2"
+	"github.com/zen-linear/zen-linear/internal/config"
 )
 
 // Theme defines the color palette and styles for the application.
