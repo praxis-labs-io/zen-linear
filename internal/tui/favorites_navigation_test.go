@@ -113,6 +113,30 @@ func TestFavoriteNavigationNodesFolders(t *testing.T) {
 	if len(folder.Children) != 2 || folder.Children[0].Text != "Inside" || folder.Children[1].Text != "Also Inside" {
 		t.Errorf("folder children = %+v", folder.Children)
 	}
+	if folder.FavoriteID != "folder-1" || folder.FavoriteParentID != "" {
+		t.Errorf("folder identity = %q/%q, want folder-1 at the top level", folder.FavoriteID, folder.FavoriteParentID)
+	}
+	if folder.Children[0].FavoriteID != "fav-a" || folder.Children[0].FavoriteParentID != "folder-1" {
+		t.Errorf("child identity = %q/%q, want fav-a inside folder-1",
+			folder.Children[0].FavoriteID, folder.Children[0].FavoriteParentID)
+	}
+}
+
+// TestFavoriteNavigationNodesOrphanRendersAtTopLevel verifies a favorite whose
+// folder is absent reports the top level, so reordering compares it against the
+// siblings it actually sits with.
+func TestFavoriteNavigationNodesOrphanRendersAtTopLevel(t *testing.T) {
+	favorites := []linearapi.Favorite{
+		{Type: "project", ID: "fav-orphan", ProjectID: "project-1", ProjectName: "Orphan", ParentID: "gone"},
+	}
+
+	nodes := favoriteNavigationNodes(favorites)
+	if len(nodes) != 1 {
+		t.Fatalf("favoriteNavigationNodes() returned %d roots, want 1", len(nodes))
+	}
+	if nodes[0].FavoriteParentID != "" {
+		t.Errorf("orphan FavoriteParentID = %q, want empty", nodes[0].FavoriteParentID)
+	}
 }
 
 // TestFavoriteNavigationNodesViews verifies custom view and predefined view

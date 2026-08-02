@@ -166,6 +166,8 @@ type App struct {
 	palettePreviousPane    FocusTarget
 	navigationTree         *tview.TreeView
 	navNodeOriginalText    map[*tview.TreeNode]string
+	favorites              []linearapi.Favorite
+	favoritesGroup         *tview.TreeNode
 	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
 	myIssuesTable          *tview.Table
 	otherIssuesTable       *tview.Table
@@ -285,6 +287,12 @@ type App struct {
 	fetchCyclesFunc         func(context.Context, string) ([]linearapi.Cycle, error)
 	preloadTeamMetadataFunc func(string)
 
+	createFavoriteFunc     func(context.Context, linearapi.FavoriteTarget) (linearapi.Favorite, error)
+	deleteFavoriteFunc     func(context.Context, string) error
+	updateFavoriteSortFunc func(context.Context, string, float64) error
+	moveFavoriteFunc       func(context.Context, string, string, float64) error
+	favoritesChanged       func()
+
 	// UI update mutex (for test safety when queueUpdateDraw executes immediately)
 	uiUpdateMu sync.Mutex
 
@@ -356,6 +364,10 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 	app.fetchWorkflowStatesFunc = app.cache.GetWorkflowStates
 	app.fetchCyclesFunc = app.cache.GetCycles
 	app.preloadTeamMetadataFunc = app.preloadTeamMetadata
+	app.createFavoriteFunc = app.api.CreateFavorite
+	app.deleteFavoriteFunc = app.api.DeleteFavorite
+	app.updateFavoriteSortFunc = app.api.UpdateFavoriteSortOrder
+	app.moveFavoriteFunc = app.api.MoveFavorite
 	app.queueUpdateDraw = func(f func()) {
 		app.app.QueueUpdateDraw(f)
 	}
@@ -434,6 +446,10 @@ func (a *App) applySettings(newCfg config.Config) {
 	a.fetchProjectsFunc = a.cache.GetProjects
 	a.fetchWorkflowStatesFunc = a.cache.GetWorkflowStates
 	a.fetchCyclesFunc = a.cache.GetCycles
+	a.createFavoriteFunc = a.api.CreateFavorite
+	a.deleteFavoriteFunc = a.api.DeleteFavorite
+	a.updateFavoriteSortFunc = a.api.UpdateFavoriteSortOrder
+	a.moveFavoriteFunc = a.api.MoveFavorite
 
 	logger.Debug("tui.app: resetting cached state after settings change")
 	a.resetCachedState()
@@ -791,6 +807,7 @@ func (a *App) loadNavigationData(ctx context.Context) bool {
 // rebuildNavigationTree rebuilds the navigation tree with real data.
 func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearapi.Favorite) {
 	a.navNodeOriginalText = make(map[*tview.TreeNode]string)
+	a.favorites = favorites
 	rootLabel := "Linear"
 	if a.activeWorkspaceName != "" {
 		rootLabel = "Linear · " + a.activeWorkspaceName
@@ -1256,6 +1273,22 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 			a.focusedPane = FocusIssues
 			a.updateFocus()
 			return nil
+		case a.actionKey("favorite_move_up", 'K'):
+			if a.moveFavorite(a.currentNavigationNode(), -1) {
+				return nil
+			}
+		case a.actionKey("favorite_move_down", 'J'):
+			if a.moveFavorite(a.currentNavigationNode(), 1) {
+				return nil
+			}
+		case a.actionKey("favorite_nest", 'L'):
+			if a.nestFavorite(a.currentNavigationNode(), false) {
+				return nil
+			}
+		case a.actionKey("favorite_unnest", 'H'):
+			if a.nestFavorite(a.currentNavigationNode(), true) {
+				return nil
+			}
 		case 'j', 'k', 'g', 'G', 'h':
 			// Tree movement keys stay with the tree.
 		default:

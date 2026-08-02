@@ -96,13 +96,47 @@ func favoriteLeafNode(favorite linearapi.Favorite) *NavigationNode {
 	}
 }
 
+// favoriteTypeFolder is Linear's favorite type for a sidebar folder.
+const favoriteTypeFolder = "folder"
+
+// isRenderableFavorite reports whether a favorite reaches the navigation tree.
+// Unsupported types are dropped, so they must not count as reorder siblings
+// either.
+func isRenderableFavorite(favorite linearapi.Favorite) bool {
+	if favorite.Type == favoriteTypeFolder {
+		return true
+	}
+	return favoriteLeafNode(favorite) != nil
+}
+
+// favoriteParentIDs maps each favorite to the folder it renders under, empty
+// for the top level. A favorite whose folder is missing renders at the top
+// level, so it is reported that way here too.
+func favoriteParentIDs(favorites []linearapi.Favorite) map[string]string {
+	isFolder := make(map[string]bool)
+	for _, favorite := range favorites {
+		if favorite.Type == favoriteTypeFolder {
+			isFolder[favorite.ID] = true
+		}
+	}
+	parents := make(map[string]string, len(favorites))
+	for _, favorite := range favorites {
+		if favorite.ParentID != favorite.ID && isFolder[favorite.ParentID] {
+			parents[favorite.ID] = favorite.ParentID
+		}
+	}
+	return parents
+}
+
 // favoriteNavigationNodes maps favorites onto navigation nodes, nesting
 // favorites inside their Linear folders.
 func favoriteNavigationNodes(favorites []linearapi.Favorite) []*NavigationNode {
+	parents := favoriteParentIDs(favorites)
+
 	// Folders first, so children find their parent regardless of order.
 	folders := make(map[string]*NavigationNode)
 	for _, favorite := range favorites {
-		if favorite.Type != "folder" {
+		if favorite.Type != favoriteTypeFolder {
 			continue
 		}
 		label := favorite.Title
@@ -118,7 +152,9 @@ func favoriteNavigationNodes(favorites []linearapi.Favorite) []*NavigationNode {
 
 	var roots []*NavigationNode
 	place := func(favorite linearapi.Favorite, node *NavigationNode) {
-		if parent, ok := folders[favorite.ParentID]; ok && parent != node {
+		node.FavoriteID = favorite.ID
+		node.FavoriteParentID = parents[favorite.ID]
+		if parent, ok := folders[node.FavoriteParentID]; ok {
 			parent.Children = append(parent.Children, node)
 			return
 		}
@@ -126,7 +162,7 @@ func favoriteNavigationNodes(favorites []linearapi.Favorite) []*NavigationNode {
 	}
 
 	for _, favorite := range favorites {
-		if favorite.Type == "folder" {
+		if favorite.Type == favoriteTypeFolder {
 			place(favorite, folders[favorite.ID])
 			continue
 		}
@@ -137,12 +173,13 @@ func favoriteNavigationNodes(favorites []linearapi.Favorite) []*NavigationNode {
 	return roots
 }
 
-// appendFavoritesSection adds a Favorites group under the navigation root.
-// Favorites are additive: with no displayable favorites the section is omitted.
-func (a *App) appendFavoritesSection(root *tview.TreeNode, favorites []linearapi.Favorite) {
+// buildFavoritesGroup renders the Favorites group, or nil when nothing
+// displayable is favorited. Favorites are additive: with none, the section is
+// omitted rather than shown empty.
+func (a *App) buildFavoritesGroup(favorites []linearapi.Favorite) *tview.TreeNode {
 	nodes := favoriteNavigationNodes(favorites)
 	if len(nodes) == 0 {
-		return
+		return nil
 	}
 
 	group := tview.NewTreeNode("Favorites").
@@ -150,7 +187,16 @@ func (a *App) appendFavoritesSection(root *tview.TreeNode, favorites []linearapi
 		SetSelectable(false).
 		SetExpanded(true)
 	a.addFavoriteNodes(group, nodes)
-	root.AddChild(group)
+	return group
+}
+
+// appendFavoritesSection adds a Favorites group under the navigation root.
+func (a *App) appendFavoritesSection(root *tview.TreeNode, favorites []linearapi.Favorite) {
+	group := a.buildFavoritesGroup(favorites)
+	a.favoritesGroup = group
+	if group != nil {
+		root.AddChild(group)
+	}
 }
 
 // addFavoriteNodes renders favorite navigation nodes under a tree node,
