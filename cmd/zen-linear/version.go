@@ -18,6 +18,6 @@ var (
 
 // VersionInfo returns a formatted string with version details.
 func VersionInfo() string {
-	return fmt.Sprintf("linear-tui %s (commit: %s, built: %s, %s/%s)",
+	return fmt.Sprintf("zen-linear %s (commit: %s, built: %s, %s/%s)",
 		Version, Commit, Date, runtime.GOOS, runtime.GOARCH)
 }

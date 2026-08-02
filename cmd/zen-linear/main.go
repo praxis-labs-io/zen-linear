@@ -36,7 +36,7 @@ func run(args []string) int {
 	return runTUI()
 }
 
-// runAuth handles `linear-tui auth ...` subcommands.
+// runAuth handles `zen-linear auth ...` subcommands.
 func runAuth(args []string) int {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
 		auth.PrintAuthUsage(os.Stdout)

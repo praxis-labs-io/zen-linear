@@ -19,14 +19,14 @@ func Resolve(ctx context.Context, apiKey string, storePath string, oauthClient *
 	creds, err := LoadCredentials(storePath)
 	if err != nil {
 		if errors.Is(err, ErrCredentialsNotFound) {
-			return ResolvedAuth{}, fmt.Errorf("not authenticated: run `linear-tui auth login` or set %s", config.LinearAPIKeyEnv)
+			return ResolvedAuth{}, fmt.Errorf("not authenticated: run `zen-linear auth login` or set %s", config.LinearAPIKeyEnv)
 		}
 		return ResolvedAuth{}, err
 	}
 
 	updated, refreshed, err := EnsureAccessToken(ctx, creds, oauthClient, time.Now(), oauth.RefreshSkew, false)
 	if err != nil {
-		return ResolvedAuth{}, fmt.Errorf("refresh oauth credentials: %w (re-run `linear-tui auth login`)", err)
+		return ResolvedAuth{}, fmt.Errorf("refresh oauth credentials: %w (re-run `zen-linear auth login`)", err)
 	}
 	if refreshed {
 		if err := SaveCredentials(storePath, updated); err != nil {

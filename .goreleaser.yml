@@ -1,10 +1,10 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
-# GoReleaser configuration for linear-tui
+# GoReleaser configuration for zen-linear
 # Documentation: https://goreleaser.com
 
 version: 2
 
-project_name: linear-tui
+project_name: zen-linear
 
 before:
   hooks:
@@ -12,9 +12,9 @@ before:
     - go mod tidy
 
 builds:
-  - id: linear-tui
-    main: ./cmd/linear-tui
-    binary: linear-tui
+  - id: zen-linear
+    main: ./cmd/zen-linear
+    binary: zen-linear
     env:
       - CGO_ENABLED=0
     goos:
@@ -73,7 +73,7 @@ release:
 # formulas are still the appropriate distribution method. This will continue
 # to work and can be migrated to homebrew_casks in a future update if needed.
 brews:
-  - name: linear-tui
+  - name: zen-linear
     repository:
       owner: Drucial
       name: homebrew-zen-linear
@@ -84,6 +84,6 @@ brews:
     description: "Terminal user interface for Linear"
     license: "MIT"
     install: |
-      bin.install "linear-tui"
+      bin.install "zen-linear"
     test: |
-      system "#{bin}/linear-tui", "--version"
+      system "#{bin}/zen-linear", "--version"

@@ -4,8 +4,8 @@
 .DEFAULT_GOAL := help
 
 # Variables
-BINARY_NAME := linear-tui
-MAIN_PACKAGE := ./cmd/linear-tui
+BINARY_NAME := zen-linear
+MAIN_PACKAGE := ./cmd/zen-linear
 COVERAGE_FILE := coverage.out
 
 help: ## Show this help message
