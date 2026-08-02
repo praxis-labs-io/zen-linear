@@ -1,5 +1,5 @@
 # Continuous Integration workflow for linear-tui
-# Runs on pull requests and pushes to main branch
+# Runs on pushes to main and non-draft pull requests
 
 name: CI
 
@@ -8,15 +8,31 @@ on:
     branches:
       - main
   pull_request:
+    # ready_for_review is required so marking a draft PR ready triggers a run;
+    # the default types (opened, synchronize, reopened) don't fire on that
+    # transition. Draft PRs still emit these events — the job-level `if` below
+    # is what actually skips them.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
 
-permissions:
-  contents: read
+concurrency:
+  # The action is part of the key so a `ready_for_review` run can't be cancelled
+  # by a `synchronize` run that raced it. Pushing and marking ready in one go
+  # sends both at once: synchronize still carries `draft: true`, so its jobs
+  # skip, and if it also cancelled the ready run the PR ended up with no CI at
+  # all while reporting only skipped checks. Successive pushes share the
+  # `synchronize` key and still supersede each other, which is the case
+  # cancel-in-progress is actually for.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
-    name: Lint
+    name: Lint + Format
+    # Skip while the PR is a draft; push events (main) have no PR object and
+    # always run. Marking the PR ready (ready_for_review) re-fires CI.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -48,6 +64,7 @@ jobs:
 
   test:
     name: Test
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -70,6 +87,7 @@ jobs:
 
   build:
     name: Build
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     strategy:
       matrix:
