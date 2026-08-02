@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -676,5 +678,119 @@ func TestDefaultCommands_IncludesCycleCommands(t *testing.T) {
 		if !ids[id] {
 			t.Fatalf("command %q missing from DefaultCommands", id)
 		}
+	}
+}
+
+// renderedTitles returns the title cell of every rendered row in a section,
+// skipping the column header and any group headers.
+func renderedTitles(app *App, section IssuesSection) []string {
+	table := app.tableForSection(section)
+	var titles []string
+	for row := 1; row < table.GetRowCount(); row++ {
+		cell := table.GetCell(row, titleColumn)
+		if cell == nil || cell.Text == "" {
+			continue
+		}
+		titles = append(titles, cell.Text)
+	}
+	return titles
+}
+
+// TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage verifies pages after the
+// first accumulate without repainting. Repainting per page regroups and
+// re-renders the whole table for an end state only the last page settles.
+func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
+	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+	refreshDone := installRefreshCompletionHook(app)
+	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
+		return linearapi.Issue{ID: id}, nil
+	}
+
+	pages := []linearapi.Issue{
+		{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"},
+		{ID: "issue-2", Identifier: "ABC-2", Title: "Second", State: "Todo"},
+		{ID: "issue-3", Identifier: "ABC-3", Title: "Third", State: "Todo"},
+	}
+
+	blockLast := make(chan struct{})
+	var fetched atomic.Int32
+	app.fetchIssuesPage = func(_ context.Context, _ linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		index := int(fetched.Add(1)) - 1
+		if index == len(pages)-1 {
+			<-blockLast
+		}
+		return linearapi.IssuePage{
+			Issues:    []linearapi.Issue{pages[index]},
+			HasNext:   index < len(pages)-1,
+			EndCursor: stringPtr(fmt.Sprintf("cursor-%d", index)),
+		}, nil
+	}
+
+	app.refreshIssues()
+
+	// Page 2 has merged but must not have reached the table yet.
+	waitForCondition(t, time.Second, func() bool {
+		app.issuesMu.RLock()
+		defer app.issuesMu.RUnlock()
+		return len(app.issues) == 2
+	})
+	if got := renderedTitles(app, IssuesSectionOther); !slices.Equal(got, []string{"First"}) {
+		t.Fatalf("rendered titles mid-pagination = %v, want [First]", got)
+	}
+
+	close(blockLast)
+	waitForRefreshCompletion(t, refreshDone)
+
+	got := renderedTitles(app, IssuesSectionOther)
+	want := []string{"First", "Second", "Third"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("rendered titles after pagination = %v, want %v", got, want)
+	}
+}
+
+// TestRefreshIssues_KeepsSelectionAcrossPagination guards the one thing the
+// deferred paint could break: the cursor moving because a later page reordered
+// the list under it.
+func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
+	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+	refreshDone := installRefreshCompletionHook(app)
+	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
+		return linearapi.Issue{ID: id}, nil
+	}
+
+	// Page 2 sorts ahead of page 1, so the selected row moves.
+	pages := []linearapi.Issue{
+		{ID: "issue-b", Identifier: "ABC-2", Title: "Beta", State: "Todo", Priority: 3},
+		{ID: "issue-a", Identifier: "ABC-1", Title: "Alpha", State: "Todo", Priority: 1},
+	}
+	app.sortFields = []SortField{SortByPriority}
+
+	var fetched atomic.Int32
+	app.fetchIssuesPage = func(_ context.Context, _ linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		index := int(fetched.Add(1)) - 1
+		return linearapi.IssuePage{
+			Issues:    []linearapi.Issue{pages[index]},
+			HasNext:   index < len(pages)-1,
+			EndCursor: stringPtr(fmt.Sprintf("cursor-%d", index)),
+		}, nil
+	}
+
+	app.refreshIssues()
+	waitForRefreshCompletion(t, refreshDone)
+
+	got := renderedTitles(app, IssuesSectionOther)
+	if !slices.Equal(got, []string{"Alpha", "Beta"}) {
+		t.Fatalf("rendered titles = %v, want [Alpha Beta]", got)
+	}
+
+	app.issuesMu.RLock()
+	selected := app.selectedIssue
+	app.issuesMu.RUnlock()
+	if selected == nil || selected.ID != "issue-b" {
+		t.Fatalf("selectedIssue = %#v, want issue-b to survive the reorder", selected)
 	}
 }

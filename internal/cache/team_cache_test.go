@@ -2,6 +2,8 @@ package cache
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -448,4 +450,165 @@ func TestTeamCache_PreloadTeamMetadata_UsesCachedCycles(t *testing.T) {
 	if err := cache.PreloadTeamMetadata(context.Background(), teamID); err != nil {
 		t.Fatalf("PreloadTeamMetadata() error = %v", err)
 	}
+}
+
+func TestGetCachedOrFetch_CollapsesConcurrentMisses(t *testing.T) {
+	c := NewTeamCache(nil, time.Minute)
+	teamID := "team-1"
+
+	release := make(chan struct{})
+	var calls atomic.Int32
+	fetch := func(context.Context, string) ([]linearapi.User, error) {
+		calls.Add(1)
+		<-release
+		return []linearapi.User{{ID: "user-1"}}, nil
+	}
+
+	const callers = 8
+	results := make(chan []linearapi.User, callers)
+	errs := make(chan error, callers)
+	for range callers {
+		go func() {
+			data, err := getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch)
+			results <- data
+			errs <- err
+		}()
+	}
+
+	// Every follower has to reach the cache and park while the leader is still
+	// fetching, or this asserts nothing. There is no way to observe a parked
+	// waiter, so settle instead: a follower that raced the cache would have
+	// incremented calls by the time this returns.
+	waitForCalls(t, &calls, 1)
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+
+	for range callers {
+		if err := <-errs; err != nil {
+			t.Fatalf("getCachedOrFetch() error = %v", err)
+		}
+		if data := <-results; len(data) != 1 || data[0].ID != "user-1" {
+			t.Fatalf("getCachedOrFetch() = %#v, want one user-1", data)
+		}
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("fetch calls = %d, want 1", got)
+	}
+}
+
+func TestGetCachedOrFetch_FailedLeaderLetsFollowerRetry(t *testing.T) {
+	c := NewTeamCache(nil, time.Minute)
+	teamID := "team-1"
+
+	release := make(chan struct{})
+	var calls atomic.Int32
+	fetch := func(context.Context, string) ([]linearapi.User, error) {
+		if calls.Add(1) == 1 {
+			<-release
+			return nil, errors.New("boom")
+		}
+		return []linearapi.User{{ID: "user-1"}}, nil
+	}
+
+	leaderErr := make(chan error, 1)
+	go func() {
+		_, err := getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch)
+		leaderErr <- err
+	}()
+	waitForCalls(t, &calls, 1)
+
+	followerData := make(chan []linearapi.User, 1)
+	go func() {
+		data, err := getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch)
+		if err != nil {
+			t.Errorf("follower error = %v", err)
+		}
+		followerData <- data
+	}()
+	waitForInflight(t, c, "users:"+teamID)
+
+	close(release)
+	if err := <-leaderErr; err == nil {
+		t.Fatal("leader error = nil, want the fetch error")
+	}
+	select {
+	case data := <-followerData:
+		if len(data) != 1 || data[0].ID != "user-1" {
+			t.Fatalf("follower data = %#v, want one user-1", data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("follower never took over after the leader failed")
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("fetch calls = %d, want 2", got)
+	}
+}
+
+func TestGetCachedOrFetch_WaiterHonorsContextCancellation(t *testing.T) {
+	c := NewTeamCache(nil, time.Minute)
+	teamID := "team-1"
+
+	release := make(chan struct{})
+	defer close(release)
+	var calls atomic.Int32
+	fetch := func(context.Context, string) ([]linearapi.User, error) {
+		calls.Add(1)
+		<-release
+		return nil, nil
+	}
+
+	go func() {
+		_, _ = getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch)
+	}()
+	waitForCalls(t, &calls, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	waiterErr := make(chan error, 1)
+	go func() {
+		_, err := getCachedOrFetch(ctx, c, "users", teamID, c.users, c.usersExpiry, fetch)
+		waiterErr <- err
+	}()
+	waitForInflight(t, c, "users:"+teamID)
+	cancel()
+
+	select {
+	case err := <-waiterErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("waiter error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiter did not return after its context was canceled")
+	}
+}
+
+func waitForCalls(t *testing.T, calls *atomic.Int32, want int32) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if calls.Load() >= want {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("fetch calls reached %d, want %d", calls.Load(), want)
+}
+
+// waitForInflight blocks until a second caller is parked on the leader's
+// channel, which is the state these tests are about.
+func waitForInflight(t *testing.T, c *TeamCache, key string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		c.mu.Lock()
+		_, running := c.inflight[key]
+		c.mu.Unlock()
+		if running {
+			// The follower cannot be observed directly; give it a moment to
+			// park after finding the entry.
+			time.Sleep(10 * time.Millisecond)
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("no in-flight entry for %q", key)
 }

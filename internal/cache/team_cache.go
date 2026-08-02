@@ -43,6 +43,11 @@ type TeamCache struct {
 	// Project-scoped caches
 	projectMilestones       map[string][]linearapi.ProjectMilestone
 	projectMilestonesExpiry map[string]time.Time
+
+	// inflight tracks fetches in progress so concurrent misses for the same
+	// key wait on the first request instead of issuing their own. Keyed
+	// "kind:id" because team and project ids share the map.
+	inflight map[string]chan struct{}
 }
 
 // NewTeamCache creates a new team cache with the given client and TTL.
@@ -62,6 +67,7 @@ func NewTeamCache(client *linearapi.Client, ttl time.Duration) *TeamCache {
 		labelsExpiry:            make(map[string]time.Time),
 		projectMilestones:       make(map[string][]linearapi.ProjectMilestone),
 		projectMilestonesExpiry: make(map[string]time.Time),
+		inflight:                make(map[string]chan struct{}),
 	}
 }
 
@@ -118,33 +124,62 @@ func (c *TeamCache) GetCurrentUser(ctx context.Context) (linearapi.User, error) 
 }
 
 // getCachedOrFetch is a generic helper function to get cached data or fetch from API.
+// Concurrent misses for the same key collapse onto one request: expanding a
+// team and selecting it both warm the same caches, and without this each pair
+// hit the API twice.
 func getCachedOrFetch[T any](
 	ctx context.Context,
 	c *TeamCache,
+	kind string,
 	teamID string,
 	cache map[string][]T,
 	expiryMap map[string]time.Time,
 	fetchFunc func(context.Context, string) ([]T, error),
 ) ([]T, error) {
-	c.mu.RLock()
-	if exp, ok := expiryMap[teamID]; ok && time.Now().Before(exp) {
-		data := cache[teamID]
-		c.mu.RUnlock()
-		return data, nil
+	key := kind + ":" + teamID
+
+	var done chan struct{}
+	for {
+		c.mu.Lock()
+		if exp, ok := expiryMap[teamID]; ok && time.Now().Before(exp) {
+			data := cache[teamID]
+			c.mu.Unlock()
+			return data, nil
+		}
+		wait, running := c.inflight[key]
+		if !running {
+			done = make(chan struct{})
+			c.inflight[key] = done
+			c.mu.Unlock()
+			break
+		}
+		c.mu.Unlock()
+
+		select {
+		case <-wait:
+			// Loop back: the leader either cached a result or failed, in which
+			// case this call takes over as leader.
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
-	c.mu.RUnlock()
 
 	// Fetch from API
 	logger.Debug("cache.team: cache miss team_id=%s, fetching from API", teamID)
 	data, err := fetchFunc(ctx, teamID)
+
+	c.mu.Lock()
+	if err == nil {
+		cache[teamID] = data
+		expiryMap[teamID] = time.Now().Add(c.ttl)
+	}
+	delete(c.inflight, key)
+	close(done)
+	c.mu.Unlock()
+
 	if err != nil {
 		return nil, err
 	}
-
-	c.mu.Lock()
-	cache[teamID] = data
-	expiryMap[teamID] = time.Now().Add(c.ttl)
-	c.mu.Unlock()
 
 	logger.Debug("cache.team: cached data team_id=%s count=%d ttl=%s", teamID, len(data), c.ttl)
 	return data, nil
@@ -152,32 +187,32 @@ func getCachedOrFetch[T any](
 
 // GetUsers returns cached users for a team or fetches them from the API.
 func (c *TeamCache) GetUsers(ctx context.Context, teamID string) ([]linearapi.User, error) {
-	return getCachedOrFetch(ctx, c, teamID, c.users, c.usersExpiry, c.client.ListUsers)
+	return getCachedOrFetch(ctx, c, "users", teamID, c.users, c.usersExpiry, c.client.ListUsers)
 }
 
 // GetProjects returns cached projects for a team or fetches them from the API.
 func (c *TeamCache) GetProjects(ctx context.Context, teamID string) ([]linearapi.Project, error) {
-	return getCachedOrFetch(ctx, c, teamID, c.projects, c.projectsExpiry, c.client.ListProjects)
+	return getCachedOrFetch(ctx, c, "projects", teamID, c.projects, c.projectsExpiry, c.client.ListProjects)
 }
 
 // GetWorkflowStates returns cached workflow states for a team or fetches from the API.
 func (c *TeamCache) GetWorkflowStates(ctx context.Context, teamID string) ([]linearapi.WorkflowState, error) {
-	return getCachedOrFetch(ctx, c, teamID, c.states, c.statesExpiry, c.client.ListWorkflowStates)
+	return getCachedOrFetch(ctx, c, "states", teamID, c.states, c.statesExpiry, c.client.ListWorkflowStates)
 }
 
 // GetCycles returns cached cycles for a team or fetches from the API.
 func (c *TeamCache) GetCycles(ctx context.Context, teamID string) ([]linearapi.Cycle, error) {
-	return getCachedOrFetch(ctx, c, teamID, c.cycles, c.cyclesExpiry, c.client.ListCycles)
+	return getCachedOrFetch(ctx, c, "cycles", teamID, c.cycles, c.cyclesExpiry, c.client.ListCycles)
 }
 
 // GetIssueLabels returns cached labels (merged team + workspace) for a team or fetches from the API.
 func (c *TeamCache) GetIssueLabels(ctx context.Context, teamID string) ([]linearapi.IssueLabel, error) {
-	return getCachedOrFetch(ctx, c, teamID, c.labels, c.labelsExpiry, c.client.ListIssueLabels)
+	return getCachedOrFetch(ctx, c, "labels", teamID, c.labels, c.labelsExpiry, c.client.ListIssueLabels)
 }
 
 // GetProjectMilestones returns cached milestones for a project or fetches from the API.
 func (c *TeamCache) GetProjectMilestones(ctx context.Context, projectID string) ([]linearapi.ProjectMilestone, error) {
-	return getCachedOrFetch(ctx, c, projectID, c.projectMilestones, c.projectMilestonesExpiry, c.client.ListProjectMilestones)
+	return getCachedOrFetch(ctx, c, "milestones", projectID, c.projectMilestones, c.projectMilestonesExpiry, c.client.ListProjectMilestones)
 }
 
 // InvalidateTeams clears the teams cache.
