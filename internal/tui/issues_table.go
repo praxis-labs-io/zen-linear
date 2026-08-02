@@ -415,6 +415,60 @@ func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 	return nil
 }
 
+// issueMapForSection returns the id lookup backing a section's rows.
+func (a *App) issueMapForSection(section IssuesSection) map[string]*linearapi.Issue {
+	switch section {
+	case IssuesSectionMy:
+		return a.myIDToIssue
+	case IssuesSectionOther:
+		return a.otherIDToIssue
+	case IssuesSectionAll:
+		return a.idToIssue
+	case IssuesSectionSearch:
+		return a.searchIDToIssue
+	}
+	return nil
+}
+
+// renderIssueSections paints the mounted section and defers the rest. Only one
+// tab is ever on screen, so rendering all three costs three tables' worth of
+// cell allocations to show one, and resets the off-screen tabs' selection to
+// the first row every time. Deferred sections paint in
+// updateIssuesColumnLayout, which every tab switch already routes through.
+func (a *App) renderIssueSections(selected map[IssuesSection]string) {
+	if a.pendingSectionRenders == nil {
+		a.pendingSectionRenders = make(map[IssuesSection]string, len(selected))
+	}
+	active := a.effectiveIssuesSection()
+	for section, issueID := range selected {
+		if section == active {
+			delete(a.pendingSectionRenders, section)
+			a.renderIssueSection(section, issueID)
+			continue
+		}
+		a.pendingSectionRenders[section] = issueID
+	}
+}
+
+func (a *App) renderIssueSection(section IssuesSection, selectedIssueID string) {
+	table := a.tableForSection(section)
+	if table == nil {
+		return
+	}
+	renderIssuesTableModel(table, a.rowsForSection(section), a.issueMapForSection(section), selectedIssueID, a.theme, a.issueColumns())
+}
+
+// flushPendingSectionRender paints a section whose render was deferred while it
+// was off screen.
+func (a *App) flushPendingSectionRender(section IssuesSection) {
+	selectedIssueID, pending := a.pendingSectionRenders[section]
+	if !pending {
+		return
+	}
+	delete(a.pendingSectionRenders, section)
+	a.renderIssueSection(section, selectedIssueID)
+}
+
 // scrollIssueColumns scrolls the issue table horizontally: H left, L right.
 func scrollIssueColumns(table *tview.Table, key rune) {
 	rowOffset, columnOffset := table.GetOffset()
@@ -653,6 +707,40 @@ func buildFlatSearchRows(issues []linearapi.Issue) ([]IssueRow, map[string]*line
 	return rows, idToIssue
 }
 
+// setIssueRowCells writes one issue's cells into a table row. Splitting this
+// out of the render loop lets a single-issue update repaint its own row instead
+// of clearing and reallocating the whole table.
+func setIssueRowCells(table *tview.Table, row int, issueRow IssueRow, issue *linearapi.Issue, theme Theme, columns []string) {
+	// Build identifier with hierarchy indicator
+	identifierPrefix := " "
+
+	if issueRow.Level > 0 {
+		// Child issue - show indent prefix
+		identifierPrefix = " " + IconChildPrefix + " "
+	} else if issueRow.HasChildren {
+		// Parent issue - show expand/collapse indicator
+		if issueRow.IsExpanded {
+			identifierPrefix = " " + IconExpanded + " "
+		} else {
+			identifierPrefix = " " + IconCollapsed + " "
+		}
+	}
+
+	for column, name := range columns {
+		cellText, cellColor := issueColumnCell(name, issue, identifierPrefix, theme)
+		if column == 0 && name != ColumnID {
+			cellText = " " + cellText
+		}
+		cell := tview.NewTableCell(cellText).
+			SetTextColor(cellColor).
+			SetAlign(tview.AlignLeft)
+		if spec := issueColumnSpecs[name]; spec.maxWidth > 0 {
+			cell.SetMaxWidth(spec.maxWidth)
+		}
+		table.SetCell(row, column, cell)
+	}
+}
+
 // renderIssuesTableModel renders a table with the given rows and issue lookup map.
 func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[string]*linearapi.Issue, selectedIssueID string, theme Theme, columns []string) {
 	if len(columns) == 0 {
@@ -709,34 +797,7 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 			continue
 		}
 
-		// Build identifier with hierarchy indicator
-		identifierPrefix := " "
-
-		if issueRow.Level > 0 {
-			// Child issue - show indent prefix
-			identifierPrefix = " " + IconChildPrefix + " "
-		} else if issueRow.HasChildren {
-			// Parent issue - show expand/collapse indicator
-			if issueRow.IsExpanded {
-				identifierPrefix = " " + IconExpanded + " "
-			} else {
-				identifierPrefix = " " + IconCollapsed + " "
-			}
-		}
-
-		for column, name := range columns {
-			cellText, cellColor := issueColumnCell(name, issue, identifierPrefix, theme)
-			if column == 0 && name != ColumnID {
-				cellText = " " + cellText
-			}
-			cell := tview.NewTableCell(cellText).
-				SetTextColor(cellColor).
-				SetAlign(tview.AlignLeft)
-			if spec := issueColumnSpecs[name]; spec.maxWidth > 0 {
-				cell.SetMaxWidth(spec.maxWidth)
-			}
-			table.SetCell(row, column, cell)
-		}
+		setIssueRowCells(table, row, issueRow, issue, theme, columns)
 	}
 
 	// Select the specified issue or first issue row (skipping group headers)

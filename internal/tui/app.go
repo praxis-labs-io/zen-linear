@@ -221,6 +221,10 @@ type App struct {
 	otherIssueRows []IssueRow                  // Flattened rows for "Other Issues" table
 	otherIDToIssue map[string]*linearapi.Issue // Quick lookup by issue ID for "Other Issues"
 	expandedState  map[string]bool             // Expanded state for parent issues (shared across sections)
+	// pendingSectionRenders holds sections whose cells are stale because they
+	// were off screen when the model changed, keyed to the row they should
+	// select once painted.
+	pendingSectionRenders map[IssuesSection]string
 
 	// Filter/sort state
 	richFilters IssueFilters
@@ -1932,6 +1936,10 @@ func (a *App) applyRichFiltersToParams(params *linearapi.FetchIssuesParams) {
 func (a *App) updateIssuesColumnLayout() {
 	a.issuesColumn.Clear()
 
+	// A tab about to come on screen may still be holding cells from before the
+	// last model change.
+	a.flushPendingSectionRender(a.effectiveIssuesSection())
+
 	// Without any My Issues, that tab disappears (without forgetting the
 	// active choice: My re-applies once it has rows). The Search tab mounts
 	// its input-plus-results panel instead of a bare table.
@@ -1981,50 +1989,12 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 
 // rebuildIssuesTables rebuilds issue rows and renders tables, returning the selected issue.
 func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
-	// Split issues by assignee.
-	a.issuesMu.RLock()
-	issues := a.issues
-	a.issuesMu.RUnlock()
+	a.rebuildIssueRowModels()
 
-	currentUserID := ""
-	if a.currentUser != nil {
-		currentUserID = a.currentUser.ID
-	}
-	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
-
-	// Build hierarchical tree rows for each section, grouped when enabled.
-	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues)
-	a.otherIssueRows, a.otherIDToIssue = a.buildIssueRowsFor(otherIssues)
-
-	// The All Issues tab renders the full list.
-	a.issueRows, a.idToIssue = a.buildIssueRowsFor(issues)
-
-	// Render the tables.
-	var selectedMyIssueID, selectedOtherIssueID, selectedAllIssueID string
-	if targetIssueID != "" {
-		selectedAllIssueID = targetIssueID
-		// Check which section contains the target issue; the All and Search
-		// tabs show their own lists, so they stay active when selected.
-		sectionPinned := a.activeIssuesSection == IssuesSectionAll || a.activeIssuesSection == IssuesSectionSearch
-		if _, ok := a.myIDToIssue[targetIssueID]; ok {
-			selectedMyIssueID = targetIssueID
-			if !sectionPinned {
-				a.activeIssuesSection = IssuesSectionMy
-			}
-		} else if _, ok := a.otherIDToIssue[targetIssueID]; ok {
-			selectedOtherIssueID = targetIssueID
-			if !sectionPinned {
-				a.activeIssuesSection = IssuesSectionOther
-			}
-		}
-	}
+	a.renderIssueSections(a.sectionSelectionsFor(targetIssueID))
 
 	// Show the active tab (after target selection may have switched it).
 	a.updateIssuesColumnLayout()
-
-	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
-	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
-	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme, a.issueColumns())
 
 	// Select issue and update details.
 	var selectedIssue *linearapi.Issue
@@ -2341,9 +2311,6 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	// The All Issues tab renders the full list.
 	a.issueRows, a.idToIssue = a.buildIssueRowsFor(issues)
 
-	// Update layout
-	a.updateIssuesColumnLayout()
-
 	// Render the tables, selecting the toggled issue
 	var selectedMyIssueID, selectedOtherIssueID string
 	selectedAllIssueID := issueID
@@ -2360,9 +2327,12 @@ func (a *App) toggleIssueExpanded(issueID string) {
 		}
 	}
 
-	renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
-	renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
-	renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, selectedAllIssueID, a.theme, a.issueColumns())
+	a.renderIssueSections(map[IssuesSection]string{
+		IssuesSectionMy:    selectedMyIssueID,
+		IssuesSectionOther: selectedOtherIssueID,
+		IssuesSectionAll:   selectedAllIssueID,
+	})
+	a.updateIssuesColumnLayout()
 }
 
 // onNavigationSelected handles when a navigation item is selected.
@@ -3005,23 +2975,10 @@ func (a *App) ShowEditTitleModal() {
 	}
 
 	a.editTitleModal.Show(issue.ID, issue.Title, a.issueContextLine(*issue), func(issueID, title string) {
-		go func() {
-			ctx := context.Background()
-			_, err := a.api.UpdateIssue(ctx, linearapi.UpdateIssueInput{
-				ID:    issueID,
-				Title: &title,
-			})
-			a.QueueUpdateDraw(func() {
-				if err != nil {
-					logger.ErrorWithErr(err, "tui.app: failed to update issue title issue=%s", issue.Identifier)
-					a.updateStatusBarWithError(err)
-					return
-				}
-				logger.Info("tui.app: updated issue title issue=%s", issue.Identifier)
-				a.flashStatus(fmt.Sprintf("Updated title for %s", issue.Identifier))
-				go a.refreshIssues(issueID)
-			})
-		}()
+		a.runIssueUpdate(
+			linearapi.UpdateIssueInput{ID: issueID, Title: &title},
+			fmt.Sprintf("Updated title for %s", issue.Identifier),
+		)
 	})
 }
 
@@ -3111,23 +3068,10 @@ func (a *App) ShowEditLabelsModal() {
 
 		a.QueueUpdateDraw(func() {
 			a.editLabelsModal.Show(issue.ID, currentLabelIDs, availableLabels, a.issueContextLine(*issue), func(issueID string, labelIDs []string) {
-				go func() {
-					ctx := context.Background()
-					_, err := a.api.UpdateIssue(ctx, linearapi.UpdateIssueInput{
-						ID:       issueID,
-						LabelIDs: &labelIDs,
-					})
-					a.QueueUpdateDraw(func() {
-						if err != nil {
-							logger.ErrorWithErr(err, "tui.app: failed to update labels issue=%s", issue.Identifier)
-							a.updateStatusBarWithError(err)
-							return
-						}
-						logger.Info("tui.app: updated labels issue=%s", issue.Identifier)
-						a.flashStatus(fmt.Sprintf("Updated labels for %s", issue.Identifier))
-						go a.refreshIssues(issueID)
-					})
-				}()
+				a.runIssueUpdate(
+					linearapi.UpdateIssueInput{ID: issueID, LabelIDs: &labelIDs},
+					fmt.Sprintf("Updated labels for %s", issue.Identifier),
+				)
 			})
 		})
 	}()

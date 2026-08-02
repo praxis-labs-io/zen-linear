@@ -1612,6 +1612,84 @@ func TestUpdateIssue_SetsAndClearsProjectID(t *testing.T) {
 	}
 }
 
+// TestUpdateIssue_ReturnsFieldsTheListRenders guards the mutation selection
+// against drifting behind the list query. The TUI splices this response
+// straight into the list instead of refetching, so a field missing here shows
+// up as a row that silently loses its due date, estimate, or hierarchy.
+func TestUpdateIssue_ReturnsFieldsTheListRenders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"data": {
+				"issueUpdate": {
+					"success": true,
+					"issue": {
+						"id": "issue-1",
+						"identifier": "ABC-1",
+						"title": "Child issue",
+						"state": {"id": "state-1", "name": "Todo"},
+						"assignee": null,
+						"priority": 1,
+						"updatedAt": "2025-01-01T00:00:00Z",
+						"createdAt": "2025-01-01T00:00:00Z",
+						"description": null,
+						"team": {"id": "team-1"},
+						"project": {"id": "project-1", "name": "Alpha"},
+						"cycle": null,
+						"dueDate": "2026-06-15",
+						"estimate": 5,
+						"projectMilestone": {
+							"id": "milestone-1",
+							"name": "M1",
+							"targetDate": null,
+							"status": "next",
+							"project": {"id": "project-1"}
+						},
+						"labels": {"nodes": []},
+						"url": "https://linear.app/issue/ABC-1",
+						"branchName": "abc-1-child-issue",
+						"archivedAt": null,
+						"parent": {"id": "issue-0", "identifier": "ABC-0", "title": "Parent"},
+						"children": {"nodes": [
+							{"id": "issue-2", "identifier": "ABC-2", "title": "Grandchild", "state": {"id": "state-1", "name": "Todo"}}
+						]}
+					}
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{Endpoint: server.URL})
+
+	issue, err := client.UpdateIssue(context.Background(), UpdateIssueInput{ID: "issue-1"})
+	if err != nil {
+		t.Fatalf("UpdateIssue error: %v", err)
+	}
+
+	if issue.DueDate == nil || *issue.DueDate != "2026-06-15" {
+		t.Fatalf("DueDate = %v, want 2026-06-15", issue.DueDate)
+	}
+	if issue.Estimate == nil || *issue.Estimate != 5 {
+		t.Fatalf("Estimate = %v, want 5", issue.Estimate)
+	}
+	if issue.ProjectMilestone == nil || issue.ProjectMilestone.Name != "M1" {
+		t.Fatalf("ProjectMilestone = %#v, want M1", issue.ProjectMilestone)
+	}
+	if issue.ProjectID != "project-1" || issue.ProjectName != "Alpha" {
+		t.Fatalf("project = %q/%q, want project-1/Alpha", issue.ProjectID, issue.ProjectName)
+	}
+	if issue.BranchName != "abc-1-child-issue" {
+		t.Fatalf("BranchName = %q, want abc-1-child-issue", issue.BranchName)
+	}
+	if issue.Parent == nil || issue.Parent.ID != "issue-0" {
+		t.Fatalf("Parent = %#v, want issue-0", issue.Parent)
+	}
+	if len(issue.Children) != 1 || issue.Children[0].ID != "issue-2" {
+		t.Fatalf("Children = %#v, want issue-2", issue.Children)
+	}
+}
+
 func TestListProjectMilestones_PaginatesAndParses(t *testing.T) {
 	requestCount := 0
 	var afterValues []interface{}
