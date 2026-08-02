@@ -1,4 +1,4 @@
-# Continuous Integration workflow for linear-tui
+# Continuous Integration workflow for zen-linear
 # Runs on pushes to main and non-draft pull requests
 
 name: CI
@@ -111,4 +111,4 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
-        run: go build -v ./cmd/linear-tui
+        run: go build -v ./cmd/zen-linear

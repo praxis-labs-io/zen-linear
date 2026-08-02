@@ -52,15 +52,16 @@ Requires Go 1.24 or later.
 
     git clone https://github.com/Drucial/zen-linear.git
     cd zen-linear
-    go build -o ~/.local/bin/linear-tui ./cmd/linear-tui
+    go build -o ~/.local/bin/zen-linear ./cmd/zen-linear
 
-Authenticate with `linear-tui auth login`, or set per-workspace API keys as
+Authenticate with `zen-linear auth login`, or set per-workspace API keys as
 described below.
 
 ## Configuration
 
-Settings live in `~/.linear-tui/config.json`, created on first start. The
-options added by this fork:
+Settings live in `~/.zen-linear/config.json`, created on first start. A
+config left over at `~/.linear-tui` is moved there automatically on startup.
+The options beyond the original linear-tui set:
 
     {
       "theme": "rose_pine_moon",

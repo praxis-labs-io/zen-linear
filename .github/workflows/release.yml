@@ -1,4 +1,4 @@
-# Release workflow for linear-tui
+# Release workflow for zen-linear
 # Triggered when a version tag (vX.Y.Z) is pushed
 # Uses GoReleaser to build and publish releases
 
