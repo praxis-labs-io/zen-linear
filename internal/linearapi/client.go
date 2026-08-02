@@ -2163,10 +2163,6 @@ func reflectBoolField(v reflect.Value, name string) bool {
 	return false
 }
 
-func parseCycleRef(node interface{}) *CycleRef {
-	return parseCycleRefValue(reflect.ValueOf(node))
-}
-
 func parseIssueRefValue(v reflect.Value) IssueRef {
 	return IssueRef{
 		ID:         reflectStringField(v, "ID"),
@@ -2583,61 +2579,7 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 	var mutation struct {
 		IssueCreate struct {
 			Success graphql.Boolean
-			Issue   struct {
-				ID         graphql.String
-				Identifier graphql.String
-				Title      graphql.String
-				State      struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Assignee *struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Priority    graphql.Float
-				UpdatedAt   graphql.String
-				CreatedAt   graphql.String
-				Description *graphql.String
-				Team        struct {
-					ID graphql.String
-				}
-				Project *struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Cycle *struct {
-					ID         graphql.String
-					Name       *graphql.String
-					Number     graphql.Float
-					StartsAt   graphql.String
-					EndsAt     graphql.String
-					IsActive   graphql.Boolean
-					IsFuture   graphql.Boolean
-					IsPast     graphql.Boolean
-					IsNext     graphql.Boolean
-					IsPrevious graphql.Boolean
-				}
-				DueDate          *graphql.String
-				Estimate         *graphql.Float
-				ProjectMilestone *struct {
-					ID         graphql.String
-					Name       graphql.String
-					TargetDate *graphql.String
-					Status     graphql.String
-					Project    struct {
-						ID graphql.String
-					}
-				}
-				Labels struct {
-					Nodes []struct {
-						ID    graphql.String
-						Name  graphql.String
-						Color graphql.String
-					}
-				}
-				URL graphql.String
-			}
+			Issue   issueQueryNode
 		} `graphql:"issueCreate(input: $input)"`
 	}
 
@@ -2682,57 +2624,7 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 		return Issue{}, fmt.Errorf("create issue: operation failed")
 	}
 
-	node := mutation.IssueCreate.Issue
-	updatedAt := parseTime(string(node.UpdatedAt))
-	createdAt := parseTime(string(node.CreatedAt))
-
-	assignee := ""
-	assigneeID := ""
-	if node.Assignee != nil {
-		assignee = string(node.Assignee.Name)
-		assigneeID = string(node.Assignee.ID)
-	}
-
-	description := ""
-	if node.Description != nil {
-		description = string(*node.Description)
-	}
-
-	projectID := ""
-	if node.Project != nil {
-		projectID = string(node.Project.ID)
-	}
-
-	cycle := parseCycleRef(node.Cycle)
-
-	// Parse labels
-	labels := make([]IssueLabel, 0, len(node.Labels.Nodes))
-	for _, lbl := range node.Labels.Nodes {
-		labels = append(labels, IssueLabel{
-			ID:    string(lbl.ID),
-			Name:  string(lbl.Name),
-			Color: string(lbl.Color),
-		})
-	}
-
-	return Issue{
-		ID:          string(node.ID),
-		Identifier:  string(node.Identifier),
-		Title:       string(node.Title),
-		State:       string(node.State.Name),
-		StateID:     string(node.State.ID),
-		Assignee:    assignee,
-		AssigneeID:  assigneeID,
-		Priority:    int(node.Priority),
-		UpdatedAt:   updatedAt,
-		CreatedAt:   createdAt,
-		Description: description,
-		TeamID:      string(node.Team.ID),
-		ProjectID:   projectID,
-		Cycle:       cycle,
-		URL:         string(node.URL),
-		Labels:      labels,
-	}, nil
+	return c.parseIssueNode(mutation.IssueCreate.Issue), nil
 }
 
 // UpdateIssue updates an existing issue.

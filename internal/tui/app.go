@@ -2944,7 +2944,7 @@ func (a *App) showCreateIssueModalWithParent(parentID string, parentRef *lineara
 					logger.Info("tui.app: created issue issue=%s title=%s", issue.Identifier, title)
 					a.flashStatus(fmt.Sprintf("Created issue %s", issue.Identifier))
 				}
-				go a.refreshIssues(issue.ID)
+				a.applyIssueInsert(issue)
 			})
 		}()
 	})

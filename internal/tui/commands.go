@@ -661,8 +661,7 @@ func DefaultCommands(app *App) []Command {
 								}
 								logger.Info("tui.commands: archived issue issue=%s", issue.Identifier)
 								a.flashStatus(fmt.Sprintf("Archived %s", issue.Identifier))
-								// After archiving, the issue won't be in the list, so just refresh without ID
-								go a.refreshIssues()
+								a.applyIssueRemoval(issue.ID)
 							})
 						}()
 					},
@@ -975,23 +974,10 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				a.ShowParentIssuePicker(a.issueContextLine(*issue), func(parentID string) {
-					go func() {
-						ctx := context.Background()
-						_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
-							ID:       issue.ID,
-							ParentID: &parentID,
-						})
-						a.QueueUpdateDraw(func() {
-							if err != nil {
-								logger.ErrorWithErr(err, "tui.commands: failed to set parent issue=%s", issue.Identifier)
-								a.updateStatusBarWithError(err)
-								return
-							}
-							logger.Info("tui.commands: set parent issue=%s", issue.Identifier)
-							a.flashStatus(fmt.Sprintf("Set parent for %s", issue.Identifier))
-							go a.refreshIssues(issue.ID)
-						})
-					}()
+					a.runIssueUpdate(
+						linearapi.UpdateIssueInput{ID: issue.ID, ParentID: &parentID},
+						fmt.Sprintf("Set parent for %s", issue.Identifier),
+					)
 				})
 			},
 		},
@@ -1016,23 +1002,10 @@ func DefaultCommands(app *App) []Command {
 					"Remove",
 					func() {
 						emptyParent := ""
-						go func() {
-							ctx := context.Background()
-							_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
-								ID:       issue.ID,
-								ParentID: &emptyParent,
-							})
-							a.QueueUpdateDraw(func() {
-								if err != nil {
-									logger.ErrorWithErr(err, "tui.commands: failed to remove parent issue=%s", issue.Identifier)
-									a.updateStatusBarWithError(err)
-									return
-								}
-								logger.Info("tui.commands: removed parent issue=%s", issue.Identifier)
-								a.flashStatus(fmt.Sprintf("Removed parent from %s", issue.Identifier))
-								go a.refreshIssues(issue.ID)
-							})
-						}()
+						a.runIssueUpdate(
+							linearapi.UpdateIssueInput{ID: issue.ID, ParentID: &emptyParent},
+							fmt.Sprintf("Removed parent from %s", issue.Identifier),
+						)
 					},
 				)
 			},
