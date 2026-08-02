@@ -115,6 +115,7 @@ func (a *App) confirmIssueInScope(issue linearapi.Issue, inList bool) {
 		if inScope == inList {
 			return
 		}
+		logger.Debug("tui.issue_update: scope check moved issue_id=%s in_scope=%v", issue.ID, inScope)
 		a.QueueUpdateDraw(func() {
 			if inScope {
 				a.insertIssue(issue)
