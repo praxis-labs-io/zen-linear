@@ -265,3 +265,47 @@ func TestFindProjectByName(t *testing.T) {
 		})
 	}
 }
+
+// TestCurrentFetchParamsScopesNavigationSelection verifies the fetch narrows to
+// whatever the selected navigation node scopes to. A team-scoped All Issues
+// favorite carries only a TeamID, with none of the IsTeam/IsProject flags, so
+// it needs its own branch without shadowing the richer ones.
+func TestCurrentFetchParamsScopesNavigationSelection(t *testing.T) {
+	tests := []struct {
+		name          string
+		node          *NavigationNode
+		wantTeamID    string
+		wantProjectID string
+	}{
+		{
+			name: "workspace all issues stays unscoped",
+			node: &NavigationNode{ID: "all", Text: "All Issues"},
+		},
+		{
+			name:       "team-scoped all issues filters by team",
+			node:       &NavigationNode{ID: "all", Text: "All issues", TeamID: "team-1"},
+			wantTeamID: "team-1",
+		},
+		{
+			name:          "project node keeps its project filter",
+			node:          &NavigationNode{ID: "proj-1", TeamID: "team-1", IsProject: true},
+			wantTeamID:    "team-1",
+			wantProjectID: "proj-1",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			app := newDefaultNavTestApp(config.Config{})
+			app.selectedNavigation = tc.node
+
+			params := app.currentFetchParams("updatedAt")
+			if params.TeamID != tc.wantTeamID {
+				t.Errorf("TeamID = %q, want %q", params.TeamID, tc.wantTeamID)
+			}
+			if params.ProjectID != tc.wantProjectID {
+				t.Errorf("ProjectID = %q, want %q", params.ProjectID, tc.wantProjectID)
+			}
+		})
+	}
+}

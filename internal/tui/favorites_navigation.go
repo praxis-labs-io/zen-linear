@@ -85,7 +85,9 @@ func favoriteLeafNode(favorite linearapi.Favorite) *NavigationNode {
 			if label == "" {
 				label = "All Issues"
 			}
-			return &NavigationNode{ID: "all", Text: label}
+			// A team-scoped favorite of this view must keep its team, or it
+			// renders as a second copy of the workspace-wide All Issues node.
+			return &NavigationNode{ID: "all", Text: label, TeamID: favorite.PredefinedViewTeamID}
 		default:
 			logger.Debug("tui.favorites: skipping unsupported predefined view type=%s id=%s", favorite.PredefinedViewType, favorite.ID)
 			return nil
