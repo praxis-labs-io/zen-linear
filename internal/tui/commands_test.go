@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Drucial/zen-linear/internal/linearapi"
 	"github.com/gdamore/tcell/v2"
-	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
 
 // TestFormatShortcutPreservesCase verifies uppercase and lowercase shortcut

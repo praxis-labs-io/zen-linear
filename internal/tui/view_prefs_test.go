@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/roeyazroel/linear-tui/internal/config"
-	"github.com/roeyazroel/linear-tui/internal/linearapi"
+	"github.com/Drucial/zen-linear/internal/config"
+	"github.com/Drucial/zen-linear/internal/linearapi"
 )
 
 func TestMapViewGrouping(t *testing.T) {

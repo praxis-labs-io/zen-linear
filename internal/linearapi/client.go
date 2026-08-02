@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/roeyazroel/linear-tui/internal/logger"
+	"github.com/Drucial/zen-linear/internal/logger"
 	"github.com/shurcooL/graphql"
 )
 

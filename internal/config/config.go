@@ -41,14 +41,14 @@ const (
 	DefaultAgentSandbox   = "enabled"
 )
 
-// getDefaultLogFile returns the default log file path: $HOME/.linear-tui/app.log
+// getDefaultLogFile returns the default log file path: $HOME/.zen-linear/app.log
 func getDefaultLogFile() string {
-	homeDir, err := os.UserHomeDir()
+	dir, err := Dir()
 	if err != nil {
 		// Fallback to empty string if home directory cannot be determined
 		return ""
 	}
-	return filepath.Join(homeDir, ".linear-tui", "app.log")
+	return filepath.Join(dir, "app.log")
 }
 
 // Config holds runtime configuration for the application.
@@ -185,7 +185,7 @@ func LoadFromEnv() (Config, error) {
 		PageSize:       DefaultPageSize,
 		CacheTTL:       DefaultCacheTTL,
 		SearchDebounce: DefaultSearchDebounce,
-		LogFile:        getDefaultLogFile(), // Default: $HOME/.linear-tui/app.log
+		LogFile:        getDefaultLogFile(), // Default: $HOME/.zen-linear/app.log
 		LogLevel:       DefaultLogLevel,
 		Theme:          DefaultTheme,
 		Density:        DefaultDensity,
@@ -232,7 +232,7 @@ func LoadFromEnv() (Config, error) {
 
 	// Parse optional log file path.
 	// If LINEAR_LOG_FILE is set to empty string, disable logging.
-	// If not set, use default: $HOME/.linear-tui/app.log
+	// If not set, use default: $HOME/.zen-linear/app.log
 	if logFile, ok := os.LookupEnv(LogFileEnv); ok {
 		if logFile == "" {
 			cfg.LogFile = "" // Explicitly disable logging

@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Drucial/zen-linear/internal/agents"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"github.com/roeyazroel/linear-tui/internal/agents"
 )
 
 // AgentOutputModal displays streaming output from an agent run.

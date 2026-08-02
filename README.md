@@ -2,11 +2,11 @@
 
 A terminal interface for Linear, built with Go and tview.
 
-zen-linear is an opinionated fork of
+zen-linear started as a fork of
 [linear-tui](https://github.com/roeyazroel/linear-tui) by
-[@roeyazroel](https://github.com/roeyazroel), who built the foundation this
-runs on: the Linear API client, OAuth, the pane layout, and the agent
-integration. Fixes and features are offered upstream where they fit.
+[@roeyazroel](https://github.com/roeyazroel), who built the foundation it runs
+on: the Linear API client, OAuth, the pane layout, and the agent integration.
+It is now developed independently.
 
 ## Screenshots
 
@@ -109,7 +109,7 @@ In the navigation pane:
     L           move a favorite into the folder above it
     H           move a favorite back out of its folder
 
-*Defaults shown reflect this fork's example config; stock defaults keep
+*Defaults shown reflect the example config; earlier builds kept
 [ ] on expand and collapse all.
 
 ## Credits

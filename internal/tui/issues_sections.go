@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/roeyazroel/linear-tui/internal/linearapi"
+import "github.com/Drucial/zen-linear/internal/linearapi"
 
 // splitIssuesByAssignee partitions issues into "My Issues" and "Other Issues" based on assignee.
 // Issues where AssigneeID matches currentUserID go into "my", all others go into "other".

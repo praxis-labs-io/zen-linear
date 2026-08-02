@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/roeyazroel/linear-tui/internal/config"
+import "github.com/Drucial/zen-linear/internal/config"
 
 // DensityProfile defines spacing values for UI layouts.
 type DensityProfile struct {

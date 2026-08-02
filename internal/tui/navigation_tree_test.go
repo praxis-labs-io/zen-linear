@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Drucial/zen-linear/internal/linearapi"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
 
 // pressEnterOnNavigation drives the real tree input handler, so the test

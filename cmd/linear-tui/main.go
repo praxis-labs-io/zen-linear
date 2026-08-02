@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/roeyazroel/linear-tui/internal/auth"
-	"github.com/roeyazroel/linear-tui/internal/auth/oauth"
-	"github.com/roeyazroel/linear-tui/internal/config"
-	"github.com/roeyazroel/linear-tui/internal/linearapi"
-	"github.com/roeyazroel/linear-tui/internal/logger"
-	"github.com/roeyazroel/linear-tui/internal/tui"
+	"github.com/Drucial/zen-linear/internal/auth"
+	"github.com/Drucial/zen-linear/internal/auth/oauth"
+	"github.com/Drucial/zen-linear/internal/config"
+	"github.com/Drucial/zen-linear/internal/linearapi"
+	"github.com/Drucial/zen-linear/internal/logger"
+	"github.com/Drucial/zen-linear/internal/tui"
 )
 
 func main() {
@@ -22,6 +22,11 @@ func run(args []string) int {
 	if len(args) > 0 && (args[0] == "--version" || args[0] == "-v") {
 		fmt.Println(VersionInfo())
 		return 0
+	}
+
+	if err := config.MigrateLegacyDir(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error migrating config directory: %v\n", err)
+		return 1
 	}
 
 	if len(args) > 0 && args[0] == "auth" {

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Drucial/zen-linear/internal/linearapi"
 	"github.com/gdamore/tcell/v2"
-	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
 
 // TestApplyCommandKeybindings verifies overrides apply and claimed default

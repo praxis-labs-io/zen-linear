@@ -12,7 +12,7 @@ const (
 	TokenSourceOAuth TokenSource = "oauth"
 )
 
-// Credentials are persisted OAuth tokens under ~/.linear-tui/credentials.json.
+// Credentials are persisted OAuth tokens under ~/.zen-linear/credentials.json.
 type Credentials struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`

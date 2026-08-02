@@ -63,8 +63,8 @@ changelog:
 
 release:
   github:
-    owner: roeyazroel
-    name: linear-tui
+    owner: Drucial
+    name: zen-linear
   draft: false
   prerelease: auto
   name_template: "{{.ProjectName}} v{{.Version}}"
@@ -75,12 +75,12 @@ release:
 brews:
   - name: linear-tui
     repository:
-      owner: roeyazroel
-      name: homebrew-linear-tui
+      owner: Drucial
+      name: homebrew-zen-linear
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    homepage: "https://github.com/roeyazroel/linear-tui"
+    homepage: "https://github.com/Drucial/zen-linear"
     description: "Terminal user interface for Linear"
     license: "MIT"
     install: |

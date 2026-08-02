@@ -3,10 +3,10 @@ package tui
 import (
 	"fmt"
 
+	"github.com/Drucial/zen-linear/internal/linearapi"
+	"github.com/Drucial/zen-linear/internal/logger"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"github.com/roeyazroel/linear-tui/internal/linearapi"
-	"github.com/roeyazroel/linear-tui/internal/logger"
 )
 
 // CreateIssueModal manages the create issue form overlay.

@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
+	"github.com/Drucial/zen-linear/internal/config"
 	"github.com/gdamore/tcell/v2"
-	"github.com/roeyazroel/linear-tui/internal/config"
 )
 
 // TestResolveThemeKnownNames verifies every registered theme resolves by name.
