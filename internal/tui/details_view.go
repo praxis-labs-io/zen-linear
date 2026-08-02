@@ -171,6 +171,12 @@ func (a *App) updateDetailsView() {
 	}
 	headerLines = append(headerLines, fmt.Sprintf("%sCycle:[-]      %s%s[-]", keyColor, valColor, cycle))
 
+	project := "No project"
+	if issue.ProjectName != "" {
+		project = issue.ProjectName
+	}
+	headerLines = append(headerLines, fmt.Sprintf("%sProject:[-]    %s%s[-]", keyColor, valColor, project))
+
 	headerLines = append(headerLines, fmt.Sprintf("%sDue date:[-]   %s%s[-]", keyColor, valColor, formatDueDate(issue.DueDate)))
 	headerLines = append(headerLines, fmt.Sprintf("%sEstimate:[-]   %s%s[-]", keyColor, valColor, formatEstimate(issue.Estimate)))
 	headerLines = append(headerLines, fmt.Sprintf("%sMilestone:[-]  %s%s[-]", keyColor, valColor, formatMilestoneName(issue.ProjectMilestone)))

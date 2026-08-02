@@ -81,7 +81,7 @@ options added by this fork:
     }
 
 - `columns` selects and orders the issue list from: priority, id, state,
-  title, labels, assignee, updated, cycle, due, estimate, milestone
+  title, labels, assignee, updated, cycle, due, estimate, project, milestone
 - `group_by` and `subgroup_by` take status, priority, assignee, cycle,
   project, or milestone
 - `sort_by` takes status, priority, updated, or created. Order matters: the

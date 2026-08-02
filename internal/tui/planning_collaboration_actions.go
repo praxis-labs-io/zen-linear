@@ -163,6 +163,53 @@ func (a *App) showSetPriorityPicker() {
 	})
 }
 
+func (a *App) showSetProjectPicker() {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	// The picker names this issue, so the write targets it even if a refresh
+	// moves the selection while the picker is open.
+	target := *issue
+	a.ShowProjectPicker(a.issueContextLine(target), func(projectID string) {
+		if projectID == target.ProjectID {
+			a.flashStatus("Already in that project")
+			return
+		}
+		input := linearapi.UpdateIssueInput{ID: target.ID, ProjectID: &projectID}
+		clearMilestoneOnProjectChange(&input, target)
+		a.runIssueUpdate(input, "Set project: "+projectNameByID(a.teamProjects, projectID))
+	})
+}
+
+func (a *App) clearProjectForSelectedIssue() {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	if strings.TrimSpace(issue.ProjectID) == "" {
+		a.flashStatus("Issue has no project")
+		return
+	}
+	empty := ""
+	input := linearapi.UpdateIssueInput{ID: issue.ID, ProjectID: &empty}
+	clearMilestoneOnProjectChange(&input, *issue)
+	a.runIssueUpdate(input, "Cleared project")
+}
+
+// clearMilestoneOnProjectChange nulls the milestone alongside a project change.
+// A milestone belongs to one project, so leaving it set would orphan it against
+// the new project.
+func clearMilestoneOnProjectChange(input *linearapi.UpdateIssueInput, issue linearapi.Issue) {
+	if issue.ProjectMilestone == nil {
+		return
+	}
+	empty := ""
+	input.ProjectMilestoneID = &empty
+}
+
 func (a *App) selectedIssueProjectID() (string, bool) {
 	issue := a.GetSelectedIssue()
 	if issue == nil {
@@ -325,41 +372,9 @@ func (a *App) showStatusFilter() {
 }
 
 func (a *App) showProjectFilter() {
-	projects := a.teamProjects
-	if len(projects) == 0 {
-		teamID := a.GetSelectedTeamID()
-		if teamID == "" {
-			a.updateStatusBarWithError(fmt.Errorf("team context is required"))
-			return
-		}
-		go func() {
-			loadedProjects, err := a.cache.GetProjects(context.Background(), teamID)
-			a.QueueUpdateDraw(func() {
-				if err != nil {
-					a.updateStatusBarWithError(err)
-					return
-				}
-				a.teamProjects = loadedProjects
-				a.showProjectFilterWithProjects(loadedProjects)
-			})
-		}()
-		return
-	}
-	a.showProjectFilterWithProjects(projects)
-}
-
-func (a *App) showProjectFilterWithProjects(projects []linearapi.Project) {
-	items := make([]PickerItem, 0, len(projects))
-	projectNames := make(map[string]string, len(projects))
-	for _, project := range projects {
-		items = append(items, PickerItem{ID: project.ID, Label: project.Name})
-		projectNames[project.ID] = project.Name
-	}
-	a.pickerActive = true
-	a.pickerModal.Show("Filter Project", items, func(item PickerItem) {
-		a.pickerActive = false
-		a.richFilters.ProjectID = item.ID
-		a.richFilters.ProjectName = projectNames[item.ID]
+	a.ShowProjectPicker("", func(projectID string) {
+		a.richFilters.ProjectID = projectID
+		a.richFilters.ProjectName = projectNameByID(a.teamProjects, projectID)
 		a.applyFiltersAndRefresh("Applied project filter")
 	})
 }
@@ -410,6 +425,15 @@ func workflowStateNameByID(states []linearapi.WorkflowState, id string) string {
 	for _, state := range states {
 		if state.ID == id {
 			return state.Name
+		}
+	}
+	return id
+}
+
+func projectNameByID(projects []linearapi.Project, id string) string {
+	for _, project := range projects {
+		if project.ID == id {
+			return project.Name
 		}
 	}
 	return id

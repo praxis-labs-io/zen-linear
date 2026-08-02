@@ -437,7 +437,8 @@ func validateColumns(columns []string, label string) error {
 	known := map[string]bool{
 		"priority": true, "id": true, "state": true, "title": true,
 		"labels": true, "assignee": true, "updated": true,
-		"cycle": true, "due": true, "estimate": true, "milestone": true,
+		"cycle": true, "due": true, "estimate": true,
+		"project": true, "milestone": true,
 	}
 	seen := make(map[string]bool, len(columns))
 	for _, column := range columns {

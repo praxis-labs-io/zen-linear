@@ -183,6 +183,7 @@ func TestDefaultCommands_IncludesPlanningCommandsWithoutReactions(t *testing.T) 
 	for _, id := range []string{
 		"set_due_date", "clear_due_date", "edit_estimate", "clear_estimate",
 		"set_priority",
+		"set_project", "clear_project",
 		"list_project_milestones", "set_milestone", "clear_milestone",
 		"filter_issues", "clear_filters", "filter_assignee", "filter_labels",
 		"filter_status", "filter_project", "filter_cycle", "filter_due_date",
@@ -247,6 +248,92 @@ func TestSetPriorityPickerDispatchesSelectedPriority(t *testing.T) {
 		}
 		waitForRefreshCompletion(t, refreshDone)
 	}
+}
+
+func TestSetProjectPickerDispatchesProjectAndClearsMilestone(t *testing.T) {
+	app := newUXTestApp()
+	refreshDone := installRefreshCompletionHook(app)
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		return linearapi.IssuePage{}, nil
+	}
+	app.teamProjects = []linearapi.Project{
+		{ID: "project-1", Name: "Alpha"},
+		{ID: "project-2", Name: "Beta"},
+	}
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{
+		ID: "issue-1", Identifier: "LIN-1", Title: "Current",
+		ProjectID:        "project-1",
+		ProjectName:      "Alpha",
+		ProjectMilestone: &linearapi.ProjectMilestoneRef{ID: "milestone-1", Name: "M1"},
+	}
+	app.issuesMu.Unlock()
+
+	called := make(chan linearapi.UpdateIssueInput, 1)
+	app.updateIssueFunc = func(ctx context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
+		called <- input
+		return linearapi.Issue{ID: input.ID}, nil
+	}
+
+	app.showSetProjectPicker()
+
+	// The selection moves out from under an open picker on a background
+	// refresh; the write must still land on the issue the picker named.
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Moved on"}
+	app.issuesMu.Unlock()
+	selectPickerItem(t, app, "Beta")
+
+	select {
+	case input := <-called:
+		if input.ID != "issue-1" {
+			t.Fatalf("issue ID = %q, want issue-1", input.ID)
+		}
+		if input.ProjectID == nil || *input.ProjectID != "project-2" {
+			t.Fatalf("ProjectID = %v, want project-2", input.ProjectID)
+		}
+		if input.ProjectMilestoneID == nil || *input.ProjectMilestoneID != "" {
+			t.Fatalf("ProjectMilestoneID = %v, want cleared", input.ProjectMilestoneID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for project update")
+	}
+	waitForRefreshCompletion(t, refreshDone)
+}
+
+func TestClearProjectLeavesMilestoneAloneWhenAbsent(t *testing.T) {
+	app := newUXTestApp()
+	refreshDone := installRefreshCompletionHook(app)
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		return linearapi.IssuePage{}, nil
+	}
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{
+		ID: "issue-1", Identifier: "LIN-1", Title: "Current",
+		ProjectID: "project-1", ProjectName: "Alpha",
+	}
+	app.issuesMu.Unlock()
+
+	called := make(chan linearapi.UpdateIssueInput, 1)
+	app.updateIssueFunc = func(ctx context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
+		called <- input
+		return linearapi.Issue{ID: input.ID}, nil
+	}
+
+	app.clearProjectForSelectedIssue()
+
+	select {
+	case input := <-called:
+		if input.ProjectID == nil || *input.ProjectID != "" {
+			t.Fatalf("ProjectID = %v, want cleared", input.ProjectID)
+		}
+		if input.ProjectMilestoneID != nil {
+			t.Fatalf("ProjectMilestoneID = %v, want untouched", *input.ProjectMilestoneID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for project clear")
+	}
+	waitForRefreshCompletion(t, refreshDone)
 }
 
 func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {

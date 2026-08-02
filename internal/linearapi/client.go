@@ -569,6 +569,7 @@ type UpdateIssueInput struct {
 	DueDate            *string   // nil = no change, empty string = clear due date, non-empty = set YYYY-MM-DD date
 	Estimate           *float64  // nil = no change, non-nil = set estimate
 	ClearEstimate      bool      // true = clear estimate
+	ProjectID          *string   // nil = no change, empty string = clear project, non-empty = set project
 	ProjectMilestoneID *string   // nil = no change, empty string = clear milestone, non-empty = set milestone
 }
 
@@ -2841,6 +2842,13 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 		issueInput["estimate"] = (*graphql.Float)(nil)
 	} else if input.Estimate != nil {
 		issueInput["estimate"] = graphql.Float(*input.Estimate)
+	}
+	if input.ProjectID != nil {
+		if *input.ProjectID == "" {
+			issueInput["projectId"] = (*graphql.ID)(nil)
+		} else {
+			issueInput["projectId"] = graphql.ID(*input.ProjectID)
+		}
 	}
 	if input.ProjectMilestoneID != nil {
 		if *input.ProjectMilestoneID == "" {

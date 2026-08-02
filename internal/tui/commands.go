@@ -457,6 +457,22 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:       "set_project",
+			Title:    "Set project",
+			Keywords: []string{"project", "set", "move"},
+			Run: func(a *App) {
+				a.showSetProjectPicker()
+			},
+		},
+		{
+			ID:       "clear_project",
+			Title:    "Clear project",
+			Keywords: []string{"project", "clear", "remove"},
+			Run: func(a *App) {
+				a.clearProjectForSelectedIssue()
+			},
+		},
+		{
 			ID:       "list_project_milestones",
 			Title:    "List project milestones",
 			Keywords: []string{"project", "milestone", "list"},
