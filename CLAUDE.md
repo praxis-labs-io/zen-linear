@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Drew's Go/tview terminal client for Linear, at Drucial/zen-linear (`origin`). It began as a fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui) and separated on 2026-08-02: the module is `github.com/Drucial/zen-linear`, there is no `upstream` remote, and nothing here is written with an upstream PR in mind. The MIT license retains Roey Azroel's copyright alongside Drew's, and the README credits the original. Both stay.
 
-**`main` is the product branch.** Feature work flows ticket → branch → PR on `origin` (see Project Management); genuinely trivial tweaks (a typo, a one-liner) still commit straight to `main`. The installed binary is built from here to `~/.local/bin/linear-tui`, which shadows the stock brew install; **rebuild after changes or Drew keeps running the old code**:
+**`main` is the product branch.** Feature work flows ticket → branch → PR on `origin` (see Project Management); genuinely trivial tweaks (a typo, a one-liner) still commit straight to `main`. A pre-push hook rejects pushes to `main`, so agent work always goes through a branch. The installed binary is built from here to `~/.local/bin/zen-linear`; **rebuild after changes or Drew keeps running the old code**:
 
 ```sh
-go build -o ~/.local/bin/linear-tui ./cmd/linear-tui
+go build -o ~/.local/bin/zen-linear ./cmd/zen-linear
 ```
 
-The command directory and binary are still named `linear-tui`, and the Homebrew tap in `.goreleaser.yml` points at a `Drucial/homebrew-zen-linear` repo that does not exist yet. Both are tracked follow-ups, not oversights.
+The Homebrew tap in `.goreleaser.yml` points at a `Drucial/homebrew-zen-linear` repo that does not exist yet, so a tagged release fails at the brew step until it is created. Tracked, not an oversight.
 
 Anything published under Drew's name (PR bodies, issues, README) must be shown to him word-for-word before pushing. His voice: terse, considerate, stoic, no strong adverbs, no em-dashes.
 
@@ -72,7 +72,7 @@ Scratch, never committed. `docs/` describes only what is true today. Durable con
 
 ## Architecture
 
-`cmd/linear-tui` is the entrypoint; everything lives in `internal/`: `linearapi` (GraphQL client via shurcooL/graphql), `tui` (tview app — the bulk), `config`, `auth`, `cache`, `agents`, `logger`.
+`cmd/zen-linear` is the entrypoint; everything lives in `internal/`: `linearapi` (GraphQL client via shurcooL/graphql), `tui` (tview app — the bulk), `config`, `auth`, `cache`, `agents`, `logger`.
 
 ### Config plumbing (the most common trap)
 

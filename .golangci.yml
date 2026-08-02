@@ -1,4 +1,4 @@
-# golangci-lint configuration for linear-tui
+# golangci-lint configuration for zen-linear
 # Documentation: https://golangci-lint.run/usage/configuration/
 
 version: "2"

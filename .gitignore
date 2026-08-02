@@ -32,8 +32,8 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Built binary (only at root level, not cmd/linear-tui/)
-/linear-tui
+# Built binary (only at root level, not cmd/zen-linear/)
+/zen-linear
 /main
 
 .cursor/

@@ -187,8 +187,8 @@ func buildAuthorizeURL(base, clientID, redirectURI, scopes, state, challenge str
 func PrintAuthUsage(w interface{ Write([]byte) (int, error) }) {
 	msg := strings.TrimSpace(`
 Usage:
-  linear-tui auth login    Authenticate with Linear via browser OAuth
-  linear-tui auth logout   Revoke and remove stored OAuth credentials
+  zen-linear auth login    Authenticate with Linear via browser OAuth
+  zen-linear auth logout   Revoke and remove stored OAuth credentials
 
 LINEAR_API_KEY overrides stored OAuth credentials when set.
 `) + "\n"
