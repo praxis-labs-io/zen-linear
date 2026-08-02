@@ -40,9 +40,132 @@ func (a *App) applyIssueUpdate(updated linearapi.Issue) {
 	updated.Subscribers = existing.Subscribers
 	updated.Attachments = existing.Attachments
 	a.issues[index] = updated
+	a.moveChildRef(existing.Parent, updated.Parent, updated)
 	a.sortIssuesLocally()
 	a.issuesMu.Unlock()
 
+	a.renderIssueChange(updated.ID, false)
+}
+
+// applyIssueInsert adds a newly created issue to the local list. CreateIssue
+// returns the same selection the list query uses, so the row can be rendered
+// without a fetch. An issue the active filter would have excluded stays
+// visible until the next refresh, which is the cost of not asking the server.
+func (a *App) applyIssueInsert(created linearapi.Issue) {
+	if created.ID == "" {
+		return
+	}
+
+	a.issuesMu.Lock()
+	for i := range a.issues {
+		if a.issues[i].ID == created.ID {
+			a.issuesMu.Unlock()
+			a.applyIssueUpdate(created)
+			return
+		}
+	}
+	a.issues = append(a.issues, created)
+	a.moveChildRef(nil, created.Parent, created)
+	a.sortIssuesLocally()
+	a.issuesMu.Unlock()
+
+	a.renderIssueChange(created.ID, true)
+}
+
+// applyIssueRemoval drops an archived issue from the local list, landing the
+// cursor on the row that followed it. Sub-issues left behind render as
+// top-level rows, which is how indexIssues already treats an orphan.
+func (a *App) applyIssueRemoval(issueID string) {
+	if issueID == "" {
+		return
+	}
+	successor := a.issueRowAfter(a.effectiveIssuesSection(), issueID)
+
+	a.issuesMu.Lock()
+	index := -1
+	for i := range a.issues {
+		if a.issues[i].ID == issueID {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		a.issuesMu.Unlock()
+		return
+	}
+	removed := a.issues[index]
+	a.issues = append(a.issues[:index], a.issues[index+1:]...)
+	a.moveChildRef(removed.Parent, nil, removed)
+	if a.selectedIssue != nil && a.selectedIssue.ID == issueID {
+		a.selectedIssue = nil
+	}
+	a.issuesMu.Unlock()
+
+	a.renderIssueChange(successor, true)
+}
+
+// issueRowAfter returns the id of the issue row following the given one, so a
+// removal can keep the cursor where it was instead of jumping to the top.
+func (a *App) issueRowAfter(section IssuesSection, issueID string) string {
+	rows := a.rowsForSection(section)
+	for i, row := range rows {
+		if row.IssueID != issueID {
+			continue
+		}
+		if next := nextIssueRow(rows, i+1, 1); next > 0 {
+			return rows[next-1].IssueID
+		}
+		if previous := nextIssueRow(rows, i+1, -1); previous > 0 {
+			return rows[previous-1].IssueID
+		}
+		return ""
+	}
+	return ""
+}
+
+// moveChildRef keeps the Children slices of the old and new parent in step
+// with a child's own Parent field. Nothing else reports it: the mutation
+// answers for the child alone, and a parent whose Children still lists a
+// departed child renders an expand arrow over nothing.
+// Callers must hold issuesMu.
+func (a *App) moveChildRef(oldParent, newParent *linearapi.IssueRef, child linearapi.Issue) {
+	oldID, newID := "", ""
+	if oldParent != nil {
+		oldID = oldParent.ID
+	}
+	if newParent != nil {
+		newID = newParent.ID
+	}
+	if oldID == newID {
+		return
+	}
+
+	for i := range a.issues {
+		switch a.issues[i].ID {
+		case oldID:
+			for j := range a.issues[i].Children {
+				if a.issues[i].Children[j].ID == child.ID {
+					a.issues[i].Children = append(a.issues[i].Children[:j], a.issues[i].Children[j+1:]...)
+					break
+				}
+			}
+		case newID:
+			a.issues[i].Children = append(a.issues[i].Children, linearapi.IssueChildRef{
+				ID:         child.ID,
+				Identifier: child.Identifier,
+				Title:      child.Title,
+				State:      child.State,
+				StateID:    child.StateID,
+			})
+		}
+	}
+}
+
+// renderIssueChange repaints the list after the issue slice changed, painting
+// the narrowest thing that reflects it. selectTarget moves the details pane to
+// targetIssueID; an edit leaves it false so changing a row the user is not
+// looking at does not pull the pane away from the row they are.
+func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 	previousRows := map[IssuesSection][]IssueRow{
 		IssuesSectionMy:    a.myIssueRows,
 		IssuesSectionOther: a.otherIssueRows,
@@ -51,7 +174,7 @@ func (a *App) applyIssueUpdate(updated linearapi.Issue) {
 	previousSection := a.activeIssuesSection
 
 	a.rebuildIssueRowModels()
-	selections := a.sectionSelectionsFor(updated.ID)
+	selections := a.sectionSelectionsFor(targetIssueID)
 
 	deferred := make(map[IssuesSection]string, len(selections))
 	for section, selectedIssueID := range selections {
@@ -59,7 +182,7 @@ func (a *App) applyIssueUpdate(updated linearapi.Issue) {
 			// Nothing moved, so only this issue's own cells can have changed.
 			// Repainting the row keeps the table's scroll, selection, and
 			// column offset, which a full render resets.
-			a.repaintIssueRow(section, updated.ID)
+			a.repaintIssueRow(section, targetIssueID)
 			continue
 		}
 		deferred[section] = selectedIssueID
@@ -75,8 +198,8 @@ func (a *App) applyIssueUpdate(updated linearapi.Issue) {
 	}
 
 	a.issuesMu.Lock()
-	if a.selectedIssue != nil && a.selectedIssue.ID == updated.ID {
-		if issue := a.idToIssue[updated.ID]; issue != nil {
+	if selectTarget || (a.selectedIssue != nil && a.selectedIssue.ID == targetIssueID) {
+		if issue := a.idToIssue[targetIssueID]; issue != nil {
 			a.selectedIssue = issue
 		}
 	}
