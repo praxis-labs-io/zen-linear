@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Drew's fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui) (`upstream`), a Go/tview terminal client for Linear. `origin` is Drucial/zen-linear. **`main` is the product branch** — feature work and integration fixes commit straight to it, no fork-internal PRs. The installed binary is built from here to `~/.local/bin/linear-tui`, which shadows the stock brew install; **rebuild after changes or Drew keeps running the old code**:
+Drew's fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui) (`upstream`), a Go/tview terminal client for Linear. `origin` is Drucial/zen-linear. **`main` is the product branch.** Feature work flows ticket → branch → PR on `origin` (see Project Management); genuinely trivial tweaks (a typo, a one-liner) still commit straight to `main`. The installed binary is built from here to `~/.local/bin/linear-tui`, which shadows the stock brew install; **rebuild after changes or Drew keeps running the old code**:
 
 ```sh
 go build -o ~/.local/bin/linear-tui ./cmd/linear-tui
@@ -15,6 +15,10 @@ go build -o ~/.local/bin/linear-tui ./cmd/linear-tui
 `feature/*` branches are cut from `upstream/main` and map to individual upstream PRs (#15 favorites, #16 workspace switching, #17 keybindings, #18 pane toggles pending as of 2026-07-31). Each must stay standalone-green (`make all` on the branch) — never fix a cross-feature interaction on a feature branch; integration fixes live only on `main`. #16 and #17 overlap; whichever lands second gets rebased (promised in the PR bodies). Held back as too opinionated for upstream: the Rose Pine Moon theme work, the Linear-style list layout, and pane tabs.
 
 Anything published under Drew's name (PR bodies, issues, README) must be shown to him word-for-word before pushing. His voice: terse, considerate, stoic, no strong adverbs, no em-dashes.
+
+## Conventions
+
+@.claude/rules/code-quality.md
 
 ## Commands
 
@@ -31,6 +35,40 @@ Run checks directly, never through a pipe that swallows exit codes (`make lint |
 ### Lint version pin
 
 CI pins golangci-lint **v2.8.0** (`.github/workflows/ci.yml`). Newer local versions report false positives (goconst, staticcheck) on code CI accepts, and v2.8.0 panics under new Go toolchains. Replicate CI with a pinned binary plus `GOTOOLCHAIN=go1.24.4`, or scope a newer binary with `--new-from-rev=upstream/main`.
+
+## Project Management
+
+Work is tracked in Linear: Praxis Labs workspace, **Zen Linear** team (key `ZNL`, tickets `ZNL-###`), reached through the `linear-zen-linear` MCP server declared in `.mcp.json`. Address projects and statuses **by name, never a UUID**; ids don't survive workspace moves.
+
+### Projects
+
+Five long-running buckets. They never complete; every ticket belongs to exactly one. Each bucket's Linear description holds a `File here when:` test and a routing list, and those descriptions are the tiebreaker when a ticket could fit two:
+
+- **Polish & Bugs**: bugs and rough edges in surfaces that already ship. The dogfood inbox.
+- **Feature Backlog**: net-new capabilities. Ideas live here until promoted.
+- **Performance and Code-Quality**: improves the code, no user-visible change (perf, refactors, tests, hygiene).
+- **Website**: the public site, its copy, its SEO.
+- **Release & Distribution**: how the binary gets from `main` to a user and stays current (GoReleaser, Homebrew tap, versioning, CI release).
+
+A body of work big enough to need milestones gets its own finite epic project, named for what it delivers, completed and closed when it ships. An epic is a Linear Project, never a tracking issue. When an epic closes, follow-ups move to the matching bucket.
+
+### Tickets
+
+- Every ticket gets the team, exactly one project, a priority, and a status. No orphans.
+- Create tickets as we go; never dump a full backlog up front.
+- PR-sized scoping: 1 ticket = 1 branch = 1 PR as the rule of thumb. Don't split tightly-related work that ships together; don't group independent slices.
+- Keep descriptions lean: clear title, short goal and scope. No boilerplate acceptance criteria.
+- Use Linear's generated branch name (`gitBranchName` from the MCP), never an invented one.
+- Reference the ticket id in commits and the PR title/body so Linear auto-links.
+- Status ladder: agent drives Backlog → Todo → In Progress. The GitHub integration owns In Review and Done; never write those by hand.
+
+### Shipping
+
+Feature-complete work ships via the `ship-feature` skill (`.claude/skills/ship-feature/SKILL.md`): `make all` green, push, draft PR, Copilot + `/code-review`, triage with no tech debt, push then mark ready as separate actions. Manual invocation only.
+
+### Specs and plans
+
+Scratch, never committed. `docs/` describes only what is true today. Durable context lives in Linear project descriptions and tickets.
 
 ## Architecture
 
