@@ -2,6 +2,9 @@
 
 A terminal interface for Linear, built with Go and tview.
 
+Not affiliated with Linear. Unofficial third-party client, built on Linear's
+public API.
+
 zen-linear started as a fork of
 [linear-tui](https://github.com/roeyazroel/linear-tui) by
 [@roeyazroel](https://github.com/roeyazroel), who built the foundation it runs
@@ -48,7 +51,12 @@ Appearance
 
 ## Install
 
-Requires Go 1.24 or later.
+Homebrew:
+
+    brew tap zen-linear/tap
+    brew install zen-linear
+
+From source, requires Go 1.24 or later:
 
     git clone https://github.com/zen-linear/zen-linear.git
     cd zen-linear
