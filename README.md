@@ -53,8 +53,7 @@ Appearance
 
 Homebrew:
 
-    brew tap zen-linear/tap
-    brew install zen-linear
+    brew install zen-linear/tap/zen-linear
 
 From source, requires Go 1.24 or later:
 
