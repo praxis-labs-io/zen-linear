@@ -3,8 +3,8 @@ package tui
 import (
 	"fmt"
 
-	"github.com/Drucial/zen-linear/internal/config"
-	"github.com/Drucial/zen-linear/internal/logger"
+	"github.com/zen-linear/zen-linear/internal/config"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // workspaceNameForKey returns the name of the workspace whose API key matches

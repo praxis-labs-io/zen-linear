@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Drucial/zen-linear/internal/auth/oauth"
+	"github.com/zen-linear/zen-linear/internal/auth/oauth"
 )
 
 func TestExchangeCode_RequestShape(t *testing.T) {

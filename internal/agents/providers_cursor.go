@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Drucial/zen-linear/internal/logger"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // CursorProvider invokes the Cursor Agent CLI.

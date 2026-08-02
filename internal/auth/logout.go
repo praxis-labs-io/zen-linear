@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Drucial/zen-linear/internal/auth/oauth"
+	"github.com/zen-linear/zen-linear/internal/auth/oauth"
 )
 
 // LogoutOptions configures credential revocation and local deletion.

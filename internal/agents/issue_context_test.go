@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // TestBuildIssueContext_RendersFields verifies basic rendering.

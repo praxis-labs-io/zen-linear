@@ -3,10 +3,10 @@ package tui
 import (
 	"context"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
-	"github.com/Drucial/zen-linear/internal/logger"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // CreateCommentModal manages the create comment form overlay.

@@ -63,7 +63,7 @@ changelog:
 
 release:
   github:
-    owner: Drucial
+    owner: zen-linear
     name: zen-linear
   draft: false
   prerelease: auto
@@ -75,12 +75,12 @@ release:
 brews:
   - name: zen-linear
     repository:
-      owner: Drucial
-      name: homebrew-zen-linear
+      owner: zen-linear
+      name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
-    homepage: "https://github.com/Drucial/zen-linear"
+    homepage: "https://github.com/zen-linear/zen-linear"
     description: "Terminal user interface for Linear"
     license: "MIT"
     install: |

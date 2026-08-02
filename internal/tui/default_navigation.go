@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
-	"github.com/Drucial/zen-linear/internal/logger"
 	"github.com/rivo/tview"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // applyDefaultNavigation selects the configured default team (and optionally

@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/auth"
-	"github.com/Drucial/zen-linear/internal/auth/oauth"
+	"github.com/zen-linear/zen-linear/internal/auth"
+	"github.com/zen-linear/zen-linear/internal/auth/oauth"
 )
 
 func TestGeneratePKCE(t *testing.T) {

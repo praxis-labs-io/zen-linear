@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 func TestBuildIssueRows_NoChildren(t *testing.T) {

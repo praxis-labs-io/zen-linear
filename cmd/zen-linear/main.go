@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Drucial/zen-linear/internal/auth"
-	"github.com/Drucial/zen-linear/internal/auth/oauth"
-	"github.com/Drucial/zen-linear/internal/config"
-	"github.com/Drucial/zen-linear/internal/linearapi"
-	"github.com/Drucial/zen-linear/internal/logger"
-	"github.com/Drucial/zen-linear/internal/tui"
+	"github.com/zen-linear/zen-linear/internal/auth"
+	"github.com/zen-linear/zen-linear/internal/auth/oauth"
+	"github.com/zen-linear/zen-linear/internal/config"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/logger"
+	"github.com/zen-linear/zen-linear/internal/tui"
 )
 
 func main() {

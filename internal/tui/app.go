@@ -9,13 +9,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/agents"
-	"github.com/Drucial/zen-linear/internal/cache"
-	"github.com/Drucial/zen-linear/internal/config"
-	"github.com/Drucial/zen-linear/internal/linearapi"
-	"github.com/Drucial/zen-linear/internal/logger"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+	"github.com/zen-linear/zen-linear/internal/agents"
+	"github.com/zen-linear/zen-linear/internal/cache"
+	"github.com/zen-linear/zen-linear/internal/config"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // SortField represents a field to sort issues by.

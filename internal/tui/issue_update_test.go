@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 var errNotReachable = errors.New("linear unreachable")

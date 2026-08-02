@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // A Linear custom view saves its own display settings (grouping, subgrouping,

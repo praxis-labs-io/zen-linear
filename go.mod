@@ -1,4 +1,4 @@
-module github.com/Drucial/zen-linear
+module github.com/zen-linear/zen-linear
 
 go 1.24.0
 

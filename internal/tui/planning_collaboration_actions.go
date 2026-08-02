@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Drucial/zen-linear/internal/linearapi"
-	"github.com/Drucial/zen-linear/internal/logger"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 var issueRelationTypeLabels = []PickerItem{
