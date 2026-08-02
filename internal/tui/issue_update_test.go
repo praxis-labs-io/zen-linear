@@ -106,15 +106,37 @@ func TestApplyIssueUpdate_MovesIssueBetweenSectionsWithoutRefetch(t *testing.T) 
 
 // scopedTestApp narrows the list to a team, so the scope check has something
 // to check. On All Issues it is skipped.
-func scopedTestApp(t *testing.T, issues []linearapi.Issue) *App {
+//
+// The returned channel fires once the scope check's redraw callback has run.
+// Waiting on the issue count instead would return while that callback is still
+// rendering, and the table work it does races the next test's NewApp over
+// tview's package-level styles.
+func scopedTestApp(t *testing.T, issues []linearapi.Issue) (*App, <-chan struct{}) {
 	t.Helper()
 	app := newIssueUpdateTestApp(t, issues)
 	app.selectedNavigation = &NavigationNode{IsTeam: true, TeamID: "team-1"}
-	return app
+	drawn := make(chan struct{}, 4)
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		select {
+		case drawn <- struct{}{}:
+		default:
+		}
+	}
+	return app, drawn
+}
+
+func waitForDraw(t *testing.T, drawn <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-drawn:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the scope check to reconcile the list")
+	}
 }
 
 func TestApplyIssueUpdate_AddsAnIssueTheEditBroughtIntoScope(t *testing.T) {
-	app := scopedTestApp(t, []linearapi.Issue{
+	app, drawn := scopedTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
 	checked := make(chan string, 1)
@@ -133,11 +155,12 @@ func TestApplyIssueUpdate_AddsAnIssueTheEditBroughtIntoScope(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for the scope check")
 	}
-	waitForIssueCount(t, app, 2)
+	waitForDraw(t, drawn)
+	assertIssueCount(t, app, 2)
 }
 
 func TestApplyIssueUpdate_DropsAnIssueTheEditPushedOutOfScope(t *testing.T) {
-	app := scopedTestApp(t, []linearapi.Issue{
+	app, drawn := scopedTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
 	})
@@ -147,11 +170,12 @@ func TestApplyIssueUpdate_DropsAnIssueTheEditPushedOutOfScope(t *testing.T) {
 
 	app.applyIssueUpdate(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta moved"})
 
-	waitForIssueCount(t, app, 1)
+	waitForDraw(t, drawn)
+	assertIssueCount(t, app, 1)
 }
 
 func TestApplyIssueInsert_KeepsTheRowWhenTheScopeCheckFails(t *testing.T) {
-	app := scopedTestApp(t, []linearapi.Issue{
+	app, _ := scopedTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
 	checked := make(chan struct{}, 1)
@@ -164,7 +188,7 @@ func TestApplyIssueInsert_KeepsTheRowWhenTheScopeCheckFails(t *testing.T) {
 
 	<-checked
 	// A failed check must not take away a row the user is looking at.
-	waitForIssueCount(t, app, 2)
+	assertIssueCount(t, app, 2)
 }
 
 func TestConfirmIssueInScope_SkippedOnTheUnscopedList(t *testing.T) {
@@ -180,22 +204,14 @@ func TestConfirmIssueInScope_SkippedOnTheUnscopedList(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func waitForIssueCount(t *testing.T, app *App, want int) {
+func assertIssueCount(t *testing.T, app *App, want int) {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		app.issuesMu.RLock()
-		got := len(app.issues)
-		app.issuesMu.RUnlock()
-		if got == want {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
 	app.issuesMu.RLock()
 	got := len(app.issues)
 	app.issuesMu.RUnlock()
-	t.Fatalf("issue count = %d, want %d", got, want)
+	if got != want {
+		t.Fatalf("issue count = %d, want %d", got, want)
+	}
 }
 
 func TestApplyIssueRemoval_DropsRowAndLandsOnTheNextIssue(t *testing.T) {
