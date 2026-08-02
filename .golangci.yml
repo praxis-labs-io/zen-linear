@@ -20,8 +20,13 @@ linters:
     - dogsled
     - dupl
     - errorlint
-    - goconst
     - gocritic
+    # goconst is off on purpose. "project" here is a favorite type, a picker
+    # item id, a search keyword, a Linear grouping value, and a group-by
+    # dimension; goconst reads the five as one string and points at
+    # GroupByProject. Where it does find a real repeat, the constant it wants
+    # is an untyped string passed to a plain string parameter, so naming the
+    # literal buys no compile-time check. config.validate* guards the boundary.
     - gocyclo
     - misspell
     - nakedret
@@ -46,10 +51,6 @@ linters:
 
     dupl:
       threshold: 150
-
-    goconst:
-      min-len: 3
-      min-occurrences: 5
 
     misspell:
       locale: US

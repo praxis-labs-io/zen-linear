@@ -13,7 +13,8 @@ make fmt-fix  # gofmt -w .
 ```
 
 Run checks directly, never through a pipe that swallows exit codes. CI pins
-golangci-lint v2.8.0; newer local versions report findings CI does not.
+golangci-lint v2.12.2; keep the pin in step with your local version so the
+two agree.
 
 
 Go style follows [Effective Go](https://go.dev/doc/effective_go): gofmt-clean,

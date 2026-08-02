@@ -233,7 +233,7 @@ func buildToolCallEvent(event cursorStreamEvent) *AgentEvent {
 		Path:   detail,
 		Status: event.Subtype,
 	}
-	if event.Subtype == "completed" {
+	if event.Subtype == SubtypeCompleted {
 		if errMessage := extractToolCallError(event.ToolCall); errMessage != "" {
 			logger.Error("agents.cursor: tool call failed tool=%s error=%s", name, errMessage)
 		}
@@ -383,7 +383,7 @@ func formatEventLine(event AgentEvent) string {
 	case AgentEventResult:
 		subtype := event.Subtype
 		if subtype == "" {
-			subtype = "completed"
+			subtype = SubtypeCompleted
 		}
 		parts := []string{fmt.Sprintf("Result %s", subtype)}
 		if event.IsError {

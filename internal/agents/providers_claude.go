@@ -35,7 +35,7 @@ func (p *ClaudeProvider) Name() string {
 
 // ResolveBinary finds the Claude CLI binary.
 func (p *ClaudeProvider) ResolveBinary() (string, bool) {
-	path, err := p.lookPath("claude")
+	path, err := p.lookPath(ProviderClaude)
 	if err != nil {
 		return "", false
 	}
@@ -211,11 +211,11 @@ func (p *ClaudeProvider) parseClaudeToolResult(event claudeStreamEvent) *AgentEv
 		}
 		return &AgentEvent{
 			Type:    AgentEventToolCall,
-			Subtype: "completed",
+			Subtype: SubtypeCompleted,
 			Tool: &AgentToolCall{
 				Name:    toolName,
 				Path:    info.Detail,
-				Status:  "completed",
+				Status:  SubtypeCompleted,
 				Summary: summarizeClaudeToolResult(item.Content, event.ToolUseResult),
 			},
 		}
