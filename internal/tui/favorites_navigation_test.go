@@ -146,12 +146,13 @@ func TestFavoriteNavigationNodesViews(t *testing.T) {
 		{Type: "customView", CustomViewID: "view-1", CustomViewName: "Open Bugs", Title: "Open Bugs"},
 		{Type: "predefinedView", ID: "fav-triage", Title: "Triage", PredefinedViewType: "triage", PredefinedViewTeamID: "team-1"},
 		{Type: "predefinedView", ID: "fav-all", Title: "All issues", PredefinedViewType: "allIssues"},
+		{Type: "predefinedView", ID: "fav-all-team", Title: "All issues", PredefinedViewType: "allIssues", PredefinedViewTeamID: "team-1"},
 		{Type: "predefinedView", ID: "fav-other", Title: "Cycles", PredefinedViewType: "cycles"},
 	}
 
 	nodes := favoriteNavigationNodes(favorites)
-	if len(nodes) != 3 {
-		t.Fatalf("favoriteNavigationNodes() returned %d nodes, want 3: %+v", len(nodes), nodes)
+	if len(nodes) != 4 {
+		t.Fatalf("favoriteNavigationNodes() returned %d nodes, want 4: %+v", len(nodes), nodes)
 	}
 	view := nodes[0]
 	if view.CustomViewID != "view-1" || view.Text != "Open Bugs" {
@@ -162,8 +163,12 @@ func TestFavoriteNavigationNodesViews(t *testing.T) {
 		t.Errorf("triage node = %+v", triage)
 	}
 	all := nodes[2]
-	if all.ID != "all" || all.Text != "All issues" {
-		t.Errorf("all issues node = %+v", all)
+	if all.ID != "all" || all.Text != "All issues" || all.TeamID != "" {
+		t.Errorf("workspace all issues node = %+v", all)
+	}
+	teamAll := nodes[3]
+	if teamAll.ID != "all" || teamAll.Text != "All issues" || teamAll.TeamID != "team-1" {
+		t.Errorf("team-scoped all issues node = %+v", teamAll)
 	}
 }
 

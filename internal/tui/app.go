@@ -1762,8 +1762,12 @@ func (a *App) currentFetchParams(orderBy string) linearapi.FetchIssuesParams {
 		case a.selectedNavigation.IsProject:
 			params.TeamID = a.selectedNavigation.TeamID
 			params.ProjectID = a.selectedNavigation.ID
+		case a.selectedNavigation.TeamID != "":
+			// A team-scoped All Issues favorite carries a team and none of the
+			// flags above, so it must stay last to avoid shadowing them.
+			params.TeamID = a.selectedNavigation.TeamID
 		}
-		// If "All Issues", no team/project filter
+		// Workspace-wide "All Issues" reaches here with nothing set, unfiltered
 	}
 	return params
 }
