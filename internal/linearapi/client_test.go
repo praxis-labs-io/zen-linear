@@ -1690,6 +1690,62 @@ func TestUpdateIssue_ReturnsFieldsTheListRenders(t *testing.T) {
 	}
 }
 
+func TestIssueMatchesScope_SendsScopeAndIDFilter(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		nodes string
+		want  bool
+	}{
+		{name: "in scope", nodes: `[{"id": "issue-1", "identifier": "ABC-1", "title": "T", "state": {"id": "s", "name": "Todo"}, "assignee": null, "priority": 0, "updatedAt": "2025-01-01T00:00:00Z", "createdAt": "2025-01-01T00:00:00Z", "team": {"id": "team-1"}, "labels": {"nodes": []}, "children": {"nodes": []}}]`, want: true},
+		{name: "out of scope", nodes: `[]`, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var filter map[string]interface{}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var reqBody map[string]interface{}
+				if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+					t.Fatalf("Failed to decode request body: %v", err)
+				}
+				variables := reqBody["variables"].(map[string]interface{})
+				filter, _ = variables["filter"].(map[string]interface{})
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"data": {"issues": {"nodes": ` + tc.nodes + `, "pageInfo": {"hasNextPage": false, "endCursor": ""}}}}`))
+			}))
+			defer server.Close()
+
+			client := NewClient(ClientConfig{Endpoint: server.URL})
+
+			got, err := client.IssueMatchesScope(context.Background(), FetchIssuesParams{
+				TeamID:  "team-1",
+				StateID: "state-1",
+			}, "issue-1")
+			if err != nil {
+				t.Fatalf("IssueMatchesScope error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("IssueMatchesScope = %v, want %v", got, tc.want)
+			}
+
+			idFilter, ok := filter["id"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("filter.id = %#v, want an id comparator", filter["id"])
+			}
+			ids, ok := idFilter["in"].([]interface{})
+			if !ok || len(ids) != 1 || ids[0] != "issue-1" {
+				t.Fatalf("filter.id.in = %#v, want [issue-1]", idFilter["in"])
+			}
+			// The scope has to ride along, otherwise the check answers a
+			// different question than the list asks.
+			if _, ok := filter["team"]; !ok {
+				t.Fatalf("filter = %#v, want the team scope carried through", filter)
+			}
+			if _, ok := filter["state"]; !ok {
+				t.Fatalf("filter = %#v, want the state scope carried through", filter)
+			}
+		})
+	}
+}
+
 func TestListProjectMilestones_PaginatesAndParses(t *testing.T) {
 	requestCount := 0
 	var afterValues []interface{}

@@ -504,6 +504,10 @@ type FetchIssuesParams struct {
 	// StateType filters by workflow state type (triage, backlog, unstarted,
 	// started, completed, canceled).
 	StateType string
+	// IDs narrows the query to specific issues. Combined with the rest of the
+	// params it answers whether an issue is inside the current scope, which no
+	// local check can decide for a custom view.
+	IDs []string
 	// OrderBy specifies the sort order. Valid API values are "updatedAt" and "createdAt".
 	// "priority" is also supported and will be sorted client-side after fetching.
 	OrderBy string
@@ -1309,6 +1313,9 @@ func (c *Client) ListWorkflowStates(ctx context.Context, teamID string) ([]Workf
 // buildBaseIssueFilter builds the base issue filter without search terms.
 func buildBaseIssueFilter(params FetchIssuesParams) IssueFilter {
 	filter := make(IssueFilter)
+	if len(params.IDs) > 0 {
+		filter["id"] = map[string]interface{}{"in": params.IDs}
+	}
 	if params.TeamID != "" {
 		filter["team"] = map[string]interface{}{"id": map[string]interface{}{"eq": params.TeamID}}
 	}
@@ -1767,6 +1774,53 @@ func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesPa
 }
 
 // customViewIssuesPage fetches a single page of a Linear custom view's issues.
+// IssueMatchesScope reports whether an issue is inside the scope the params
+// describe, asking the server the same question the list query asks so a
+// custom view's own filter is honored. The params' IDs field is ignored.
+//
+// The caller gets an error rather than a false when the check itself fails, so
+// a failed check never removes a row the user is looking at.
+func (c *Client) IssueMatchesScope(ctx context.Context, params FetchIssuesParams, issueID string) (bool, error) {
+	if issueID == "" {
+		return false, fmt.Errorf("issue id is required")
+	}
+	params.IDs = []string{issueID}
+	params.First = 1
+	params.OnProgress = nil
+
+	if params.CustomViewID == "" {
+		page, err := c.fetchIssuesWithFilterPage(ctx, params, nil)
+		if err != nil {
+			return false, err
+		}
+		return len(page.Issues) > 0, nil
+	}
+
+	// A custom view keeps its filter server-side, so the id filter has to ride
+	// along on the view's own connection. This is a separate selection from
+	// customViewIssuesPage on purpose: if the schema rejects the argument here,
+	// only the check breaks, not the list.
+	var query struct {
+		CustomView struct {
+			Issues struct {
+				Nodes []struct {
+					ID graphql.String
+				}
+			} `graphql:"issues(first: $first, filter: $filter)"`
+		} `graphql:"customView(id: $id)"`
+	}
+	variables := map[string]interface{}{
+		"id":     graphql.String(params.CustomViewID),
+		"first":  graphql.Int(1),
+		"filter": IssueFilter{"id": map[string]interface{}{"in": params.IDs}},
+	}
+	if err := c.client.Query(ctx, &query, variables); err != nil {
+		logger.ErrorWithErr(err, "linearapi.client: IssueMatchesScope failed view_id=%s issue_id=%s", params.CustomViewID, issueID)
+		return false, fmt.Errorf("check issue %s against view %s: %w", issueID, params.CustomViewID, err)
+	}
+	return len(query.CustomView.Issues.Nodes) > 0, nil
+}
+
 func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {

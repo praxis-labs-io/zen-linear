@@ -26,9 +26,9 @@ func (a *App) applyIssueUpdate(updated linearapi.Issue) {
 	}
 	if index < 0 {
 		a.issuesMu.Unlock()
-		// The issue is outside the current filter or list; only a fetch can say
-		// where it belongs now.
-		go a.refreshIssues(updated.ID)
+		// The edit may have brought the issue into scope. Ask about that one
+		// issue rather than refetching every page to find out.
+		a.confirmIssueInScope(updated, false)
 		return
 	}
 	// The mutation selection carries no comments, relations, subscribers, or
@@ -45,15 +45,27 @@ func (a *App) applyIssueUpdate(updated linearapi.Issue) {
 	a.issuesMu.Unlock()
 
 	a.renderIssueChange(updated.ID, false)
+	// The edit itself can push the issue out of the active filter, which the
+	// refetch this replaced used to handle by simply not returning it.
+	a.confirmIssueInScope(updated, true)
 }
 
 // applyIssueInsert adds a newly created issue to the local list. CreateIssue
-// returns the same selection the list query uses, so the row can be rendered
-// without a fetch. An issue the active filter would have excluded stays
-// visible until the next refresh, which is the cost of not asking the server.
+// returns the same selection the list query uses, so the row renders without a
+// fetch. Whether it belongs under the active filter is the server's to answer,
+// so the row goes up immediately and confirmIssueInScope takes it back down if
+// the filter excludes it.
 func (a *App) applyIssueInsert(created linearapi.Issue) {
+	if a.insertIssue(created) {
+		a.confirmIssueInScope(created, true)
+	}
+}
+
+// insertIssue splices a new issue into the list, reporting whether it landed.
+// An id already present is an update instead.
+func (a *App) insertIssue(created linearapi.Issue) bool {
 	if created.ID == "" {
-		return
+		return false
 	}
 
 	a.issuesMu.Lock()
@@ -61,7 +73,7 @@ func (a *App) applyIssueInsert(created linearapi.Issue) {
 		if a.issues[i].ID == created.ID {
 			a.issuesMu.Unlock()
 			a.applyIssueUpdate(created)
-			return
+			return false
 		}
 	}
 	a.issues = append(a.issues, created)
@@ -70,6 +82,64 @@ func (a *App) applyIssueInsert(created linearapi.Issue) {
 	a.issuesMu.Unlock()
 
 	a.renderIssueChange(created.ID, true)
+	return true
+}
+
+// confirmIssueInScope asks whether one issue belongs in the list as currently
+// filtered, and reconciles the row. inList says whether the row is showing:
+// a row that does not belong comes out, one that does belong goes in.
+//
+// A failed check leaves the list alone. Guessing wrong in the direction of
+// removing a row the user is looking at is worse than showing one row too many
+// until the next refresh.
+func (a *App) confirmIssueInScope(issue linearapi.Issue, inList bool) {
+	if issue.ID == "" {
+		return
+	}
+	params := a.currentFetchParams(string(a.sortFields[0]))
+	if !issueScopeIsNarrowed(params) {
+		// Nothing to fall out of.
+		return
+	}
+	matches := a.issueMatchesScopeFunc
+	if matches == nil {
+		matches = a.api.IssueMatchesScope
+	}
+
+	go func() {
+		inScope, err := matches(context.Background(), params, issue.ID)
+		if err != nil {
+			logger.ErrorWithErr(err, "tui.issue_update: scope check failed issue_id=%s", issue.ID)
+			return
+		}
+		if inScope == inList {
+			return
+		}
+		a.QueueUpdateDraw(func() {
+			if inScope {
+				a.insertIssue(issue)
+				return
+			}
+			a.applyIssueRemoval(issue.ID)
+		})
+	}()
+}
+
+// issueScopeIsNarrowed reports whether the params exclude anything. On the All
+// Issues view they do not, so there is nothing to check and no reason to spend
+// a round trip on every edit.
+func issueScopeIsNarrowed(params linearapi.FetchIssuesParams) bool {
+	return params.CustomViewID != "" ||
+		params.TeamID != "" ||
+		params.ProjectID != "" ||
+		params.StateID != "" ||
+		params.StateType != "" ||
+		params.CycleID != "" ||
+		params.AssigneeID != "" ||
+		params.ProjectMilestoneID != "" ||
+		len(params.LabelIDs) > 0 ||
+		!params.DueDate.Empty() ||
+		!params.Estimate.Empty()
 }
 
 // applyIssueRemoval drops an archived issue from the local list, landing the

@@ -2,11 +2,14 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
+
+var errNotReachable = errors.New("linear unreachable")
 
 // titleColumn is the index of the title cell in DefaultIssueColumns.
 const titleColumn = 3
@@ -101,28 +104,98 @@ func TestApplyIssueUpdate_MovesIssueBetweenSectionsWithoutRefetch(t *testing.T) 
 	}
 }
 
-func TestApplyIssueUpdate_RefetchesWhenIssueIsNotInTheList(t *testing.T) {
-	app := newUXTestApp()
-	refreshDone := installRefreshCompletionHook(app)
-	fetched := make(chan struct{}, 1)
-	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
-		select {
-		case fetched <- struct{}{}:
-		default:
-		}
-		return linearapi.IssuePage{}, nil
+// scopedTestApp narrows the list to a team, so the scope check has something
+// to check. On All Issues it is skipped.
+func scopedTestApp(t *testing.T, issues []linearapi.Issue) *App {
+	t.Helper()
+	app := newIssueUpdateTestApp(t, issues)
+	app.selectedNavigation = &NavigationNode{IsTeam: true, TeamID: "team-1"}
+	return app
+}
+
+func TestApplyIssueUpdate_AddsAnIssueTheEditBroughtIntoScope(t *testing.T) {
+	app := scopedTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+	})
+	checked := make(chan string, 1)
+	app.issueMatchesScopeFunc = func(ctx context.Context, params linearapi.FetchIssuesParams, issueID string) (bool, error) {
+		checked <- issueID
+		return true, nil
 	}
 
-	app.applyIssueUpdate(linearapi.Issue{ID: "unknown", Identifier: "LIN-9"})
+	app.applyIssueUpdate(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"})
 
 	select {
-	case <-fetched:
+	case issueID := <-checked:
+		if issueID != "issue-2" {
+			t.Fatalf("checked issue = %q, want issue-2", issueID)
+		}
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for the fallback refetch")
+		t.Fatal("timed out waiting for the scope check")
 	}
-	// The refresh runs on its own goroutine and touches tview globals; letting
-	// it outlive the test races the next test's app construction.
-	waitForRefreshCompletion(t, refreshDone)
+	waitForIssueCount(t, app, 2)
+}
+
+func TestApplyIssueUpdate_DropsAnIssueTheEditPushedOutOfScope(t *testing.T) {
+	app := scopedTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
+	})
+	app.issueMatchesScopeFunc = func(ctx context.Context, params linearapi.FetchIssuesParams, issueID string) (bool, error) {
+		return false, nil
+	}
+
+	app.applyIssueUpdate(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta moved"})
+
+	waitForIssueCount(t, app, 1)
+}
+
+func TestApplyIssueInsert_KeepsTheRowWhenTheScopeCheckFails(t *testing.T) {
+	app := scopedTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+	})
+	checked := make(chan struct{}, 1)
+	app.issueMatchesScopeFunc = func(ctx context.Context, params linearapi.FetchIssuesParams, issueID string) (bool, error) {
+		checked <- struct{}{}
+		return false, errNotReachable
+	}
+
+	app.applyIssueInsert(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"})
+
+	<-checked
+	// A failed check must not take away a row the user is looking at.
+	waitForIssueCount(t, app, 2)
+}
+
+func TestConfirmIssueInScope_SkippedOnTheUnscopedList(t *testing.T) {
+	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+	})
+	app.issueMatchesScopeFunc = func(ctx context.Context, params linearapi.FetchIssuesParams, issueID string) (bool, error) {
+		t.Error("scope check ran with no filter to check against")
+		return true, nil
+	}
+
+	app.applyIssueUpdate(linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha renamed"})
+	time.Sleep(100 * time.Millisecond)
+}
+
+func waitForIssueCount(t *testing.T, app *App, want int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		app.issuesMu.RLock()
+		got := len(app.issues)
+		app.issuesMu.RUnlock()
+		if got == want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	app.issuesMu.RLock()
+	got := len(app.issues)
+	app.issuesMu.RUnlock()
+	t.Fatalf("issue count = %d, want %d", got, want)
 }
 
 func TestApplyIssueRemoval_DropsRowAndLandsOnTheNextIssue(t *testing.T) {
