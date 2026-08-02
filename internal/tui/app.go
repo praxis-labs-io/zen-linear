@@ -165,7 +165,7 @@ type App struct {
 	layoutMode             layoutMode
 	palettePreviousPane    FocusTarget
 	navigationTree         *tview.TreeView
-	navNodeOriginalText    map[*tview.TreeNode]string
+	navNodeLabels          map[*tview.TreeNode]navNodeLabel
 	favorites              []linearapi.Favorite
 	favoritesGroup         *tview.TreeNode
 	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
@@ -257,6 +257,7 @@ type App struct {
 	searchDebounceMu         sync.Mutex
 	searchDebounceGeneration atomic.Int64
 	searchFetchGeneration    atomic.Int64
+	searchFetchCancel        context.CancelFunc
 
 	// Cached metadata for currently selected team
 	currentUser    *linearapi.User
@@ -341,7 +342,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		sortFields:           parseSortFields(cfg.SortBy),
 		configuredSortFields: parseSortFields(cfg.SortBy),
 		expandedState:        make(map[string]bool),
-		navNodeOriginalText:  make(map[*tview.TreeNode]string),
+		navNodeLabels:        make(map[*tview.TreeNode]navNodeLabel),
 		idToIssue:            make(map[string]*linearapi.Issue),
 		myIDToIssue:          make(map[string]*linearapi.Issue),
 		otherIDToIssue:       make(map[string]*linearapi.Issue),
@@ -811,7 +812,7 @@ func (a *App) loadNavigationData(ctx context.Context) bool {
 
 // rebuildNavigationTree rebuilds the navigation tree with real data.
 func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearapi.Favorite) {
-	a.navNodeOriginalText = make(map[*tview.TreeNode]string)
+	a.navNodeLabels = make(map[*tview.TreeNode]navNodeLabel)
 	a.favorites = favorites
 	rootLabel := "Linear"
 	if a.activeWorkspaceName != "" {

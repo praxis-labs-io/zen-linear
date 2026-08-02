@@ -471,7 +471,7 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 			}
 			rebuilt = append(rebuilt, child)
 		}
-		a.forgetNavNodeText(previous)
+		a.forgetNavNodeLabels(previous)
 	} else {
 		// No section yet: it belongs directly under "All Issues".
 		at := min(1, len(children))
@@ -507,15 +507,15 @@ func (a *App) restoreNavigationCursor(root, group *tview.TreeNode, preferFavorit
 	}
 }
 
-// forgetNavNodeText drops a subtree from the label cache, which is otherwise
+// forgetNavNodeLabels drops a subtree from the label cache, which is otherwise
 // only cleared on a full rebuild.
-func (a *App) forgetNavNodeText(node *tview.TreeNode) {
-	if node == nil || a.navNodeOriginalText == nil {
+func (a *App) forgetNavNodeLabels(node *tview.TreeNode) {
+	if node == nil || a.navNodeLabels == nil {
 		return
 	}
-	delete(a.navNodeOriginalText, node)
+	delete(a.navNodeLabels, node)
 	for _, child := range node.GetChildren() {
-		a.forgetNavNodeText(child)
+		a.forgetNavNodeLabels(child)
 	}
 }
 
