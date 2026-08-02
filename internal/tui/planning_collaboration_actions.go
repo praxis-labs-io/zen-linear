@@ -372,6 +372,12 @@ func (a *App) showStatusFilter() {
 }
 
 func (a *App) showProjectFilter() {
+	// ShowProjectPicker only logs on a missing team; the filter's failure has
+	// to be visible.
+	if a.GetSelectedTeamID() == "" {
+		a.updateStatusBarWithError(fmt.Errorf("team context is required"))
+		return
+	}
 	a.ShowProjectPicker("", func(projectID string) {
 		a.richFilters.ProjectID = projectID
 		a.richFilters.ProjectName = projectNameByID(a.teamProjects, projectID)

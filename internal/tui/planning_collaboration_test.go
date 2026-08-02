@@ -333,6 +333,19 @@ func TestClearProjectLeavesMilestoneAloneWhenAbsent(t *testing.T) {
 	}
 }
 
+func TestShowProjectFilterReportsMissingTeamContext(t *testing.T) {
+	app := newUXTestApp()
+
+	app.showProjectFilter()
+
+	if text := app.statusBar.GetText(true); !strings.Contains(text, "team context is required") {
+		t.Fatalf("status bar = %q, want the team-context error, not a silent no-op", text)
+	}
+	if app.pages.HasPage("picker") {
+		t.Fatal("picker opened without a team to list projects for")
+	}
+}
+
 func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {
 	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
 	app.queueUpdateDraw = func(f func()) { f() }

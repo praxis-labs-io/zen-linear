@@ -661,7 +661,13 @@ func DefaultCommands(app *App) []Command {
 								}
 								logger.Info("tui.commands: archived issue issue=%s", issue.Identifier)
 								a.flashStatus(fmt.Sprintf("Archived %s", issue.Identifier))
-								a.applyIssueRemoval(issue.ID)
+								if len(issue.Children) > 0 {
+									// Linear may archive sub-issues with the
+									// parent; only a fetch answers for them.
+									go a.refreshIssues()
+								} else {
+									a.applyIssueRemoval(issue.ID)
+								}
 							})
 						}()
 					},
@@ -843,49 +849,13 @@ func DefaultCommands(app *App) []Command {
 			Run: func(a *App) {
 				a.issuesMu.RLock()
 				issues := a.issues
+				selectedID := ""
+				if a.selectedIssue != nil {
+					selectedID = a.selectedIssue.ID
+				}
 				a.issuesMu.RUnlock()
 				ExpandAll(a.expandedState, issues)
-				// Rebuild rows for both sections
-				currentUserID := ""
-				if a.currentUser != nil {
-					currentUserID = a.currentUser.ID
-				}
-				myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
-				a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
-				a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
-
-				// Legacy: keep old fields for backward compatibility
-				a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
-				a.issueRows = append(a.issueRows, a.myIssueRows...)
-				a.issueRows = append(a.issueRows, a.otherIssueRows...)
-				a.idToIssue = make(map[string]*linearapi.Issue)
-				for k, v := range a.myIDToIssue {
-					a.idToIssue[k] = v
-				}
-				for k, v := range a.otherIDToIssue {
-					a.idToIssue[k] = v
-				}
-
-				// Render both tables, preserving selection
-				var selectedMyIssueID, selectedOtherIssueID string
-				a.issuesMu.RLock()
-				selectedIssue := a.selectedIssue
-				a.issuesMu.RUnlock()
-				if selectedIssue != nil {
-					if _, ok := a.myIDToIssue[selectedIssue.ID]; ok {
-						selectedMyIssueID = selectedIssue.ID
-						a.activeIssuesSection = IssuesSectionMy
-					} else if _, ok := a.otherIDToIssue[selectedIssue.ID]; ok {
-						selectedOtherIssueID = selectedIssue.ID
-						a.activeIssuesSection = IssuesSectionOther
-					}
-				}
-
-				a.renderIssueSections(map[IssuesSection]string{
-					IssuesSectionMy:    selectedMyIssueID,
-					IssuesSectionOther: selectedOtherIssueID,
-				})
-				a.updateIssuesColumnLayout()
+				a.renderIssueChange(selectedID, false)
 			},
 		},
 		{
@@ -895,50 +865,13 @@ func DefaultCommands(app *App) []Command {
 			ShortcutRune: '[',
 			Run: func(a *App) {
 				CollapseAll(a.expandedState)
-				// Rebuild rows for both sections
-				currentUserID := ""
-				if a.currentUser != nil {
-					currentUserID = a.currentUser.ID
-				}
 				a.issuesMu.RLock()
-				issues := a.issues
+				selectedID := ""
+				if a.selectedIssue != nil {
+					selectedID = a.selectedIssue.ID
+				}
 				a.issuesMu.RUnlock()
-				myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
-				a.myIssueRows, a.myIDToIssue = BuildIssueRows(myIssues, a.expandedState)
-				a.otherIssueRows, a.otherIDToIssue = BuildIssueRows(otherIssues, a.expandedState)
-
-				// Legacy: keep old fields for backward compatibility
-				a.issueRows = make([]IssueRow, 0, len(a.myIssueRows)+len(a.otherIssueRows))
-				a.issueRows = append(a.issueRows, a.myIssueRows...)
-				a.issueRows = append(a.issueRows, a.otherIssueRows...)
-				a.idToIssue = make(map[string]*linearapi.Issue)
-				for k, v := range a.myIDToIssue {
-					a.idToIssue[k] = v
-				}
-				for k, v := range a.otherIDToIssue {
-					a.idToIssue[k] = v
-				}
-
-				// Render both tables, preserving selection
-				var selectedMyIssueID, selectedOtherIssueID string
-				a.issuesMu.RLock()
-				selectedIssue := a.selectedIssue
-				a.issuesMu.RUnlock()
-				if selectedIssue != nil {
-					if _, ok := a.myIDToIssue[selectedIssue.ID]; ok {
-						selectedMyIssueID = selectedIssue.ID
-						a.activeIssuesSection = IssuesSectionMy
-					} else if _, ok := a.otherIDToIssue[selectedIssue.ID]; ok {
-						selectedOtherIssueID = selectedIssue.ID
-						a.activeIssuesSection = IssuesSectionOther
-					}
-				}
-
-				a.renderIssueSections(map[IssuesSection]string{
-					IssuesSectionMy:    selectedMyIssueID,
-					IssuesSectionOther: selectedOtherIssueID,
-				})
-				a.updateIssuesColumnLayout()
+				a.renderIssueChange(selectedID, false)
 			},
 		},
 		{
