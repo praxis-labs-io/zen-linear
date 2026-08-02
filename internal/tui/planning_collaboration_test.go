@@ -206,8 +206,8 @@ func TestSetPriorityPickerDispatchesSelectedPriority(t *testing.T) {
 		{label: "No priority", want: 0},
 	} {
 		app := newUXTestApp()
-		refreshDone := installRefreshCompletionHook(app)
 		app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+			t.Error("a single-issue update refetched the whole list")
 			return linearapi.IssuePage{}, nil
 		}
 		app.issuesMu.Lock()
@@ -246,14 +246,13 @@ func TestSetPriorityPickerDispatchesSelectedPriority(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("timed out waiting for priority update")
 		}
-		waitForRefreshCompletion(t, refreshDone)
 	}
 }
 
 func TestSetProjectPickerDispatchesProjectAndClearsMilestone(t *testing.T) {
 	app := newUXTestApp()
-	refreshDone := installRefreshCompletionHook(app)
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		t.Error("a single-issue update refetched the whole list")
 		return linearapi.IssuePage{}, nil
 	}
 	app.teamProjects = []linearapi.Project{
@@ -298,13 +297,12 @@ func TestSetProjectPickerDispatchesProjectAndClearsMilestone(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for project update")
 	}
-	waitForRefreshCompletion(t, refreshDone)
 }
 
 func TestClearProjectLeavesMilestoneAloneWhenAbsent(t *testing.T) {
 	app := newUXTestApp()
-	refreshDone := installRefreshCompletionHook(app)
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		t.Error("a single-issue update refetched the whole list")
 		return linearapi.IssuePage{}, nil
 	}
 	app.issuesMu.Lock()
@@ -333,7 +331,6 @@ func TestClearProjectLeavesMilestoneAloneWhenAbsent(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for project clear")
 	}
-	waitForRefreshCompletion(t, refreshDone)
 }
 
 func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {

@@ -276,6 +276,7 @@ type App struct {
 	// Lazy loading helpers (overridable in tests)
 	fetchIssuesPage         func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error)
 	fetchIssueByID          func(context.Context, string) (linearapi.Issue, error)
+	issueMatchesScopeFunc   func(context.Context, linearapi.FetchIssuesParams, string) (bool, error)
 	fetchViewPrefsFunc      func(context.Context, string) (*linearapi.ViewPreferencesValues, error)
 	queueUpdateDraw         func(func())
 	updateIssueFunc         func(context.Context, linearapi.UpdateIssueInput) (linearapi.Issue, error)
@@ -1732,6 +1733,41 @@ func (a *App) notifyRefreshCompleted() {
 	}
 }
 
+// currentFetchParams describes the issue list as it is scoped right now: the
+// rich filters plus whatever the navigation selection narrows to. Callers must
+// build it on the UI thread, since it reads state a refresh reassigns.
+func (a *App) currentFetchParams(orderBy string) linearapi.FetchIssuesParams {
+	params := linearapi.FetchIssuesParams{
+		First:   a.config.PageSize,
+		OrderBy: orderBy,
+	}
+	a.applyRichFiltersToParams(&params)
+
+	// Apply team/project/state filter based on navigation selection
+	if a.selectedNavigation != nil {
+		switch {
+		case a.selectedNavigation.CustomViewID != "":
+			params.CustomViewID = a.selectedNavigation.CustomViewID
+		case a.selectedNavigation.StateType != "":
+			params.TeamID = a.selectedNavigation.TeamID
+			params.StateType = a.selectedNavigation.StateType
+		case a.selectedNavigation.IsStatus:
+			params.TeamID = a.selectedNavigation.TeamID
+			params.StateID = a.selectedNavigation.StateID
+		case a.selectedNavigation.IsCycle:
+			params.TeamID = a.selectedNavigation.TeamID
+			params.CycleID = a.selectedNavigation.CycleID
+		case a.selectedNavigation.IsTeam:
+			params.TeamID = a.selectedNavigation.TeamID
+		case a.selectedNavigation.IsProject:
+			params.TeamID = a.selectedNavigation.TeamID
+			params.ProjectID = a.selectedNavigation.ID
+		}
+		// If "All Issues", no team/project filter
+	}
+	return params
+}
+
 // refreshIssues fetches issues from the API and updates the UI.
 // If issueID is provided, that issue will be selected after refresh.
 func (a *App) refreshIssues(issueID ...string) {
@@ -1761,37 +1797,9 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 	// Snapshot the chain here: setSortFields reassigns it on the UI thread
 	// while this goroutine runs.
 	orderBy := string(a.sortFields[0])
+	params := a.currentFetchParams(orderBy)
 	go func() {
 		ctx := context.Background()
-
-		params := linearapi.FetchIssuesParams{
-			First:   a.config.PageSize,
-			OrderBy: orderBy,
-		}
-		a.applyRichFiltersToParams(&params)
-
-		// Apply team/project/state filter based on navigation selection
-		if a.selectedNavigation != nil {
-			switch {
-			case a.selectedNavigation.CustomViewID != "":
-				params.CustomViewID = a.selectedNavigation.CustomViewID
-			case a.selectedNavigation.StateType != "":
-				params.TeamID = a.selectedNavigation.TeamID
-				params.StateType = a.selectedNavigation.StateType
-			case a.selectedNavigation.IsStatus:
-				params.TeamID = a.selectedNavigation.TeamID
-				params.StateID = a.selectedNavigation.StateID
-			case a.selectedNavigation.IsCycle:
-				params.TeamID = a.selectedNavigation.TeamID
-				params.CycleID = a.selectedNavigation.CycleID
-			case a.selectedNavigation.IsTeam:
-				params.TeamID = a.selectedNavigation.TeamID
-			case a.selectedNavigation.IsProject:
-				params.TeamID = a.selectedNavigation.TeamID
-				params.ProjectID = a.selectedNavigation.ID
-			}
-			// If "All Issues", no team/project filter
-		}
 
 		fetchPage := a.fetchIssuesPage
 		if fetchPage == nil {
