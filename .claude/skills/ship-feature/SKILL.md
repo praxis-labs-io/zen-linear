@@ -45,30 +45,42 @@ Step 9 is where that chaining has already caused a silent CI failure.
 
 ## 4. Request a Copilot review
 
-**`gh pr edit --add-reviewer` cannot do this.** It lowercases the login and fails
-with "Could not resolve user with login 'copilot'", and
-`copilot-pull-request-reviewer[bot]` is the login Copilot _reviews as_, not a
-requestable one. Both failures read like Copilot is unavailable; it isn't. Use
-the GraphQL `requestReviews` mutation with the Bot's node id:
+One REST call, with the reviewer login `Copilot`:
 
 ```bash
-PR_ID=$(gh api graphql -f query='query { repository(owner:"zen-linear",name:"zen-linear"){ pullRequest(number:NNN){ id } } }' --jq '.data.repository.pullRequest.id')
-BOT_ID=$(gh api graphql -f query='query { repository(owner:"zen-linear",name:"zen-linear"){ suggestedActors(capabilities:[CAN_BE_ASSIGNED],first:20){ nodes{ ... on Bot { id login } } } } }' --jq '.data.repository.suggestedActors.nodes[] | select(.login=="copilot-swe-agent") | .id')
-gh api graphql -f query='mutation($pr:ID!,$bot:ID!){ requestReviews(input:{pullRequestId:$pr, botIds:[$bot], union:true}){ pullRequest{ reviewRequests(first:10){ nodes{ requestedReviewer{ ... on Bot { login } } } } } } }' -f pr="$PR_ID" -f bot="$BOT_ID"
+gh api -X POST repos/zen-linear/zen-linear/pulls/NNN/requested_reviewers -f 'reviewers[]=Copilot'
 ```
 
-The requestable actor is `copilot-swe-agent`; it comes back as
-`copilot-pull-request-reviewer` in the confirmation, which is expected. Resolve
-the id from `suggestedActors` rather than hardcoding it, and if that query
-returns no Bot, say the request failed rather than that Copilot is unavailable.
+Confirm it registered rather than assuming. The response carries
+`requested_reviewers`, and a live request shows the Bot there:
+
+```bash
+gh api repos/zen-linear/zen-linear/pulls/NNN --jq '.requested_reviewers[].login'
+```
+
+**`gh pr edit --add-reviewer` cannot do this.** It lowercases the login and
+fails with "Could not resolve user with login 'copilot'". That reads like
+Copilot is unavailable; it isn't.
+
+**Do not resolve a bot id from `suggestedActors` and call the GraphQL
+`requestReviews` mutation.** `suggestedActors` returns `copilot-swe-agent`,
+which is the coding agent, not the reviewer. The mutation accepts its id,
+returns success, and requests nothing: `reviewRequests` comes back empty and no
+review ever runs. The reviewer is a different bot, `Copilot`, which reviews as
+`copilot-pull-request-reviewer`. Reach it through the REST call above. This
+cost two PRs' worth of false "Copilot is broken" diagnosis on 2026-08-02.
+
+**Never confirm with `gh pr view --json reviewRequests`.** It omits Bot
+reviewers and returns `[]` while the request is live. Use the REST field above,
+or GraphQL with a `... on Bot` fragment.
 
 **A repo with automatic Copilot review enabled produces a review whether or not
 the request succeeded**, so a review appearing is not evidence the request
-worked. Confirm from the mutation's own response.
+worked. Confirm from the request's own response.
 
 It runs async; continue and re-check later.
 
-**Never `@copilot`, in a comment or anywhere else.** The mutation above is the
+**Never `@copilot`, in a comment or anywhere else.** The REST call above is the
 only way to request a review. An `@`-mention summons it out of band, and it
 re-fires on every edit of the comment that carries it. Read its findings from
 the review comments and write your triage as ordinary prose that does not
