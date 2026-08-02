@@ -26,28 +26,71 @@ func (a *App) applyIssueUpdate(updated linearapi.Issue) {
 	}
 	if index < 0 {
 		a.issuesMu.Unlock()
+		// A search result outside the loaded pages still owns the details
+		// pane and its row; without this the mutation lands and nothing on
+		// screen changes.
+		a.applyDetachedIssueEdit(updated)
 		// The edit may have brought the issue into scope. Ask about that one
 		// issue rather than refetching every page to find out.
 		a.confirmIssueInScope(updated, false)
 		return
 	}
 	// The mutation selection carries no comments, relations, subscribers, or
-	// attachments. The details pane loaded those separately and a straight
-	// replace would drop them.
+	// attachments. Only the details pane's full fetch has them, and it lives
+	// in selectedIssue, never in the list entry.
 	existing := a.issues[index]
-	updated.Comments = existing.Comments
-	updated.Relations = existing.Relations
-	updated.Subscribers = existing.Subscribers
-	updated.Attachments = existing.Attachments
+	detail := &existing
+	if a.selectedIssue != nil && a.selectedIssue.ID == updated.ID {
+		detail = a.selectedIssue
+	}
+	updated.Comments = detail.Comments
+	updated.Relations = detail.Relations
+	updated.Subscribers = detail.Subscribers
+	updated.Attachments = detail.Attachments
 	a.issues[index] = updated
 	a.moveChildRef(existing.Parent, updated.Parent, updated)
 	a.sortIssuesLocally()
 	a.issuesMu.Unlock()
 
 	a.renderIssueChange(updated.ID, false)
+	a.updateSearchIssueRow(updated)
 	// The edit itself can push the issue out of the active filter, which the
 	// refetch this replaced used to handle by simply not returning it.
 	a.confirmIssueInScope(updated, true)
+}
+
+// applyDetachedIssueEdit reflects an edit to an issue that is not in the main
+// list: the details pane if it is the selection, and its search-tab row.
+func (a *App) applyDetachedIssueEdit(updated linearapi.Issue) {
+	a.issuesMu.Lock()
+	if a.selectedIssue != nil && a.selectedIssue.ID == updated.ID {
+		selected := updated
+		selected.Comments = a.selectedIssue.Comments
+		selected.Relations = a.selectedIssue.Relations
+		selected.Subscribers = a.selectedIssue.Subscribers
+		selected.Attachments = a.selectedIssue.Attachments
+		a.selectedIssue = &selected
+		a.issuesMu.Unlock()
+		a.updateDetailsView()
+	} else {
+		a.issuesMu.Unlock()
+	}
+	a.updateSearchIssueRow(updated)
+}
+
+// updateSearchIssueRow keeps an edited issue's search-tab row in step. Search
+// results carry their own model, so the main-list render never touches them.
+func (a *App) updateSearchIssueRow(updated linearapi.Issue) {
+	for i := range a.searchIssues {
+		if a.searchIssues[i].ID != updated.ID {
+			continue
+		}
+		// searchIDToIssue points into this slice, so the write is visible to
+		// the repaint.
+		a.searchIssues[i] = updated
+		a.repaintIssueRow(IssuesSectionSearch, updated.ID)
+		return
+	}
 }
 
 // applyIssueInsert adds a newly created issue to the local list. CreateIssue
@@ -105,6 +148,7 @@ func (a *App) confirmIssueInScope(issue linearapi.Issue, inList bool) {
 	if matches == nil {
 		matches = a.api.IssueMatchesScope
 	}
+	generation := a.refreshGeneration.Load()
 
 	go func() {
 		inScope, err := matches(context.Background(), params, issue.ID)
@@ -117,6 +161,12 @@ func (a *App) confirmIssueInScope(issue linearapi.Issue, inList bool) {
 		}
 		logger.Debug("tui.issue_update: scope check moved issue_id=%s in_scope=%v", issue.ID, inScope)
 		a.QueueUpdateDraw(func() {
+			// A refresh or navigation change re-scoped the list while the
+			// answer was in flight; the verdict describes a list that is no
+			// longer showing.
+			if a.refreshGeneration.Load() != generation {
+				return
+			}
 			if inScope {
 				a.insertIssue(issue)
 				return
@@ -153,6 +203,12 @@ func (a *App) applyIssueRemoval(issueID string) {
 	successor := a.issueRowAfter(a.effectiveIssuesSection(), issueID)
 
 	a.issuesMu.Lock()
+	// Read the selection before the splice: selectedIssue can alias the
+	// backing array, and the shift below changes what that pointer reads.
+	selectedID := ""
+	if a.selectedIssue != nil {
+		selectedID = a.selectedIssue.ID
+	}
 	index := -1
 	for i := range a.issues {
 		if a.issues[i].ID == issueID {
@@ -167,12 +223,19 @@ func (a *App) applyIssueRemoval(issueID string) {
 	removed := a.issues[index]
 	a.issues = append(a.issues[:index], a.issues[index+1:]...)
 	a.moveChildRef(removed.Parent, nil, removed)
-	if a.selectedIssue != nil && a.selectedIssue.ID == issueID {
+	wasSelected := selectedID == issueID
+	if wasSelected {
 		a.selectedIssue = nil
 	}
 	a.issuesMu.Unlock()
 
-	a.renderIssueChange(successor, true)
+	if wasSelected {
+		a.renderIssueChange(successor, true)
+		return
+	}
+	// The user is on another row, possibly moved there while a scope check
+	// was in flight; a removal elsewhere has no claim on their cursor.
+	a.renderIssueChange(selectedID, false)
 }
 
 // issueRowAfter returns the id of the issue row following the given one, so a
@@ -242,7 +305,7 @@ func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 		IssuesSectionOther: a.otherIssueRows,
 		IssuesSectionAll:   a.issueRows,
 	}
-	previousSection := a.activeIssuesSection
+	previousEffective := a.effectiveIssuesSection()
 
 	a.rebuildIssueRowModels()
 	selections := a.sectionSelectionsFor(targetIssueID)
@@ -262,20 +325,56 @@ func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 		a.renderIssueSections(deferred)
 	}
 
-	if a.activeIssuesSection != previousSection {
+	// Remount on the effective section, not the active one: emptying the My
+	// tab redirects the display to Other without touching activeIssuesSection,
+	// and the stale table would stay mounted.
+	if a.effectiveIssuesSection() != previousEffective {
 		a.updateIssuesColumnLayout()
 	} else {
 		a.updateAllPaneTitles()
 	}
 
-	a.issuesMu.Lock()
-	if selectTarget || (a.selectedIssue != nil && a.selectedIssue.ID == targetIssueID) {
-		if issue := a.idToIssue[targetIssueID]; issue != nil {
-			a.selectedIssue = issue
-		}
+	a.repointSelection(targetIssueID, selectTarget)
+}
+
+// repointSelection re-resolves the details pane after the row models changed.
+// The id maps point into the a.issues backing array, which later edits re-sort
+// and splice in place, so the selection always keeps its own copy.
+func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
+	a.issuesMu.RLock()
+	previousSelected := a.selectedIssue
+	a.issuesMu.RUnlock()
+	selectedID := ""
+	if previousSelected != nil {
+		selectedID = previousSelected.ID
 	}
-	a.issuesMu.Unlock()
-	a.updateDetailsView()
+
+	target := a.idToIssue[targetIssueID]
+	switch {
+	case target != nil && selectedID == targetIssueID:
+		// Same issue: take the fresh list fields, keep the detail data only
+		// the pane's full fetch carries.
+		selected := *target
+		selected.Comments = previousSelected.Comments
+		selected.Relations = previousSelected.Relations
+		selected.Subscribers = previousSelected.Subscribers
+		selected.Attachments = previousSelected.Attachments
+		a.issuesMu.Lock()
+		a.selectedIssue = &selected
+		a.issuesMu.Unlock()
+		a.updateDetailsView()
+	case selectTarget && target != nil:
+		// The selection moves to a different issue; render and fetch its
+		// details the same way a cursor move would.
+		a.onIssueSelected(*target)
+	case selectTarget:
+		a.issuesMu.Lock()
+		a.selectedIssue = nil
+		a.issuesMu.Unlock()
+		a.updateDetailsView()
+	default:
+		a.updateDetailsView()
+	}
 }
 
 // refreshIssueDetails refetches one issue so the details pane picks up data the

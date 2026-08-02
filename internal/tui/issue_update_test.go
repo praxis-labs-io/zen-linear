@@ -14,23 +14,80 @@ var errNotReachable = errors.New("linear unreachable")
 // titleColumn is the index of the title cell in DefaultIssueColumns.
 const titleColumn = 3
 
-func newIssueUpdateTestApp(t *testing.T, issues []linearapi.Issue) *App {
+// newIssueUpdateTestApp returns an app seeded with issues and a channel that
+// fires after each queued draw completes. A selection move fetches details on
+// a background goroutine; a test that triggers one must waitForDraw before
+// finishing, or that goroutine's table work races the next test's NewApp over
+// tview's package-level styles.
+func newIssueUpdateTestApp(t *testing.T, issues []linearapi.Issue) (*App, <-chan struct{}) {
 	t.Helper()
 	app := newUXTestApp()
+	drawn := make(chan struct{}, 8)
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		select {
+		case drawn <- struct{}{}:
+		default:
+		}
+	}
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
 		t.Error("a single-issue update refetched the whole list")
 		return linearapi.IssuePage{}, nil
+	}
+	app.fetchIssueByID = func(ctx context.Context, issueID string) (linearapi.Issue, error) {
+		return linearapi.Issue{ID: issueID, Identifier: "FETCHED"}, nil
 	}
 	app.issuesMu.Lock()
 	app.issues = issues
 	app.selectedIssue = &app.issues[0]
 	app.issuesMu.Unlock()
 	app.rebuildIssuesTables(issues[0].ID)
-	return app
+	return app, drawn
+}
+
+// scopedTestApp narrows the list to a team, so the scope check has something
+// to check. On All Issues it is skipped.
+func scopedTestApp(t *testing.T, issues []linearapi.Issue) (*App, <-chan struct{}) {
+	t.Helper()
+	app, drawn := newIssueUpdateTestApp(t, issues)
+	app.selectedNavigation = &NavigationNode{IsTeam: true, TeamID: "team-1"}
+	return app, drawn
+}
+
+func waitForDraw(t *testing.T, drawn <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-drawn:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for a queued draw")
+	}
+}
+
+func assertIssueCount(t *testing.T, app *App, want int) {
+	t.Helper()
+	app.issuesMu.RLock()
+	got := len(app.issues)
+	app.issuesMu.RUnlock()
+	if got != want {
+		t.Fatalf("issue count = %d, want %d", got, want)
+	}
+}
+
+// assertSelectionNotAliased fails when selectedIssue points into the a.issues
+// backing array, which in-place sorts and splices silently repoint.
+func assertSelectionNotAliased(t *testing.T, app *App) {
+	t.Helper()
+	app.issuesMu.RLock()
+	defer app.issuesMu.RUnlock()
+	for i := range app.issues {
+		if app.selectedIssue == &app.issues[i] {
+			t.Fatal("selectedIssue aliases the issues backing array")
+		}
+	}
 }
 
 func TestApplyIssueUpdate_RepaintsOneRowWhenNothingMoves(t *testing.T) {
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
 	})
@@ -60,29 +117,67 @@ func TestApplyIssueUpdate_RepaintsOneRowWhenNothingMoves(t *testing.T) {
 	}
 }
 
-func TestApplyIssueUpdate_KeepsCommentsTheMutationDoesNotReturn(t *testing.T) {
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{
-			ID: "issue-1", Identifier: "LIN-1", Title: "Alpha",
-			Comments:    []linearapi.Comment{{ID: "comment-1", Body: "keep me"}},
-			Subscribers: []linearapi.User{{ID: "user-9"}},
-		},
+func TestApplyIssueUpdate_KeepsDetailsThePaneLoaded(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
+	// The pane's full fetch lives only in selectedIssue; the list entry never
+	// carries comments or subscribers.
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{
+		ID: "issue-1", Identifier: "LIN-1", Title: "Alpha",
+		Comments:    []linearapi.Comment{{ID: "comment-1", Body: "keep me"}},
+		Subscribers: []linearapi.User{{ID: "user-9"}},
+	}
+	app.issuesMu.Unlock()
 
 	app.applyIssueUpdate(linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha renamed"})
 
 	app.issuesMu.RLock()
-	defer app.issuesMu.RUnlock()
-	if len(app.issues[0].Comments) != 1 {
-		t.Fatalf("comments = %#v, want the loaded comment kept", app.issues[0].Comments)
+	selected := app.selectedIssue
+	app.issuesMu.RUnlock()
+	if selected == nil || selected.Title != "Alpha renamed" {
+		t.Fatalf("selected issue = %#v, want the renamed issue", selected)
 	}
-	if len(app.issues[0].Subscribers) != 1 {
-		t.Fatalf("subscribers = %#v, want the loaded subscriber kept", app.issues[0].Subscribers)
+	if len(selected.Comments) != 1 {
+		t.Fatalf("comments = %#v, want the loaded comment kept", selected.Comments)
 	}
+	if len(selected.Subscribers) != 1 {
+		t.Fatalf("subscribers = %#v, want the loaded subscriber kept", selected.Subscribers)
+	}
+	assertSelectionNotAliased(t, app)
+}
+
+func TestApplyIssueUpdate_ConsecutiveEditsFollowTheEditedIssue(t *testing.T) {
+	base := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", UpdatedAt: base.Add(3 * time.Hour)},
+		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta", UpdatedAt: base.Add(2 * time.Hour)},
+		{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma", UpdatedAt: base.Add(time.Hour)},
+	})
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma"}
+	app.issuesMu.Unlock()
+
+	// The first edit re-sorts the slice under the selection; the second must
+	// still land on the same issue.
+	app.applyIssueUpdate(linearapi.Issue{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma", UpdatedAt: base.Add(4 * time.Hour)})
+	app.applyIssueUpdate(linearapi.Issue{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma edited", UpdatedAt: base.Add(5 * time.Hour)})
+
+	app.issuesMu.RLock()
+	selected := app.selectedIssue
+	app.issuesMu.RUnlock()
+	if selected == nil || selected.ID != "issue-3" {
+		t.Fatalf("selected issue = %#v, want issue-3", selected)
+	}
+	if selected.Title != "Gamma edited" {
+		t.Fatalf("selected title = %q, want %q", selected.Title, "Gamma edited")
+	}
+	assertSelectionNotAliased(t, app)
 }
 
 func TestApplyIssueUpdate_MovesIssueBetweenSectionsWithoutRefetch(t *testing.T) {
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
 	})
@@ -104,34 +199,37 @@ func TestApplyIssueUpdate_MovesIssueBetweenSectionsWithoutRefetch(t *testing.T) 
 	}
 }
 
-// scopedTestApp narrows the list to a team, so the scope check has something
-// to check. On All Issues it is skipped.
-//
-// The returned channel fires once the scope check's redraw callback has run.
-// Waiting on the issue count instead would return while that callback is still
-// rendering, and the table work it does races the next test's NewApp over
-// tview's package-level styles.
-func scopedTestApp(t *testing.T, issues []linearapi.Issue) (*App, <-chan struct{}) {
-	t.Helper()
-	app := newIssueUpdateTestApp(t, issues)
-	app.selectedNavigation = &NavigationNode{IsTeam: true, TeamID: "team-1"}
-	drawn := make(chan struct{}, 4)
-	app.queueUpdateDraw = func(f func()) {
-		f()
-		select {
-		case drawn <- struct{}{}:
-		default:
-		}
+func TestApplyIssueUpdate_ReflectsEditToAnIssueOutsideTheList(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+	})
+	// A search result outside the loaded pages: it owns the pane and a search
+	// row, but is absent from a.issues.
+	app.searchIssues = []linearapi.Issue{{ID: "search-1", Identifier: "LIN-9", Title: "Old title"}}
+	app.searchIssueRows, app.searchIDToIssue = BuildIssueRows(app.searchIssues, app.expandedState)
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{
+		ID: "search-1", Identifier: "LIN-9", Title: "Old title",
+		Comments: []linearapi.Comment{{ID: "comment-1", Body: "keep"}},
 	}
-	return app, drawn
-}
+	app.issuesMu.Unlock()
 
-func waitForDraw(t *testing.T, drawn <-chan struct{}) {
-	t.Helper()
-	select {
-	case <-drawn:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for the scope check to reconcile the list")
+	app.applyIssueUpdate(linearapi.Issue{ID: "search-1", Identifier: "LIN-9", Title: "New title"})
+
+	app.issuesMu.RLock()
+	selected := app.selectedIssue
+	app.issuesMu.RUnlock()
+	if selected == nil || selected.Title != "New title" {
+		t.Fatalf("selected issue = %#v, want the edited title", selected)
+	}
+	if len(selected.Comments) != 1 {
+		t.Fatalf("comments = %#v, want kept", selected.Comments)
+	}
+	if app.searchIssues[0].Title != "New title" {
+		t.Fatalf("search model title = %q, want %q", app.searchIssues[0].Title, "New title")
+	}
+	if got := app.searchResultsTable.GetCell(1, titleColumn).Text; got != "New title" {
+		t.Fatalf("search row title = %q, want %q", got, "New title")
 	}
 }
 
@@ -155,6 +253,9 @@ func TestApplyIssueUpdate_AddsAnIssueTheEditBroughtIntoScope(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for the scope check")
 	}
+	// One draw applies the verdict, a second lands the selection's detail
+	// fetch.
+	waitForDraw(t, drawn)
 	waitForDraw(t, drawn)
 	assertIssueCount(t, app, 2)
 }
@@ -174,8 +275,29 @@ func TestApplyIssueUpdate_DropsAnIssueTheEditPushedOutOfScope(t *testing.T) {
 	assertIssueCount(t, app, 1)
 }
 
+func TestConfirmIssueInScope_DiscardsVerdictAfterRefresh(t *testing.T) {
+	app, drawn := scopedTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
+	})
+	release := make(chan struct{})
+	app.issueMatchesScopeFunc = func(ctx context.Context, params linearapi.FetchIssuesParams, issueID string) (bool, error) {
+		<-release
+		return false, nil
+	}
+
+	app.applyIssueUpdate(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta edited"})
+	// A refresh re-scopes the list while the answer is in flight; the stale
+	// verdict must not touch it.
+	app.refreshGeneration.Add(1)
+	close(release)
+
+	waitForDraw(t, drawn)
+	assertIssueCount(t, app, 2)
+}
+
 func TestApplyIssueInsert_KeepsTheRowWhenTheScopeCheckFails(t *testing.T) {
-	app, _ := scopedTestApp(t, []linearapi.Issue{
+	app, drawn := scopedTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
 	checked := make(chan struct{}, 1)
@@ -187,12 +309,14 @@ func TestApplyIssueInsert_KeepsTheRowWhenTheScopeCheckFails(t *testing.T) {
 	app.applyIssueInsert(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"})
 
 	<-checked
+	// The insert moved the selection, which fetches details in background.
+	waitForDraw(t, drawn)
 	// A failed check must not take away a row the user is looking at.
 	assertIssueCount(t, app, 2)
 }
 
 func TestConfirmIssueInScope_SkippedOnTheUnscopedList(t *testing.T) {
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
 	app.issueMatchesScopeFunc = func(ctx context.Context, params linearapi.FetchIssuesParams, issueID string) (bool, error) {
@@ -204,18 +328,8 @@ func TestConfirmIssueInScope_SkippedOnTheUnscopedList(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func assertIssueCount(t *testing.T, app *App, want int) {
-	t.Helper()
-	app.issuesMu.RLock()
-	got := len(app.issues)
-	app.issuesMu.RUnlock()
-	if got != want {
-		t.Fatalf("issue count = %d, want %d", got, want)
-	}
-}
-
-func TestApplyIssueRemoval_DropsRowAndLandsOnTheNextIssue(t *testing.T) {
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+func TestApplyIssueRemoval_KeepsCursorWhenAnotherRowIsRemoved(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
 		{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma"},
@@ -234,8 +348,9 @@ func TestApplyIssueRemoval_DropsRowAndLandsOnTheNextIssue(t *testing.T) {
 	if len(remaining) != 2 || remaining[0] != "issue-1" || remaining[1] != "issue-3" {
 		t.Fatalf("remaining issues = %v, want [issue-1 issue-3]", remaining)
 	}
-	if selected == nil || selected.ID != "issue-3" {
-		t.Fatalf("selected issue = %#v, want issue-3", selected)
+	// The removed row was not the selected one; the cursor stays put.
+	if selected == nil || selected.ID != "issue-1" {
+		t.Fatalf("selected issue = %#v, want issue-1", selected)
 	}
 	table := app.tableForSection(IssuesSectionOther)
 	if got := table.GetCell(2, titleColumn).Text; got != "Gamma" {
@@ -243,9 +358,59 @@ func TestApplyIssueRemoval_DropsRowAndLandsOnTheNextIssue(t *testing.T) {
 	}
 }
 
+func TestApplyIssueRemoval_SelectedRowLandsOnSuccessor(t *testing.T) {
+	app, drawn := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
+		{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma"},
+	})
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"}
+	app.issuesMu.Unlock()
+
+	app.applyIssueRemoval("issue-2")
+
+	// The successor selection fetches details in background.
+	waitForDraw(t, drawn)
+	app.issuesMu.RLock()
+	selected := app.selectedIssue
+	app.issuesMu.RUnlock()
+	if selected == nil || selected.ID != "issue-3" {
+		t.Fatalf("selected issue = %#v, want the successor issue-3", selected)
+	}
+}
+
+func TestApplyIssueRemoval_RemountsWhenTheLastMyIssueGoes(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Mine", AssigneeID: "user-1", Assignee: "Me"},
+		{ID: "issue-2", Identifier: "LIN-2", Title: "Theirs"},
+	})
+	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
+	app.rebuildIssueRowModels()
+	app.activeIssuesSection = IssuesSectionMy
+	app.updateIssuesColumnLayout()
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Mine"}
+	app.issuesMu.Unlock()
+
+	app.applyIssueRemoval("issue-1")
+
+	// Emptying My redirects the display to Other without touching
+	// activeIssuesSection; the column must remount or the archived issue
+	// stays painted.
+	if app.issuesColumn.GetItemCount() != 1 || app.issuesColumn.GetItem(0) != app.otherIssuesTable {
+		t.Fatal("the emptied My table stayed mounted after its last issue was archived")
+	}
+	app.issuesMu.RLock()
+	defer app.issuesMu.RUnlock()
+	if app.selectedIssue != nil {
+		t.Fatalf("selected issue = %#v, want nil with nothing left in the section", app.selectedIssue)
+	}
+}
+
 func TestApplyIssueRemoval_DetachesTheRowFromItsParent(t *testing.T) {
 	parentRef := &linearapi.IssueRef{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"}
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{
 			ID: "issue-1", Identifier: "LIN-1", Title: "Alpha",
 			Children: []linearapi.IssueChildRef{{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"}},
@@ -264,7 +429,7 @@ func TestApplyIssueRemoval_DetachesTheRowFromItsParent(t *testing.T) {
 
 func TestApplyIssueUpdate_MovesTheChildRefBetweenParents(t *testing.T) {
 	oldParent := &linearapi.IssueRef{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"}
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{
 			ID: "issue-1", Identifier: "LIN-1", Title: "Alpha",
 			Children: []linearapi.IssueChildRef{{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma"}},
@@ -294,7 +459,7 @@ func TestApplyIssueUpdate_MovesTheChildRefBetweenParents(t *testing.T) {
 
 func TestApplyIssueUpdate_DropsTheChildRefWhenTheParentIsRemoved(t *testing.T) {
 	parentRef := &linearapi.IssueRef{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"}
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{
 			ID: "issue-1", Identifier: "LIN-1", Title: "Alpha",
 			Children: []linearapi.IssueChildRef{{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"}},
@@ -312,20 +477,18 @@ func TestApplyIssueUpdate_DropsTheChildRefWhenTheParentIsRemoved(t *testing.T) {
 }
 
 func TestApplyIssueInsert_AddsTheCreatedRowAndSelectsIt(t *testing.T) {
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+	app, drawn := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
 
 	app.applyIssueInsert(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"})
 
+	// The insert selects the new issue, which fetches details in background.
+	waitForDraw(t, drawn)
+	assertIssueCount(t, app, 2)
 	app.issuesMu.RLock()
-	count := len(app.issues)
 	selected := app.selectedIssue
 	app.issuesMu.RUnlock()
-
-	if count != 2 {
-		t.Fatalf("issue count = %d, want 2", count)
-	}
 	if selected == nil || selected.ID != "issue-2" {
 		t.Fatalf("selected issue = %#v, want issue-2", selected)
 	}
@@ -335,7 +498,7 @@ func TestApplyIssueInsert_AddsTheCreatedRowAndSelectsIt(t *testing.T) {
 }
 
 func TestApplyIssueInsert_LinksASubIssueToItsParent(t *testing.T) {
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+	app, drawn := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
 
@@ -344,6 +507,7 @@ func TestApplyIssueInsert_LinksASubIssueToItsParent(t *testing.T) {
 		Parent: &linearapi.IssueRef{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
 
+	waitForDraw(t, drawn)
 	app.issuesMu.RLock()
 	defer app.issuesMu.RUnlock()
 	for _, issue := range app.issues {
@@ -358,8 +522,40 @@ func TestApplyIssueInsert_LinksASubIssueToItsParent(t *testing.T) {
 	t.Fatal("parent issue missing from the list")
 }
 
+func TestExpandAllKeepsGroupingAndCoversAllTab(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", State: "Todo"},
+		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta", State: "Done"},
+	})
+	app.config.GroupBy = "status"
+
+	command := findCommandByID(DefaultCommands(app), "expand_all")
+	if command == nil {
+		t.Fatal("expand_all command not found")
+	}
+	command.Run(app)
+
+	hasHeader := func(rows []IssueRow) bool {
+		for _, row := range rows {
+			if row.IsHeader {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasHeader(app.otherIssueRows) {
+		t.Fatal("expand_all dropped grouping from the section rows")
+	}
+	if !hasHeader(app.issueRows) {
+		t.Fatal("expand_all dropped grouping from the All rows")
+	}
+	if _, pending := app.pendingSectionRenders[IssuesSectionAll]; !pending && app.effectiveIssuesSection() != IssuesSectionAll {
+		t.Fatal("expand_all left the All tab neither painted nor deferred")
+	}
+}
+
 func TestRenderIssueSections_DefersOffScreenTabsUntilShown(t *testing.T) {
-	app := newIssueUpdateTestApp(t, []linearapi.Issue{
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", AssigneeID: "user-1", Assignee: "Me"},
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
 	})
