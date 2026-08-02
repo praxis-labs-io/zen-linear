@@ -64,7 +64,7 @@ func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage st
 		updateIssue = a.api.UpdateIssue
 	}
 	go func(issueID string) {
-		_, err := updateIssue(context.Background(), input)
+		updated, err := updateIssue(context.Background(), input)
 		a.QueueUpdateDraw(func() {
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.planning: issue update failed issue_id=%s", issueID)
@@ -72,7 +72,7 @@ func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage st
 				return
 			}
 			a.flashStatus(successMessage)
-			go a.refreshIssues(issueID)
+			a.applyIssueUpdate(updated)
 		})
 	}(input.ID)
 }
@@ -524,7 +524,7 @@ func (a *App) createIssueRelationForSelectedIssue(label, targetIssueID string) {
 				return
 			}
 			a.flashStatus("Added issue relation")
-			go a.refreshIssues(issueID)
+			a.refreshIssueDetails(issueID)
 		})
 	}(issue.ID)
 }
@@ -575,7 +575,7 @@ func (a *App) deleteIssueRelationForSelectedIssue(relationID string) {
 				return
 			}
 			a.flashStatus("Removed issue relation")
-			go a.refreshIssues(issueID)
+			a.refreshIssueDetails(issueID)
 		})
 	}(issue.ID)
 }
@@ -598,7 +598,7 @@ func (a *App) subscribeSelectedIssue() {
 				return
 			}
 			a.flashStatus("Subscribed to issue")
-			go a.refreshIssues(issueID)
+			a.refreshIssueDetails(issueID)
 		})
 	}(issue.ID)
 }
@@ -621,7 +621,7 @@ func (a *App) unsubscribeSelectedIssue() {
 				return
 			}
 			a.flashStatus("Unsubscribed from issue")
-			go a.refreshIssues(issueID)
+			a.refreshIssueDetails(issueID)
 		})
 	}(issue.ID)
 }

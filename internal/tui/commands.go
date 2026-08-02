@@ -133,24 +133,6 @@ func handleAskAgent(a *App) {
 	})
 }
 
-func runIssueUpdateCommand(a *App, issue *linearapi.Issue, input linearapi.UpdateIssueInput, logAction, successMessage string) {
-	input.ID = issue.ID
-	go func() {
-		ctx := context.Background()
-		_, err := a.GetAPI().UpdateIssue(ctx, input)
-		a.QueueUpdateDraw(func() {
-			if err != nil {
-				logger.ErrorWithErr(err, "tui.commands: failed to %s issue=%s", logAction, issue.Identifier)
-				a.updateStatusBarWithError(err)
-				return
-			}
-			logger.Info("tui.commands: %s issue=%s", logAction, issue.Identifier)
-			a.flashStatus(successMessage)
-			go a.refreshIssues(issue.ID)
-		})
-	}()
-}
-
 func handleOpenBrowserCommand(a *App) {
 	issue := a.GetSelectedIssue()
 	if issue == nil {
@@ -628,23 +610,10 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue or current user selected")
 					return
 				}
-				go func() {
-					ctx := context.Background()
-					_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
-						ID:         issue.ID,
-						AssigneeID: &user.ID,
-					})
-					a.QueueUpdateDraw(func() {
-						if err != nil {
-							logger.ErrorWithErr(err, "tui.commands: failed to assign issue issue=%s user=%s", issue.Identifier, user.DisplayName)
-							a.updateStatusBarWithError(err)
-							return
-						}
-						logger.Info("tui.commands: assigned issue issue=%s user=%s", issue.Identifier, user.DisplayName)
-						a.flashStatus(fmt.Sprintf("Assigned %s to %s", issue.Identifier, user.DisplayName))
-						go a.refreshIssues(issue.ID)
-					})
-				}()
+				a.runIssueUpdate(
+					linearapi.UpdateIssueInput{ID: issue.ID, AssigneeID: &user.ID},
+					fmt.Sprintf("Assigned %s to %s", issue.Identifier, user.DisplayName),
+				)
 			},
 		},
 		{
@@ -659,23 +628,10 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				emptyAssignee := ""
-				go func() {
-					ctx := context.Background()
-					_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
-						ID:         issue.ID,
-						AssigneeID: &emptyAssignee,
-					})
-					a.QueueUpdateDraw(func() {
-						if err != nil {
-							logger.ErrorWithErr(err, "tui.commands: failed to unassign issue issue=%s", issue.Identifier)
-							a.updateStatusBarWithError(err)
-							return
-						}
-						logger.Info("tui.commands: unassigned issue issue=%s", issue.Identifier)
-						a.flashStatus(fmt.Sprintf("Unassigned %s", issue.Identifier))
-						go a.refreshIssues(issue.ID)
-					})
-				}()
+				a.runIssueUpdate(
+					linearapi.UpdateIssueInput{ID: issue.ID, AssigneeID: &emptyAssignee},
+					fmt.Sprintf("Unassigned %s", issue.Identifier),
+				)
 			},
 		},
 		{
@@ -725,23 +681,10 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				a.ShowStatusPicker(a.issueContextLine(*issue), func(stateID string) {
-					go func() {
-						ctx := context.Background()
-						_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
-							ID:      issue.ID,
-							StateID: &stateID,
-						})
-						a.QueueUpdateDraw(func() {
-							if err != nil {
-								logger.ErrorWithErr(err, "tui.commands: failed to change status issue=%s", issue.Identifier)
-								a.updateStatusBarWithError(err)
-								return
-							}
-							logger.Info("tui.commands: changed status issue=%s", issue.Identifier)
-							a.flashStatus(fmt.Sprintf("Changed status for %s", issue.Identifier))
-							go a.refreshIssues(issue.ID)
-						})
-					}()
+					a.runIssueUpdate(
+						linearapi.UpdateIssueInput{ID: issue.ID, StateID: &stateID},
+						fmt.Sprintf("Changed status for %s", issue.Identifier),
+					)
 				})
 			},
 		},
@@ -757,7 +700,7 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				a.ShowCyclePicker(a.issueContextLine(*issue), func(cycleID string) {
-					runIssueUpdateCommand(a, issue, linearapi.UpdateIssueInput{CycleID: &cycleID}, "set cycle", fmt.Sprintf("Set cycle for %s", issue.Identifier))
+					a.runIssueUpdate(linearapi.UpdateIssueInput{ID: issue.ID, CycleID: &cycleID}, fmt.Sprintf("Set cycle for %s", issue.Identifier))
 				})
 			},
 		},
@@ -776,23 +719,10 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				emptyCycleID := ""
-				go func() {
-					ctx := context.Background()
-					_, err := a.GetAPI().UpdateIssue(ctx, linearapi.UpdateIssueInput{
-						ID:      issue.ID,
-						CycleID: &emptyCycleID,
-					})
-					a.QueueUpdateDraw(func() {
-						if err != nil {
-							logger.ErrorWithErr(err, "tui.commands: failed to clear cycle issue=%s", issue.Identifier)
-							a.updateStatusBarWithError(err)
-							return
-						}
-						logger.Info("tui.commands: cleared cycle issue=%s", issue.Identifier)
-						a.flashStatus(fmt.Sprintf("Cleared cycle for %s", issue.Identifier))
-						go a.refreshIssues(issue.ID)
-					})
-				}()
+				a.runIssueUpdate(
+					linearapi.UpdateIssueInput{ID: issue.ID, CycleID: &emptyCycleID},
+					fmt.Sprintf("Cleared cycle for %s", issue.Identifier),
+				)
 			},
 		},
 		{
@@ -807,7 +737,7 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				a.ShowUserPicker(a.issueContextLine(*issue), func(userID string) {
-					runIssueUpdateCommand(a, issue, linearapi.UpdateIssueInput{AssigneeID: &userID}, "assign issue to user", fmt.Sprintf("Assigned %s", issue.Identifier))
+					a.runIssueUpdate(linearapi.UpdateIssueInput{ID: issue.ID, AssigneeID: &userID}, fmt.Sprintf("Assigned %s", issue.Identifier))
 				})
 			},
 		},
@@ -937,9 +867,6 @@ func DefaultCommands(app *App) []Command {
 					a.idToIssue[k] = v
 				}
 
-				// Update layout
-				a.updateIssuesColumnLayout()
-
 				// Render both tables, preserving selection
 				var selectedMyIssueID, selectedOtherIssueID string
 				a.issuesMu.RLock()
@@ -955,8 +882,11 @@ func DefaultCommands(app *App) []Command {
 					}
 				}
 
-				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
-				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
+				a.renderIssueSections(map[IssuesSection]string{
+					IssuesSectionMy:    selectedMyIssueID,
+					IssuesSectionOther: selectedOtherIssueID,
+				})
+				a.updateIssuesColumnLayout()
 			},
 		},
 		{
@@ -990,9 +920,6 @@ func DefaultCommands(app *App) []Command {
 					a.idToIssue[k] = v
 				}
 
-				// Update layout
-				a.updateIssuesColumnLayout()
-
 				// Render both tables, preserving selection
 				var selectedMyIssueID, selectedOtherIssueID string
 				a.issuesMu.RLock()
@@ -1008,8 +935,11 @@ func DefaultCommands(app *App) []Command {
 					}
 				}
 
-				renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, selectedMyIssueID, a.theme, a.issueColumns())
-				renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, selectedOtherIssueID, a.theme, a.issueColumns())
+				a.renderIssueSections(map[IssuesSection]string{
+					IssuesSectionMy:    selectedMyIssueID,
+					IssuesSectionOther: selectedOtherIssueID,
+				})
+				a.updateIssuesColumnLayout()
 			},
 		},
 		{

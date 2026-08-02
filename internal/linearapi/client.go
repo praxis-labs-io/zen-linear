@@ -586,51 +586,6 @@ type CreateIssueRelationInput struct {
 	Type           IssueRelationType
 }
 
-type issueMutationNode struct {
-	ID         graphql.String
-	Identifier graphql.String
-	Title      graphql.String
-	State      struct {
-		ID   graphql.String
-		Name graphql.String
-	}
-	Assignee *struct {
-		ID   graphql.String
-		Name graphql.String
-	}
-	Priority    graphql.Float
-	UpdatedAt   graphql.String
-	CreatedAt   graphql.String
-	Description *graphql.String
-	Team        struct {
-		ID graphql.String
-	}
-	Project *struct {
-		ID   graphql.String
-		Name graphql.String
-	}
-	Cycle *struct {
-		ID         graphql.String
-		Name       *graphql.String
-		Number     graphql.Float
-		StartsAt   graphql.String
-		EndsAt     graphql.String
-		IsActive   graphql.Boolean
-		IsFuture   graphql.Boolean
-		IsPast     graphql.Boolean
-		IsNext     graphql.Boolean
-		IsPrevious graphql.Boolean
-	}
-	Labels struct {
-		Nodes []struct {
-			ID    graphql.String
-			Name  graphql.String
-			Color graphql.String
-		}
-	}
-	URL graphql.String
-}
-
 // NewClient creates a new Linear API client with the provided configuration.
 func NewClient(cfg ClientConfig) *Client {
 	endpoint := cfg.Endpoint
@@ -1875,7 +1830,10 @@ func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesPar
 }
 
 // issueQueryNode is the GraphQL selection for a single issue, shared by the
-// filtered, search, and custom-view issue queries.
+// filtered, search, and custom-view queries and by the issue mutations. The
+// mutations return it so the TUI can splice the result into the list instead
+// of refetching; a narrower selection there would quietly drop fields the list
+// renders.
 type issueQueryNode struct {
 	ID         graphql.String
 	Identifier graphql.String
@@ -2782,7 +2740,7 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 	var mutation struct {
 		IssueUpdate struct {
 			Success graphql.Boolean
-			Issue   issueMutationNode
+			Issue   issueQueryNode
 		} `graphql:"issueUpdate(id: $id, input: $input)"`
 	}
 
@@ -2969,7 +2927,7 @@ func (c *Client) setIssueSubscription(ctx context.Context, issueID string, subsc
 		var mutation struct {
 			IssueSubscribe struct {
 				Success graphql.Boolean
-				Issue   issueMutationNode
+				Issue   issueQueryNode
 			} `graphql:"issueSubscribe(id: $id)"`
 		}
 		variables := map[string]interface{}{"id": graphql.String(issueID)}
@@ -2985,7 +2943,7 @@ func (c *Client) setIssueSubscription(ctx context.Context, issueID string, subsc
 	var mutation struct {
 		IssueUnsubscribe struct {
 			Success graphql.Boolean
-			Issue   issueMutationNode
+			Issue   issueQueryNode
 		} `graphql:"issueUnsubscribe(id: $id)"`
 	}
 	variables := map[string]interface{}{"id": graphql.String(issueID)}

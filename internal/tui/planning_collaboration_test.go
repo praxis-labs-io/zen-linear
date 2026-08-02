@@ -339,9 +339,16 @@ func TestClearProjectLeavesMilestoneAloneWhenAbsent(t *testing.T) {
 func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {
 	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
-	refreshDone := installRefreshCompletionHook(app)
+	// A relation changes nothing the list renders, so it must refetch the one
+	// issue for the details pane instead of the whole list.
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
-		return linearapi.IssuePage{Issues: nil, HasNext: false}, nil
+		t.Error("relation change refetched the issue list")
+		return linearapi.IssuePage{}, nil
+	}
+	detailFetches := make(chan string, 1)
+	app.fetchIssueByID = func(ctx context.Context, issueID string) (linearapi.Issue, error) {
+		detailFetches <- issueID
+		return linearapi.Issue{ID: issueID, Identifier: "LIN-1"}, nil
 	}
 	app.issuesMu.Lock()
 	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Current"}
@@ -366,7 +373,15 @@ func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for relation API call")
 	}
-	waitForRefreshCompletion(t, refreshDone)
+
+	select {
+	case issueID := <-detailFetches:
+		if issueID != "issue-1" {
+			t.Fatalf("detail refetch issue = %q, want issue-1", issueID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for issue detail refetch")
+	}
 }
 
 func TestAttachmentActionsUseInjectedOpenAndCopyFunctions(t *testing.T) {
