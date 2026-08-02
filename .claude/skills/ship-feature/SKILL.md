@@ -5,9 +5,12 @@ description: Run zen-linear's feature-complete PR process. Full local check via 
 
 # Ship Feature (zen-linear)
 
-Go/tview adaptation of the feature-complete process. This is a downstream copy
-of `~/.claude/skills/ship-feature/SKILL.md`; edit the source and copy out, never
-edit this file directly.
+Go/tview adaptation of the feature-complete process, downstream of
+`~/.claude/skills/ship-feature/SKILL.md`. Not a verbatim copy: the commands,
+the lint pin, and the ticket conventions below are this repo's and are
+maintained here. Generic process changes belong in the source first, then come
+across by hand. Copying the source over this file wholesale deletes the Go
+specifics.
 
 Applies to fork feature work shipping to `origin` (zen-linear/zen-linear) `main`.
 Upstream `feature/*` branches follow CLAUDE.md's upstream PR discipline instead,
@@ -19,12 +22,13 @@ Run `make all` (lint + test + build) **directly, never through a pipe** —
 `make lint | tail` reports success on failure and has let broken commits
 through before.
 
-- CI pins golangci-lint v2.8.0; a newer local binary false-positives on code CI
-  accepts. Replicate CI with the pinned binary plus `GOTOOLCHAIN=go1.24.4`, or
-  scope a newer binary with `--new-from-rev=upstream/main`.
+- CI pins golangci-lint v2.12.2 (`.github/workflows/ci.yml`), matching what brew
+  ships. `make lint` needs no `GOTOOLCHAIN` override and reports what CI reports.
+  Keep the pin current with the local version: the old v2.8.0 pin drifted four
+  versions behind, so local runs and CI disagreed.
 - If anything fails, fix it and re-run until green. Do not push until it is.
 - Rebuild the installed binary so Drew isn't running stale code during review:
-  `go build -o ~/.local/bin/linear-tui ./cmd/linear-tui`.
+  `go build -o ~/.local/bin/zen-linear ./cmd/zen-linear`.
 
 ## 2. Push the branch
 
