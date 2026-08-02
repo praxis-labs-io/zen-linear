@@ -177,7 +177,7 @@ func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, g
 			subGroup := subGroups[subLabel]
 			subKey := key + "\x1f" + subgroupBy + "\x1f" + subLabel
 			// Subgroups gap too, except directly under their group header.
-			if last := rows[len(rows)-1]; !(last.IsHeader && last.HeaderLevel == 0) {
+			if last := rows[len(rows)-1]; !last.IsHeader || last.HeaderLevel != 0 {
 				rows = append(rows, IssueRow{IsSpacer: true})
 			}
 			rows = append(rows, IssueRow{

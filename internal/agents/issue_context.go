@@ -12,7 +12,7 @@ import (
 func BuildIssueContext(issue linearapi.Issue) string {
 	var builder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("Title: %s\n", issue.Title))
+	fmt.Fprintf(&builder, "Title: %s\n", issue.Title)
 
 	if issue.Description == "" {
 		builder.WriteString("Description: (none)\n")
@@ -34,7 +34,7 @@ func BuildIssueContext(issue linearapi.Issue) string {
 		timestamp := formatTimestamp(comment.CreatedAt)
 		body := comment.Body
 
-		builder.WriteString(fmt.Sprintf("- %s at %s\n", author, timestamp))
+		fmt.Fprintf(&builder, "- %s at %s\n", author, timestamp)
 		builder.WriteString(body)
 		builder.WriteString("\n")
 

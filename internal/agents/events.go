@@ -14,6 +14,9 @@ const (
 	AgentEventUnknown        AgentEventType = "unknown"
 )
 
+// SubtypeCompleted marks a terminal result event in both provider streams.
+const SubtypeCompleted = "completed"
+
 // AgentEvent captures a parsed stream event for UI rendering.
 type AgentEvent struct {
 	Type          AgentEventType

@@ -34,7 +34,9 @@ Run checks directly, never through a pipe that swallows exit codes (`make lint |
 
 ### Lint version pin
 
-CI pins golangci-lint **v2.8.0** (`.github/workflows/ci.yml`). Newer local versions report false positives (goconst, staticcheck) on code CI accepts, and v2.8.0 panics under new Go toolchains. Replicate CI with a pinned binary plus `GOTOOLCHAIN=go1.24.4`, or scope a newer binary with `--new-from-rev=upstream/main`.
+CI pins golangci-lint **v2.12.2** (`.github/workflows/ci.yml`), matching what brew currently ships. `make lint` needs no `GOTOOLCHAIN` override and reports what CI reports.
+
+Keep the pin current with the local version. The old v2.8.0 pin drifted four versions behind, which meant local runs and CI disagreed and v2.8.0 panicked under newer Go toolchains.
 
 ## Project Management
 

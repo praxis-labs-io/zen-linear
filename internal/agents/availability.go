@@ -5,14 +5,20 @@ import (
 	"strings"
 )
 
+// Provider keys as they appear in config and on the agent CLIs' own binaries.
+const (
+	ProviderCursor = "cursor"
+	ProviderClaude = "claude"
+)
+
 // AvailableProviderKeys returns provider keys with resolvable binaries.
 func AvailableProviderKeys(lookPath func(string) (string, error)) []string {
 	providers := []struct {
 		key      string
 		provider Provider
 	}{
-		{key: "cursor", provider: NewCursorProvider(lookPath)},
-		{key: "claude", provider: NewClaudeProvider(lookPath)},
+		{key: ProviderCursor, provider: NewCursorProvider(lookPath)},
+		{key: ProviderClaude, provider: NewClaudeProvider(lookPath)},
 	}
 
 	available := make([]string, 0, len(providers))
@@ -28,9 +34,9 @@ func AvailableProviderKeys(lookPath func(string) (string, error)) []string {
 func ProviderForKey(key string, lookPath func(string) (string, error)) (Provider, error) {
 	normalized := strings.ToLower(strings.TrimSpace(key))
 	switch normalized {
-	case "cursor":
+	case ProviderCursor:
 		return NewCursorProvider(lookPath), nil
-	case "claude":
+	case ProviderClaude:
 		return NewClaudeProvider(lookPath), nil
 	default:
 		return nil, fmt.Errorf("invalid agent provider %q", key)
