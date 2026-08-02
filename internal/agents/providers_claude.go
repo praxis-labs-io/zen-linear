@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/roeyazroel/linear-tui/internal/logger"
+	"github.com/Drucial/zen-linear/internal/logger"
 )
 
 // ClaudeProvider invokes the Claude Code CLI.

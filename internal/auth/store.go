@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/Drucial/zen-linear/internal/config"
 )
 
 // ErrCredentialsNotFound indicates there is no credentials file on disk.
@@ -13,11 +15,11 @@ var ErrCredentialsNotFound = errors.New("credentials not found")
 
 // CredentialsPath returns the default path for stored OAuth credentials.
 func CredentialsPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	dir, err := config.Dir()
 	if err != nil {
-		return "", fmt.Errorf("get home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(homeDir, ".linear-tui", "credentials.json"), nil
+	return filepath.Join(dir, "credentials.json"), nil
 }
 
 // LoadCredentials reads OAuth credentials from path.

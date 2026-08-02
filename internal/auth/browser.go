@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/roeyazroel/linear-tui/internal/config"
+	"github.com/Drucial/zen-linear/internal/config"
 )
 
 // OpenURL opens url in the user's default browser.

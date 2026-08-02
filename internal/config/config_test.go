@@ -127,7 +127,7 @@ func TestLoadFromEnv_Defaults(t *testing.T) {
 	// Verify default log file path
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
-		expectedLogFile := filepath.Join(homeDir, ".linear-tui", "app.log")
+		expectedLogFile := filepath.Join(homeDir, ".zen-linear", "app.log")
 		if cfg.LogFile != expectedLogFile {
 			t.Errorf("LogFile = %q, want %q", cfg.LogFile, expectedLogFile)
 		}

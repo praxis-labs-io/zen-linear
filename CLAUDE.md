@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Drew's fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui) (`upstream`), a Go/tview terminal client for Linear. `origin` is Drucial/zen-linear. **`main` is the product branch.** Feature work flows ticket → branch → PR on `origin` (see Project Management); genuinely trivial tweaks (a typo, a one-liner) still commit straight to `main`. The installed binary is built from here to `~/.local/bin/linear-tui`, which shadows the stock brew install; **rebuild after changes or Drew keeps running the old code**:
+Drew's Go/tview terminal client for Linear, at Drucial/zen-linear (`origin`). It began as a fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui) and separated on 2026-08-02: the module is `github.com/Drucial/zen-linear`, there is no `upstream` remote, and nothing here is written with an upstream PR in mind. The MIT license retains Roey Azroel's copyright alongside Drew's, and the README credits the original. Both stay.
+
+**`main` is the product branch.** Feature work flows ticket → branch → PR on `origin` (see Project Management); genuinely trivial tweaks (a typo, a one-liner) still commit straight to `main`. The installed binary is built from here to `~/.local/bin/linear-tui`, which shadows the stock brew install; **rebuild after changes or Drew keeps running the old code**:
 
 ```sh
 go build -o ~/.local/bin/linear-tui ./cmd/linear-tui
 ```
 
-### Upstream PR discipline
-
-`feature/*` branches are cut from `upstream/main` and map to individual upstream PRs (#15 favorites, #16 workspace switching, #17 keybindings, #18 pane toggles pending as of 2026-07-31). Each must stay standalone-green (`make all` on the branch) — never fix a cross-feature interaction on a feature branch; integration fixes live only on `main`. #16 and #17 overlap; whichever lands second gets rebased (promised in the PR bodies). Held back as too opinionated for upstream: the Rose Pine Moon theme work, the Linear-style list layout, and pane tabs.
+The command directory and binary are still named `linear-tui`, and the Homebrew tap in `.goreleaser.yml` points at a `Drucial/homebrew-zen-linear` repo that does not exist yet. Both are tracked follow-ups, not oversights.
 
 Anything published under Drew's name (PR bodies, issues, README) must be shown to him word-for-word before pushing. His voice: terse, considerate, stoic, no strong adverbs, no em-dashes.
 
@@ -78,7 +78,9 @@ Scratch, never committed. `docs/` describes only what is true today. Durable con
 
 `internal/config` has a triple: `SettingsFile` (pointer fields, what's on disk) → `Settings` → `Config`. The settings modal saves via `settingsFromForm`, which rebuilds the file from form controls — **any config field without a form control (workspaces, default_workspace, group_by, subgroup_by, columns, keybindings) must be explicitly carried through there, or an in-app settings save silently strips it from the user's config**. Every new field needs: the triple, a validator in `settings.go`, and the carry-through.
 
-Drew's live config is a symlink chain: `~/.linear-tui/config.json` → dotfiles repo (`drucial-dots/configs/linear-tui/config.json`). The app writes settings in place, so in-app saves show up as diffs in the dotfiles repo — intentional.
+Config, credentials, prompts, and the log live under `~/.zen-linear`, resolved through `config.Dir()`. `config.MigrateLegacyDir()` renames a leftover `~/.linear-tui` on startup; it uses `os.Rename` so symlinked files keep resolving to their targets.
+
+Drew's live config is a symlink chain: `~/.zen-linear/config.json` → dotfiles repo (`drucial-dots/configs/linear-tui/config.json`). The app writes settings in place, so in-app saves show up as diffs in the dotfiles repo — intentional.
 
 ### Keybindings
 

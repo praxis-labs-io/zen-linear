@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Drucial/zen-linear/internal/config"
+	"github.com/Drucial/zen-linear/internal/linearapi"
 	"github.com/gdamore/tcell/v2"
-	"github.com/roeyazroel/linear-tui/internal/config"
-	"github.com/roeyazroel/linear-tui/internal/linearapi"
 )
 
 func newReviewGraphQLServer(t *testing.T, onQuery func(string)) *httptest.Server {

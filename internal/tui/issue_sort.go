@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/roeyazroel/linear-tui/internal/linearapi"
+	"github.com/Drucial/zen-linear/internal/linearapi"
 )
 
 // Config names for the sort fields. The field values themselves double as the

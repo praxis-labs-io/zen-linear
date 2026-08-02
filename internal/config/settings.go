@@ -224,12 +224,12 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 
 // ConfigFilePath returns the default settings file path.
 func ConfigFilePath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	dir, err := Dir()
 	if err != nil {
-		return "", fmt.Errorf("get home directory: %w", err)
+		return "", err
 	}
 
-	return filepath.Join(homeDir, ".linear-tui", "config.json"), nil
+	return filepath.Join(dir, "config.json"), nil
 }
 
 // EnsureSettingsFile ensures the settings file exists and returns its settings.

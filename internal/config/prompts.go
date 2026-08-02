@@ -35,11 +35,11 @@ func DefaultAgentPromptTemplates() []AgentPromptTemplate {
 
 // PromptTemplatesFilePath returns the default prompts file path.
 func PromptTemplatesFilePath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	dir, err := Dir()
 	if err != nil {
-		return "", fmt.Errorf("get home directory: %w", err)
+		return "", err
 	}
-	return filepath.Join(homeDir, ".linear-tui", "prompts.json"), nil
+	return filepath.Join(dir, "prompts.json"), nil
 }
 
 // EnsurePromptTemplatesFile ensures the prompts file exists and returns its templates.
