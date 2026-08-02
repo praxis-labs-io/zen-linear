@@ -21,6 +21,8 @@ integration. Fixes and features are offered upstream where they fit.
 Navigation
 - Favorites matching the Linear sidebar: projects, issues, cycles, teams,
   custom views, triage, folders
+- Favorite, reorder, and move in and out of folders from the sidebar. All of
+  it writes back to Linear, so the web app stays in step
 - Teams with cycles, statuses, and projects
 - Workspace switching with per-workspace API keys and a default workspace
 
@@ -88,8 +90,9 @@ options added by this fork:
 - `workspaces` reads keys from the named env vars. Keys are never stored in
   the file
 - `keybindings` remaps palette commands by id, the global quit, open_palette,
-  and search actions, and the tab_next, tab_prev, columns_left, and
-  columns_right actions
+  and search actions, and the tab_next, tab_prev, columns_left,
+  columns_right, favorite_move_up, favorite_move_down, favorite_nest, and
+  favorite_unnest actions
 
 ## Keys
 
@@ -98,6 +101,13 @@ options added by this fork:
     { }         toggle panes    [ ]         cycle issue tabs*
     H/L         scroll columns  :           command palette
     /           search          q           quit
+
+In the navigation pane:
+
+    f           favorite or unfavorite the item under the cursor
+    J/K         move a favorite down or up
+    L           move a favorite into the folder above it
+    H           move a favorite back out of its folder
 
 *Defaults shown reflect this fork's example config; stock defaults keep
 [ ] on expand and collapse all.

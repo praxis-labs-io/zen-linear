@@ -28,6 +28,11 @@ type NavigationNode struct {
 	StateType string
 	// IsFolder marks a favorites folder; selecting it toggles expansion.
 	IsFolder bool
+	// FavoriteID is set on nodes built from a favorite, so the toggle knows
+	// the node is already favorited and the reorder knows what to move.
+	FavoriteID string
+	// FavoriteParentID is the enclosing favorite folder, for sibling lookup.
+	FavoriteParentID string
 }
 
 // buildNavigationTree creates and configures the navigation tree widget.
@@ -73,11 +78,9 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 				if navNode.IsTeam {
 					a.onTeamExpanded(navNode.TeamID, node)
 				}
-				// Update selection and refresh issues
+				// Update selection and refresh issues. Focus stays in the
+				// navigation pane so the next pick is one keypress away.
 				a.onNavigationSelected(navNode)
-				// Selecting a view moves focus to the issues list.
-				a.focusedPane = FocusIssues
-				a.updateFocus()
 			}
 		}
 	})

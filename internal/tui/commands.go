@@ -285,6 +285,13 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:           "toggle_favorite",
+			Title:        "Favorite / unfavorite navigation item",
+			Keywords:     []string{"favorite", "unfavorite", "star", "pin", "bookmark"},
+			ShortcutRune: 'f',
+			Run:          handleToggleFavorite,
+		},
+		{
 			ID:       "settings",
 			Title:    "Settings",
 			Keywords: []string{"settings", "config", "preferences"},
