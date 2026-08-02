@@ -120,6 +120,7 @@ const (
 	ColumnCycle     = "cycle"
 	ColumnDue       = "due"
 	ColumnEstimate  = "estimate"
+	ColumnProject   = "project"
 	ColumnMilestone = "milestone"
 )
 
@@ -147,6 +148,7 @@ var issueColumnSpecs = map[string]issueColumnSpec{
 	ColumnCycle:     {header: "Cycle", expansion: 1, maxWidth: 15},
 	ColumnDue:       {header: "Due", expansion: 0},
 	ColumnEstimate:  {header: "Est", expansion: 0},
+	ColumnProject:   {header: "Project", expansion: 1, maxWidth: 18},
 	ColumnMilestone: {header: "Milestone", expansion: 1, maxWidth: 18},
 }
 
@@ -223,6 +225,11 @@ func issueColumnCell(name string, issue *linearapi.Issue, identifierPrefix strin
 			return estimate, theme.SecondaryText
 		}
 		return estimate, theme.Foreground
+	case ColumnProject:
+		if issue.ProjectName == "" {
+			return "-", theme.SecondaryText
+		}
+		return issue.ProjectName, theme.Foreground
 	case ColumnMilestone:
 		milestone := formatMilestoneName(issue.ProjectMilestone)
 		if milestone == "-" {

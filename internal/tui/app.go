@@ -2805,6 +2805,48 @@ func (a *App) showCyclePickerWithCycles(cycles []linearapi.Cycle, contextLine st
 	})
 }
 
+// ShowProjectPicker shows a picker for team projects. contextLine names the
+// issue being modified; empty for non-issue uses like filters.
+func (a *App) ShowProjectPicker(contextLine string, onSelect func(projectID string)) {
+	logger.Debug("tui.app: showing project picker")
+	projects := a.teamProjects
+	if len(projects) == 0 {
+		a.loadPickerData(
+			"projects for picker",
+			func() bool { return len(a.teamProjects) > 0 },
+			func(ctx context.Context, teamID string) error {
+				loadedProjects, err := a.cache.GetProjects(ctx, teamID)
+				if err != nil {
+					return err
+				}
+				a.teamProjects = loadedProjects
+				return nil
+			},
+			func() {
+				a.showProjectPickerWithProjects(a.teamProjects, contextLine, onSelect)
+			},
+		)
+		return
+	}
+	a.showProjectPickerWithProjects(projects, contextLine, onSelect)
+}
+
+func (a *App) showProjectPickerWithProjects(projects []linearapi.Project, contextLine string, onSelect func(projectID string)) {
+	items := make([]PickerItem, 0, len(projects))
+	for _, project := range projects {
+		items = append(items, PickerItem{
+			ID:    project.ID,
+			Label: project.Name,
+		})
+	}
+
+	a.pickerActive = true
+	a.pickerModal.ShowWithContext("Select Project", contextLine, items, func(item PickerItem) {
+		a.pickerActive = false
+		onSelect(item.ID)
+	})
+}
+
 // ShowParentIssuePicker shows a picker for selecting a parent issue.
 // It lists all top-level issues (issues without a parent) from the current
 // list. contextLine names the issue being reparented.

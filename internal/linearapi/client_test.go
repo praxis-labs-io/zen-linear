@@ -1557,6 +1557,61 @@ func TestUpdateIssue_SetsAndClearsPlanningFields(t *testing.T) {
 	}
 }
 
+func TestUpdateIssue_SetsAndClearsProjectID(t *testing.T) {
+	var inputs []map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		variables, ok := reqBody["variables"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Request body missing variables")
+		}
+		input, ok := variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("variables.input = %#v, want object", variables["input"])
+		}
+		inputs = append(inputs, input)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mutationIssueResponse("issueUpdate")))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{Endpoint: server.URL})
+
+	projectID := "project-1"
+	if _, err := client.UpdateIssue(context.Background(), UpdateIssueInput{
+		ID:        "issue-1",
+		ProjectID: &projectID,
+	}); err != nil {
+		t.Fatalf("UpdateIssue(set project) error: %v", err)
+	}
+
+	clearProject := ""
+	clearMilestone := ""
+	if _, err := client.UpdateIssue(context.Background(), UpdateIssueInput{
+		ID:                 "issue-1",
+		ProjectID:          &clearProject,
+		ProjectMilestoneID: &clearMilestone,
+	}); err != nil {
+		t.Fatalf("UpdateIssue(clear project) error: %v", err)
+	}
+
+	if len(inputs) != 2 {
+		t.Fatalf("inputs length = %d, want 2", len(inputs))
+	}
+	if inputs[0]["projectId"] != "project-1" {
+		t.Fatalf("set projectId = %#v, want project-1", inputs[0]["projectId"])
+	}
+	if value, ok := inputs[1]["projectId"]; !ok || value != nil {
+		t.Fatalf("clear projectId = %#v (present=%v), want present null", value, ok)
+	}
+	if value, ok := inputs[1]["projectMilestoneId"]; !ok || value != nil {
+		t.Fatalf("clear projectMilestoneId = %#v (present=%v), want present null", value, ok)
+	}
+}
+
 func TestListProjectMilestones_PaginatesAndParses(t *testing.T) {
 	requestCount := 0
 	var afterValues []interface{}
