@@ -682,12 +682,17 @@ func TestDefaultCommands_IncludesCycleCommands(t *testing.T) {
 	}
 }
 
-// renderedTitles returns the title cell of every rendered row in a section,
-// skipping the column header and any group headers.
+// renderedTitles returns the title cell of every issue row in a section. Group
+// headers render their label into the title column, so they have to be skipped
+// by row kind, not by an empty-cell check.
 func renderedTitles(app *App, section IssuesSection) []string {
 	table := app.tableForSection(section)
+	rows := app.rowsForSection(section)
 	var titles []string
 	for row := 1; row < table.GetRowCount(); row++ {
+		if row <= len(rows) && (rows[row-1].IsHeader || rows[row-1].IsSpacer) {
+			continue
+		}
 		cell := table.GetCell(row, titleColumn)
 		if cell == nil || cell.Text == "" {
 			continue
@@ -974,5 +979,46 @@ func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 	want := []string{"First", "Second", "Third"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("rendered titles after pagination = %v, want %v", got, want)
+	}
+}
+
+// TestRenderedTitles_SkipsGroupHeaders guards the test helper itself: group
+// headers write their label into the title column, so an empty-cell check does
+// not exclude them and every assertion built on it would silently compare
+// against header text once grouping is on.
+func TestRenderedTitles_SkipsGroupHeaders(t *testing.T) {
+	cfg := config.Config{PageSize: 10, CacheTTL: time.Minute, GroupBy: GroupByStatus}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
+		return linearapi.Issue{ID: id}, nil
+	}
+
+	app.issuesMu.Lock()
+	app.issues = []linearapi.Issue{
+		{ID: "issue-1", Identifier: "ZNL-1", Title: "First", State: "Todo"},
+		{ID: "issue-2", Identifier: "ZNL-2", Title: "Second", State: "In Progress"},
+	}
+	app.issuesMu.Unlock()
+	app.rebuildIssuesTables("")
+
+	if app.effectiveGroupBy() != GroupByStatus {
+		t.Fatalf("effectiveGroupBy = %q, want %q", app.effectiveGroupBy(), GroupByStatus)
+	}
+	rows := app.rowsForSection(IssuesSectionOther)
+	headers := 0
+	for _, row := range rows {
+		if row.IsHeader {
+			headers++
+		}
+	}
+	if headers == 0 {
+		t.Fatal("no group headers rendered, so this test proves nothing")
+	}
+
+	got := renderedTitles(app, IssuesSectionOther)
+	want := []string{"Second", "First"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("renderedTitles = %v, want %v", got, want)
 	}
 }
