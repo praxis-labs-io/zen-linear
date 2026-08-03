@@ -26,11 +26,11 @@ func TestPerformIssueSearch_CancelsTheSupersededFetch(t *testing.T) {
 	}
 
 	app.performIssueSearch("first")
-	waitForSignal(t, started)
+	waitForDraw(t, started)
 
 	// A newer query supersedes the first.
 	app.performIssueSearch("second")
-	waitForSignal(t, started)
+	waitForDraw(t, started)
 
 	select {
 	case err := <-observed:
@@ -81,14 +81,5 @@ func TestPerformIssueSearch_RendersResults(t *testing.T) {
 	}
 	if got := app.searchResultsTable.GetCell(1, titleColumn).Text; got != "Found me" {
 		t.Fatalf("search result title = %q, want %q", got, "Found me")
-	}
-}
-
-func waitForSignal(t *testing.T, ch <-chan struct{}) {
-	t.Helper()
-	select {
-	case <-ch:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for the fetch to start")
 	}
 }

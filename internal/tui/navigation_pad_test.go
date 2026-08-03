@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -40,39 +41,92 @@ func navTreeLabels(app *App) []string {
 	return labels
 }
 
-func TestPadNavigationTree_FitsEveryNodeToTheWidth(t *testing.T) {
+// navTreeLabelsByLevel walks the tree returning each label with its depth, so
+// assertions can pin the width a node was fitted to against its own level
+// rather than accepting any level's width.
+func navTreeLabelsByLevel(app *App) []struct {
+	label string
+	level int
+} {
+	var out []struct {
+		label string
+		level int
+	}
+	var walk func(*tview.TreeNode, int)
+	walk = func(node *tview.TreeNode, level int) {
+		out = append(out, struct {
+			label string
+			level int
+		}{node.GetText(), level})
+		for _, child := range node.GetChildren() {
+			walk(child, level+1)
+		}
+	}
+	walk(app.navigationTree.GetRoot(), 0)
+	return out
+}
+
+func TestPadNavigationTree_FitsEveryNodeToItsLevelWidth(t *testing.T) {
 	app := newUXTestApp()
 	app.rebuildNavigationTree(navTestTeams(3), nil)
 
-	app.padNavigationTree(30)
+	const width = 30
+	app.padNavigationTree(width)
 
-	for _, label := range navTreeLabels(app) {
-		if width := runeCellWidth(label); width != 30 && width != 28 && width != 26 {
-			t.Fatalf("label %q fitted to width %d, want the width for its level", label, width)
+	truncated := false
+	for _, node := range navTreeLabelsByLevel(app) {
+		want := width - 2*node.level
+		if got := runeCellWidth(node.label); got != want {
+			t.Fatalf("level %d label %q fitted to width %d, want %d", node.level, node.label, got, want)
+		}
+		if strings.Contains(node.label, "…") {
+			truncated = true
 		}
 	}
-	if !strings.Contains(strings.Join(navTreeLabels(app), "\n"), "…") {
+	if !truncated {
 		t.Fatal("no label was truncated, so the test is not exercising a fit")
 	}
 }
 
-// TestPadNavigationTree_SkipsNodesAlreadyFittedToTheWidth guards the reason this
-// cache exists: padNavigationTree runs from SetDrawFunc, so it fires on every
-// draw anywhere in the app, and re-deriving identical labels is pure waste.
-func TestPadNavigationTree_SkipsNodesAlreadyFittedToTheWidth(t *testing.T) {
+// TestPadNavigationTree_IsIdempotentAtAnUnchangedWidth covers the skip path
+// from the outside: redrawing at the same width must leave every label exactly
+// as it was. The saving itself is measured by BenchmarkPadNavigationTree, not
+// asserted here, because a unit test cannot see that the work was skipped
+// without pinning an invariant the code should not have.
+func TestPadNavigationTree_IsIdempotentAtAnUnchangedWidth(t *testing.T) {
+	app := newUXTestApp()
+	app.rebuildNavigationTree(navTestTeams(3), nil)
+
+	app.padNavigationTree(30)
+	before := navTreeLabels(app)
+	app.padNavigationTree(30)
+	after := navTreeLabels(app)
+
+	if !slices.Equal(before, after) {
+		t.Fatalf("labels changed on a redraw at the same width:\n%v\n%v", before, after)
+	}
+}
+
+// TestPadNavigationTree_PicksUpALabelChangedElsewhere guards the trap the cache
+// could set: if a fitted width alone counted as proof the rendered text is
+// current, anything that relabels a node outside padNavigationNode would be
+// silently discarded and the pane would show stale text until a resize.
+func TestPadNavigationTree_PicksUpALabelChangedElsewhere(t *testing.T) {
 	app := newUXTestApp()
 	app.rebuildNavigationTree(navTestTeams(3), nil)
 	app.padNavigationTree(30)
 
-	// Overwrite a fitted label. A redraw at the same width must not restore it,
-	// which is only true if the node was skipped.
 	teamNode := app.navigationTree.GetRoot().GetChildren()[1]
-	teamNode.SetText("sentinel")
+	teamNode.SetText("Renamed elsewhere")
 
 	app.padNavigationTree(30)
 
-	if got := teamNode.GetText(); got != "sentinel" {
-		t.Fatalf("node text = %q, want the redraw to skip an already-fitted node", got)
+	got := teamNode.GetText()
+	if !strings.HasPrefix(got, "Renamed elsewhere") {
+		t.Fatalf("node text = %q, want the relabel to survive the redraw", got)
+	}
+	if width := runeCellWidth(got); width != 28 {
+		t.Fatalf("relabelled node fitted to width %d, want 28 for its level", width)
 	}
 }
 

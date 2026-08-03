@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // issueNodeJSON returns a JSON object string for an issue node used in tests.
@@ -1858,5 +1859,78 @@ func TestIssueRelationMutationsAndSubscriptions(t *testing.T) {
 	}
 	if len(inputs) != 1 || inputs[0]["issueId"] != "issue-1" || inputs[0]["relatedIssueId"] != "issue-2" || inputs[0]["type"] != "blocks" {
 		t.Fatalf("issueRelationCreate input = %#v, want issue relation input", inputs)
+	}
+}
+
+// TestAuthTransport_RefreshSurvivesRequestCancellation guards the credential on
+// disk. A refresh rotates the token server-side and then saves it; if the
+// request that hit the 401 is canceled part-way, the save never runs and the
+// stored refresh token is dead, which logs the user out for good.
+func TestAuthTransport_RefreshSurvivesRequestCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	refreshErr := make(chan error, 1)
+	client := NewClient(ClientConfig{
+		Token:     "old-token",
+		UseBearer: true,
+		Endpoint:  server.URL,
+		OnUnauthorized: func(refreshCtx context.Context) (string, error) {
+			// The caller gives up while the token exchange is in flight.
+			cancel()
+			select {
+			case <-refreshCtx.Done():
+				refreshErr <- refreshCtx.Err()
+			case <-time.After(200 * time.Millisecond):
+				refreshErr <- nil
+			}
+			return "new-token", nil
+		},
+	})
+
+	_, _ = client.ListTeams(ctx)
+
+	select {
+	case err := <-refreshErr:
+		if err != nil {
+			t.Fatalf("refresh context was canceled with %v; a rotation must not inherit the request's cancellation", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnUnauthorized never ran")
+	}
+}
+
+// TestAuthTransport_RefreshCarriesItsOwnDeadline confirms detaching from the
+// caller did not leave the refresh able to hang forever.
+func TestAuthTransport_RefreshCarriesItsOwnDeadline(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	deadline := make(chan bool, 1)
+	client := NewClient(ClientConfig{
+		Token:     "old-token",
+		UseBearer: true,
+		Endpoint:  server.URL,
+		OnUnauthorized: func(refreshCtx context.Context) (string, error) {
+			_, ok := refreshCtx.Deadline()
+			deadline <- ok
+			return "new-token", nil
+		},
+	})
+
+	_, _ = client.ListTeams(context.Background())
+
+	select {
+	case ok := <-deadline:
+		if !ok {
+			t.Fatal("refresh context has no deadline, so a hung token exchange would never return")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnUnauthorized never ran")
 	}
 }

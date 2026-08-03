@@ -641,6 +641,10 @@ func NewClientWithToken(token string) *Client {
 	return NewClient(ClientConfig{Token: token})
 }
 
+// refreshTimeout bounds the post-401 token refresh. It runs detached from the
+// triggering request's cancellation, so it needs a deadline of its own.
+const refreshTimeout = 30 * time.Second
+
 // authTransport adds the Authorization header to requests and optionally
 // refreshes OAuth credentials once after a 401 response.
 type authTransport struct {
@@ -671,7 +675,13 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	_ = resp.Body.Close()
 
-	newToken, refreshErr := t.OnUnauthorized(req.Context())
+	// A refresh rotates the token server-side and writes the new one to disk.
+	// Canceling it part-way leaves the stored credential dead and logs the
+	// user out, so it must not inherit the cancellation of whichever request
+	// happened to hit the 401. It gets its own deadline instead.
+	refreshCtx, cancelRefresh := context.WithTimeout(context.WithoutCancel(req.Context()), refreshTimeout)
+	newToken, refreshErr := t.OnUnauthorized(refreshCtx)
+	cancelRefresh()
 	if refreshErr != nil {
 		return nil, fmt.Errorf("refresh auth after 401: %w", refreshErr)
 	}

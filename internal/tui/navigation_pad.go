@@ -7,11 +7,12 @@ import (
 	"github.com/rivo/tview"
 )
 
-// navNodeLabel caches a node's untruncated label alongside the inner width it
-// was last fitted to. Both live in one entry so they cannot drift apart when
-// the cache is cleared.
+// navNodeLabel caches a node's untruncated label alongside the fitted text and
+// width last written to it. All three live in one entry so they cannot drift
+// apart when the cache is cleared.
 type navNodeLabel struct {
 	original    string
+	fitted      string
 	fittedWidth int
 }
 
@@ -22,9 +23,12 @@ type navNodeLabel struct {
 // across redraws and resizes.
 //
 // This runs from SetDrawFunc, so it fires on every draw anywhere in the app.
-// Nodes already fitted to the requested width are skipped: the rune-width
-// measure and truncate is the expensive part, and re-deriving an identical
-// label for every node on every keystroke is pure waste.
+// Nodes still carrying the text they were last fitted to, at the same width,
+// are skipped: the rune-width measure and truncate is the expensive part, and
+// re-deriving an identical label for every node on every keystroke is pure
+// waste. The check is against the node's current text, not the cache alone, so
+// anything that relabels a node elsewhere is picked up on the next draw rather
+// than silently discarded.
 func (a *App) padNavigationTree(width int) {
 	if a.navigationTree == nil || width <= 0 {
 		return
@@ -38,17 +42,24 @@ func (a *App) padNavigationTree(width int) {
 
 func (a *App) padNavigationNode(node *tview.TreeNode, level int, width int) {
 	label, cached := a.navNodeLabels[node]
+	text := node.GetText()
 	if !cached {
-		label = navNodeLabel{original: node.GetText()}
 		// Tighten tview's default indent of two to one, so each level advances
 		// two cells (one graphics offset plus one indent).
 		node.SetIndent(1)
 	}
+	if !cached || text != label.fitted {
+		// Either the node is new or something relabelled it; the text on it now
+		// is the truth to fit from.
+		label = navNodeLabel{original: text}
+	}
+
 	available := width - 2*level
-	needsFit := available > 0 && label.fittedWidth != available
+	needsFit := available > 0 && (label.fittedWidth != available || label.fitted != text)
 	if needsFit {
-		node.SetText(fitToWidth(label.original, available))
+		label.fitted = fitToWidth(label.original, available)
 		label.fittedWidth = available
+		node.SetText(label.fitted)
 	}
 	if !cached || needsFit {
 		a.navNodeLabels[node] = label

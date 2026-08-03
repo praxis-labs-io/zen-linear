@@ -1670,6 +1670,11 @@ func (a *App) searchDebounceDelay() time.Duration {
 func (a *App) scheduleSearchDebounce(query string) {
 	delay := a.searchDebounceDelay()
 	generation := a.searchDebounceGeneration.Add(1)
+	// The query changed, so anything in flight is already stale. Drop it here
+	// rather than a debounce window later when the next fetch starts, or every
+	// typing burst holds a known-dead request against the API while the live
+	// query queues behind it.
+	a.cancelSearchFetch()
 
 	a.searchDebounceMu.Lock()
 	if a.searchDebounceTimer != nil {
