@@ -39,10 +39,13 @@ func newPaginationBenchApp(b *testing.B) *App {
 	return app
 }
 
-// benchmarkPagination replays count issues in 50-issue pages. paintPerPage
-// selects the pre-ZNL-13 behavior, where every page regrouped and repainted the
-// whole table; otherwise pages accumulate and the table paints once.
-func benchmarkPagination(b *testing.B, count int, paintPerPage bool) {
+// benchmarkPagination replays count issues in 50-issue pages, repainting every
+// repaintEvery pages. 1 is the pre-ZNL-13 behavior, where every page regrouped
+// and repainted the whole table. 0 paints only at the end. The Budgeted arms
+// stand in for the issuesRepaintInterval the refresh loop actually uses: on a
+// load that streams 50 pages in a couple of seconds the 250ms budget fires
+// roughly every twelfth page.
+func benchmarkPagination(b *testing.B, count, repaintEvery int) {
 	const pageSize = 50
 	issues := benchIssues(count)
 	app := newPaginationBenchApp(b)
@@ -54,28 +57,28 @@ func benchmarkPagination(b *testing.B, count int, paintPerPage bool) {
 		app.selectedIssue = nil
 		app.issuesMu.Unlock()
 
-		seen := make(map[string]bool, count)
+		merge := &pageMerge{seen: make(map[string]bool, count)}
 		app.updateIssuesData(issues[:pageSize])
 		app.issuesMu.RLock()
-		for i := range app.issues {
-			seen[app.issues[i].ID] = true
-		}
+		merge.reset(app.issues)
 		app.issuesMu.RUnlock()
 
+		page := 0
 		for start := pageSize; start < count; start += pageSize {
 			end := min(start+pageSize, count)
-			app.accumulateIssues(issues[start:end], seen)
-			if paintPerPage {
+			app.accumulateIssues(issues[start:end], merge)
+			page++
+			if repaintEvery > 0 && page%repaintEvery == 0 {
 				app.renderAccumulatedIssues()
 			}
 		}
-		if !paintPerPage {
-			app.renderAccumulatedIssues()
-		}
+		app.renderAccumulatedIssues()
 	}
 }
 
-func BenchmarkPagination2000PaintOnce(b *testing.B)    { benchmarkPagination(b, 2000, false) }
-func BenchmarkPagination2000PaintPerPage(b *testing.B) { benchmarkPagination(b, 2000, true) }
-func BenchmarkPagination5000PaintOnce(b *testing.B)    { benchmarkPagination(b, 5000, false) }
-func BenchmarkPagination5000PaintPerPage(b *testing.B) { benchmarkPagination(b, 5000, true) }
+func BenchmarkPagination2000PaintOnce(b *testing.B)     { benchmarkPagination(b, 2000, 0) }
+func BenchmarkPagination2000PaintBudgeted(b *testing.B) { benchmarkPagination(b, 2000, 12) }
+func BenchmarkPagination2000PaintPerPage(b *testing.B)  { benchmarkPagination(b, 2000, 1) }
+func BenchmarkPagination5000PaintOnce(b *testing.B)     { benchmarkPagination(b, 5000, 0) }
+func BenchmarkPagination5000PaintBudgeted(b *testing.B) { benchmarkPagination(b, 5000, 12) }
+func BenchmarkPagination5000PaintPerPage(b *testing.B)  { benchmarkPagination(b, 5000, 1) }

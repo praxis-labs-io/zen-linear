@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -47,7 +48,15 @@ type TeamCache struct {
 	// inflight tracks fetches in progress so concurrent misses for the same
 	// key wait on the first request instead of issuing their own. Keyed
 	// "kind:id" because team and project ids share the map.
-	inflight map[string]chan struct{}
+	inflight map[string]*cacheFlight
+}
+
+// cacheFlight is one in-progress fetch. Waiters read err after done closes, so
+// a failure surfaces to everyone waiting on it instead of each of them
+// retrying in turn.
+type cacheFlight struct {
+	done chan struct{}
+	err  error
 }
 
 // NewTeamCache creates a new team cache with the given client and TTL.
@@ -67,7 +76,7 @@ func NewTeamCache(client *linearapi.Client, ttl time.Duration) *TeamCache {
 		labelsExpiry:            make(map[string]time.Time),
 		projectMilestones:       make(map[string][]linearapi.ProjectMilestone),
 		projectMilestonesExpiry: make(map[string]time.Time),
-		inflight:                make(map[string]chan struct{}),
+		inflight:                make(map[string]*cacheFlight),
 	}
 }
 
@@ -138,30 +147,40 @@ func getCachedOrFetch[T any](
 ) ([]T, error) {
 	key := kind + ":" + teamID
 
-	var done chan struct{}
+	var flight *cacheFlight
 	for {
 		c.mu.Lock()
 		if exp, ok := expiryMap[teamID]; ok && time.Now().Before(exp) {
-			data := cache[teamID]
+			// Hand back a copy: callers sort the result in place
+			// (sortCyclesForNavigation and friends), and every caller for a
+			// key would otherwise be mutating the one cached array.
+			data := slices.Clone(cache[teamID])
 			c.mu.Unlock()
 			return data, nil
 		}
-		wait, running := c.inflight[key]
-		if !running {
-			done = make(chan struct{})
-			c.inflight[key] = done
+		if running, ok := c.inflight[key]; ok {
 			c.mu.Unlock()
-			break
+			select {
+			case <-running.done:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			c.mu.Lock()
+			err := running.err
+			c.mu.Unlock()
+			if err != nil {
+				// Share the leader's failure. Taking over as leader instead
+				// would make waiters fail one after another, so an unreachable
+				// API costs one timeout per caller in series.
+				return nil, err
+			}
+			// The leader cached a result; loop back to read it.
+			continue
 		}
+		flight = &cacheFlight{done: make(chan struct{})}
+		c.inflight[key] = flight
 		c.mu.Unlock()
-
-		select {
-		case <-wait:
-			// Loop back: the leader either cached a result or failed, in which
-			// case this call takes over as leader.
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+		break
 	}
 
 	// Fetch from API
@@ -172,9 +191,11 @@ func getCachedOrFetch[T any](
 	if err == nil {
 		cache[teamID] = data
 		expiryMap[teamID] = time.Now().Add(c.ttl)
+		data = slices.Clone(data)
 	}
+	flight.err = err
 	delete(c.inflight, key)
-	close(done)
+	close(flight.done)
 	c.mu.Unlock()
 
 	if err != nil {

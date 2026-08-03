@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -792,5 +793,186 @@ func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
 	app.issuesMu.RUnlock()
 	if selected == nil || selected.ID != "issue-b" {
 		t.Fatalf("selectedIssue = %#v, want issue-b to survive the reorder", selected)
+	}
+}
+
+// TestAccumulateIssues_ReconcilesAfterAnOutsideSplice guards the dedup set
+// against another path appending to a.issues mid-refresh: insertIssue does
+// exactly that when an edit brings an issue into scope, and a page carrying
+// the same issue would otherwise add it twice.
+func TestAccumulateIssues_ReconcilesAfterAnOutsideSplice(t *testing.T) {
+	app := newUXTestApp()
+	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
+		return linearapi.Issue{ID: id}, nil
+	}
+	page1 := []linearapi.Issue{{ID: "issue-1", Identifier: "ZNL-1", Title: "First"}}
+	spliced := linearapi.Issue{ID: "issue-2", Identifier: "ZNL-2", Title: "Spliced"}
+
+	app.updateIssuesData(page1)
+	merge := &pageMerge{seen: make(map[string]bool)}
+	app.issuesMu.RLock()
+	merge.reset(app.issues)
+	app.issuesMu.RUnlock()
+
+	// Something else adds issue-2 while pagination is still running.
+	app.issuesMu.Lock()
+	app.issues = append(app.issues, spliced)
+	app.issuesMu.Unlock()
+
+	// The next server page carries it too.
+	app.accumulateIssues([]linearapi.Issue{spliced, {ID: "issue-3", Identifier: "ZNL-3"}}, merge)
+
+	app.issuesMu.RLock()
+	defer app.issuesMu.RUnlock()
+	counts := map[string]int{}
+	for i := range app.issues {
+		counts[app.issues[i].ID]++
+	}
+	if counts["issue-2"] != 1 {
+		t.Fatalf("issue-2 appears %d times, want 1", counts["issue-2"])
+	}
+	if len(app.issues) != 3 {
+		t.Fatalf("issue count = %d, want 3", len(app.issues))
+	}
+}
+
+// TestAccumulateIssues_KeepsTheListSorted guards the repaint paths that read
+// a.issues directly mid-pagination and do not sort first.
+func TestAccumulateIssues_KeepsTheListSorted(t *testing.T) {
+	app := newUXTestApp()
+	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
+		return linearapi.Issue{ID: id}, nil
+	}
+	app.sortFields = []SortField{SortByPriority}
+
+	app.updateIssuesData([]linearapi.Issue{{ID: "issue-b", Identifier: "ZNL-2", Priority: 3}})
+	merge := &pageMerge{seen: make(map[string]bool)}
+	app.issuesMu.RLock()
+	merge.reset(app.issues)
+	app.issuesMu.RUnlock()
+
+	app.accumulateIssues([]linearapi.Issue{{ID: "issue-a", Identifier: "ZNL-1", Priority: 1}}, merge)
+
+	app.issuesMu.RLock()
+	defer app.issuesMu.RUnlock()
+	if app.issues[0].ID != "issue-a" {
+		t.Fatalf("issues[0] = %q, want issue-a: the merged page left the list unsorted", app.issues[0].ID)
+	}
+}
+
+// TestRenderAccumulatedIssues_KeepsTheHydratedSelection guards the details
+// pane: the list model carries no comments or attachments, so overwriting a
+// surviving selection with it silently strips them.
+func TestRenderAccumulatedIssues_KeepsTheHydratedSelection(t *testing.T) {
+	app := newUXTestApp()
+	// Set the state directly: updateIssuesData fires an async detail fetch
+	// that would race the selection this test installs.
+	hydrated := linearapi.Issue{
+		ID: "issue-1", Identifier: "ZNL-1", Title: "First",
+		Comments: []linearapi.Comment{{ID: "comment-1", Body: "still here"}},
+	}
+	app.issuesMu.Lock()
+	app.issues = []linearapi.Issue{
+		{ID: "issue-1", Identifier: "ZNL-1", Title: "First"},
+		{ID: "issue-2", Identifier: "ZNL-2", Title: "Second"},
+	}
+	app.selectedIssue = &hydrated
+	app.issuesMu.Unlock()
+
+	app.renderAccumulatedIssues()
+
+	app.issuesMu.RLock()
+	defer app.issuesMu.RUnlock()
+	if got := len(app.selectedIssue.Comments); got != 1 {
+		t.Fatalf("selected issue has %d comments, want 1: the repaint replaced it with the list copy", got)
+	}
+}
+
+// TestRenderAccumulatedIssues_LeavesTheSearchTabAlone mirrors the guard
+// updateIssuesData carries: a background refresh must not clear the selection
+// the user is browsing in search results.
+func TestRenderAccumulatedIssues_LeavesTheSearchTabAlone(t *testing.T) {
+	app := newUXTestApp()
+	// A search hit that is not in the My/Other models. State is set directly
+	// so no async detail fetch races the selection.
+	offList := linearapi.Issue{ID: "issue-99", Identifier: "ZNL-99", Title: "Elsewhere"}
+	app.issuesMu.Lock()
+	app.issues = []linearapi.Issue{{ID: "issue-1", Identifier: "ZNL-1", Title: "First"}}
+	app.selectedIssue = &offList
+	app.issuesMu.Unlock()
+	app.activeIssuesSection = IssuesSectionSearch
+
+	app.renderAccumulatedIssues()
+
+	app.issuesMu.RLock()
+	defer app.issuesMu.RUnlock()
+	if app.selectedIssue == nil || app.selectedIssue.ID != "issue-99" {
+		t.Fatalf("selectedIssue = %#v, want the search hit to survive", app.selectedIssue)
+	}
+}
+
+// TestRefreshIssues_PaintsDuringPagination guards the budget: pages fetched
+// early in a slow load must become reachable without waiting for the last one.
+func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
+	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
+	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
+		return linearapi.Issue{ID: id}, nil
+	}
+	// The table belongs to the draw goroutine, so snapshot it there rather
+	// than reading it from the test.
+	var paintedMu sync.Mutex
+	var painted []string
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		paintedMu.Lock()
+		painted = renderedTitles(app, IssuesSectionOther)
+		paintedMu.Unlock()
+	}
+	lastPainted := func() []string {
+		paintedMu.Lock()
+		defer paintedMu.Unlock()
+		return slices.Clone(painted)
+	}
+	refreshDone := installRefreshCompletionHook(app)
+
+	pages := []linearapi.Issue{
+		{ID: "issue-1", Identifier: "ZNL-1", Title: "First", State: "Todo"},
+		{ID: "issue-2", Identifier: "ZNL-2", Title: "Second", State: "Todo"},
+		{ID: "issue-3", Identifier: "ZNL-3", Title: "Third", State: "Todo"},
+	}
+
+	blockLast := make(chan struct{})
+	var fetched atomic.Int32
+	app.fetchIssuesPage = func(_ context.Context, _ linearapi.FetchIssuesParams, _ *string) (linearapi.IssuePage, error) {
+		index := int(fetched.Add(1)) - 1
+		if index == len(pages)-1 {
+			<-blockLast
+		}
+		if index > 0 {
+			// Push page 2 past the repaint budget so it must paint on its own.
+			time.Sleep(issuesRepaintInterval + 50*time.Millisecond)
+		}
+		return linearapi.IssuePage{
+			Issues:    []linearapi.Issue{pages[index]},
+			HasNext:   index < len(pages)-1,
+			EndCursor: stringPtr(fmt.Sprintf("cursor-%d", index)),
+		}, nil
+	}
+
+	app.refreshIssues()
+
+	// Page 2 must reach the table while page 3 is still blocked.
+	waitForCondition(t, 3*time.Second, func() bool {
+		return slices.Equal(lastPainted(), []string{"First", "Second"})
+	})
+
+	close(blockLast)
+	waitForRefreshCompletion(t, refreshDone)
+
+	got := lastPainted()
+	want := []string{"First", "Second", "Third"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("rendered titles after pagination = %v, want %v", got, want)
 	}
 }

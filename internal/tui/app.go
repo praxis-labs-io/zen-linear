@@ -19,6 +19,12 @@ import (
 	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
+// issuesRepaintInterval bounds how long fetched-but-unpainted issues stay
+// unreachable during pagination. Short enough that the list keeps filling in,
+// long enough that a fast multi-page load still paints a handful of times
+// rather than once per page.
+const issuesRepaintInterval = 250 * time.Millisecond
+
 // SortField represents a field to sort issues by.
 type SortField string
 
@@ -887,19 +893,17 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 
 		// Warm all five team caches rather than the three this needs.
 		// Selecting a team preloads the same set, and duplicating a subset here
-		// meant every first click issued each request twice.
+		// meant every first click issued each request twice. A preload error is
+		// not fatal: it reports the first of five failures, and users and labels
+		// are for the pickers, not the tree.
 		if err := a.cache.PreloadTeamMetadata(ctx, teamID); err != nil {
-			logger.ErrorWithErr(err, "tui.app: failed to load team metadata team_id=%s", teamID)
-			a.app.QueueUpdateDraw(func() {
-				a.updateStatusBarWithError(err)
-			})
-			return
+			logger.ErrorWithErr(err, "tui.app: team metadata preload incomplete team_id=%s", teamID)
 		}
 		projects, projectsErr := a.cache.GetProjects(ctx, teamID)
 		states, statesErr := a.cache.GetWorkflowStates(ctx, teamID)
 		cycles, cyclesErr := a.cache.GetCycles(ctx, teamID)
 		if err := cmp.Or(projectsErr, statesErr, cyclesErr); err != nil {
-			logger.ErrorWithErr(err, "tui.app: failed to read team metadata team_id=%s", teamID)
+			logger.ErrorWithErr(err, "tui.app: failed to load navigation children team_id=%s", teamID)
 			a.app.QueueUpdateDraw(func() {
 				a.updateStatusBarWithError(err)
 			})
@@ -1856,19 +1860,17 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 
 		pageCount++
 		fetchedCount += len(page.Issues)
-		// Dedup state for the pages that follow. Kept across iterations so the
-		// merge stays linear instead of rebuilding a set over the whole
-		// accumulated slice once per page.
-		seen := make(map[string]bool, len(page.Issues))
+		merge := &pageMerge{seen: make(map[string]bool, len(page.Issues))}
+		lastPaint := time.Now()
 		a.QueueUpdateDraw(func() {
 			logger.Debug("tui.app: fetched issues page=%d count=%d", pageCount, len(page.Issues))
 			// Install (or clear) the active view's display settings with
 			// the list they belong to.
 			a.viewPrefs = prefs
 			a.updateIssuesData(page.Issues, targetIssueID)
-			for _, issue := range a.issues {
-				seen[issue.ID] = true
-			}
+			a.issuesMu.RLock()
+			merge.reset(a.issues)
+			a.issuesMu.RUnlock()
 			if allowFocus {
 				// Ensure focus is on issues table after initial load
 				a.focusedPane = FocusIssues
@@ -1880,7 +1882,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		})
 
 		after := page.EndCursor
-		accumulated := false
+		unpainted := false
 		for page.HasNext {
 			if generation != a.refreshGeneration.Load() {
 				break
@@ -1902,11 +1904,23 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			pageCount++
 			fetchedCount += len(page.Issues)
 			a.QueueUpdateDraw(func() {
-				// Merge without painting. A regroup and full repaint per page
-				// costs roughly fifty times a single rebuild for the same end
-				// state; the status text carries progress until the last page.
-				if a.accumulateIssues(page.Issues, seen) {
-					accumulated = true
+				// A superseded refresh must not merge into the list the
+				// surviving one paints. The check above ran on the fetching
+				// goroutine; the generation can change before this closure does.
+				if generation != a.refreshGeneration.Load() {
+					return
+				}
+				if a.accumulateIssues(page.Issues, merge) {
+					unpainted = true
+				}
+				// Repaint on a budget rather than per page. Per page costs
+				// roughly fifty times a single rebuild for the same end state;
+				// never until the last page leaves fetched issues unreachable
+				// for the whole of a slow load.
+				if unpainted && time.Since(lastPaint) >= issuesRepaintInterval {
+					a.renderAccumulatedIssues()
+					unpainted = false
+					lastPaint = time.Now()
 				}
 				if page.HasNext {
 					a.statusBar.SetText(fmt.Sprintf("%sLoading more (page %d, fetched %d)...[-]", a.themeTags.Warning, pageCount, fetchedCount))
@@ -1917,7 +1931,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		a.QueueUpdateDraw(func() {
 			// A superseded refresh must not paint its partial list. The queued
 			// refresh that replaced it runs next and owns the table.
-			if accumulated && generation == a.refreshGeneration.Load() {
+			if unpainted && generation == a.refreshGeneration.Load() {
 				a.renderAccumulatedIssues()
 			}
 			a.isLoading = false
@@ -2055,52 +2069,90 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	return selectedIssue
 }
 
-// accumulateIssues merges a fetched page into the issue list without sorting or
-// painting. seen carries dedup state across pages. Reports whether anything was
-// added, so a run of empty or fully duplicated pages skips the final repaint.
-func (a *App) accumulateIssues(newIssues []linearapi.Issue, seen map[string]bool) bool {
+// pageMerge carries dedup state across the pages of one refresh, so merging a
+// page stays linear instead of rebuilding a set over the whole accumulated
+// slice every time.
+type pageMerge struct {
+	seen map[string]bool
+	// length a.issues had when this merge last wrote it. A different length
+	// means something else spliced the list.
+	length int
+}
+
+// reset seeds the merge from the current list. Callers must hold issuesMu.
+func (m *pageMerge) reset(issues []linearapi.Issue) {
+	clear(m.seen)
+	for i := range issues {
+		m.seen[issues[i].ID] = true
+	}
+	m.length = len(issues)
+}
+
+// accumulateIssues merges a fetched page into the issue list without painting.
+// Reports whether anything was added, so a run of empty or fully duplicated
+// pages costs no repaint.
+func (a *App) accumulateIssues(newIssues []linearapi.Issue, merge *pageMerge) bool {
 	a.issuesMu.Lock()
 	defer a.issuesMu.Unlock()
 
+	// insertIssue splices into a.issues when an edit brings an issue into
+	// scope, and it can land mid-refresh. Reconcile rather than trust the set,
+	// or the server page carrying that issue appends it a second time.
+	if len(a.issues) != merge.length {
+		merge.reset(a.issues)
+	}
+
 	added := false
 	for _, issue := range newIssues {
-		if seen[issue.ID] {
+		if merge.seen[issue.ID] {
 			continue
 		}
 		a.issues = append(a.issues, issue)
-		seen[issue.ID] = true
+		merge.seen[issue.ID] = true
 		added = true
 	}
+	if added {
+		// Hold the sort invariant across pagination. Repaint paths that read
+		// a.issues directly (toggleIssueExpanded, expand_all) would otherwise
+		// render fetch order. Sorting was never the expensive part; the
+		// regroup and full table repaint were.
+		a.sortIssuesLocally()
+	}
+	merge.length = len(a.issues)
 	return added
 }
 
-// renderAccumulatedIssues sorts and repaints once pagination has finished.
+// renderAccumulatedIssues repaints the list from the accumulated issues.
+// accumulateIssues owns the sort, so this only rebuilds and paints.
 func (a *App) renderAccumulatedIssues() {
-	a.issuesMu.Lock()
-	// Read the selection before sorting: selectedIssue can point into the
-	// a.issues backing array, which the in-place sort reorders under it.
+	a.issuesMu.RLock()
 	previousID := ""
 	if a.selectedIssue != nil {
 		previousID = a.selectedIssue.ID
 	}
-	a.sortIssuesLocally()
-	a.issuesMu.Unlock()
+	a.issuesMu.RUnlock()
 
 	selectedIssue := a.rebuildIssuesTables(previousID)
 
+	if a.activeIssuesSection == IssuesSectionSearch {
+		// A background refresh must not overwrite the search result the user
+		// is browsing, and its selection is not in the My/Other models.
+		a.updateStatusBar()
+		return
+	}
+
+	if selectedIssue != nil && selectedIssue.ID == previousID {
+		// The selection survived the reorder. Keep the copy onIssueSelected
+		// hydrated: the list model carries no comments, relations, or
+		// attachments, so replacing it here strips them from the details pane.
+		a.updateStatusBar()
+		return
+	}
+
 	a.issuesMu.Lock()
-	// Reassign even when the id is unchanged: the old pointer aims into the
-	// backing array the sort just reordered.
 	a.selectedIssue = selectedIssue
 	a.issuesMu.Unlock()
-
-	selectedID := ""
-	if selectedIssue != nil {
-		selectedID = selectedIssue.ID
-	}
-	if selectedID != previousID {
-		a.updateDetailsView()
-	}
+	a.updateDetailsView()
 	a.updateStatusBar()
 }
 

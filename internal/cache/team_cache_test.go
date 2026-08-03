@@ -496,18 +496,21 @@ func TestGetCachedOrFetch_CollapsesConcurrentMisses(t *testing.T) {
 	}
 }
 
-func TestGetCachedOrFetch_FailedLeaderLetsFollowerRetry(t *testing.T) {
+// TestGetCachedOrFetch_FollowersShareTheLeadersFailure guards against waiters
+// retrying in turn: with the API unreachable each one would otherwise wait a
+// full timeout before reporting the same error, so the failure takes N
+// timeouts to surface instead of one.
+func TestGetCachedOrFetch_FollowersShareTheLeadersFailure(t *testing.T) {
 	c := NewTeamCache(nil, time.Minute)
 	teamID := "team-1"
 
 	release := make(chan struct{})
 	var calls atomic.Int32
+	boom := errors.New("boom")
 	fetch := func(context.Context, string) ([]linearapi.User, error) {
-		if calls.Add(1) == 1 {
-			<-release
-			return nil, errors.New("boom")
-		}
-		return []linearapi.User{{ID: "user-1"}}, nil
+		calls.Add(1)
+		<-release
+		return nil, boom
 	}
 
 	leaderErr := make(chan error, 1)
@@ -517,30 +520,79 @@ func TestGetCachedOrFetch_FailedLeaderLetsFollowerRetry(t *testing.T) {
 	}()
 	waitForCalls(t, &calls, 1)
 
-	followerData := make(chan []linearapi.User, 1)
+	followerErr := make(chan error, 1)
 	go func() {
-		data, err := getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch)
-		if err != nil {
-			t.Errorf("follower error = %v", err)
-		}
-		followerData <- data
+		_, err := getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch)
+		followerErr <- err
 	}()
 	waitForInflight(t, c, "users:"+teamID)
 
 	close(release)
-	if err := <-leaderErr; err == nil {
-		t.Fatal("leader error = nil, want the fetch error")
+	if err := <-leaderErr; !errors.Is(err, boom) {
+		t.Fatalf("leader error = %v, want boom", err)
 	}
 	select {
-	case data := <-followerData:
-		if len(data) != 1 || data[0].ID != "user-1" {
-			t.Fatalf("follower data = %#v, want one user-1", data)
+	case err := <-followerErr:
+		if !errors.Is(err, boom) {
+			t.Fatalf("follower error = %v, want the leader's boom", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("follower never took over after the leader failed")
+		t.Fatal("follower never got the leader's failure")
 	}
-	if got := calls.Load(); got != 2 {
-		t.Fatalf("fetch calls = %d, want 2", got)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("fetch calls = %d, want 1: the follower must not retry", got)
+	}
+}
+
+// TestGetCachedOrFetch_ANewCallAfterAFailureRefetches confirms sharing the
+// error is scoped to one flight, not cached: the next caller tries again.
+func TestGetCachedOrFetch_ANewCallAfterAFailureRefetches(t *testing.T) {
+	c := NewTeamCache(nil, time.Minute)
+	teamID := "team-1"
+
+	var calls atomic.Int32
+	fetch := func(context.Context, string) ([]linearapi.User, error) {
+		if calls.Add(1) == 1 {
+			return nil, errors.New("boom")
+		}
+		return []linearapi.User{{ID: "user-1"}}, nil
+	}
+
+	if _, err := getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch); err == nil {
+		t.Fatal("first call error = nil, want the fetch error")
+	}
+	data, err := getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch)
+	if err != nil {
+		t.Fatalf("second call error = %v", err)
+	}
+	if len(data) != 1 || data[0].ID != "user-1" {
+		t.Fatalf("second call data = %#v, want one user-1", data)
+	}
+}
+
+// TestGetCachedOrFetch_ReturnsACopy guards the callers that sort the result in
+// place. Handing out the cached array means one caller's sort reorders every
+// other caller's slice, and corrupts the cache for the rest of the TTL.
+func TestGetCachedOrFetch_ReturnsACopy(t *testing.T) {
+	c := NewTeamCache(nil, time.Minute)
+	teamID := "team-1"
+
+	fetch := func(context.Context, string) ([]linearapi.User, error) {
+		return []linearapi.User{{ID: "user-1"}, {ID: "user-2"}}, nil
+	}
+
+	first, err := getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch)
+	if err != nil {
+		t.Fatalf("first call error = %v", err)
+	}
+	first[0] = linearapi.User{ID: "clobbered"}
+
+	second, err := getCachedOrFetch(context.Background(), c, "users", teamID, c.users, c.usersExpiry, fetch)
+	if err != nil {
+		t.Fatalf("second call error = %v", err)
+	}
+	if second[0].ID != "user-1" {
+		t.Fatalf("second call saw %q: the caller mutated the cached slice", second[0].ID)
 	}
 }
 
