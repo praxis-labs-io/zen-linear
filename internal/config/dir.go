@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -53,4 +54,25 @@ func MigrateLegacyDir() error {
 		return fmt.Errorf("migrate config dir %s to %s: %w", legacy, current, err)
 	}
 	return nil
+}
+
+// rewriteLegacyPath maps a path still rooted in the pre-rename directory onto
+// the current one. The rename moved the files but left absolute paths inside
+// the config behind, so a stale log_file silently recreates ~/.linear-tui and
+// writes there. Applied on load rather than during the migration, because the
+// migration has already run for anyone carrying a stale path.
+func rewriteLegacyPath(path string) string {
+	if path == "" {
+		return path
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	legacy := filepath.Join(homeDir, legacyDirName)
+	cleaned := filepath.Clean(path)
+	if cleaned != legacy && !strings.HasPrefix(cleaned, legacy+string(filepath.Separator)) {
+		return path
+	}
+	return filepath.Join(homeDir, dirName, strings.TrimPrefix(cleaned, legacy))
 }
