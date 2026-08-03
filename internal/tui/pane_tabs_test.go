@@ -24,6 +24,12 @@ func tabLabels(t *testing.T, app *App) []string {
 	return labels
 }
 
+// pressKey sends a rune through the app's real input capture, so a handler that
+// claims the key before the focused pane sees it shows up here.
+func pressKey(app *App, r rune) {
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
+}
+
 // holdDetailFetches parks every background detail fetch until the test ends, so
 // its queueUpdateDraw stub cannot repaint the UI alongside the assertions.
 func holdDetailFetches(t *testing.T, app *App) {
@@ -131,12 +137,9 @@ func TestJumpToParent_SelectsTheParentInTheTabOnScreen(t *testing.T) {
 	app.issuesMu.Lock()
 	app.selectedIssue = app.allIDToIssue["child-1"]
 	app.issuesMu.Unlock()
+	app.focusedPane = FocusIssues
 
-	viewParent := findCommandByID(DefaultCommands(app), "view_parent")
-	if viewParent == nil {
-		t.Fatal("view_parent command not found")
-	}
-	viewParent.Run(app)
+	pressKey(app, 'p')
 
 	if app.activeIssuesSection != IssuesSectionAll {
 		t.Fatalf("view_parent switched to %v, want to stay on All", app.activeIssuesSection)
@@ -160,20 +163,17 @@ func TestViewParent_SaysSoWhenTheParentIsNotLoaded(t *testing.T) {
 		},
 	})
 	holdDetailFetches(t, app)
+	app.focusedPane = FocusIssues
 
-	viewParent := findCommandByID(DefaultCommands(app), "view_parent")
-	if viewParent == nil {
-		t.Fatal("view_parent command not found")
-	}
-	viewParent.Run(app)
+	pressKey(app, 'p')
 
 	if got := app.statusBar.GetText(true); !strings.Contains(got, "Parent issue not loaded") {
 		t.Fatalf("status after view_parent with an unfetched parent = %q, want the parent-not-loaded feedback", got)
 	}
 }
 
-// A child assigned to the user whose parent is not is an orphan in My. Pressing
-// h there has to fall back to All rather than sit on a parent My cannot show.
+// A child assigned to the user whose parent is not is an orphan in My. p there
+// has to fall back to All rather than sit on a parent My cannot show.
 func TestParentKeyFallsBackToAllWhenMyHasNoParent(t *testing.T) {
 	parentRef := &linearapi.IssueRef{ID: "parent-1", Identifier: "LIN-1", Title: "Parent"}
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
@@ -186,18 +186,45 @@ func TestParentKeyFallsBackToAllWhenMyHasNoParent(t *testing.T) {
 
 	app.activeIssuesSection = IssuesSectionMy
 	app.updateIssuesColumnLayout()
+	app.focusedPane = FocusIssues
 	myTable := app.tableForSection(IssuesSectionMy)
 	myTable.Select(app.getRowForIssueInSection("child-1", IssuesSectionMy), 0)
+	app.issuesMu.Lock()
+	app.selectedIssue = app.myIDToIssue["child-1"]
+	app.issuesMu.Unlock()
 
-	app.handleIssuesTableRune(myTable, IssuesSectionMy, tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone))
+	pressKey(app, 'p')
 
 	if app.activeIssuesSection != IssuesSectionAll {
-		t.Fatalf("h from My landed on %v, want All, which holds the parent", app.activeIssuesSection)
+		t.Fatalf("p from My landed on %v, want All, which holds the parent", app.activeIssuesSection)
 	}
 	allTable := app.tableForSection(IssuesSectionAll)
 	wantRow := app.getRowForIssueInSection("parent-1", IssuesSectionAll)
 	if row, _ := allTable.GetSelection(); row != wantRow {
 		t.Fatalf("All table selection = row %d, want the parent at row %d", row, wantRow)
+	}
+}
+
+// h and l are pane movement in the issues list, as the README documents. The
+// table used to carry its own expand/collapse branches for them, which the
+// global handler swallowed before the table ever ran.
+func TestIssuesListLeavesHAndLToPaneMovement(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+	})
+	holdDetailFetches(t, app)
+	app.detailsHidden = false
+	app.focusedPane = FocusIssues
+
+	pressKey(app, 'h')
+	if app.focusedPane != FocusNavigation {
+		t.Fatalf("h from the issues list landed on %v, want Navigation", app.focusedPane)
+	}
+
+	app.focusedPane = FocusIssues
+	pressKey(app, 'l')
+	if app.focusedPane != FocusDetails {
+		t.Fatalf("l from the issues list landed on %v, want Details", app.focusedPane)
 	}
 }
 

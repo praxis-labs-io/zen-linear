@@ -520,35 +520,8 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 			}
 		}
 		return nil
-	case 'l':
-		if section == IssuesSectionSearch {
-			return nil // search results are a flat list
-		}
-		// Expand current parent issue
-		row, _ := table.GetSelection()
-		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
-			if len(issue.Children) > 0 && !a.expandedState[issue.ID] {
-				a.toggleIssueExpanded(issue.ID)
-				a.activeIssuesSection = section
-			}
-		}
-		return nil
-	case 'h':
-		if section == IssuesSectionSearch {
-			return nil // search results are a flat list
-		}
-		// Collapse current parent issue, or go to parent if on child
-		row, _ := table.GetSelection()
-		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
-			if len(issue.Children) > 0 && a.expandedState[issue.ID] {
-				// Collapse this parent
-				a.toggleIssueExpanded(issue.ID)
-				a.activeIssuesSection = section
-			} else if issue.Parent != nil {
-				a.jumpToParent(issue.Parent.ID)
-			}
-		}
-		return nil
+	// h and l never arrive here: handleIssuesKey claims them for pane movement,
+	// which is what the README documents. Space expands, p jumps to the parent.
 	case a.actionKey("columns_left", 'H'):
 		scrollIssueColumns(table, 'H')
 		return nil
