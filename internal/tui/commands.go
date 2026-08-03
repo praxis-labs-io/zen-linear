@@ -831,13 +831,8 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No parent issue")
 					return
 				}
-				// Try to navigate to parent in the table
-				parentRow := a.getRowForIssue(issue.Parent.ID)
-				if parentRow > 0 {
-					a.issuesTable.Select(parentRow, 0)
-					if parent := a.getIssueFromRow(parentRow); parent != nil {
-						a.onIssueSelected(*parent)
-					}
+				if !a.jumpToParent(issue.Parent.ID) {
+					a.flashStatus("Parent issue not loaded")
 				}
 			},
 		},

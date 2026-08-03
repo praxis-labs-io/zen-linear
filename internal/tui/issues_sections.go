@@ -2,76 +2,40 @@ package tui
 
 import "github.com/zen-linear/zen-linear/internal/linearapi"
 
-// splitIssuesByAssignee partitions issues into "My Issues" and "Other Issues" based on assignee.
-// Issues where AssigneeID matches currentUserID go into "my", all others go into "other".
-// Children always follow their parent's section to preserve parent-child relationships.
-// If currentUserID is empty, all issues go into "other".
-func splitIssuesByAssignee(issues []linearapi.Issue, currentUserID string) (my []linearapi.Issue, other []linearapi.Issue) {
-	my = make([]linearapi.Issue, 0)
-	other = make([]linearapi.Issue, 0)
-
-	// If no current user, all issues go to "other"
+// myIssues returns the issues belonging in the My tab: those assigned to the
+// current user, plus the sub-issues beneath them so a subtree the user owns
+// stays intact. Descent only ever adds, so an issue assigned to the user stays
+// in My whoever owns its parent. If currentUserID is empty, My is empty.
+func myIssues(issues []linearapi.Issue, currentUserID string) []linearapi.Issue {
+	mine := make([]linearapi.Issue, 0)
 	if currentUserID == "" {
-		other = issues
-		return my, other
+		return mine
 	}
 
-	// Build a map of issue ID to section assignment
-	// true = "my", false = "other", not present = not yet assigned
-	sectionMap := make(map[string]bool)
-
-	// First pass: assign top-level issues (no parent) to sections based on assignee
+	member := make(map[string]bool)
 	for i := range issues {
-		issue := &issues[i]
-		if issue.Parent == nil {
-			if issue.AssigneeID == currentUserID {
-				sectionMap[issue.ID] = true
-			} else {
-				sectionMap[issue.ID] = false
-			}
+		if issues[i].AssigneeID == currentUserID {
+			member[issues[i].ID] = true
 		}
 	}
 
-	// Second pass: assign children to the same section as their parent
-	// Process in multiple iterations to handle nested children
-	changed := true
-	for changed {
+	// Descend one generation per sweep, so nested children reach their
+	// ancestor however the pages ordered them.
+	for changed := true; changed; {
 		changed = false
 		for i := range issues {
 			issue := &issues[i]
-			if issue.Parent != nil {
-				if _, assigned := sectionMap[issue.ID]; !assigned {
-					// Check if parent is assigned
-					if parentInMy, parentAssigned := sectionMap[issue.Parent.ID]; parentAssigned {
-						sectionMap[issue.ID] = parentInMy
-						changed = true
-					}
-				}
+			if issue.Parent != nil && !member[issue.ID] && member[issue.Parent.ID] {
+				member[issue.ID] = true
+				changed = true
 			}
 		}
 	}
 
-	// Final pass: assign any remaining orphan children based on their own assignee
 	for i := range issues {
-		issue := &issues[i]
-		if _, assigned := sectionMap[issue.ID]; !assigned {
-			if issue.AssigneeID == currentUserID {
-				sectionMap[issue.ID] = true
-			} else {
-				sectionMap[issue.ID] = false
-			}
+		if member[issues[i].ID] {
+			mine = append(mine, issues[i])
 		}
 	}
-
-	// Build result slices
-	for i := range issues {
-		issue := &issues[i]
-		if sectionMap[issue.ID] {
-			my = append(my, *issue)
-		} else {
-			other = append(other, *issue)
-		}
-	}
-
-	return my, other
+	return mine
 }

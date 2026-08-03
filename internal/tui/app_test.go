@@ -549,7 +549,7 @@ func TestSearchTabRemappedTabKeysCycleOutOfInput(t *testing.T) {
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
-	app.otherIssueRows, app.otherIDToIssue = buildFlatSearchRows([]linearapi.Issue{issue})
+	app.allIssueRows, app.allIDToIssue = buildFlatSearchRows([]linearapi.Issue{issue})
 	// Hold the detail fetch until assertions are done so its immediate
 	// queueUpdateDraw stub cannot run concurrently with them.
 	releaseDetails := make(chan struct{})
@@ -604,8 +604,8 @@ func TestCycleIssuesSectionReachesEmptySearchTab(t *testing.T) {
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
-	app.otherIssueRows, app.otherIDToIssue = buildFlatSearchRows([]linearapi.Issue{issue})
-	app.activeIssuesSection = IssuesSectionOther
+	app.allIssueRows, app.allIDToIssue = buildFlatSearchRows([]linearapi.Issue{issue})
+	app.activeIssuesSection = IssuesSectionAll
 
 	app.cycleIssuesSection(1)
 	if app.activeIssuesSection != IssuesSectionSearch {
@@ -742,14 +742,14 @@ func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
 		defer app.issuesMu.RUnlock()
 		return len(app.issues) == 2
 	})
-	if got := renderedTitles(app, IssuesSectionOther); !slices.Equal(got, []string{"First"}) {
+	if got := renderedTitles(app, IssuesSectionAll); !slices.Equal(got, []string{"First"}) {
 		t.Fatalf("rendered titles mid-pagination = %v, want [First]", got)
 	}
 
 	close(blockLast)
 	waitForRefreshCompletion(t, refreshDone)
 
-	got := renderedTitles(app, IssuesSectionOther)
+	got := renderedTitles(app, IssuesSectionAll)
 	want := []string{"First", "Second", "Third"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("rendered titles after pagination = %v, want %v", got, want)
@@ -788,7 +788,7 @@ func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
 	app.refreshIssues()
 	waitForRefreshCompletion(t, refreshDone)
 
-	got := renderedTitles(app, IssuesSectionOther)
+	got := renderedTitles(app, IssuesSectionAll)
 	if !slices.Equal(got, []string{"Alpha", "Beta"}) {
 		t.Fatalf("rendered titles = %v, want [Alpha Beta]", got)
 	}
@@ -931,7 +931,7 @@ func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 	app.queueUpdateDraw = func(f func()) {
 		f()
 		paintedMu.Lock()
-		painted = renderedTitles(app, IssuesSectionOther)
+		painted = renderedTitles(app, IssuesSectionAll)
 		paintedMu.Unlock()
 	}
 	lastPainted := func() []string {
@@ -1005,7 +1005,7 @@ func TestRenderedTitles_SkipsGroupHeaders(t *testing.T) {
 	if app.effectiveGroupBy() != GroupByStatus {
 		t.Fatalf("effectiveGroupBy = %q, want %q", app.effectiveGroupBy(), GroupByStatus)
 	}
-	rows := app.rowsForSection(IssuesSectionOther)
+	rows := app.rowsForSection(IssuesSectionAll)
 	headers := 0
 	for _, row := range rows {
 		if row.IsHeader {
@@ -1016,7 +1016,7 @@ func TestRenderedTitles_SkipsGroupHeaders(t *testing.T) {
 		t.Fatal("no group headers rendered, so this test proves nothing")
 	}
 
-	got := renderedTitles(app, IssuesSectionOther)
+	got := renderedTitles(app, IssuesSectionAll)
 	want := []string{"Second", "First"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("renderedTitles = %v, want %v", got, want)

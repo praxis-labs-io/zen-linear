@@ -301,9 +301,8 @@ func (a *App) moveChildRef(oldParent, newParent *linearapi.IssueRef, child linea
 // looking at does not pull the pane away from the row they are.
 func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 	previousRows := map[IssuesSection][]IssueRow{
-		IssuesSectionMy:    a.myIssueRows,
-		IssuesSectionOther: a.otherIssueRows,
-		IssuesSectionAll:   a.issueRows,
+		IssuesSectionAll: a.allIssueRows,
+		IssuesSectionMy:  a.myIssueRows,
 	}
 	previousEffective := a.effectiveIssuesSection()
 
@@ -349,7 +348,7 @@ func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 		selectedID = previousSelected.ID
 	}
 
-	target := a.idToIssue[targetIssueID]
+	target := a.allIDToIssue[targetIssueID]
 	switch {
 	case target != nil && selectedID == targetIssueID:
 		// Same issue: take the fresh list fields, keep the detail data only
@@ -415,41 +414,25 @@ func (a *App) rebuildIssueRowModels() {
 	if a.currentUser != nil {
 		currentUserID = a.currentUser.ID
 	}
-	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
-
 	// Build hierarchical tree rows for each section, grouped when enabled.
-	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues)
-	a.otherIssueRows, a.otherIDToIssue = a.buildIssueRowsFor(otherIssues)
-
-	// The All Issues tab renders the full list.
-	a.issueRows, a.idToIssue = a.buildIssueRowsFor(issues)
+	a.allIssueRows, a.allIDToIssue = a.buildIssueRowsFor(issues)
+	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues(issues, currentUserID))
 }
 
-// sectionSelectionsFor maps each section to the row it should land on, and
-// makes the section holding the target issue active. The All and Search tabs
-// show their own lists, so they stay active when selected.
+// sectionSelectionsFor maps each section to the row it should land on. All
+// holds every fetched issue; My gets the target only when it is in there. The
+// tab on screen is the user's choice and stays put either way.
 func (a *App) sectionSelectionsFor(targetIssueID string) map[IssuesSection]string {
 	selections := map[IssuesSection]string{
-		IssuesSectionMy:    "",
-		IssuesSectionOther: "",
-		IssuesSectionAll:   "",
+		IssuesSectionAll: "",
+		IssuesSectionMy:  "",
 	}
 	if targetIssueID == "" {
 		return selections
 	}
 	selections[IssuesSectionAll] = targetIssueID
-
-	sectionPinned := a.activeIssuesSection == IssuesSectionAll || a.activeIssuesSection == IssuesSectionSearch
 	if _, ok := a.myIDToIssue[targetIssueID]; ok {
 		selections[IssuesSectionMy] = targetIssueID
-		if !sectionPinned {
-			a.activeIssuesSection = IssuesSectionMy
-		}
-	} else if _, ok := a.otherIDToIssue[targetIssueID]; ok {
-		selections[IssuesSectionOther] = targetIssueID
-		if !sectionPinned {
-			a.activeIssuesSection = IssuesSectionOther
-		}
 	}
 	return selections
 }

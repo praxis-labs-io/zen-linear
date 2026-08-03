@@ -175,16 +175,14 @@ type App struct {
 	navNodeLabels          map[*tview.TreeNode]navNodeLabel
 	favorites              []linearapi.Favorite
 	favoritesGroup         *tview.TreeNode
-	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
-	myIssuesTable          *tview.Table
-	otherIssuesTable       *tview.Table
 	allIssuesTable         *tview.Table
+	myIssuesTable          *tview.Table
 	searchInput            *tview.InputField
 	searchResultsTable     *tview.Table
 	searchPanel            *tview.Flex     // Search tab shell: input row + body
 	searchBody             *tview.Flex     // Swappable slot: results table or placeholder
 	searchPlaceholder      *tview.TextView // Centered empty/loading/error message
-	issuesColumn           *tview.Flex     // Vertical flex containing My/Other tables
+	issuesColumn           *tview.Flex     // Vertical flex holding the active issues tab
 	detailsView            *tview.Flex     // Flex container for details (description + comments)
 	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
 	detailsCommentsView    *tview.TextView // Scrollable comments view
@@ -218,16 +216,12 @@ type App struct {
 	focusedPane         FocusTarget
 	activeIssuesSection IssuesSection // Tracks which issues section (My/Other) is currently active
 
-	// Issue tree state (for sub-issue hierarchy)
-	// Legacy fields - kept for backward compatibility during migration
-	issueRows []IssueRow                  // Flattened rows for table rendering
-	idToIssue map[string]*linearapi.Issue // Quick lookup by issue ID
-	// Per-section issue tree state
-	myIssueRows    []IssueRow                  // Flattened rows for "My Issues" table
-	myIDToIssue    map[string]*linearapi.Issue // Quick lookup by issue ID for "My Issues"
-	otherIssueRows []IssueRow                  // Flattened rows for "Other Issues" table
-	otherIDToIssue map[string]*linearapi.Issue // Quick lookup by issue ID for "Other Issues"
-	expandedState  map[string]bool             // Expanded state for parent issues (shared across sections)
+	// Per-section issue tree state (for sub-issue hierarchy)
+	allIssueRows  []IssueRow                  // Flattened rows for the "All Issues" table
+	allIDToIssue  map[string]*linearapi.Issue // Quick lookup by issue ID for "All Issues"
+	myIssueRows   []IssueRow                  // Flattened rows for the "My Issues" table
+	myIDToIssue   map[string]*linearapi.Issue // Quick lookup by issue ID for "My Issues"
+	expandedState map[string]bool             // Expanded state for parent issues (shared across sections)
 	// pendingSectionRenders holds sections whose cells are stale because they
 	// were off screen when the model changed, keyed to the row they should
 	// select once painted.
@@ -350,11 +344,9 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		configuredSortFields: parseSortFields(cfg.SortBy),
 		expandedState:        make(map[string]bool),
 		navNodeLabels:        make(map[*tview.TreeNode]navNodeLabel),
-		idToIssue:            make(map[string]*linearapi.Issue),
+		allIDToIssue:         make(map[string]*linearapi.Issue),
 		myIDToIssue:          make(map[string]*linearapi.Issue),
-		otherIDToIssue:       make(map[string]*linearapi.Issue),
 		searchIDToIssue:      make(map[string]*linearapi.Issue),
-		activeIssuesSection:  IssuesSectionMy, // Default to My Issues (falls back to Other when empty)
 		agentPromptTemplates: templates,
 		activeWorkspaceName:  workspaceNameForKey(cfg.Workspaces, cfg.LinearAPIKey),
 		// Details opens on demand (Enter or the palette toggle); the list
@@ -559,13 +551,9 @@ func (a *App) applyThemeToComponents() {
 		a.applyIssuesTableTheme(a.myIssuesTable)
 		renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, a.selectedIssueID(IssuesSectionMy), a.theme, a.issueColumns())
 	}
-	if a.otherIssuesTable != nil {
-		a.applyIssuesTableTheme(a.otherIssuesTable)
-		renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, a.selectedIssueID(IssuesSectionOther), a.theme, a.issueColumns())
-	}
 	if a.allIssuesTable != nil {
 		a.applyIssuesTableTheme(a.allIssuesTable)
-		renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, a.selectedIssueID(IssuesSectionAll), a.theme, a.issueColumns())
+		renderIssuesTableModel(a.allIssuesTable, a.allIssueRows, a.allIDToIssue, a.selectedIssueID(IssuesSectionAll), a.theme, a.issueColumns())
 	}
 	if a.searchPanel != nil {
 		// Rebuild the panel so the input picks up the new InputBg (tview
@@ -717,17 +705,7 @@ func (a *App) applySelectionStyleToTree(node *tview.TreeNode) {
 }
 
 func (a *App) selectedIssueID(section IssuesSection) string {
-	var table *tview.Table
-	switch section {
-	case IssuesSectionMy:
-		table = a.myIssuesTable
-	case IssuesSectionOther:
-		table = a.otherIssuesTable
-	case IssuesSectionAll:
-		table = a.allIssuesTable
-	case IssuesSectionSearch:
-		table = a.searchResultsTable
-	}
+	table := a.tableForSection(section)
 	if table == nil {
 		return ""
 	}
@@ -747,12 +725,10 @@ func (a *App) resetCachedState() {
 	a.issuesMu.Lock()
 	a.selectedIssue = nil
 	a.issues = nil
-	a.issueRows = nil
-	a.idToIssue = make(map[string]*linearapi.Issue)
+	a.allIssueRows = nil
+	a.allIDToIssue = make(map[string]*linearapi.Issue)
 	a.myIssueRows = nil
 	a.myIDToIssue = make(map[string]*linearapi.Issue)
-	a.otherIssueRows = nil
-	a.otherIDToIssue = make(map[string]*linearapi.Issue)
 	a.issuesMu.Unlock()
 
 	a.selectedNavigation = nil
@@ -774,8 +750,8 @@ func (a *App) resetCachedState() {
 	a.updateSearchBody()
 	a.cancelSearchDebounce()
 	a.searchInputFocused = false
-	a.searchReturnSection = IssuesSectionMy
-	a.activeIssuesSection = IssuesSectionOther
+	a.searchReturnSection = IssuesSectionAll
+	a.activeIssuesSection = IssuesSectionAll
 	a.expandedState = make(map[string]bool)
 
 	a.isLoading = false
@@ -1038,17 +1014,13 @@ func cycleNavigationRank(cycle linearapi.Cycle) int {
 func (a *App) buildLayout() {
 	// Build all panes
 	a.navigationTree = a.buildNavigationTree()
-	// Build My Issues and Other Issues tables
-	a.myIssuesTable = a.buildIssuesTable(" My Issues ", IssuesSectionMy)
-	a.otherIssuesTable = a.buildIssuesTable(" Other Issues ", IssuesSectionOther)
 	a.allIssuesTable = a.buildIssuesTable(" All Issues ", IssuesSectionAll)
+	a.myIssuesTable = a.buildIssuesTable(" My Issues ", IssuesSectionMy)
 	a.buildSearchPanel()
 	// Create vertical flex for issues column
 	a.issuesColumn = tview.NewFlex().SetDirection(tview.FlexRow)
-	// Initially show only Other Issues table (My Issues will be added when issues are loaded)
-	a.issuesColumn.AddItem(a.otherIssuesTable, 0, 1, false)
-	// Legacy table for backward compatibility (will be removed after migration)
-	a.issuesTable = a.otherIssuesTable
+	// All is the tab the app opens on; the others mount on a tab switch.
+	a.issuesColumn.AddItem(a.allIssuesTable, 0, 1, false)
 	a.detailsView = a.buildDetailsView()
 	a.statusBar = a.buildStatusBar()
 
@@ -1431,42 +1403,16 @@ func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// cyclePanesForward cycles focus forward through panes.
-// When in Issues pane, cycles: My Issues -> Other Issues -> Details
-// Otherwise cycles: Navigation -> Issues -> Details -> Navigation
+// cyclePanesForward cycles focus forward through panes:
+// Navigation -> Issues -> Details -> Navigation. The issues tab on screen is
+// the tab keys' business, so it stays put.
 func (a *App) cyclePanesForward() {
 	switch a.focusedPane {
 	case FocusNavigation:
 		a.focusedPane = FocusIssues
-		// Set to My Issues if available, otherwise Other Issues. The Search
-		// tab keeps its place: tabbing away and back must not clear it.
-		if a.activeIssuesSection != IssuesSectionSearch {
-			if len(a.myIssueRows) > 0 {
-				a.activeIssuesSection = IssuesSectionMy
-			} else {
-				a.activeIssuesSection = IssuesSectionOther
-			}
-		}
 	case FocusIssues:
-		switch {
-		case a.activeIssuesSection == IssuesSectionSearch:
-			// The Search tab is a single section; no My/Other shuffle.
-			a.focusedPane = FocusDetails
-			a.focusedDetailsView = false
-		case len(a.myIssueRows) > 0 && len(a.otherIssueRows) > 0:
-			if a.activeIssuesSection == IssuesSectionMy {
-				// Switch from My Issues to Other Issues
-				a.activeIssuesSection = IssuesSectionOther
-			} else {
-				// Switch from Other Issues to Details pane
-				a.focusedPane = FocusDetails
-				a.focusedDetailsView = false // Start with description
-			}
-		default:
-			// Only one section exists, move to Details
-			a.focusedPane = FocusDetails
-			a.focusedDetailsView = false // Start with description
-		}
+		a.focusedPane = FocusDetails
+		a.focusedDetailsView = false // Start with description
 	case FocusDetails:
 		a.focusedPane = FocusNavigation
 		// FocusPalette is excluded from cycling
@@ -1474,42 +1420,17 @@ func (a *App) cyclePanesForward() {
 	a.updateFocus()
 }
 
-// cyclePanesBackward cycles focus backward through panes.
-// When in Issues pane, cycles: Other Issues -> My Issues -> Navigation
-// Otherwise cycles: Details -> Issues (My Issues preferred) -> Navigation -> Details
+// cyclePanesBackward cycles focus backward through panes:
+// Details -> Issues -> Navigation -> Details.
 func (a *App) cyclePanesBackward() {
 	switch a.focusedPane {
 	case FocusNavigation:
 		a.focusedPane = FocusDetails
 		a.focusedDetailsView = false // Start with description
 	case FocusIssues:
-		switch {
-		case a.activeIssuesSection == IssuesSectionSearch:
-			// The Search tab is a single section; no My/Other shuffle.
-			a.focusedPane = FocusNavigation
-		case len(a.myIssueRows) > 0 && len(a.otherIssueRows) > 0:
-			if a.activeIssuesSection == IssuesSectionOther {
-				// Switch from Other Issues to My Issues
-				a.activeIssuesSection = IssuesSectionMy
-			} else {
-				// Switch from My Issues to Navigation pane
-				a.focusedPane = FocusNavigation
-			}
-		default:
-			// Only one section exists, move to Navigation
-			a.focusedPane = FocusNavigation
-		}
+		a.focusedPane = FocusNavigation
 	case FocusDetails:
 		a.focusedPane = FocusIssues
-		// Set to My Issues if available, otherwise Other Issues (consistent
-		// with forward cycle). The Search tab keeps its place.
-		if a.activeIssuesSection != IssuesSectionSearch {
-			if len(a.myIssueRows) > 0 {
-				a.activeIssuesSection = IssuesSectionMy
-			} else {
-				a.activeIssuesSection = IssuesSectionOther
-			}
-		}
 		// FocusPalette is excluded from cycling
 	}
 	a.updateFocus()
@@ -1531,7 +1452,6 @@ func (a *App) updateFocus() {
 		a.app.SetFocus(a.navigationTree)
 		a.navigationTree.SetBorderColor(a.theme.BorderFocus)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
@@ -1541,7 +1461,6 @@ func (a *App) updateFocus() {
 	case FocusIssues:
 		// Focus the visible issues section
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
 		if a.effectiveIssuesSection() == IssuesSectionSearch {
@@ -1577,7 +1496,6 @@ func (a *App) updateFocus() {
 		}
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
 		// Update all pane titles
@@ -1586,7 +1504,6 @@ func (a *App) updateFocus() {
 		a.app.SetFocus(a.paletteInput)
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
@@ -1613,8 +1530,6 @@ func (a *App) updateAllPaneTitles() {
 	issuesTitle := a.issuesTabsTitle(isIssuesFocused)
 	a.myIssuesTable.SetTitle(issuesTitle)
 	a.myIssuesTable.SetTitleColor(a.theme.Foreground)
-	a.otherIssuesTable.SetTitle(issuesTitle)
-	a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
 	a.allIssuesTable.SetTitle(issuesTitle)
 	a.allIssuesTable.SetTitleColor(a.theme.Foreground)
 	if a.searchPanel != nil {
@@ -1990,7 +1905,7 @@ func (a *App) updateIssuesColumnLayout() {
 	// last model change.
 	a.flushPendingSectionRender(a.effectiveIssuesSection())
 
-	// Without any My Issues, that tab disappears (without forgetting the
+	// Without any My Issues, that tab falls back to All (without forgetting the
 	// active choice: My re-applies once it has rows). The Search tab mounts
 	// its input-plus-results panel instead of a bare table.
 	if a.effectiveIssuesSection() == IssuesSectionSearch {
@@ -2049,25 +1964,20 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	// Select issue and update details.
 	var selectedIssue *linearapi.Issue
 	if targetIssueID != "" {
-		if issue, ok := a.myIDToIssue[targetIssueID]; ok {
+		if issue, ok := a.allIDToIssue[targetIssueID]; ok {
 			selectedIssue = issue
-		} else if issue, ok := a.otherIDToIssue[targetIssueID]; ok {
+		} else if issue, ok := a.myIDToIssue[targetIssueID]; ok {
 			selectedIssue = issue
 		}
 	}
 
-	// If no target issue, default to the first issue row (skipping group
+	// If no target issue, default to the first issue row of All (skipping group
 	// headers, which carry no issue). The Search tab keeps its own selection.
 	if selectedIssue == nil && a.activeIssuesSection != IssuesSectionSearch {
-		if first := nextIssueRow(a.myIssueRows, 0, 1); first > 0 {
-			if issue, ok := a.myIDToIssue[a.myIssueRows[first-1].IssueID]; ok {
+		if first := nextIssueRow(a.allIssueRows, 0, 1); first > 0 {
+			if issue, ok := a.allIDToIssue[a.allIssueRows[first-1].IssueID]; ok {
 				selectedIssue = issue
-				a.activeIssuesSection = IssuesSectionMy
-			}
-		} else if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
-			if issue, ok := a.otherIDToIssue[a.otherIssueRows[first-1].IssueID]; ok {
-				selectedIssue = issue
-				a.activeIssuesSection = IssuesSectionOther
+				a.activeIssuesSection = IssuesSectionAll
 			}
 		}
 	}
@@ -2223,13 +2133,7 @@ func (a *App) toggleGroupCollapse(section IssuesSection, header IssueRow) {
 	a.updateDetailsView()
 
 	// Re-select the toggled header so repeated presses toggle in place.
-	var table *tview.Table
-	switch section {
-	case IssuesSectionMy:
-		table = a.myIssuesTable
-	case IssuesSectionOther:
-		table = a.otherIssuesTable
-	}
+	table := a.tableForSection(section)
 	if table == nil {
 		return
 	}
@@ -2368,17 +2272,10 @@ func (a *App) onIssueSelected(issue linearapi.Issue) {
 
 // toggleIssueExpanded toggles the expand/collapse state of a parent issue.
 func (a *App) toggleIssueExpanded(issueID string) {
-	// Check both sections for the issue
-	var issue *linearapi.Issue
-	var ok bool
-	if issue, ok = a.myIDToIssue[issueID]; !ok {
-		if issue, ok = a.otherIDToIssue[issueID]; !ok {
-			logger.Debug("tui.app: issue not found for toggle issue_id=%s", issueID)
-			return
-		}
-	}
-
-	if issue == nil {
+	// All holds every fetched issue, whichever tab the press came from.
+	issue, ok := a.allIDToIssue[issueID]
+	if !ok || issue == nil {
+		logger.Debug("tui.app: issue not found for toggle issue_id=%s", issueID)
 		return
 	}
 
@@ -2392,42 +2289,8 @@ func (a *App) toggleIssueExpanded(issueID string) {
 
 	ToggleExpanded(a.expandedState, issueID)
 
-	// Rebuild rows for both sections
-	currentUserID := ""
-	if a.currentUser != nil {
-		currentUserID = a.currentUser.ID
-	}
-	a.issuesMu.RLock()
-	issues := a.issues
-	a.issuesMu.RUnlock()
-	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
-	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues)
-	a.otherIssueRows, a.otherIDToIssue = a.buildIssueRowsFor(otherIssues)
-
-	// The All Issues tab renders the full list.
-	a.issueRows, a.idToIssue = a.buildIssueRowsFor(issues)
-
-	// Render the tables, selecting the toggled issue
-	var selectedMyIssueID, selectedOtherIssueID string
-	selectedAllIssueID := issueID
-	sectionPinned := a.activeIssuesSection == IssuesSectionAll || a.activeIssuesSection == IssuesSectionSearch
-	if _, ok := a.myIDToIssue[issueID]; ok {
-		selectedMyIssueID = issueID
-		if !sectionPinned {
-			a.activeIssuesSection = IssuesSectionMy
-		}
-	} else if _, ok := a.otherIDToIssue[issueID]; ok {
-		selectedOtherIssueID = issueID
-		if !sectionPinned {
-			a.activeIssuesSection = IssuesSectionOther
-		}
-	}
-
-	a.renderIssueSections(map[IssuesSection]string{
-		IssuesSectionMy:    selectedMyIssueID,
-		IssuesSectionOther: selectedOtherIssueID,
-		IssuesSectionAll:   selectedAllIssueID,
-	})
+	a.rebuildIssueRowModels()
+	a.renderIssueSections(a.sectionSelectionsFor(issueID))
 	a.updateIssuesColumnLayout()
 }
 
