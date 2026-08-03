@@ -172,7 +172,7 @@ type App struct {
 	layoutMode             layoutMode
 	palettePreviousPane    FocusTarget
 	navigationTree         *tview.TreeView
-	navNodeOriginalText    map[*tview.TreeNode]string
+	navNodeLabels          map[*tview.TreeNode]navNodeLabel
 	favorites              []linearapi.Favorite
 	favoritesGroup         *tview.TreeNode
 	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
@@ -264,6 +264,7 @@ type App struct {
 	searchDebounceMu         sync.Mutex
 	searchDebounceGeneration atomic.Int64
 	searchFetchGeneration    atomic.Int64
+	searchFetchCancel        context.CancelFunc
 
 	// Cached metadata for currently selected team
 	currentUser    *linearapi.User
@@ -348,7 +349,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		sortFields:           parseSortFields(cfg.SortBy),
 		configuredSortFields: parseSortFields(cfg.SortBy),
 		expandedState:        make(map[string]bool),
-		navNodeOriginalText:  make(map[*tview.TreeNode]string),
+		navNodeLabels:        make(map[*tview.TreeNode]navNodeLabel),
 		idToIssue:            make(map[string]*linearapi.Issue),
 		myIDToIssue:          make(map[string]*linearapi.Issue),
 		otherIDToIssue:       make(map[string]*linearapi.Issue),
@@ -835,7 +836,7 @@ func (a *App) fetchNavigationData(ctx context.Context) ([]linearapi.Team, []line
 
 // rebuildNavigationTree rebuilds the navigation tree with real data.
 func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearapi.Favorite) {
-	a.navNodeOriginalText = make(map[*tview.TreeNode]string)
+	a.navNodeLabels = make(map[*tview.TreeNode]navNodeLabel)
 	a.favorites = favorites
 	rootLabel := "Linear"
 	if a.activeWorkspaceName != "" {
@@ -1669,6 +1670,11 @@ func (a *App) searchDebounceDelay() time.Duration {
 func (a *App) scheduleSearchDebounce(query string) {
 	delay := a.searchDebounceDelay()
 	generation := a.searchDebounceGeneration.Add(1)
+	// The query changed, so anything in flight is already stale. Drop it here
+	// rather than a debounce window later when the next fetch starts, or every
+	// typing burst holds a known-dead request against the API while the live
+	// query queues behind it.
+	a.cancelSearchFetch()
 
 	a.searchDebounceMu.Lock()
 	if a.searchDebounceTimer != nil {

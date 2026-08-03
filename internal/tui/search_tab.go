@@ -108,6 +108,10 @@ func (a *App) updateSearchBody() {
 func (a *App) performIssueSearch(query string) {
 	query = strings.TrimSpace(query)
 	generation := a.searchFetchGeneration.Add(1)
+	// The generation counter already discards a superseded result. Canceling
+	// stops the request too, so a fast typist is not leaving one query per
+	// debounce window running against the API.
+	a.cancelSearchFetch()
 	if query == "" {
 		a.clearSearchResults()
 		a.updateSearchBody()
@@ -128,8 +132,11 @@ func (a *App) performIssueSearch(query string) {
 		Search: query,
 		First:  a.config.PageSize,
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.searchFetchCancel = cancel
 	go func() {
-		page, err := fetchPage(context.Background(), params, nil)
+		defer cancel()
+		page, err := fetchPage(ctx, params, nil)
 		a.QueueUpdateDraw(func() {
 			if generation != a.searchFetchGeneration.Load() {
 				return
@@ -154,10 +161,20 @@ func (a *App) performIssueSearch(query string) {
 	}()
 }
 
+// cancelSearchFetch stops the in-flight search request, if any. UI thread only,
+// like the rest of the search path.
+func (a *App) cancelSearchFetch() {
+	if a.searchFetchCancel != nil {
+		a.searchFetchCancel()
+		a.searchFetchCancel = nil
+	}
+}
+
 // clearSearchResults drops all search results and invalidates in-flight
 // fetches.
 func (a *App) clearSearchResults() {
 	a.searchFetchGeneration.Add(1)
+	a.cancelSearchFetch()
 	a.searchIssues = nil
 	a.searchIssueRows = nil
 	a.searchIDToIssue = make(map[string]*linearapi.Issue)

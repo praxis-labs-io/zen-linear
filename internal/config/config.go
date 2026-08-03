@@ -26,7 +26,7 @@ const (
 	DefaultTimeout        = 30 * time.Second
 	DefaultPageSize       = 50
 	DefaultCacheTTL       = 5 * time.Minute
-	DefaultSearchDebounce = 300 * time.Millisecond
+	DefaultSearchDebounce = 200 * time.Millisecond
 	DefaultAPIEndpoint    = "https://api.linear.app/graphql"
 	DefaultLogLevel       = "warning" // debug, info, warning, error
 	ThemeLinear           = "linear"
