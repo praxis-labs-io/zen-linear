@@ -50,14 +50,16 @@ func stripColorTags(s string) string {
 	}
 }
 
-func TestIssuesTabsTitle_AllLeadsAndMyHidesWhenEmpty(t *testing.T) {
+func TestIssuesTabsTitle_AllLeadsAndMyStaysAtZero(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta", AssigneeID: "user-1", Assignee: "Me"},
 	})
 
+	// The three tabs are fixed. An empty My reads (0) rather than vanishing and
+	// shifting the tabs beside it.
 	got := tabLabels(t, app)
-	want := []string{"All (2)", "Search"}
+	want := []string{"All (2)", "My (0)", "Search"}
 	if !equalLabels(got, want) {
 		t.Fatalf("tab strip without a current user = %v, want %v", got, want)
 	}

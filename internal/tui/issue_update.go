@@ -200,7 +200,7 @@ func (a *App) applyIssueRemoval(issueID string) {
 	if issueID == "" {
 		return
 	}
-	successor := a.issueRowAfter(a.effectiveIssuesSection(), issueID)
+	successor := a.issueRowAfter(a.activeIssuesSection, issueID)
 
 	a.issuesMu.Lock()
 	// Read the selection before the splice: selectedIssue can alias the
@@ -304,7 +304,7 @@ func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 		IssuesSectionAll: a.allIssueRows,
 		IssuesSectionMy:  a.myIssueRows,
 	}
-	previousEffective := a.effectiveIssuesSection()
+	previousEffective := a.activeIssuesSection
 
 	a.rebuildIssueRowModels()
 	selections := a.sectionSelectionsFor(targetIssueID)
@@ -327,7 +327,7 @@ func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 	// Remount on the effective section, not the active one: emptying the My
 	// tab redirects the display to Other without touching activeIssuesSection,
 	// and the stale table would stay mounted.
-	if a.effectiveIssuesSection() != previousEffective {
+	if a.activeIssuesSection != previousEffective {
 		a.updateIssuesColumnLayout()
 	} else {
 		a.updateAllPaneTitles()

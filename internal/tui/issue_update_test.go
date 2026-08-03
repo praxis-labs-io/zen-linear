@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -387,7 +388,7 @@ func TestApplyIssueRemoval_SelectedRowLandsOnSuccessor(t *testing.T) {
 	}
 }
 
-func TestApplyIssueRemoval_RemountsWhenTheLastMyIssueGoes(t *testing.T) {
+func TestApplyIssueRemoval_KeepsMyMountedWhenItsLastIssueGoes(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Mine", AssigneeID: "user-1", Assignee: "Me"},
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Theirs"},
@@ -402,11 +403,16 @@ func TestApplyIssueRemoval_RemountsWhenTheLastMyIssueGoes(t *testing.T) {
 
 	app.applyIssueRemoval("issue-1")
 
-	// Emptying My redirects the display to Other without touching
-	// activeIssuesSection; the column must remount or the archived issue
-	// stays painted.
-	if app.issuesColumn.GetItemCount() != 1 || app.issuesColumn.GetItem(0) != app.allIssuesTable {
-		t.Fatal("the emptied My table stayed mounted after its last issue was archived")
+	// My is a fixed tab, so emptying it leaves it on screen showing nothing
+	// rather than bouncing the user to All.
+	if app.issuesColumn.GetItemCount() != 1 || app.issuesColumn.GetItem(0) != app.myIssuesTable {
+		t.Fatal("emptying My moved the user off the tab they were on")
+	}
+	if app.activeIssuesSection != IssuesSectionMy {
+		t.Fatalf("active section = %v, want My to stay active while empty", app.activeIssuesSection)
+	}
+	if got := app.myIssuesTable.GetCell(1, titleColumn).Text; !strings.Contains(got, "No issues") {
+		t.Fatalf("emptied My table renders %q, want its empty placeholder", got)
 	}
 	app.issuesMu.RLock()
 	defer app.issuesMu.RUnlock()
@@ -556,7 +562,7 @@ func TestExpandAllKeepsGroupingAndCoversAllTab(t *testing.T) {
 	if !hasHeader(app.allIssueRows) {
 		t.Fatal("expand_all dropped grouping from the All rows")
 	}
-	if _, pending := app.pendingSectionRenders[IssuesSectionAll]; !pending && app.effectiveIssuesSection() != IssuesSectionAll {
+	if _, pending := app.pendingSectionRenders[IssuesSectionAll]; !pending && app.activeIssuesSection != IssuesSectionAll {
 		t.Fatal("expand_all left the All tab neither painted nor deferred")
 	}
 }

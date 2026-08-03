@@ -399,7 +399,7 @@ func (a *App) renderIssueSections(selected map[IssuesSection]string) {
 	if a.pendingSectionRenders == nil {
 		a.pendingSectionRenders = make(map[IssuesSection]string, len(selected))
 	}
-	active := a.effectiveIssuesSection()
+	active := a.activeIssuesSection
 	for section, issueID := range selected {
 		if section == active {
 			delete(a.pendingSectionRenders, section)

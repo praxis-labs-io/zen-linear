@@ -11,16 +11,6 @@ import (
 // pane and the border title lists every tab, highlighting the active one.
 // The { and } keys cycle tabs within the focused pane.
 
-// effectiveIssuesSection returns the section to display: the active one, or
-// All while the My tab has no rows. The active section itself is left
-// untouched so My re-applies once data arrives.
-func (a *App) effectiveIssuesSection() IssuesSection {
-	if a.activeIssuesSection == IssuesSectionMy && len(a.myIssueRows) == 0 {
-		return IssuesSectionAll
-	}
-	return a.activeIssuesSection
-}
-
 // tableForSection returns the table widget backing a section.
 func (a *App) tableForSection(section IssuesSection) *tview.Table {
 	switch section {
@@ -49,12 +39,15 @@ func (a *App) jumpToSection(section IssuesSection, row int) {
 	a.activeIssuesSection = section
 	a.updateIssuesColumnLayout()
 	table := a.tableForSection(a.activeIssuesSection)
-	if table == nil || row < 1 {
+	rows := a.rowsForSection(a.activeIssuesSection)
+	if table == nil || row < 1 || len(rows) == 0 {
+		// An empty tab is still a tab: mount it, focus it, select nothing.
+		a.updateFocus()
 		return
 	}
 	// Reset any stale scroll offset when landing at the top of a tab, so
 	// leading group headers stay visible.
-	selectIssueRow(table, a.rowsForSection(a.activeIssuesSection), row)
+	selectIssueRow(table, rows, row)
 	if issue := a.getIssueFromRowForSection(row, a.activeIssuesSection); issue != nil {
 		a.onIssueSelected(*issue)
 	}
@@ -64,7 +57,7 @@ func (a *App) jumpToSection(section IssuesSection, row int) {
 // jumpToParent selects an issue's parent in the tab on screen, falling back to
 // All, which holds every fetched issue. Reports whether the parent was found.
 func (a *App) jumpToParent(parentID string) bool {
-	section := a.effectiveIssuesSection()
+	section := a.activeIssuesSection
 	row := 0
 	// Search results are a flat list, so a parent there is not a tree move.
 	if section != IssuesSectionSearch {
@@ -82,36 +75,27 @@ func (a *App) jumpToParent(parentID string) bool {
 }
 
 // cycleIssuesSection cycles the All, My, and Search tabs in the given
-// direction (+1 forward, -1 backward), skipping empty tabs and keeping each
-// tab's own selection.
+// direction (+1 forward, -1 backward), keeping each tab's own selection. The
+// three tabs are fixed, so an empty one is reachable and shows itself empty
+// rather than being skipped over.
 func (a *App) cycleIssuesSection(direction int) {
 	order := []IssuesSection{IssuesSectionAll, IssuesSectionMy, IssuesSectionSearch}
 	current := 0
 	for i, section := range order {
-		if section == a.effectiveIssuesSection() {
+		if section == a.activeIssuesSection {
 			current = i
 			break
 		}
 	}
-	for step := 1; step < len(order); step++ {
-		target := order[((current+step*direction)%len(order)+len(order))%len(order)]
-		rows := a.rowsForSection(target)
-		// The Search tab stays reachable while empty: its body is the input
-		// plus a placeholder, not rows.
-		if len(rows) == 0 && target != IssuesSectionSearch {
-			continue
+	target := order[((current+direction)%len(order)+len(order))%len(order)]
+	rows := a.rowsForSection(target)
+	row := 1
+	if table := a.tableForSection(target); table != nil {
+		if selected, _ := table.GetSelection(); selected >= 1 && selected <= len(rows) {
+			row = selected
 		}
-		table := a.tableForSection(target)
-		if table == nil {
-			continue
-		}
-		row, _ := table.GetSelection()
-		if row < 1 || row > len(rows) {
-			row = 1
-		}
-		a.jumpToSection(target, row)
-		return
 	}
+	a.jumpToSection(target, row)
 }
 
 // issuesTabsTitle renders the tab strip for the issues pane border.
@@ -120,13 +104,11 @@ func (a *App) issuesTabsTitle(focused bool) string {
 	if focused {
 		prefix = " ▶ "
 	}
-	shown := a.effectiveIssuesSection()
+	shown := a.activeIssuesSection
 	segments := []string{
 		a.tabSegment(fmt.Sprintf("All (%d)", tabRowCount(a.allIssueRows)), shown == IssuesSectionAll, focused),
 	}
-	if len(a.myIssueRows) > 0 {
-		segments = append(segments, a.tabSegment(fmt.Sprintf("My (%d)", tabRowCount(a.myIssueRows)), shown == IssuesSectionMy, focused))
-	}
+	segments = append(segments, a.tabSegment(fmt.Sprintf("My (%d)", tabRowCount(a.myIssueRows)), shown == IssuesSectionMy, focused))
 	searchLabel := "Search"
 	if len(a.searchIssueRows) > 0 {
 		searchLabel = fmt.Sprintf("Search (%d)", tabRowCount(a.searchIssueRows))

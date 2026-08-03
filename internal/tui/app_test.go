@@ -608,6 +608,10 @@ func TestCycleIssuesSectionReachesEmptySearchTab(t *testing.T) {
 	app.activeIssuesSection = IssuesSectionAll
 
 	app.cycleIssuesSection(1)
+	if app.activeIssuesSection != IssuesSectionMy {
+		t.Fatalf("activeIssuesSection = %v, want IssuesSectionMy (an empty tab is still a tab)", app.activeIssuesSection)
+	}
+	app.cycleIssuesSection(1)
 	if app.activeIssuesSection != IssuesSectionSearch {
 		t.Fatalf("activeIssuesSection = %v, want IssuesSectionSearch (empty Search tab must stay reachable)", app.activeIssuesSection)
 	}

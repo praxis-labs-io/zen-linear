@@ -1075,159 +1075,126 @@ func (a *App) buildLayout() {
 
 // bindGlobalKeys sets up global keyboard shortcuts.
 func (a *App) bindGlobalKeys() {
-	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if a.pages.HasPage("confirmation") && a.confirmationModal != nil {
-			return a.confirmationModal.HandleKey(event)
-		}
+	a.app.SetInputCapture(a.handleGlobalKey)
+}
 
-		// Handle picker modal if active
-		if a.pickerActive {
-			return a.pickerModal.HandleKey(event)
-		}
+// handleGlobalKey is the app's single input capture: modals first, then the
+// palette and search input, then global keys, then the focused pane.
+func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
+	if a.pages.HasPage("confirmation") && a.confirmationModal != nil {
+		return a.confirmationModal.HandleKey(event)
+	}
 
-		// Check if create issue modal is visible and handle its keys
-		if a.pages.HasPage("create_issue") && a.createIssueModal != nil {
-			return a.createIssueModal.HandleKey(event)
-		}
+	// Handle picker modal if active
+	if a.pickerActive {
+		return a.pickerModal.HandleKey(event)
+	}
 
-		// Check if create comment modal is visible and handle its keys
-		if a.pages.HasPage("create_comment") && a.createCommentModal != nil {
-			return a.createCommentModal.HandleKey(event)
-		}
+	// Check if create issue modal is visible and handle its keys
+	if a.pages.HasPage("create_issue") && a.createIssueModal != nil {
+		return a.createIssueModal.HandleKey(event)
+	}
 
-		// Check if edit title modal is visible and handle its keys
-		if a.pages.HasPage("edit_title") && a.editTitleModal != nil {
-			return a.editTitleModal.HandleKey(event)
-		}
+	// Check if create comment modal is visible and handle its keys
+	if a.pages.HasPage("create_comment") && a.createCommentModal != nil {
+		return a.createCommentModal.HandleKey(event)
+	}
 
-		// Check if edit description modal is visible and handle its keys
-		if a.pages.HasPage("edit_description") && a.editDescriptionModal != nil {
-			return a.editDescriptionModal.HandleKey(event)
-		}
+	// Check if edit title modal is visible and handle its keys
+	if a.pages.HasPage("edit_title") && a.editTitleModal != nil {
+		return a.editTitleModal.HandleKey(event)
+	}
 
-		// Check if edit labels modal is visible and handle its keys
-		if a.pages.HasPage("edit_labels") && a.editLabelsModal != nil {
-			return a.editLabelsModal.HandleKey(event)
-		}
+	// Check if edit description modal is visible and handle its keys
+	if a.pages.HasPage("edit_description") && a.editDescriptionModal != nil {
+		return a.editDescriptionModal.HandleKey(event)
+	}
 
-		if a.pages.HasPage("text_input") && a.textInputModal != nil {
-			return a.textInputModal.HandleKey(event)
-		}
+	// Check if edit labels modal is visible and handle its keys
+	if a.pages.HasPage("edit_labels") && a.editLabelsModal != nil {
+		return a.editLabelsModal.HandleKey(event)
+	}
 
-		if a.pages.HasPage("multi_select") && a.multiSelectModal != nil {
-			return a.multiSelectModal.HandleKey(event)
-		}
+	if a.pages.HasPage("text_input") && a.textInputModal != nil {
+		return a.textInputModal.HandleKey(event)
+	}
 
-		// Check if settings modal is visible and handle its keys
-		if a.pages.HasPage("settings") && a.settingsModal != nil {
-			return a.settingsModal.HandleKey(event)
-		}
+	if a.pages.HasPage("multi_select") && a.multiSelectModal != nil {
+		return a.multiSelectModal.HandleKey(event)
+	}
 
-		// Check if prompt templates modal is visible and handle its keys
-		if a.pages.HasPage("prompt_templates") && a.promptTemplatesModal != nil {
-			return a.promptTemplatesModal.HandleKey(event)
-		}
+	// Check if settings modal is visible and handle its keys
+	if a.pages.HasPage("settings") && a.settingsModal != nil {
+		return a.settingsModal.HandleKey(event)
+	}
 
-		// Check if agent prompt modal is visible and handle its keys
-		if a.pages.HasPage("agent_prompt") && a.agentPromptModal != nil {
-			return a.agentPromptModal.HandleKey(event)
-		}
+	// Check if prompt templates modal is visible and handle its keys
+	if a.pages.HasPage("prompt_templates") && a.promptTemplatesModal != nil {
+		return a.promptTemplatesModal.HandleKey(event)
+	}
 
-		// Check if agent output modal is visible and handle its keys
-		if a.pages.HasPage("agent_output") && a.agentOutputModal != nil {
-			return a.agentOutputModal.HandleKey(event)
-		}
+	// Check if agent prompt modal is visible and handle its keys
+	if a.pages.HasPage("agent_prompt") && a.agentPromptModal != nil {
+		return a.agentPromptModal.HandleKey(event)
+	}
 
-		// Handle palette first if it's open
-		if a.focusedPane == FocusPalette {
-			return a.handlePaletteKey(event)
-		}
+	// Check if agent output modal is visible and handle its keys
+	if a.pages.HasPage("agent_output") && a.agentOutputModal != nil {
+		return a.agentOutputModal.HandleKey(event)
+	}
 
-		// The search input owns keys next, so typed letters reach the field
-		// instead of firing global or pane shortcuts.
-		if a.searchInputActive() {
-			return a.handleSearchInputKey(event)
-		}
+	// Handle palette first if it's open
+	if a.focusedPane == FocusPalette {
+		return a.handlePaletteKey(event)
+	}
 
-		// Global shortcuts (only when not in palette)
-		switch event.Key() {
-		case tcell.KeyCtrlC:
+	// The search input owns keys next, so typed letters reach the field
+	// instead of firing global or pane shortcuts.
+	if a.searchInputActive() {
+		return a.handleSearchInputKey(event)
+	}
+
+	// Global shortcuts (only when not in palette)
+	switch event.Key() {
+	case tcell.KeyCtrlC:
+		a.app.Stop()
+		return nil
+	case tcell.KeyTab, tcell.KeyBacktab:
+		// Tab moves between panes and nothing else. The Details/Comments
+		// tabs inside the details pane belong to that pane's tab keys.
+		if a.focusedPane != FocusPalette {
+			if event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0 {
+				a.cyclePanesBackward()
+			} else {
+				a.cyclePanesForward()
+			}
+		}
+		return nil
+	case tcell.KeyRune:
+		switch event.Rune() {
+		case a.actionKey("quit", 'q'):
 			a.app.Stop()
 			return nil
-		case tcell.KeyTab, tcell.KeyBacktab:
-			// Tab cycles forward through panes (Navigation -> Issues -> Details)
-			// When in Details pane, first cycle between description and comments
-			// Only cycle when not in palette or modals
-			isBackward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
-			if a.focusedPane != FocusPalette {
-				if a.focusedPane == FocusDetails {
-					if !a.detailsCommentsVisible {
-						if isBackward {
-							a.cyclePanesBackward()
-						} else {
-							a.cyclePanesForward()
-						}
-						return nil
-					}
-					// Cycle between description and comments within details pane
-					if !isBackward {
-						// Tab: description -> comments -> next pane
-						if a.focusedDetailsView {
-							// Currently on comments, move to next pane
-							a.focusedDetailsView = false // Reset for next time
-							a.cyclePanesForward()
-						} else {
-							// Currently on description, move to comments
-							a.focusedDetailsView = true
-							a.updateFocus()
-						}
-					} else {
-						// Shift+Tab: comments -> description -> previous pane
-						if a.focusedDetailsView {
-							// Currently on comments, move to description
-							a.focusedDetailsView = false
-							a.updateFocus()
-						} else {
-							// Currently on description, move to previous pane
-							a.cyclePanesBackward()
-						}
-					}
-				} else {
-					if isBackward {
-						// Shift+Tab cycles backward
-						a.cyclePanesBackward()
-					} else {
-						a.cyclePanesForward()
-					}
-				}
-			}
+		case a.actionKey("open_palette", ':'):
+			a.openPalette()
 			return nil
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case a.actionKey("quit", 'q'):
-				a.app.Stop()
-				return nil
-			case a.actionKey("open_palette", ':'):
-				a.openPalette()
-				return nil
-			case a.actionKey("search", '/'):
-				a.openSearchTab()
-				return nil
-			}
+		case a.actionKey("search", '/'):
+			a.openSearchTab()
+			return nil
 		}
+	}
 
-		// Pane-specific shortcuts
-		switch a.focusedPane {
-		case FocusNavigation:
-			return a.handleNavigationKey(event)
-		case FocusIssues:
-			return a.handleIssuesKey(event)
-		case FocusDetails:
-			return a.handleDetailsKey(event)
-		}
+	// Pane-specific shortcuts
+	switch a.focusedPane {
+	case FocusNavigation:
+		return a.handleNavigationKey(event)
+	case FocusIssues:
+		return a.handleIssuesKey(event)
+	case FocusDetails:
+		return a.handleDetailsKey(event)
+	}
 
-		return event
-	})
+	return event
 }
 
 // runCommandShortcut fires the palette command bound to the rune, if any.
@@ -1287,7 +1254,7 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEscape:
 		// Esc in the search results returns to the search input.
-		if a.effectiveIssuesSection() == IssuesSectionSearch {
+		if a.activeIssuesSection == IssuesSectionSearch {
 			a.focusSearchInput()
 			return nil
 		}
@@ -1347,7 +1314,7 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 		a.updateFocus()
 		return nil
 	case tcell.KeyRune:
-		switch event.Rune() {
+		switch r := event.Rune(); r {
 		case 'h':
 			a.focusedPane = FocusIssues
 			a.updateFocus()
@@ -1359,6 +1326,13 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 				a.updateFocus()
 			}
 			return nil
+		case 'j', 'k', 'g', 'G':
+			// Scrolling keys stay with the text view.
+		default:
+			// Command shortcuts work from the details pane too.
+			if a.runCommandShortcut(r) {
+				return nil
+			}
 		}
 	}
 	return event
@@ -1403,38 +1377,42 @@ func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// cyclePanesForward cycles focus forward through panes:
-// Navigation -> Issues -> Details -> Navigation. The issues tab on screen is
-// the tab keys' business, so it stays put.
-func (a *App) cyclePanesForward() {
-	switch a.focusedPane {
-	case FocusNavigation:
-		a.focusedPane = FocusIssues
-	case FocusIssues:
-		a.focusedPane = FocusDetails
-		a.focusedDetailsView = false // Start with description
-	case FocusDetails:
-		a.focusedPane = FocusNavigation
-		// FocusPalette is excluded from cycling
+// visiblePanes lists the panes Tab can reach, in screen order. A hidden pane
+// is not one of them: cycling onto it would land focus somewhere updateFocus
+// has to bounce back, which reads as Tab getting stuck.
+func (a *App) visiblePanes() []FocusTarget {
+	panes := make([]FocusTarget, 0, 3)
+	if !a.navigationHidden {
+		panes = append(panes, FocusNavigation)
 	}
+	panes = append(panes, FocusIssues)
+	if !a.detailsHidden {
+		panes = append(panes, FocusDetails)
+	}
+	return panes
+}
+
+// cyclePanes moves focus one pane in the given direction (+1 forward, -1
+// backward), wrapping. The issues tab and the details tab on screen are their
+// own panes' business, so both stay put.
+func (a *App) cyclePanes(direction int) {
+	panes := a.visiblePanes()
+	current := 0
+	for i, pane := range panes {
+		if pane == a.focusedPane {
+			current = i
+			break
+		}
+	}
+	a.focusedPane = panes[((current+direction)%len(panes)+len(panes))%len(panes)]
 	a.updateFocus()
 }
 
-// cyclePanesBackward cycles focus backward through panes:
-// Details -> Issues -> Navigation -> Details.
-func (a *App) cyclePanesBackward() {
-	switch a.focusedPane {
-	case FocusNavigation:
-		a.focusedPane = FocusDetails
-		a.focusedDetailsView = false // Start with description
-	case FocusIssues:
-		a.focusedPane = FocusNavigation
-	case FocusDetails:
-		a.focusedPane = FocusIssues
-		// FocusPalette is excluded from cycling
-	}
-	a.updateFocus()
-}
+// cyclePanesForward cycles focus forward: Navigation, Issues, Details, wrap.
+func (a *App) cyclePanesForward() { a.cyclePanes(1) }
+
+// cyclePanesBackward cycles focus backward: Details, Issues, Navigation, wrap.
+func (a *App) cyclePanesBackward() { a.cyclePanes(-1) }
 
 // updateFocus updates the focus state of all panes.
 func (a *App) updateFocus() {
@@ -1463,14 +1441,14 @@ func (a *App) updateFocus() {
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
-		if a.effectiveIssuesSection() == IssuesSectionSearch {
+		if a.activeIssuesSection == IssuesSectionSearch {
 			a.searchPanel.SetBorderColor(a.theme.BorderFocus)
 			if a.searchInputFocused {
 				a.app.SetFocus(a.searchInput)
 			} else {
 				a.app.SetFocus(a.searchResultsTable)
 			}
-		} else if table := a.tableForSection(a.effectiveIssuesSection()); table != nil {
+		} else if table := a.tableForSection(a.activeIssuesSection); table != nil {
 			a.app.SetFocus(table)
 			table.SetBorderColor(a.theme.BorderFocus)
 		}
@@ -1903,15 +1881,15 @@ func (a *App) updateIssuesColumnLayout() {
 
 	// A tab about to come on screen may still be holding cells from before the
 	// last model change.
-	a.flushPendingSectionRender(a.effectiveIssuesSection())
+	a.flushPendingSectionRender(a.activeIssuesSection)
 
 	// Without any My Issues, that tab falls back to All (without forgetting the
 	// active choice: My re-applies once it has rows). The Search tab mounts
 	// its input-plus-results panel instead of a bare table.
-	if a.effectiveIssuesSection() == IssuesSectionSearch {
+	if a.activeIssuesSection == IssuesSectionSearch {
 		a.issuesColumn.AddItem(a.searchPanel, 0, 1, false)
 	} else {
-		a.issuesColumn.AddItem(a.tableForSection(a.effectiveIssuesSection()), 0, 1, false)
+		a.issuesColumn.AddItem(a.tableForSection(a.activeIssuesSection), 0, 1, false)
 	}
 
 	// Update all pane titles to reflect current state
