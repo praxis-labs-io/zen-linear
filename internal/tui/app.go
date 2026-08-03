@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"sort"
@@ -17,6 +18,12 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 	"github.com/zen-linear/zen-linear/internal/logger"
 )
+
+// issuesRepaintInterval bounds how long fetched-but-unpainted issues stay
+// unreachable during pagination. Short enough that the list keeps filling in,
+// long enough that a fast multi-page load still paints a handful of times
+// rather than once per page.
+const issuesRepaintInterval = 250 * time.Millisecond
 
 // SortField represents a field to sort issues by.
 type SortField string
@@ -399,20 +406,46 @@ func (a *App) Run() error {
 // loadInitialData fetches user, navigation, and issues in a background goroutine.
 func (a *App) loadInitialData() {
 	go func() {
+		started := time.Now()
 		ctx := context.Background()
 
-		// Fetch current user first
-		user, err := a.cache.GetCurrentUser(ctx)
-		if err == nil {
+		// The nav tree needs teams and favorites; only the My/Other split needs
+		// the current user. Overlapping the user fetch with the tree fetch takes
+		// a full round trip off first paint. The issue refresh still waits on
+		// the user, or it would split the first page wrong.
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			user, err := a.cache.GetCurrentUser(ctx)
+			if err != nil {
+				logger.Warning("tui.app: failed to load current user error=%v", err)
+				return
+			}
 			a.currentUser = &user
 			logger.Debug("tui.app: current user loaded user=%s", user.DisplayName)
-		} else {
-			logger.Warning("tui.app: failed to load current user error=%v", err)
+		}()
+
+		teams, favorites, err := a.fetchNavigationData(ctx)
+		wg.Wait()
+		logger.Debug("tui.app: startup fetches completed elapsed=%s", time.Since(started))
+		if err != nil {
+			logger.ErrorWithErr(err, "tui.app: failed to load teams")
+			a.app.QueueUpdateDraw(func() {
+				a.updateStatusBarWithError(err)
+			})
+			// No tree, but All Issues does not need one.
+			a.refreshIssuesWithFocusChange(false)
+			return
 		}
 
-		// Fetch teams and build navigation. Default navigation triggers its own
-		// refresh after applying the configured selection.
-		if !a.loadNavigationData(ctx) {
+		a.app.QueueUpdateDraw(func() {
+			a.rebuildNavigationTree(teams, favorites)
+		})
+
+		// Default navigation triggers its own refresh after applying the
+		// configured selection.
+		if !a.applyDefaultNavigation(ctx, teams) {
 			// Startup refresh must not steal focus from the navigation pane.
 			a.refreshIssuesWithFocusChange(false)
 		}
@@ -769,10 +802,9 @@ func parseLogLevel(level string) logger.LogLevel {
 	}
 }
 
-// loadNavigationData fetches teams and projects from the API and updates the
-// navigation tree. It reports whether default navigation started the initial
-// issue refresh.
-func (a *App) loadNavigationData(ctx context.Context) bool {
+// fetchNavigationData fetches the teams and favorites the navigation tree is
+// built from. A favorites failure is not fatal: the tree renders without them.
+func (a *App) fetchNavigationData(ctx context.Context) ([]linearapi.Team, []linearapi.Favorite, error) {
 	var teams []linearapi.Team
 	var favorites []linearapi.Favorite
 	var teamsErr error
@@ -786,7 +818,6 @@ func (a *App) loadNavigationData(ctx context.Context) bool {
 		defer wg.Done()
 		fetched, err := a.api.ListFavorites(ctx)
 		if err != nil {
-			// Favorites only enhance the tree; render it without them on failure.
 			logger.ErrorWithErr(err, "tui.app: failed to load favorites")
 			return
 		}
@@ -795,18 +826,11 @@ func (a *App) loadNavigationData(ctx context.Context) bool {
 	wg.Wait()
 
 	if teamsErr != nil {
-		logger.ErrorWithErr(teamsErr, "tui.app: failed to load teams")
-		a.app.QueueUpdateDraw(func() {
-			a.updateStatusBarWithError(teamsErr)
-		})
-		return false
+		return nil, nil, teamsErr
 	}
 
 	logger.Debug("tui.app: loaded teams count=%d favorites_count=%d", len(teams), len(favorites))
-	a.app.QueueUpdateDraw(func() {
-		a.rebuildNavigationTree(teams, favorites)
-	})
-	return a.applyDefaultNavigation(ctx, teams)
+	return teams, favorites, nil
 }
 
 // rebuildNavigationTree rebuilds the navigation tree with real data.
@@ -866,43 +890,22 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 	go func() {
 		logger.Debug("tui.app: loading navigation children team_id=%s", teamID)
 		ctx := context.Background()
-		var projects []linearapi.Project
-		var states []linearapi.WorkflowState
-		var cycles []linearapi.Cycle
-		var projectsErr, statesErr, cyclesErr error
-		var wg sync.WaitGroup
-		wg.Add(3)
-		go func() {
-			defer wg.Done()
-			projects, projectsErr = a.cache.GetProjects(ctx, teamID)
-		}()
-		go func() {
-			defer wg.Done()
-			states, statesErr = a.cache.GetWorkflowStates(ctx, teamID)
-		}()
-		go func() {
-			defer wg.Done()
-			cycles, cyclesErr = a.cache.GetCycles(ctx, teamID)
-		}()
-		wg.Wait()
-		if projectsErr != nil {
-			logger.ErrorWithErr(projectsErr, "tui.app: failed to load projects team_id=%s", teamID)
-			a.app.QueueUpdateDraw(func() {
-				a.updateStatusBarWithError(projectsErr)
-			})
-			return
+
+		// Warm all five team caches rather than the three this needs.
+		// Selecting a team preloads the same set, and duplicating a subset here
+		// meant every first click issued each request twice. A preload error is
+		// not fatal: it reports the first of five failures, and users and labels
+		// are for the pickers, not the tree.
+		if err := a.cache.PreloadTeamMetadata(ctx, teamID); err != nil {
+			logger.ErrorWithErr(err, "tui.app: team metadata preload incomplete team_id=%s", teamID)
 		}
-		if statesErr != nil {
-			logger.ErrorWithErr(statesErr, "tui.app: failed to load workflow states team_id=%s", teamID)
+		projects, projectsErr := a.cache.GetProjects(ctx, teamID)
+		states, statesErr := a.cache.GetWorkflowStates(ctx, teamID)
+		cycles, cyclesErr := a.cache.GetCycles(ctx, teamID)
+		if err := cmp.Or(projectsErr, statesErr, cyclesErr); err != nil {
+			logger.ErrorWithErr(err, "tui.app: failed to load navigation children team_id=%s", teamID)
 			a.app.QueueUpdateDraw(func() {
-				a.updateStatusBarWithError(statesErr)
-			})
-			return
-		}
-		if cyclesErr != nil {
-			logger.ErrorWithErr(cyclesErr, "tui.app: failed to load cycles team_id=%s", teamID)
-			a.app.QueueUpdateDraw(func() {
-				a.updateStatusBarWithError(cyclesErr)
+				a.updateStatusBarWithError(err)
 			})
 			return
 		}
@@ -1803,6 +1806,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 	orderBy := string(a.sortFields[0])
 	params := a.currentFetchParams(orderBy)
 	go func() {
+		refreshStarted := time.Now()
 		ctx := context.Background()
 
 		fetchPage := a.fetchIssuesPage
@@ -1856,12 +1860,17 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 
 		pageCount++
 		fetchedCount += len(page.Issues)
+		merge := &pageMerge{seen: make(map[string]bool, len(page.Issues))}
+		lastPaint := time.Now()
 		a.QueueUpdateDraw(func() {
 			logger.Debug("tui.app: fetched issues page=%d count=%d", pageCount, len(page.Issues))
 			// Install (or clear) the active view's display settings with
 			// the list they belong to.
 			a.viewPrefs = prefs
 			a.updateIssuesData(page.Issues, targetIssueID)
+			a.issuesMu.RLock()
+			merge.reset(a.issues)
+			a.issuesMu.RUnlock()
 			if allowFocus {
 				// Ensure focus is on issues table after initial load
 				a.focusedPane = FocusIssues
@@ -1873,6 +1882,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		})
 
 		after := page.EndCursor
+		unpainted := false
 		for page.HasNext {
 			if generation != a.refreshGeneration.Load() {
 				break
@@ -1894,7 +1904,24 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			pageCount++
 			fetchedCount += len(page.Issues)
 			a.QueueUpdateDraw(func() {
-				a.appendIssuesData(page.Issues)
+				// A superseded refresh must not merge into the list the
+				// surviving one paints. The check above ran on the fetching
+				// goroutine; the generation can change before this closure does.
+				if generation != a.refreshGeneration.Load() {
+					return
+				}
+				if a.accumulateIssues(page.Issues, merge) {
+					unpainted = true
+				}
+				// Repaint on a budget rather than per page. Per page costs
+				// roughly fifty times a single rebuild for the same end state;
+				// never until the last page leaves fetched issues unreachable
+				// for the whole of a slow load.
+				if unpainted && time.Since(lastPaint) >= issuesRepaintInterval {
+					a.renderAccumulatedIssues()
+					unpainted = false
+					lastPaint = time.Now()
+				}
 				if page.HasNext {
 					a.statusBar.SetText(fmt.Sprintf("%sLoading more (page %d, fetched %d)...[-]", a.themeTags.Warning, pageCount, fetchedCount))
 				}
@@ -1902,8 +1929,13 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		}
 
 		a.QueueUpdateDraw(func() {
+			// A superseded refresh must not paint its partial list. The queued
+			// refresh that replaced it runs next and owns the table.
+			if unpainted && generation == a.refreshGeneration.Load() {
+				a.renderAccumulatedIssues()
+			}
 			a.isLoading = false
-			logger.Debug("tui.app: refresh completed pages=%d total_fetched=%d", pageCount, fetchedCount)
+			logger.Debug("tui.app: refresh completed pages=%d total_fetched=%d elapsed=%s", pageCount, fetchedCount, time.Since(refreshStarted))
 			a.updateStatusBar()
 			a.notifyRefreshCompleted()
 			a.runQueuedIssuesRefresh()
@@ -2037,42 +2069,88 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	return selectedIssue
 }
 
-// appendIssuesData merges additional issues and updates rendered tables.
-func (a *App) appendIssuesData(newIssues []linearapi.Issue) {
-	if len(newIssues) == 0 {
+// pageMerge carries dedup state across the pages of one refresh, so merging a
+// page stays linear instead of rebuilding a set over the whole accumulated
+// slice every time.
+type pageMerge struct {
+	seen map[string]bool
+	// length a.issues had when this merge last wrote it. A different length
+	// means something else spliced the list.
+	length int
+}
+
+// reset seeds the merge from the current list. Callers must hold issuesMu.
+func (m *pageMerge) reset(issues []linearapi.Issue) {
+	clear(m.seen)
+	for i := range issues {
+		m.seen[issues[i].ID] = true
+	}
+	m.length = len(issues)
+}
+
+// accumulateIssues merges a fetched page into the issue list without painting.
+// Reports whether anything was added, so a run of empty or fully duplicated
+// pages costs no repaint.
+func (a *App) accumulateIssues(newIssues []linearapi.Issue, merge *pageMerge) bool {
+	a.issuesMu.Lock()
+	defer a.issuesMu.Unlock()
+
+	// insertIssue splices into a.issues when an edit brings an issue into
+	// scope, and it can land mid-refresh. Reconcile rather than trust the set,
+	// or the server page carrying that issue appends it a second time.
+	if len(a.issues) != merge.length {
+		merge.reset(a.issues)
+	}
+
+	added := false
+	for _, issue := range newIssues {
+		if merge.seen[issue.ID] {
+			continue
+		}
+		a.issues = append(a.issues, issue)
+		merge.seen[issue.ID] = true
+		added = true
+	}
+	if added {
+		// Hold the sort invariant across pagination. Repaint paths that read
+		// a.issues directly (toggleIssueExpanded, expand_all) would otherwise
+		// render fetch order. Sorting was never the expensive part; the
+		// regroup and full table repaint were.
+		a.sortIssuesLocally()
+	}
+	merge.length = len(a.issues)
+	return added
+}
+
+// renderAccumulatedIssues repaints the list from the accumulated issues.
+// accumulateIssues owns the sort, so this only rebuilds and paints.
+func (a *App) renderAccumulatedIssues() {
+	a.issuesMu.RLock()
+	previousID := ""
+	if a.selectedIssue != nil {
+		previousID = a.selectedIssue.ID
+	}
+	a.issuesMu.RUnlock()
+
+	selectedIssue := a.rebuildIssuesTables(previousID)
+
+	if a.activeIssuesSection == IssuesSectionSearch {
+		// A background refresh must not overwrite the search result the user
+		// is browsing, and its selection is not in the My/Other models.
+		a.updateStatusBar()
+		return
+	}
+
+	if selectedIssue != nil && selectedIssue.ID == previousID {
+		// The selection survived the reorder. Keep the copy onIssueSelected
+		// hydrated: the list model carries no comments, relations, or
+		// attachments, so replacing it here strips them from the details pane.
+		a.updateStatusBar()
 		return
 	}
 
 	a.issuesMu.Lock()
-	existing := make(map[string]bool, len(a.issues))
-	for _, issue := range a.issues {
-		existing[issue.ID] = true
-	}
-	for _, issue := range newIssues {
-		if existing[issue.ID] {
-			continue
-		}
-		a.issues = append(a.issues, issue)
-		existing[issue.ID] = true
-	}
-
-	// Read the selection before sorting: selectedIssue can point into the
-	// a.issues backing array, which the in-place sort reorders under it.
-	targetIssueID := ""
-	if a.selectedIssue != nil {
-		targetIssueID = a.selectedIssue.ID
-	}
-
-	a.sortIssuesLocally()
-	a.issuesMu.Unlock()
-
-	selectedIssue := a.rebuildIssuesTables(targetIssueID)
-	a.issuesMu.Lock()
-	if selectedIssue != nil {
-		a.selectedIssue = selectedIssue
-	} else {
-		a.selectedIssue = nil
-	}
+	a.selectedIssue = selectedIssue
 	a.issuesMu.Unlock()
 	a.updateDetailsView()
 	a.updateStatusBar()
