@@ -148,6 +148,28 @@ func TestJumpToParent_SelectsTheParentInTheTabOnScreen(t *testing.T) {
 	}
 }
 
+// A sub-issue whose parent is out of the fetched scope is the common case for a
+// filtered list. Without feedback the key looks broken rather than out of reach.
+func TestViewParent_SaysSoWhenTheParentIsNotLoaded(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{
+			ID: "child-1", Identifier: "LIN-2", Title: "Child",
+			Parent: &linearapi.IssueRef{ID: "parent-1", Identifier: "LIN-1", Title: "Parent"},
+		},
+	})
+	holdDetailFetches(t, app)
+
+	viewParent := findCommandByID(DefaultCommands(app), "view_parent")
+	if viewParent == nil {
+		t.Fatal("view_parent command not found")
+	}
+	viewParent.Run(app)
+
+	if got := app.statusBar.GetText(true); !strings.Contains(got, "Parent issue not loaded") {
+		t.Fatalf("status after view_parent with an unfetched parent = %q, want the parent-not-loaded feedback", got)
+	}
+}
+
 // A child assigned to the user whose parent is not is an orphan in My. Pressing
 // h there has to fall back to All rather than sit on a parent My cannot show.
 func TestParentKeyFallsBackToAllWhenMyHasNoParent(t *testing.T) {
