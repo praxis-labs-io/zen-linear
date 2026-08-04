@@ -284,7 +284,7 @@ func (a *App) clearMilestoneForSelectedIssue() {
 
 func (a *App) applyFiltersAndRefresh(message string) {
 	a.flashStatus(message)
-	go a.refreshIssues()
+	a.refreshIssues()
 }
 
 func (a *App) clearFilters() {
