@@ -42,3 +42,6 @@ dist/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Scratch plans and working notes
+.scratch/
