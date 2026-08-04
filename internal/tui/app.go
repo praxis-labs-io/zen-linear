@@ -214,7 +214,7 @@ type App struct {
 	selectedNavigation  *NavigationNode
 	issues              []linearapi.Issue
 	focusedPane         FocusTarget
-	activeIssuesSection IssuesSection // Tracks which issues section (My/Other) is currently active
+	activeIssuesSection IssuesSection // Which issues tab is on screen: All, My, or Search
 
 	// Per-section issue tree state (for sub-issue hierarchy)
 	allIssueRows  []IssueRow                  // Flattened rows for the "All Issues" table
@@ -1405,6 +1405,10 @@ func (a *App) cyclePanes(direction int) {
 		}
 	}
 	a.focusedPane = panes[((current+direction)%len(panes)+len(panes))%len(panes)]
+	if a.focusedPane == FocusDetails {
+		// Enter on the description, the same way Right and l enter it.
+		a.focusedDetailsView = false
+	}
 	a.updateFocus()
 }
 
@@ -1883,9 +1887,8 @@ func (a *App) updateIssuesColumnLayout() {
 	// last model change.
 	a.flushPendingSectionRender(a.activeIssuesSection)
 
-	// Without any My Issues, that tab falls back to All (without forgetting the
-	// active choice: My re-applies once it has rows). The Search tab mounts
-	// its input-plus-results panel instead of a bare table.
+	// The three tabs are fixed, so an empty one mounts and shows itself empty.
+	// The Search tab mounts its input-plus-results panel instead of a table.
 	if a.activeIssuesSection == IssuesSectionSearch {
 		a.issuesColumn.AddItem(a.searchPanel, 0, 1, false)
 	} else {
@@ -1930,37 +1933,36 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 	a.updateStatusBar()
 }
 
-// rebuildIssuesTables rebuilds issue rows and renders tables, returning the selected issue.
+// rebuildIssuesTables rebuilds issue rows and renders tables, returning the
+// selected issue. The returned issue is a copy: the id maps point into the
+// a.issues backing array, which later edits re-sort and splice in place.
 func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	a.rebuildIssueRowModels()
 
 	a.renderIssueSections(a.sectionSelectionsFor(targetIssueID))
-
-	// Show the active tab (after target selection may have switched it).
 	a.updateIssuesColumnLayout()
 
-	// Select issue and update details.
-	var selectedIssue *linearapi.Issue
+	var found *linearapi.Issue
 	if targetIssueID != "" {
-		if issue, ok := a.allIDToIssue[targetIssueID]; ok {
-			selectedIssue = issue
-		} else if issue, ok := a.myIDToIssue[targetIssueID]; ok {
-			selectedIssue = issue
+		found = a.allIDToIssue[targetIssueID]
+	}
+
+	// Without a target, fall back to the first issue row of the tab on screen,
+	// skipping group headers, which carry no issue. Falling back to All instead
+	// would hand the caller an issue from a tab the user is not looking at. The
+	// Search tab keeps its own selection.
+	if found == nil && a.activeIssuesSection != IssuesSectionSearch {
+		rows := a.rowsForSection(a.activeIssuesSection)
+		if first := nextIssueRow(rows, 0, 1); first > 0 {
+			found = a.issueMapForSection(a.activeIssuesSection)[rows[first-1].IssueID]
 		}
 	}
 
-	// If no target issue, default to the first issue row of All (skipping group
-	// headers, which carry no issue). The Search tab keeps its own selection.
-	if selectedIssue == nil && a.activeIssuesSection != IssuesSectionSearch {
-		if first := nextIssueRow(a.allIssueRows, 0, 1); first > 0 {
-			if issue, ok := a.allIDToIssue[a.allIssueRows[first-1].IssueID]; ok {
-				selectedIssue = issue
-				a.activeIssuesSection = IssuesSectionAll
-			}
-		}
+	if found == nil {
+		return nil
 	}
-
-	return selectedIssue
+	selected := *found
+	return &selected
 }
 
 // pageMerge carries dedup state across the pages of one refresh, so merging a

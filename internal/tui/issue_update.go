@@ -304,8 +304,6 @@ func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 		IssuesSectionAll: a.allIssueRows,
 		IssuesSectionMy:  a.myIssueRows,
 	}
-	previousEffective := a.activeIssuesSection
-
 	a.rebuildIssueRowModels()
 	selections := a.sectionSelectionsFor(targetIssueID)
 
@@ -324,14 +322,9 @@ func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 		a.renderIssueSections(deferred)
 	}
 
-	// Remount on the effective section, not the active one: emptying the My
-	// tab redirects the display to Other without touching activeIssuesSection,
-	// and the stale table would stay mounted.
-	if a.activeIssuesSection != previousEffective {
-		a.updateIssuesColumnLayout()
-	} else {
-		a.updateAllPaneTitles()
-	}
+	// The tab on screen cannot change here, so only its title needs redrawing:
+	// the counts in the strip move even when the mounted table does not.
+	a.updateAllPaneTitles()
 
 	a.repointSelection(targetIssueID, selectTarget)
 }

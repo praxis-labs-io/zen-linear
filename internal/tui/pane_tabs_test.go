@@ -239,3 +239,83 @@ func equalLabels(got, want []string) bool {
 	}
 	return true
 }
+
+// Empty tabs became reachable when My stopped hiding itself. Landing on one has
+// to drop the selection, or status, assign and archive act on the issue the
+// previous tab had selected, invisibly.
+func TestJumpToSection_EmptyTabDropsTheSelection(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+	})
+	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
+	app.rebuildIssuesTables("issue-1")
+	holdDetailFetches(t, app)
+
+	app.issuesMu.Lock()
+	app.selectedIssue = app.allIDToIssue["issue-1"]
+	app.issuesMu.Unlock()
+	if len(app.myIssueRows) != 0 {
+		t.Fatalf("fixture has %d My rows, want an empty My tab", len(app.myIssueRows))
+	}
+
+	app.cycleIssuesSection(1)
+
+	if app.activeIssuesSection != IssuesSectionMy {
+		t.Fatalf("cycling landed on %v, want the empty My tab", app.activeIssuesSection)
+	}
+	if got := app.GetSelectedIssue(); got != nil {
+		t.Fatalf("selected issue on an empty tab = %v, want nil", got)
+	}
+}
+
+// rebuildIssuesTables resolves through allIDToIssue, whose values point into the
+// a.issues backing array that in-place sorts and splices mutate.
+func TestRebuildIssuesTables_ReturnsACopyNotAnAlias(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
+	})
+	holdDetailFetches(t, app)
+
+	selected := app.rebuildIssuesTables("issue-1")
+	if selected == nil {
+		t.Fatal("rebuildIssuesTables returned nil for a loaded issue")
+	}
+	app.issuesMu.RLock()
+	defer app.issuesMu.RUnlock()
+	for i := range app.issues {
+		if selected == &app.issues[i] {
+			t.Fatal("returned issue aliases the issues backing array")
+		}
+	}
+}
+
+// A tab owed a deferred render carries the row it should land on. Restoring a
+// remembered index over it drops the cursor on whatever now sits there.
+func TestCycleIssuesSection_KeepsTheDeferredRenderSelection(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", AssigneeID: "user-1", Assignee: "Me"},
+		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta", AssigneeID: "user-1", Assignee: "Me"},
+	})
+	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
+	app.rebuildIssueRowModels()
+	holdDetailFetches(t, app)
+
+	// Park My's cursor on row 1, then defer a render that wants row 2.
+	app.activeIssuesSection = IssuesSectionAll
+	app.tableForSection(IssuesSectionMy).Select(1, 0)
+	app.renderIssueSections(map[IssuesSection]string{IssuesSectionMy: "issue-2"})
+	if _, pending := app.pendingSectionRenders[IssuesSectionMy]; !pending {
+		t.Fatal("My was painted rather than deferred; the test needs a pending render")
+	}
+
+	app.cycleIssuesSection(1)
+
+	if app.activeIssuesSection != IssuesSectionMy {
+		t.Fatalf("cycling landed on %v, want My", app.activeIssuesSection)
+	}
+	want := app.getRowForIssueInSection("issue-2", IssuesSectionMy)
+	if row, _ := app.tableForSection(IssuesSectionMy).GetSelection(); row != want {
+		t.Fatalf("My selection = row %d, want row %d from the deferred render", row, want)
+	}
+}

@@ -831,9 +831,16 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No parent issue")
 					return
 				}
-				if !a.jumpToParent(issue.Parent.ID) {
-					a.flashStatus("Parent issue not loaded")
+				if a.jumpToParent(issue.Parent.ID) {
+					return
 				}
+				// A loaded parent with no row is hidden behind a collapsed
+				// group or ancestor, which is not the same as never fetched.
+				if _, loaded := a.allIDToIssue[issue.Parent.ID]; loaded {
+					a.flashStatus("Parent issue is hidden by a collapsed group")
+					return
+				}
+				a.flashStatus("Parent issue not loaded")
 			},
 		},
 		{

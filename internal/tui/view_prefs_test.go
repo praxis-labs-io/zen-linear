@@ -143,7 +143,7 @@ func TestRefreshAppliesCustomViewPreferences(t *testing.T) {
 		t.Fatalf("effective sort chain = %v, want priority alone", app.effectiveSortFields())
 	}
 	if len(app.allIssueRows) == 0 || !app.allIssueRows[0].IsHeader {
-		t.Fatalf("issueRows[0] = %+v, want a group header from the view's grouping", app.allIssueRows)
+		t.Fatalf("allIssueRows[0] = %+v, want a group header from the view's grouping", app.allIssueRows)
 	}
 
 	// A manual grouping override outranks the view for the session.

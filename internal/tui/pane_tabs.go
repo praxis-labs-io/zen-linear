@@ -25,7 +25,8 @@ func (a *App) tableForSection(section IssuesSection) *tview.Table {
 }
 
 // jumpToSection makes the given section the visible issues tab and selects a
-// row in it.
+// row in it. Pass row 0 to keep whatever selection the tab already has,
+// including one a deferred render just made.
 func (a *App) jumpToSection(section IssuesSection, row int) {
 	if section == IssuesSectionSearch {
 		// Entering the Search tab always lands on its input; Down/Enter
@@ -37,21 +38,44 @@ func (a *App) jumpToSection(section IssuesSection, row int) {
 		return
 	}
 	a.activeIssuesSection = section
+	// Flushes any render this tab was owed, which may set its selection.
 	a.updateIssuesColumnLayout()
-	table := a.tableForSection(a.activeIssuesSection)
-	rows := a.rowsForSection(a.activeIssuesSection)
-	if table == nil || row < 1 || len(rows) == 0 {
-		// An empty tab is still a tab: mount it, focus it, select nothing.
+	table := a.tableForSection(section)
+	rows := a.rowsForSection(section)
+
+	if table != nil && len(rows) > 0 {
+		if row < 1 || row > len(rows) {
+			row, _ = table.GetSelection()
+		}
+		if row < 1 || row > len(rows) || rows[row-1].IsSpacer {
+			row = nextIssueRow(rows, 0, 1)
+		}
+	} else {
+		row = 0
+	}
+
+	if row < 1 {
+		// An empty tab is still a tab: mount it and focus it, but drop the
+		// selection, or every command keeps acting on the tab we just left.
+		a.clearSelectedIssue()
 		a.updateFocus()
 		return
 	}
 	// Reset any stale scroll offset when landing at the top of a tab, so
 	// leading group headers stay visible.
 	selectIssueRow(table, rows, row)
-	if issue := a.getIssueFromRowForSection(row, a.activeIssuesSection); issue != nil {
+	if issue := a.getIssueFromRowForSection(row, section); issue != nil {
 		a.onIssueSelected(*issue)
 	}
 	a.updateFocus()
+}
+
+// clearSelectedIssue drops the selection and empties the details pane.
+func (a *App) clearSelectedIssue() {
+	a.issuesMu.Lock()
+	a.selectedIssue = nil
+	a.issuesMu.Unlock()
+	a.updateDetailsView()
 }
 
 // jumpToParent selects an issue's parent in the tab on screen, falling back to
@@ -87,15 +111,7 @@ func (a *App) cycleIssuesSection(direction int) {
 			break
 		}
 	}
-	target := order[((current+direction)%len(order)+len(order))%len(order)]
-	rows := a.rowsForSection(target)
-	row := 1
-	if table := a.tableForSection(target); table != nil {
-		if selected, _ := table.GetSelection(); selected >= 1 && selected <= len(rows) {
-			row = selected
-		}
-	}
-	a.jumpToSection(target, row)
+	a.jumpToSection(order[((current+direction)%len(order)+len(order))%len(order)], 0)
 }
 
 // issuesTabsTitle renders the tab strip for the issues pane border.

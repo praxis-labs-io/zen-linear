@@ -537,10 +537,11 @@ func TestApplyIssueInsert_LinksASubIssueToItsParent(t *testing.T) {
 
 func TestExpandAllKeepsGroupingAndCoversAllTab(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", State: "Todo"},
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", State: "Todo", AssigneeID: "user-1", Assignee: "Me"},
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta", State: "Done"},
 	})
 	app.config.GroupBy = "status"
+	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
 
 	command := findCommandByID(DefaultCommands(app), "expand_all")
 	if command == nil {
@@ -557,10 +558,10 @@ func TestExpandAllKeepsGroupingAndCoversAllTab(t *testing.T) {
 		return false
 	}
 	if !hasHeader(app.allIssueRows) {
-		t.Fatal("expand_all dropped grouping from the section rows")
-	}
-	if !hasHeader(app.allIssueRows) {
 		t.Fatal("expand_all dropped grouping from the All rows")
+	}
+	if !hasHeader(app.myIssueRows) {
+		t.Fatal("expand_all dropped grouping from the My rows")
 	}
 	if _, pending := app.pendingSectionRenders[IssuesSectionAll]; !pending && app.activeIssuesSection != IssuesSectionAll {
 		t.Fatal("expand_all left the All tab neither painted nor deferred")
