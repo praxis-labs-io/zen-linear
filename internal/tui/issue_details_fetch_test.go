@@ -210,6 +210,36 @@ func TestReselectingAnIssueKeepsItsFetchedDetail(t *testing.T) {
 	}
 }
 
+// TestPostMutationRefetchCannotRetargetTheSelection covers the callers that
+// capture an issue id, run a mutation, and only then reload the detail. The
+// cursor can outrun that round trip, and the reload must not drag the pane and
+// GetSelectedIssue back to the issue the user left.
+func TestPostMutationRefetchCannotRetargetTheSelection(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, skimTestIssues())
+	app.detailDebounce = time.Hour
+	release := make(chan struct{})
+	started := make(chan string, 4)
+	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
+		started <- id
+		<-release
+		return linearapi.Issue{ID: id, Identifier: "REFETCHED"}, nil
+	}
+
+	// The cursor moves off issue-1 while a mutation on it is still in flight.
+	pressInIssuesTable(app, tcell.KeyRune, 'j')
+
+	// The mutation lands afterwards and asks for issue-1's detail back. It
+	// takes a fresh generation, so nothing else can invalidate it.
+	app.QueueUpdateDraw(func() { app.loadIssueDetailsByID("issue-1") })
+	waitForFetch(t, started, "issue-1")
+	close(release)
+
+	time.Sleep(100 * time.Millisecond)
+	if selected := app.GetSelectedIssue(); selected == nil || selected.ID != "issue-2" {
+		t.Fatalf("selected issue = %#v, want issue-2: a post-mutation refetch retargeted the selection", selected)
+	}
+}
+
 func TestLandingOnAnEmptyTabDropsThePendingLoad(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, skimTestIssues())
 	app.detailDebounce = 40 * time.Millisecond

@@ -3,6 +3,7 @@ package linearapi
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,8 +13,6 @@ import (
 )
 
 const teamsOK = `{"data":{"teams":{"nodes":[]}}}`
-
-const commentOK = `{"data":{"commentCreate":{"success":true,"comment":{"id":"comment-1","body":"hi"}}}}`
 
 // callRecorder counts handler calls and what each one carried. The handler runs
 // on the server's goroutine, so the mutex is not optional.
@@ -242,7 +241,29 @@ func TestRetryTransportDoesNotRetryMutationOn5xx(t *testing.T) {
 	}
 }
 
-func TestRetryTransportRetriesMutationOn429(t *testing.T) {
+// TestRetryTransportDoesNotRetryMutationOn429 keeps the duplicate-comment guard
+// whole. A rate limiter usually rejects before the resolver runs, but a 429
+// applied on the response path would mean the write already landed, and no
+// saved keystroke is worth a duplicate comment.
+func TestRetryTransportDoesNotRetryMutationOn429(t *testing.T) {
+	var recorder callRecorder
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorder.record(r)
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	client := newFastRetryClient(t, ClientConfig{Endpoint: server.URL})
+	if _, err := client.CreateComment(context.Background(), CreateCommentInput{IssueID: "issue-1", Body: "hi"}); err == nil {
+		t.Fatal("CreateComment() succeeded against a server that only returns 429")
+	}
+	if got := recorder.count(); got != 1 {
+		t.Fatalf("handler calls = %d, want 1: a mutation must not be resent after a 429", got)
+	}
+}
+
+func TestRetryTransportRetriesQueryOn429(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if recorder.record(r) == 1 {
@@ -250,18 +271,35 @@ func TestRetryTransportRetriesMutationOn429(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
-		_, _ = w.Write([]byte(commentOK))
+		_, _ = w.Write([]byte(teamsOK))
 	}))
 	defer server.Close()
 
 	client := newFastRetryClient(t, ClientConfig{Endpoint: server.URL})
-	// A rate limiter rejects before the resolver runs, so the write never
-	// happened and replaying it is safe.
-	if _, err := client.CreateComment(context.Background(), CreateCommentInput{IssueID: "issue-1", Body: "hi"}); err != nil {
-		t.Fatalf("CreateComment() error: %v", err)
+	if _, err := client.ListTeams(context.Background()); err != nil {
+		t.Fatalf("ListTeams() error: %v", err)
 	}
 	if got := recorder.count(); got != 2 {
 		t.Fatalf("handler calls = %d, want 2", got)
+	}
+}
+
+// TestRetryTransportDoesNotRetryPermanentTransportErrors keeps a bad endpoint
+// from costing three attempts and two backoffs before the user sees the error.
+func TestRetryTransportDoesNotRetryPermanentTransportErrors(t *testing.T) {
+	client := newFastRetryClient(t, ClientConfig{Endpoint: "https://zen-linear.invalid/graphql"})
+
+	start := time.Now()
+	_, err := client.ListTeams(context.Background())
+	if err == nil {
+		t.Fatal("ListTeams() succeeded against a name that does not resolve")
+	}
+	var dnsErr *net.DNSError
+	if !errors.As(err, &dnsErr) {
+		t.Skipf("resolver did not return a DNS error: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("took %s: a name that does not resolve must fail on the first attempt", elapsed)
 	}
 }
 
@@ -371,8 +409,12 @@ func TestRetryTransportAbortsOnContextCancel(t *testing.T) {
 		cancel()
 	}()
 
-	if _, err := client.ListTeams(ctx); err == nil {
-		t.Fatal("ListTeams() succeeded after its context was canceled")
+	_, err := client.ListTeams(ctx)
+	// The cancellation has to reach the caller as itself. Handing back the
+	// attempt's 503 instead would report a user-initiated cancel as a server
+	// error, and the details pane cancels one on every superseded selection.
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ListTeams() error = %v, want a wrapped context.Canceled", err)
 	}
 	if got := recorder.count(); got != 1 {
 		t.Fatalf("handler calls = %d, want 1: the backoff must abort on cancellation", got)

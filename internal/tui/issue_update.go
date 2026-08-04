@@ -346,14 +346,7 @@ func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 	case target != nil && selectedID == targetIssueID:
 		// Same issue: take the fresh list fields, keep the detail data only
 		// the pane's full fetch carries.
-		selected := *target
-		selected.Comments = previousSelected.Comments
-		selected.Relations = previousSelected.Relations
-		selected.Subscribers = previousSelected.Subscribers
-		selected.Attachments = previousSelected.Attachments
-		a.issuesMu.Lock()
-		a.selectedIssue = &selected
-		a.issuesMu.Unlock()
+		a.setSelectedIssue(*target)
 		a.updateDetailsView()
 	case selectTarget && target != nil:
 		// The selection moves to a different issue; render and fetch its
@@ -361,10 +354,7 @@ func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 		// nothing to debounce.
 		a.selectIssueNow(*target)
 	case selectTarget:
-		a.issuesMu.Lock()
-		a.selectedIssue = nil
-		a.issuesMu.Unlock()
-		a.updateDetailsView()
+		a.clearSelectedIssue()
 	default:
 		a.updateDetailsView()
 	}

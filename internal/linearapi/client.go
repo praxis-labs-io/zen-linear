@@ -3,6 +3,7 @@ package linearapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -2623,7 +2624,10 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 	if err != nil {
 		// The details pane cancels this query on every superseded selection, so
 		// a cancellation here is the design working, not a failure to report.
-		if ctx.Err() != nil {
+		// Test the error rather than the context: a query that fails for a real
+		// reason while a newer selection happens to have canceled it still has
+		// to reach the log at Error.
+		if errors.Is(err, context.Canceled) {
 			logger.Debug("linearapi.client: FetchIssueByID canceled issue_id=%s", id)
 		} else {
 			logger.ErrorWithErr(err, "linearapi.client: FetchIssueByID failed issue_id=%s", id)

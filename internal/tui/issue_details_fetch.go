@@ -123,6 +123,13 @@ func (a *App) loadIssueDetailsByID(issueID string) {
 			if generation != a.detailFetchGeneration.Load() {
 				return
 			}
+			// The post-mutation callers capture an id before a round trip the
+			// cursor can outrun, and every path that repoints the list writes
+			// selectedIssue without touching the generation. The selection
+			// itself is the only reliable answer to who owns the pane.
+			if selected := a.GetSelectedIssue(); selected == nil || selected.ID != issueID {
+				return
+			}
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.issue_details_fetch: failed to fetch full issue details issue_id=%s", issueID)
 				// Keep the partial issue data we already have.

@@ -2,9 +2,11 @@ package linearapi
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,6 +23,9 @@ const (
 	// anyone will sit in front of. Clamping the server's number down instead
 	// would retry earlier than we were told, which is worse than not retrying.
 	maxRetryAfterWait = 8 * time.Second
+	// retryAfterJitter spreads clients the server handed an identical
+	// Retry-After, which would otherwise all wake and re-burst together.
+	retryAfterJitter = 250 * time.Millisecond
 	// minRetryBudget keeps a backoff from eating the whole remaining deadline
 	// and leaving no room for the request it is waiting to make.
 	minRetryBudget = 500 * time.Millisecond
@@ -86,40 +91,54 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return resp, err
 		}
 		delay, ok := t.retryDelay(attempt, resp)
-		if !ok {
-			return resp, err
-		}
-		if waitErr := sleepBeforeRetry(ctx, delay); waitErr != nil {
+		if !ok || !fitsInDeadline(ctx, delay) {
+			// Both stop paths hand the response back unread, so the caller
+			// still gets the status and body it would have seen without a
+			// retry layer at all.
 			return resp, err
 		}
 
 		logger.Debug("linearapi.retry: retrying attempt=%d/%d status=%s wait=%s",
 			attempt+1, t.maxAttempts, statusOf(resp), delay)
+		// Committed to another attempt, so free the connection before waiting
+		// on it rather than pinning it for the length of the backoff.
 		drainAndClose(resp)
+		if waitErr := sleepBeforeRetry(ctx, delay); waitErr != nil {
+			return nil, waitErr
+		}
 	}
 }
 
-// shouldRetry classifies one attempt. A 429 is safe for anything: the rate
-// limiter rejects before the resolver runs, so nothing was applied.
+// shouldRetry classifies one attempt. Only a replayable operation is ever sent
+// again: a 429 is usually rejected before the resolver runs, but "usually" is
+// not a guarantee worth a duplicate comment.
 func shouldRetry(resp *http.Response, err error, replayable bool) bool {
+	if !replayable {
+		return false
+	}
 	if err != nil {
-		if errors.Is(err, errAuthRefresh) || errors.Is(err, context.Canceled) ||
-			errors.Is(err, context.DeadlineExceeded) {
-			return false
-		}
-		return replayable
+		return isTransient(err)
 	}
 	if resp == nil {
 		return false
 	}
-	switch {
-	case resp.StatusCode == http.StatusTooManyRequests:
-		return true
-	case resp.StatusCode >= 500:
-		return replayable
-	default:
+	return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
+}
+
+// isTransient reports whether a transport error is worth another attempt.
+// A refused name, an untrusted certificate, and a canceled request all fail the
+// same way every time, so retrying them only delays the error the user needs.
+func isTransient(err error) bool {
+	if errors.Is(err, errAuthRefresh) || errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
+		return false
+	}
+	var certErr *tls.CertificateVerificationError
+	return !errors.As(err, &certErr)
 }
 
 // retryDelay picks how long to wait, reporting false when the wait is long
@@ -130,10 +149,25 @@ func (t *retryTransport) retryDelay(attempt int, resp *http.Response) (time.Dura
 			if wait > maxRetryAfterWait {
 				return 0, false
 			}
-			return wait, true
+			// Every client rate-limited in the same burst is handed the same
+			// number, so honoring it verbatim wakes them all together. Jitter
+			// on top staggers them; never below, because the server named a
+			// floor.
+			return wait + rand.N(retryAfterJitter), true
 		}
 	}
 	return t.nextBackoff(attempt), true
+}
+
+// fitsInDeadline reports whether a wait leaves room for the request it precedes.
+// http.Client.Timeout lands on the context as a deadline, so a retry spends the
+// same budget; sleeping past it would turn a readable 503 into a deadline error.
+func fitsInDeadline(ctx context.Context, delay time.Duration) bool {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return true
+	}
+	return !time.Now().Add(delay + minRetryBudget).After(deadline)
 }
 
 // nextBackoff returns the delay before the attempt after this one. Equal jitter
@@ -174,17 +208,11 @@ func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 	return 0, false
 }
 
-// sleepBeforeRetry waits out the backoff, reporting an error when the wait is
-// not worth taking.
+// sleepBeforeRetry waits out the backoff, reporting the context's error when
+// the caller gives up mid-wait.
 func sleepBeforeRetry(ctx context.Context, delay time.Duration) error {
 	if delay <= 0 {
 		return nil
-	}
-	// http.Client.Timeout lands on this context as a deadline, so a retry
-	// spends the same budget as the request. Sleeping past it would turn a
-	// readable 503 into a context-deadline error.
-	if deadline, ok := ctx.Deadline(); ok && time.Now().Add(delay+minRetryBudget).After(deadline) {
-		return errors.New("backoff would exceed the request deadline")
 	}
 	timer := time.NewTimer(delay)
 	defer timer.Stop()

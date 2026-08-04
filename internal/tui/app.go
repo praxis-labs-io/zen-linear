@@ -1968,12 +1968,12 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 		return
 	}
 	if selectedIssue != nil {
-		a.onIssueSelected(*selectedIssue)
+		// A refresh repoints the list rather than moving the cursor, so there
+		// is nothing to debounce: deferring the render leaves the pane on the
+		// pre-refresh copy, or empty on a cold start, until the window closes.
+		a.selectIssueNow(*selectedIssue)
 	} else {
-		a.issuesMu.Lock()
-		a.selectedIssue = nil
-		a.issuesMu.Unlock()
-		a.updateDetailsView()
+		a.clearSelectedIssue()
 	}
 	a.updateStatusBar()
 }
