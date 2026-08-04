@@ -22,7 +22,7 @@ const titleColumn = 3
 // tview's package-level styles.
 func newIssueUpdateTestApp(t *testing.T, issues []linearapi.Issue) (*App, <-chan struct{}) {
 	t.Helper()
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	drawn := make(chan struct{}, 8)
 	app.queueUpdateDraw = func(f func()) {
 		f()

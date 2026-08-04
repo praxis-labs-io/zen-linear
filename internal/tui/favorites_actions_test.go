@@ -14,7 +14,7 @@ import (
 // whose UI updates run inline.
 func newFavoritesTestApp(t *testing.T) *App {
 	t.Helper()
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.createFavoriteFunc = func(context.Context, linearapi.FavoriteTarget) (linearapi.Favorite, error) {
 		t.Fatal("createFavoriteFunc called unexpectedly")
 		return linearapi.Favorite{}, nil

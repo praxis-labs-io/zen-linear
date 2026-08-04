@@ -346,55 +346,18 @@ func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 	case target != nil && selectedID == targetIssueID:
 		// Same issue: take the fresh list fields, keep the detail data only
 		// the pane's full fetch carries.
-		selected := *target
-		selected.Comments = previousSelected.Comments
-		selected.Relations = previousSelected.Relations
-		selected.Subscribers = previousSelected.Subscribers
-		selected.Attachments = previousSelected.Attachments
-		a.issuesMu.Lock()
-		a.selectedIssue = &selected
-		a.issuesMu.Unlock()
+		a.setSelectedIssue(*target)
 		a.updateDetailsView()
 	case selectTarget && target != nil:
 		// The selection moves to a different issue; render and fetch its
-		// details the same way a cursor move would.
-		a.onIssueSelected(*target)
+		// details. The list moved under the user, not the cursor, so there is
+		// nothing to debounce.
+		a.selectIssueNow(*target)
 	case selectTarget:
-		a.issuesMu.Lock()
-		a.selectedIssue = nil
-		a.issuesMu.Unlock()
-		a.updateDetailsView()
+		a.clearSelectedIssue()
 	default:
 		a.updateDetailsView()
 	}
-}
-
-// refreshIssueDetails refetches one issue so the details pane picks up data the
-// list query never carries: comments, relations, subscribers, attachments.
-// Nothing the list renders changes, so the list is left alone.
-func (a *App) refreshIssueDetails(issueID string) {
-	fetchIssue := a.fetchIssueByID
-	if fetchIssue == nil {
-		fetchIssue = a.api.FetchIssueByID
-	}
-	a.fetchingIssueID = issueID
-	go func() {
-		fullIssue, err := fetchIssue(context.Background(), issueID)
-		a.QueueUpdateDraw(func() {
-			// A newer selection owns the details pane.
-			if a.fetchingIssueID != issueID {
-				return
-			}
-			if err != nil {
-				logger.ErrorWithErr(err, "tui.issue_update: failed to refresh issue details issue_id=%s", issueID)
-				return
-			}
-			a.issuesMu.Lock()
-			a.selectedIssue = &fullIssue
-			a.issuesMu.Unlock()
-			a.updateDetailsView()
-		})
-	}()
 }
 
 // rebuildIssueRowModels rebuilds every section's rows from the issue list.

@@ -89,22 +89,7 @@ func (a *App) handleCreateComment(issueID, body string) {
 			selectedIssue := a.selectedIssue
 			a.issuesMu.RUnlock()
 			if selectedIssue != nil && selectedIssue.ID == issueID {
-				a.fetchingIssueID = issueID
-				go func() {
-					fullIssue, fetchErr := a.api.FetchIssueByID(ctx, issueID)
-					a.app.QueueUpdateDraw(func() {
-						if a.fetchingIssueID == issueID {
-							if fetchErr != nil {
-								logger.ErrorWithErr(fetchErr, "tui.app: failed to refresh issue after comment creation issue=%s", issueID)
-								return
-							}
-							a.issuesMu.Lock()
-							a.selectedIssue = &fullIssue
-							a.issuesMu.Unlock()
-							a.updateDetailsView()
-						}
-					})
-				}()
+				a.loadIssueDetailsByID(issueID)
 			}
 		})
 	}()

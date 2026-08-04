@@ -11,7 +11,7 @@ import (
 // reopening a modal leaves keyboard focus on whatever was focused last
 // (tview forms remember their last-focused item across shows).
 func TestFormModalShowResetsFocusToFirstField(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
 	first := fm.AddInput("Title", "")
 	fm.AddTextArea("Body", "", 5)
@@ -31,7 +31,7 @@ func TestFormModalShowResetsFocusToFirstField(t *testing.T) {
 }
 
 func TestFormModalTabCyclesFieldsThenButtonsAndWraps(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
 	fm.AddInput("Title", "")
 	fm.AddTextArea("Body", "", 5)
@@ -49,7 +49,7 @@ func TestFormModalTabCyclesFieldsThenButtonsAndWraps(t *testing.T) {
 }
 
 func TestFormModalEscCancelsAndCtrlEnterSubmits(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
 	fm.AddInput("Title", "")
 	var canceled, submitted bool
@@ -72,7 +72,7 @@ func TestFormModalEscCancelsAndCtrlEnterSubmits(t *testing.T) {
 // back pack into one two-row unit (labels above, values below) instead of
 // stacking, and still tab in order.
 func TestFormModalConsecutivePickersShareARow(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
 	fm.AddInput("Title", "")
 	a := fm.AddPicker("Assignee", []string{"Unassigned"}, 0, nil)
@@ -95,7 +95,7 @@ func TestFormModalConsecutivePickersShareARow(t *testing.T) {
 // closeOpenDropdown behavior: Esc with an open dropdown closes the dropdown,
 // not the modal.
 func TestFormModalEscClosesOpenDropdownBeforeCanceling(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
 	dd := fm.AddPicker("Priority", []string{"Normal", "High"}, 0, nil)
 	var canceled bool
@@ -120,7 +120,7 @@ func TestFormModalEscClosesOpenDropdownBeforeCanceling(t *testing.T) {
 // modal fits its content, and when the screen is short the flexible textarea
 // row shrinks instead of clipping fields off the bottom.
 func TestFormModalHeightFitsContentAndClampsToScreen(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
 	fm.AddInput("Title", "")       // 4 rows
 	fm.AddTextArea("Body", "", 10) // 13 rows, flexible (min 6)

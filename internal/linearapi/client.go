@@ -3,6 +3,7 @@ package linearapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -227,7 +228,7 @@ type Client struct {
 	httpClient *http.Client
 	endpoint   string
 	token      string
-	client     *graphql.Client
+	client     *gqlClient
 }
 
 // Team represents a Linear team.
@@ -607,6 +608,7 @@ func NewClient(cfg ClientConfig) *Client {
 		UseBearer:      cfg.UseBearer,
 		OnUnauthorized: cfg.OnUnauthorized,
 	}
+	retry := newRetryTransport(transport)
 
 	var httpClient *http.Client
 	if cfg.HTTPClient != nil {
@@ -616,24 +618,37 @@ func NewClient(cfg ClientConfig) *Client {
 			httpClient.Transport = http.DefaultTransport
 		}
 		transport.Base = httpClient.Transport
-		httpClient.Transport = transport
+		httpClient.Transport = retry
 	} else {
 		// Create a new HTTP client
 		transport.Base = http.DefaultTransport
 		httpClient = &http.Client{
 			Timeout:   timeout,
-			Transport: transport,
+			Transport: retry,
 		}
 	}
-
-	client := graphql.NewClient(endpoint, httpClient)
 
 	return &Client{
 		httpClient: httpClient,
 		endpoint:   endpoint,
 		token:      cfg.Token,
-		client:     client,
+		client:     &gqlClient{inner: graphql.NewClient(endpoint, httpClient)},
 	}
+}
+
+// gqlClient is the package's only door to shurcooL/graphql. query marks the
+// context replayable and mutate does not, so no mutation is ever resent after a
+// 5xx or a dropped connection.
+type gqlClient struct {
+	inner *graphql.Client
+}
+
+func (g *gqlClient) query(ctx context.Context, q interface{}, variables map[string]interface{}) error {
+	return g.inner.Query(withReplayable(ctx), q, variables)
+}
+
+func (g *gqlClient) mutate(ctx context.Context, m interface{}, variables map[string]interface{}) error {
+	return g.inner.Mutate(ctx, m, variables)
 }
 
 // NewClientWithToken creates a new Linear API client with just a token (convenience method).
@@ -683,7 +698,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	newToken, refreshErr := t.OnUnauthorized(refreshCtx)
 	cancelRefresh()
 	if refreshErr != nil {
-		return nil, fmt.Errorf("refresh auth after 401: %w", refreshErr)
+		return nil, fmt.Errorf("%w: %w", errAuthRefresh, refreshErr)
 	}
 
 	t.mu.Lock()
@@ -759,7 +774,7 @@ func (c *Client) ListTeams(ctx context.Context) ([]Team, error) {
 		} `graphql:"teams"`
 	}
 
-	err := c.client.Query(ctx, &query, nil)
+	err := c.client.query(ctx, &query, nil)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: ListTeams failed")
 		return nil, fmt.Errorf("list teams: %w", err)
@@ -901,7 +916,7 @@ func (c *Client) ListFavorites(ctx context.Context) ([]Favorite, error) {
 			"after": after,
 		}
 
-		if err := c.client.Query(ctx, &query, variables); err != nil {
+		if err := c.client.query(ctx, &query, variables); err != nil {
 			logger.ErrorWithErr(err, "linearapi.client: ListFavorites failed")
 			return nil, fmt.Errorf("list favorites: %w", err)
 		}
@@ -945,7 +960,7 @@ func (c *Client) CreateFavorite(ctx context.Context, target FavoriteTarget) (Fav
 	}
 
 	variables := map[string]interface{}{"input": input}
-	if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+	if err := c.client.mutate(ctx, &mutation, variables); err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: CreateFavorite failed target=%v", input)
 		return Favorite{}, fmt.Errorf("create favorite: %w", err)
 	}
@@ -965,7 +980,7 @@ func (c *Client) DeleteFavorite(ctx context.Context, favoriteID string) error {
 	}
 
 	variables := map[string]interface{}{"id": graphql.String(favoriteID)}
-	if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+	if err := c.client.mutate(ctx, &mutation, variables); err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: DeleteFavorite failed favorite_id=%s", favoriteID)
 		return fmt.Errorf("delete favorite %s: %w", favoriteID, err)
 	}
@@ -1006,7 +1021,7 @@ func (c *Client) updateFavorite(ctx context.Context, favoriteID string, input Fa
 		"id":    graphql.String(favoriteID),
 		"input": input,
 	}
-	if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+	if err := c.client.mutate(ctx, &mutation, variables); err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: updateFavorite failed favorite_id=%s", favoriteID)
 		return fmt.Errorf("update favorite %s: %w", favoriteID, err)
 	}
@@ -1033,7 +1048,7 @@ func (c *Client) ListProjects(ctx context.Context, teamID string) ([]Project, er
 		"teamId": graphql.String(teamID),
 	}
 
-	err := c.client.Query(ctx, &query, variables)
+	err := c.client.query(ctx, &query, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: ListProjects failed team_id=%s", teamID)
 		return nil, fmt.Errorf("list projects for team %s: %w", teamID, err)
@@ -1093,7 +1108,7 @@ func (c *Client) ListProjectMilestones(ctx context.Context, projectID string) ([
 			"includeArchived": graphql.Boolean(false),
 		}
 
-		if err := c.client.Query(ctx, &query, variables); err != nil {
+		if err := c.client.query(ctx, &query, variables); err != nil {
 			logger.ErrorWithErr(err, "linearapi.client: ListProjectMilestones failed project_id=%s", projectID)
 			return nil, fmt.Errorf("list project milestones for project %s: %w", projectID, err)
 		}
@@ -1173,7 +1188,7 @@ func (c *Client) ListCycles(ctx context.Context, teamID string) ([]Cycle, error)
 			"includeArchived": graphql.Boolean(false),
 		}
 
-		if err := c.client.Query(ctx, &query, variables); err != nil {
+		if err := c.client.query(ctx, &query, variables); err != nil {
 			logger.ErrorWithErr(err, "linearapi.client: ListCycles failed team_id=%s", teamID)
 			return nil, fmt.Errorf("list cycles for team %s: %w", teamID, err)
 		}
@@ -1235,7 +1250,7 @@ func (c *Client) ListUsers(ctx context.Context, teamID string) ([]User, error) {
 		"teamId": graphql.String(teamID),
 	}
 
-	err := c.client.Query(ctx, &query, variables)
+	err := c.client.query(ctx, &query, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: ListUsers failed team_id=%s", teamID)
 		return nil, fmt.Errorf("list users for team %s: %w", teamID, err)
@@ -1266,7 +1281,7 @@ func (c *Client) GetCurrentUser(ctx context.Context) (User, error) {
 		}
 	}
 
-	err := c.client.Query(ctx, &query, nil)
+	err := c.client.query(ctx, &query, nil)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: GetCurrentUser failed")
 		return User{}, fmt.Errorf("get current user: %w", err)
@@ -1300,7 +1315,7 @@ func (c *Client) ListWorkflowStates(ctx context.Context, teamID string) ([]Workf
 		"teamId": graphql.String(teamID),
 	}
 
-	err := c.client.Query(ctx, &query, variables)
+	err := c.client.query(ctx, &query, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: ListWorkflowStates failed team_id=%s", teamID)
 		return nil, fmt.Errorf("list workflow states for team %s: %w", teamID, err)
@@ -1643,7 +1658,7 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 		"after":  afterCursor,
 	}
 
-	err := c.client.Query(ctx, &query, variables)
+	err := c.client.query(ctx, &query, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: searchIssues failed")
 		return IssuePage{}, fmt.Errorf("search issues: %w", err)
@@ -1709,7 +1724,7 @@ func (c *Client) FetchCustomViewPreferences(ctx context.Context, viewID string) 
 		"id": graphql.String(viewID),
 	}
 
-	if err := c.client.Query(ctx, &query, variables); err != nil {
+	if err := c.client.query(ctx, &query, variables); err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: fetchCustomViewPreferences failed view_id=%s", viewID)
 		return nil, fmt.Errorf("fetch custom view preferences: %w", err)
 	}
@@ -1824,7 +1839,7 @@ func (c *Client) IssueMatchesScope(ctx context.Context, params FetchIssuesParams
 		"first":  graphql.Int(1),
 		"filter": IssueFilter{"id": map[string]interface{}{"in": params.IDs}},
 	}
-	if err := c.client.Query(ctx, &query, variables); err != nil {
+	if err := c.client.query(ctx, &query, variables); err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: IssueMatchesScope failed view_id=%s issue_id=%s", params.CustomViewID, issueID)
 		return false, fmt.Errorf("check issue %s against view %s: %w", issueID, params.CustomViewID, err)
 	}
@@ -1869,7 +1884,7 @@ func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesPar
 		"orderBy": orderBy,
 	}
 
-	if err := c.client.Query(ctx, &query, variables); err != nil {
+	if err := c.client.query(ctx, &query, variables); err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: customViewIssuesPage failed view_id=%s", params.CustomViewID)
 		return IssuePage{}, fmt.Errorf("fetch custom view issues: %w", err)
 	}
@@ -2012,7 +2027,7 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 		"after":   afterCursor,
 	}
 
-	err := c.client.Query(ctx, &query, variables)
+	err := c.client.query(ctx, &query, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: FetchIssues failed")
 		return IssuePage{}, fmt.Errorf("fetch issues: %w", err)
@@ -2605,9 +2620,18 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 		"id": graphql.String(id),
 	}
 
-	err := c.client.Query(ctx, &query, variables)
+	err := c.client.query(ctx, &query, variables)
 	if err != nil {
-		logger.ErrorWithErr(err, "linearapi.client: FetchIssueByID failed issue_id=%s", id)
+		// The details pane cancels this query on every superseded selection, so
+		// a cancellation here is the design working, not a failure to report.
+		// Test the error rather than the context: a query that fails for a real
+		// reason while a newer selection happens to have canceled it still has
+		// to reach the log at Error.
+		if errors.Is(err, context.Canceled) {
+			logger.Debug("linearapi.client: FetchIssueByID canceled issue_id=%s", id)
+		} else {
+			logger.ErrorWithErr(err, "linearapi.client: FetchIssueByID failed issue_id=%s", id)
+		}
 		return Issue{}, fmt.Errorf("fetch issue %s: %w", id, err)
 	}
 
@@ -2677,7 +2701,7 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 		"input": issueInput,
 	}
 
-	err := c.client.Mutate(ctx, &mutation, variables)
+	err := c.client.mutate(ctx, &mutation, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: CreateIssue failed")
 		return Issue{}, fmt.Errorf("create issue: %w", err)
@@ -2777,7 +2801,7 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 		"input": issueInput,
 	}
 
-	err := c.client.Mutate(ctx, &mutation, variables)
+	err := c.client.mutate(ctx, &mutation, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: UpdateIssue failed issue_id=%s", input.ID)
 		return Issue{}, fmt.Errorf("update issue %s: %w", input.ID, err)
@@ -2822,7 +2846,7 @@ func (c *Client) CreateIssueRelation(ctx context.Context, input CreateIssueRelat
 		"input": relationInput,
 	}
 
-	if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+	if err := c.client.mutate(ctx, &mutation, variables); err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: CreateIssueRelation failed issue_id=%s related_issue_id=%s", input.IssueID, input.RelatedIssueID)
 		return IssueRelation{}, fmt.Errorf("create issue relation: %w", err)
 	}
@@ -2858,7 +2882,7 @@ func (c *Client) DeleteIssueRelation(ctx context.Context, relationID string) err
 	variables := map[string]interface{}{
 		"id": graphql.String(relationID),
 	}
-	if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+	if err := c.client.mutate(ctx, &mutation, variables); err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: DeleteIssueRelation failed relation_id=%s", relationID)
 		return fmt.Errorf("delete issue relation %s: %w", relationID, err)
 	}
@@ -2887,7 +2911,7 @@ func (c *Client) setIssueSubscription(ctx context.Context, issueID string, subsc
 			} `graphql:"issueSubscribe(id: $id)"`
 		}
 		variables := map[string]interface{}{"id": graphql.String(issueID)}
-		if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+		if err := c.client.mutate(ctx, &mutation, variables); err != nil {
 			return Issue{}, fmt.Errorf("subscribe to issue %s: %w", issueID, err)
 		}
 		if !bool(mutation.IssueSubscribe.Success) {
@@ -2903,7 +2927,7 @@ func (c *Client) setIssueSubscription(ctx context.Context, issueID string, subsc
 		} `graphql:"issueUnsubscribe(id: $id)"`
 	}
 	variables := map[string]interface{}{"id": graphql.String(issueID)}
-	if err := c.client.Mutate(ctx, &mutation, variables); err != nil {
+	if err := c.client.mutate(ctx, &mutation, variables); err != nil {
 		return Issue{}, fmt.Errorf("unsubscribe from issue %s: %w", issueID, err)
 	}
 	if !bool(mutation.IssueUnsubscribe.Success) {
@@ -2942,7 +2966,7 @@ func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (C
 		"input": commentInput,
 	}
 
-	err := c.client.Mutate(ctx, &mutation, variables)
+	err := c.client.mutate(ctx, &mutation, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: CreateComment failed issue_id=%s", input.IssueID)
 		return Comment{}, fmt.Errorf("create comment: %w", err)
@@ -2985,7 +3009,7 @@ func (c *Client) ArchiveIssue(ctx context.Context, issueID string) error {
 		"id": graphql.String(issueID),
 	}
 
-	err := c.client.Mutate(ctx, &mutation, variables)
+	err := c.client.mutate(ctx, &mutation, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: ArchiveIssue failed issue_id=%s", issueID)
 		return fmt.Errorf("archive issue %s: %w", issueID, err)
@@ -3011,7 +3035,7 @@ func (c *Client) UnarchiveIssue(ctx context.Context, issueID string) error {
 		"id": graphql.String(issueID),
 	}
 
-	err := c.client.Mutate(ctx, &mutation, variables)
+	err := c.client.mutate(ctx, &mutation, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: UnarchiveIssue failed issue_id=%s", issueID)
 		return fmt.Errorf("unarchive issue %s: %w", issueID, err)
@@ -3037,7 +3061,7 @@ func (c *Client) ListWorkspaceLabels(ctx context.Context) ([]IssueLabel, error) 
 		} `graphql:"issueLabels(first: 250)"`
 	}
 
-	err := c.client.Query(ctx, &query, nil)
+	err := c.client.query(ctx, &query, nil)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: ListWorkspaceLabels failed")
 		return nil, fmt.Errorf("list workspace labels: %w", err)
@@ -3073,7 +3097,7 @@ func (c *Client) ListTeamLabels(ctx context.Context, teamID string) ([]IssueLabe
 		"teamId": graphql.String(teamID),
 	}
 
-	err := c.client.Query(ctx, &query, variables)
+	err := c.client.query(ctx, &query, variables)
 	if err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: ListTeamLabels failed team_id=%s", teamID)
 		return nil, fmt.Errorf("list team labels for team %s: %w", teamID, err)

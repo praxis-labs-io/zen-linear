@@ -21,7 +21,7 @@ func pressEnterOnNavigation(app *App) {
 // TestSelectingNavigationItemKeepsFocusInTheNavigationPane guards the behavior
 // Drew asked for: Enter picks a view without throwing focus at the issues list.
 func TestSelectingNavigationItemKeepsFocusInTheNavigationPane(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	refreshed := make(chan struct{}, 1)
 	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
 		return linearapi.IssuePage{}, nil
@@ -51,7 +51,7 @@ func TestSelectingNavigationItemKeepsFocusInTheNavigationPane(t *testing.T) {
 // TestSelectingFavoritesFolderOnlyToggles verifies a folder expands instead of
 // filtering.
 func TestSelectingFavoritesFolderOnlyToggles(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
 		t.Error("selecting a folder must not refresh issues")
 		return linearapi.IssuePage{}, nil

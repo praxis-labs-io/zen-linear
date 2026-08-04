@@ -14,7 +14,7 @@ import (
 // stale result, but without cancellation the request keeps running against the
 // API, so a fast typist leaves one live query per debounce window.
 func TestPerformIssueSearch_CancelsTheSupersededFetch(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 
 	started := make(chan struct{}, 2)
 	observed := make(chan error, 2)
@@ -54,7 +54,7 @@ func TestPerformIssueSearch_CancelsTheSupersededFetch(t *testing.T) {
 }
 
 func TestPerformIssueSearch_RendersResults(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	// Search state is UI-thread-only, so the test reads it after the queued
 	// draw rather than polling it from here.
 	drawn := make(chan struct{}, 8)

@@ -52,6 +52,7 @@ func TestUpdateDetailsView_IncludesPlanningAndCollaboration(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	dueDate := "2026-06-15"
@@ -110,6 +111,7 @@ func TestRefreshIssues_AppliesRichFiltersWithNavigation(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 
@@ -205,7 +207,7 @@ func TestSetPriorityPickerDispatchesSelectedPriority(t *testing.T) {
 		{label: "Urgent", want: 1},
 		{label: "No priority", want: 0},
 	} {
-		app := newUXTestApp()
+		app := newUXTestApp(t)
 		app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
 			t.Error("a single-issue update refetched the whole list")
 			return linearapi.IssuePage{}, nil
@@ -250,7 +252,7 @@ func TestSetPriorityPickerDispatchesSelectedPriority(t *testing.T) {
 }
 
 func TestSetProjectPickerDispatchesProjectAndClearsMilestone(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
 		t.Error("a single-issue update refetched the whole list")
 		return linearapi.IssuePage{}, nil
@@ -300,7 +302,7 @@ func TestSetProjectPickerDispatchesProjectAndClearsMilestone(t *testing.T) {
 }
 
 func TestClearProjectLeavesMilestoneAloneWhenAbsent(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
 		t.Error("a single-issue update refetched the whole list")
 		return linearapi.IssuePage{}, nil
@@ -334,7 +336,7 @@ func TestClearProjectLeavesMilestoneAloneWhenAbsent(t *testing.T) {
 }
 
 func TestShowProjectFilterReportsMissingTeamContext(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 
 	app.showProjectFilter()
 
@@ -348,6 +350,7 @@ func TestShowProjectFilterReportsMissingTeamContext(t *testing.T) {
 
 func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {
 	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	// A relation changes nothing the list renders, so it must refetch the one
 	// issue for the details pane instead of the whole list.
@@ -396,6 +399,7 @@ func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {
 
 func TestAttachmentActionsUseInjectedOpenAndCopyFunctions(t *testing.T) {
 	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.issuesMu.Lock()
 	app.selectedIssue = &linearapi.Issue{

@@ -37,7 +37,7 @@ func TestSortByPickerAppliesWholeOrdering(t *testing.T) {
 		{label: "Priority", wantFields: []SortField{SortByPriority}, wantConfig: []string{"priority"}, wantStatus: "Sort: priority"},
 	} {
 		t.Run(tc.label, func(t *testing.T) {
-			app := newUXTestApp()
+			app := newUXTestApp(t)
 			refreshDone := installRefreshCompletionHook(app)
 			app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
 				return linearapi.IssuePage{}, nil
@@ -90,7 +90,7 @@ func selectPickerItem(t *testing.T, app *App, label string) {
 // running "Edit issue description" must leave keyboard focus in the modal,
 // not on the pane the palette restored.
 func TestEditDescriptionCommandFocusesModalNotNav(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LTUI-1", Title: "T", Description: "old"}
 	app.focusedPane = FocusNavigation
 	app.openPalette()
@@ -120,7 +120,7 @@ func TestEditDescriptionCommandFocusesModalNotNav(t *testing.T) {
 // modal focuses the description field even after a prior submit left focus
 // on a button.
 func TestEditDescriptionModalShowResetsFocusToTextArea(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	modal := app.editDescriptionModal
 	app.app.SetFocus(modal.fm.order[len(modal.fm.order)-1])
 

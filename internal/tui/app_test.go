@@ -67,6 +67,7 @@ func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 
@@ -133,6 +134,7 @@ func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 
@@ -208,6 +210,7 @@ func TestRefreshIssues_PreservesNavigationFocus(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 
@@ -243,6 +246,7 @@ func TestRefreshIssues_IncludesStateID(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 
@@ -286,6 +290,7 @@ func TestRefreshIssues_IncludesCycleID(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 
@@ -348,6 +353,7 @@ func TestSearchTabTypingDebouncesLatestQuery(t *testing.T) {
 		SearchDebounce: 80 * time.Millisecond,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	// A selected team must not scope the search: it is workspace-wide.
 	app.selectedNavigation = &NavigationNode{ID: "team-1", TeamID: "team-1", IsTeam: true}
@@ -419,6 +425,7 @@ func TestSearchTabEnterMovesFocusToResults(t *testing.T) {
 		SearchDebounce: 20 * time.Millisecond,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "Search hit", State: "Todo"}
@@ -458,6 +465,7 @@ func TestSearchStaleResultsDropped(t *testing.T) {
 		SearchDebounce: 10 * time.Millisecond,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	firstStarted := make(chan struct{})
@@ -496,6 +504,7 @@ func TestSearchEmptyQueryClearsWithoutFetch(t *testing.T) {
 		SearchDebounce: 10 * time.Millisecond,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	var fetches atomic.Int64
@@ -524,6 +533,7 @@ func TestSearchTabTypedLettersReachInput(t *testing.T) {
 		SearchDebounce: time.Hour, // keep the debounce from firing mid-test
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	app.openSearchTab()
@@ -546,6 +556,7 @@ func TestSearchTabRemappedTabKeysCycleOutOfInput(t *testing.T) {
 		Keybindings: map[string]string{"tab_next": "]", "tab_prev": "["},
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
@@ -578,6 +589,7 @@ func TestSearchEscOnEmptyInputReturnsToPreviousTab(t *testing.T) {
 		SearchDebounce: 10 * time.Millisecond,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.activeIssuesSection = IssuesSectionAll
 
@@ -601,6 +613,7 @@ func TestCycleIssuesSectionReachesEmptySearchTab(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
@@ -627,6 +640,7 @@ func TestResetCachedStateClearsSearch(t *testing.T) {
 		SearchDebounce: 10 * time.Millisecond,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "Hit", State: "Todo"}
@@ -682,6 +696,7 @@ func TestResetCachedStateClearsOffScreenSectionTables(t *testing.T) {
 // queued write that installs the user.
 func TestAssignMe_DuringCurrentUserFetch(t *testing.T) {
 	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	release := make(chan struct{})
@@ -767,6 +782,7 @@ func TestUpdateDetailsView_IncludesCycle(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
 	app.issuesMu.Lock()
@@ -826,6 +842,7 @@ func renderedTitles(app *App, section IssuesSection) []string {
 func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
 	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
@@ -880,6 +897,7 @@ func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
 func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
 	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
@@ -924,7 +942,7 @@ func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
 // exactly that when an edit brings an issue into scope, and a page carrying
 // the same issue would otherwise add it twice.
 func TestAccumulateIssues_ReconcilesAfterAnOutsideSplice(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
 		return linearapi.Issue{ID: id}, nil
 	}
@@ -962,7 +980,7 @@ func TestAccumulateIssues_ReconcilesAfterAnOutsideSplice(t *testing.T) {
 // TestAccumulateIssues_KeepsTheListSorted guards the repaint paths that read
 // a.issues directly mid-pagination and do not sort first.
 func TestAccumulateIssues_KeepsTheListSorted(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
 		return linearapi.Issue{ID: id}, nil
 	}
@@ -987,7 +1005,7 @@ func TestAccumulateIssues_KeepsTheListSorted(t *testing.T) {
 // pane: the list model carries no comments or attachments, so overwriting a
 // surviving selection with it silently strips them.
 func TestRenderAccumulatedIssues_KeepsTheHydratedSelection(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	// Set the state directly: updateIssuesData fires an async detail fetch
 	// that would race the selection this test installs.
 	hydrated := linearapi.Issue{
@@ -1015,7 +1033,7 @@ func TestRenderAccumulatedIssues_KeepsTheHydratedSelection(t *testing.T) {
 // updateIssuesData carries: a background refresh must not clear the selection
 // the user is browsing in search results.
 func TestRenderAccumulatedIssues_LeavesTheSearchTabAlone(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	// A search hit that is not in the My/Other models. State is set directly
 	// so no async detail fetch races the selection.
 	offList := linearapi.Issue{ID: "issue-99", Identifier: "ZNL-99", Title: "Elsewhere"}
@@ -1039,6 +1057,7 @@ func TestRenderAccumulatedIssues_LeavesTheSearchTabAlone(t *testing.T) {
 func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
 		return linearapi.Issue{ID: id}, nil
 	}
@@ -1107,6 +1126,7 @@ func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 func TestRenderedTitles_SkipsGroupHeaders(t *testing.T) {
 	cfg := config.Config{PageSize: 10, CacheTTL: time.Minute, GroupBy: GroupByStatus}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
 		return linearapi.Issue{ID: id}, nil

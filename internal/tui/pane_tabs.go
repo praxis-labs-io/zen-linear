@@ -72,6 +72,7 @@ func (a *App) jumpToSection(section IssuesSection, row int) {
 
 // clearSelectedIssue drops the selection and empties the details pane.
 func (a *App) clearSelectedIssue() {
+	a.abandonDetailFetch()
 	a.issuesMu.Lock()
 	a.selectedIssue = nil
 	a.issuesMu.Unlock()

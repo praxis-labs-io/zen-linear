@@ -530,7 +530,7 @@ func (a *App) createIssueRelationForSelectedIssue(label, targetIssueID string) {
 				return
 			}
 			a.flashStatus("Added issue relation")
-			a.refreshIssueDetails(issueID)
+			a.loadIssueDetailsByID(issueID)
 		})
 	}(issue.ID)
 }
@@ -581,7 +581,7 @@ func (a *App) deleteIssueRelationForSelectedIssue(relationID string) {
 				return
 			}
 			a.flashStatus("Removed issue relation")
-			a.refreshIssueDetails(issueID)
+			a.loadIssueDetailsByID(issueID)
 		})
 	}(issue.ID)
 }
@@ -604,7 +604,7 @@ func (a *App) subscribeSelectedIssue() {
 				return
 			}
 			a.flashStatus("Subscribed to issue")
-			a.refreshIssueDetails(issueID)
+			a.loadIssueDetailsByID(issueID)
 		})
 	}(issue.ID)
 }
@@ -627,7 +627,7 @@ func (a *App) unsubscribeSelectedIssue() {
 				return
 			}
 			a.flashStatus("Unsubscribed from issue")
-			a.refreshIssueDetails(issueID)
+			a.loadIssueDetailsByID(issueID)
 		})
 	}(issue.ID)
 }
