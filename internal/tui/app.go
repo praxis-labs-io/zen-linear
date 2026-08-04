@@ -292,6 +292,7 @@ type App struct {
 	fetchProjectsFunc       func(context.Context, string) ([]linearapi.Project, error)
 	fetchWorkflowStatesFunc func(context.Context, string) ([]linearapi.WorkflowState, error)
 	fetchCyclesFunc         func(context.Context, string) ([]linearapi.Cycle, error)
+	fetchCurrentUserFunc    func(context.Context) (linearapi.User, error)
 	preloadTeamMetadataFunc func(string)
 
 	createFavoriteFunc     func(context.Context, linearapi.FavoriteTarget) (linearapi.Favorite, error)
@@ -368,6 +369,7 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 	app.fetchProjectsFunc = app.cache.GetProjects
 	app.fetchWorkflowStatesFunc = app.cache.GetWorkflowStates
 	app.fetchCyclesFunc = app.cache.GetCycles
+	app.fetchCurrentUserFunc = app.cache.GetCurrentUser
 	app.preloadTeamMetadataFunc = app.preloadTeamMetadata
 	app.createFavoriteFunc = app.api.CreateFavorite
 	app.deleteFavoriteFunc = app.api.DeleteFavorite
@@ -410,13 +412,7 @@ func (a *App) loadInitialData() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			user, err := a.cache.GetCurrentUser(ctx)
-			if err != nil {
-				logger.Warning("tui.app: failed to load current user error=%v", err)
-				return
-			}
-			a.currentUser = &user
-			logger.Debug("tui.app: current user loaded user=%s", user.DisplayName)
+			a.loadCurrentUser(ctx)
 		}()
 
 		teams, favorites, err := a.fetchNavigationData(ctx)
@@ -426,9 +422,9 @@ func (a *App) loadInitialData() {
 			logger.ErrorWithErr(err, "tui.app: failed to load teams")
 			a.app.QueueUpdateDraw(func() {
 				a.updateStatusBarWithError(err)
+				// No tree, but All Issues does not need one.
+				a.refreshIssuesWithFocusChange(false)
 			})
-			// No tree, but All Issues does not need one.
-			a.refreshIssuesWithFocusChange(false)
 			return
 		}
 
@@ -440,9 +436,26 @@ func (a *App) loadInitialData() {
 		// configured selection.
 		if !a.applyDefaultNavigation(ctx, teams) {
 			// Startup refresh must not steal focus from the navigation pane.
-			a.refreshIssuesWithFocusChange(false)
+			a.app.QueueUpdateDraw(func() {
+				a.refreshIssuesWithFocusChange(false)
+			})
 		}
 	}()
+}
+
+// loadCurrentUser fetches the authenticated user and installs it on the UI
+// thread. Callers must run it off the event loop; the queued write is what
+// orders it against readers like GetCurrentUser and rebuildIssueRowModels.
+func (a *App) loadCurrentUser(ctx context.Context) {
+	user, err := a.fetchCurrentUserFunc(ctx)
+	if err != nil {
+		logger.Warning("tui.app: failed to load current user error=%v", err)
+		return
+	}
+	a.QueueUpdateDraw(func() {
+		a.currentUser = &user
+	})
+	logger.Debug("tui.app: current user loaded user=%s", user.DisplayName)
 }
 
 // applySettings updates runtime dependencies to match a new configuration.
@@ -477,6 +490,7 @@ func (a *App) applySettings(newCfg config.Config) {
 	a.fetchProjectsFunc = a.cache.GetProjects
 	a.fetchWorkflowStatesFunc = a.cache.GetWorkflowStates
 	a.fetchCyclesFunc = a.cache.GetCycles
+	a.fetchCurrentUserFunc = a.cache.GetCurrentUser
 	a.createFavoriteFunc = a.api.CreateFavorite
 	a.deleteFavoriteFunc = a.api.DeleteFavorite
 	a.updateFavoriteSortFunc = a.api.UpdateFavoriteSortOrder
@@ -753,6 +767,7 @@ func (a *App) resetCachedState() {
 	a.searchReturnSection = IssuesSectionAll
 	a.activeIssuesSection = IssuesSectionAll
 	a.expandedState = make(map[string]bool)
+	a.pendingSectionRenders = nil
 
 	a.isLoading = false
 	a.pendingRefresh = false
@@ -1627,10 +1642,10 @@ func (a *App) runQueuedIssuesRefresh() {
 	a.pendingRefreshIssueID = ""
 	a.pendingRefreshAllowFocusChange = true
 	if issueID != "" {
-		go a.refreshIssuesWithFocusChange(allowFocusChange, issueID)
+		a.refreshIssuesWithFocusChange(allowFocusChange, issueID)
 		return
 	}
-	go a.refreshIssuesWithFocusChange(allowFocusChange)
+	a.refreshIssuesWithFocusChange(allowFocusChange)
 }
 
 func (a *App) notifyRefreshCompleted() {
@@ -1684,7 +1699,10 @@ func (a *App) refreshIssues(issueID ...string) {
 	a.refreshIssuesWithFocusChange(true, issueID...)
 }
 
-// refreshIssuesWithFocusChange fetches issues and optionally shifts focus to the issues pane.
+// refreshIssuesWithFocusChange fetches issues and optionally shifts focus to the
+// issues pane. It must be called on the UI thread: everything it reads before
+// starting the fetch, isLoading included, belongs to the event loop, and that
+// contract is what keeps them free of synchronization.
 func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...string) {
 	if a.isLoading {
 		a.queueIssuesRefresh(allowFocusChange, issueID...)
@@ -1692,40 +1710,37 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 	}
 	a.isLoading = true
 
-	targetID := ""
-	if len(issueID) > 0 {
-		targetID = issueID[0]
-	}
-	logger.Debug("tui.app: starting issues refresh target_issue_id=%s", targetID)
-	generation := a.refreshGeneration.Add(1)
-	var targetIssueID string
+	targetIssueID := ""
 	if len(issueID) > 0 {
 		targetIssueID = issueID[0]
 	}
+	logger.Debug("tui.app: starting issues refresh target_issue_id=%s", targetIssueID)
+	generation := a.refreshGeneration.Add(1)
 
 	allowFocus := allowFocusChange
 	// Snapshot the chain here: setSortFields reassigns it on the UI thread
 	// while this goroutine runs.
 	orderBy := string(a.sortFields[0])
 	params := a.currentFetchParams(orderBy)
+	sortOverridden := a.sortOverridden
+	fetchPage := a.fetchIssuesPage
+	if fetchPage == nil {
+		fetchPage = a.api.FetchIssuesPage
+	}
+	fetchPrefs := a.fetchViewPrefsFunc
+	if fetchPrefs == nil {
+		fetchPrefs = a.api.FetchCustomViewPreferences
+	}
+	a.statusBar.SetText(fmt.Sprintf("%sLoading...[-]", a.themeTags.Warning))
 	go func() {
 		refreshStarted := time.Now()
 		ctx := context.Background()
-
-		fetchPage := a.fetchIssuesPage
-		if fetchPage == nil {
-			fetchPage = a.api.FetchIssuesPage
-		}
 
 		// A custom view carries its own display settings; fetch them first
 		// so the issue query can use the view's sort. Failures fall back to
 		// the configured defaults.
 		var prefs *viewDisplayPrefs
 		if params.CustomViewID != "" {
-			fetchPrefs := a.fetchViewPrefsFunc
-			if fetchPrefs == nil {
-				fetchPrefs = a.api.FetchCustomViewPreferences
-			}
 			values, prefsErr := fetchPrefs(ctx, params.CustomViewID)
 			if prefsErr != nil {
 				logger.ErrorWithErr(prefsErr, "tui.app: failed to fetch view preferences view_id=%s", params.CustomViewID)
@@ -1733,7 +1748,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 				logger.Debug("tui.app: view preferences view_id=%s grouping=%q subgrouping=%q ordering=%q direction=%q", params.CustomViewID, values.IssueGrouping, values.IssueSubGrouping, values.ViewOrdering, values.ViewOrderingDirection)
 				prefs = resolveViewPrefs(values)
 			}
-			if prefs != nil && prefs.hasSort && !a.sortOverridden {
+			if prefs != nil && prefs.hasSort && !sortOverridden {
 				params.OrderBy = string(prefs.sortField)
 			}
 		}
@@ -1844,11 +1859,6 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			a.runQueuedIssuesRefresh()
 		})
 	}()
-
-	// Show loading indicator
-	a.QueueUpdateDraw(func() {
-		a.statusBar.SetText(fmt.Sprintf("%sLoading...[-]", a.themeTags.Warning))
-	})
 }
 
 func (a *App) applyRichFiltersToParams(params *linearapi.FetchIssuesParams) {
@@ -2295,7 +2305,7 @@ func (a *App) onNavigationSelected(node *NavigationNode) {
 		if node.TeamID != "" {
 			go a.preloadTeamMetadataFunc(node.TeamID)
 		}
-		go a.refreshIssuesWithFocusChange(false, node.IssueID)
+		a.refreshIssuesWithFocusChange(false, node.IssueID)
 		return
 	}
 
@@ -2306,9 +2316,7 @@ func (a *App) onNavigationSelected(node *NavigationNode) {
 		go a.preloadTeamMetadataFunc(node.TeamID)
 	}
 
-	// Refresh issues for the new selection - run in goroutine to avoid blocking
-	// the tview callback (QueueUpdateDraw deadlocks if called from within a callback)
-	go a.refreshIssuesWithFocusChange(false)
+	a.refreshIssuesWithFocusChange(false)
 }
 
 // preloadTeamMetadata warms team-scoped metadata caches for commands and create-issue defaults.
@@ -2351,8 +2359,7 @@ func (a *App) setSortFields(fields []SortField) {
 	a.issuesMu.Unlock()
 	a.regroupIssues("")
 
-	// Run in goroutine to avoid deadlock when called from tview callbacks
-	go a.refreshIssues()
+	a.refreshIssues()
 }
 
 // updateStatusBar updates the status bar with current information.
@@ -2486,15 +2493,11 @@ func (a *App) GetTeamUsers() []linearapi.User {
 	return a.teamUsers
 }
 
-// FetchTeamUsers fetches users for a specific team from the API.
+// FetchTeamUsers fetches users for a specific team from the API. It only
+// returns them: the caller runs off the UI thread, and a.teamUsers belongs to
+// the event loop.
 func (a *App) FetchTeamUsers(teamID string) ([]linearapi.User, error) {
-	ctx := context.Background()
-	users, err := a.cache.GetUsers(ctx, teamID)
-	if err != nil {
-		return nil, err
-	}
-	a.teamUsers = users
-	return users, nil
+	return a.cache.GetUsers(context.Background(), teamID)
 }
 
 // GetTeamProjects returns the projects for the currently selected team.
@@ -2502,31 +2505,19 @@ func (a *App) GetTeamProjects() []linearapi.Project {
 	return a.teamProjects
 }
 
-// FetchTeamProjects fetches projects for a specific team from the API.
-func (a *App) FetchTeamProjects(teamID string) ([]linearapi.Project, error) {
-	ctx := context.Background()
-	projects, err := a.cache.GetProjects(ctx, teamID)
-	if err != nil {
-		return nil, err
-	}
-	a.teamProjects = projects
-	return projects, nil
-}
-
 // GetTeamCycles returns the cycles for the currently selected team.
 func (a *App) GetTeamCycles() []linearapi.Cycle {
 	return a.teamCycles
 }
 
-// FetchTeamCycles fetches cycles for a specific team from the API.
+// FetchTeamCycles fetches cycles for a specific team from the API, in
+// navigation order. Like FetchTeamUsers it only returns them.
 func (a *App) FetchTeamCycles(teamID string) ([]linearapi.Cycle, error) {
-	ctx := context.Background()
-	cycles, err := a.cache.GetCycles(ctx, teamID)
+	cycles, err := a.cache.GetCycles(context.Background(), teamID)
 	if err != nil {
 		return nil, err
 	}
 	sortCyclesForNavigation(cycles)
-	a.teamCycles = cycles
 	return cycles, nil
 }
 
@@ -2547,12 +2538,14 @@ func (a *App) QueueUpdateDraw(f func()) {
 	a.app.QueueUpdateDraw(f)
 }
 
-// loadPickerData loads picker data asynchronously if not already cached.
-func (a *App) loadPickerData(
+// loadPickerData fetches picker data for the selected team in the background and
+// hands it to onLoaded on the UI thread, where the caller caches it. A method
+// cannot take a type parameter, hence the free function.
+func loadPickerData[T any](
+	a *App,
 	resourceName string,
-	hasData func() bool,
-	loadData func(ctx context.Context, teamID string) error,
-	onLoaded func(),
+	load func(ctx context.Context, teamID string) ([]T, error),
+	onLoaded func(values []T),
 ) {
 	teamID := a.GetSelectedTeamID()
 	if teamID == "" {
@@ -2561,8 +2554,8 @@ func (a *App) loadPickerData(
 	}
 	go func() {
 		logger.Debug("tui.app: loading %s team_id=%s", resourceName, teamID)
-		ctx := context.Background()
-		if err := loadData(ctx, teamID); err != nil {
+		values, err := load(context.Background(), teamID)
+		if err != nil {
 			logger.ErrorWithErr(err, "tui.app: failed to load %s team_id=%s", resourceName, teamID)
 			a.QueueUpdateDraw(func() {
 				a.updateStatusBarWithError(err)
@@ -2570,7 +2563,9 @@ func (a *App) loadPickerData(
 			return
 		}
 		logger.Debug("tui.app: loaded %s team_id=%s", resourceName, teamID)
-		a.QueueUpdateDraw(onLoaded)
+		a.QueueUpdateDraw(func() {
+			onLoaded(values)
+		})
 	}()
 }
 
@@ -2580,19 +2575,10 @@ func (a *App) ShowStatusPicker(contextLine string, onSelect func(stateID string)
 	logger.Debug("tui.app: showing status picker")
 	states := a.workflowStates
 	if len(states) == 0 {
-		a.loadPickerData(
-			"workflow states",
-			func() bool { return len(a.workflowStates) > 0 },
-			func(ctx context.Context, teamID string) error {
-				loadedStates, err := a.cache.GetWorkflowStates(ctx, teamID)
-				if err != nil {
-					return err
-				}
-				a.workflowStates = loadedStates
-				return nil
-			},
-			func() {
-				a.showStatusPickerWithStates(a.workflowStates, contextLine, onSelect)
+		loadPickerData(a, "workflow states", a.cache.GetWorkflowStates,
+			func(loaded []linearapi.WorkflowState) {
+				a.workflowStates = loaded
+				a.showStatusPickerWithStates(loaded, contextLine, onSelect)
 			},
 		)
 		return
@@ -2622,19 +2608,10 @@ func (a *App) ShowUserPicker(contextLine string, onSelect func(userID string)) {
 	logger.Debug("tui.app: showing user picker")
 	users := a.teamUsers
 	if len(users) == 0 {
-		a.loadPickerData(
-			"users for picker",
-			func() bool { return len(a.teamUsers) > 0 },
-			func(ctx context.Context, teamID string) error {
-				loadedUsers, err := a.cache.GetUsers(ctx, teamID)
-				if err != nil {
-					return err
-				}
-				a.teamUsers = loadedUsers
-				return nil
-			},
-			func() {
-				a.showUserPickerWithUsers(a.teamUsers, contextLine, onSelect)
+		loadPickerData(a, "users for picker", a.cache.GetUsers,
+			func(loaded []linearapi.User) {
+				a.teamUsers = loaded
+				a.showUserPickerWithUsers(loaded, contextLine, onSelect)
 			},
 		)
 		return
@@ -2668,20 +2645,18 @@ func (a *App) ShowCyclePicker(contextLine string, onSelect func(cycleID string))
 	logger.Debug("tui.app: showing cycle picker")
 	cycles := a.teamCycles
 	if len(cycles) == 0 {
-		a.loadPickerData(
-			"cycles for picker",
-			func() bool { return len(a.teamCycles) > 0 },
-			func(ctx context.Context, teamID string) error {
-				loadedCycles, err := a.cache.GetCycles(ctx, teamID)
+		loadPickerData(a, "cycles for picker",
+			func(ctx context.Context, teamID string) ([]linearapi.Cycle, error) {
+				loaded, err := a.cache.GetCycles(ctx, teamID)
 				if err != nil {
-					return err
+					return nil, err
 				}
-				sortCyclesForNavigation(loadedCycles)
-				a.teamCycles = loadedCycles
-				return nil
+				sortCyclesForNavigation(loaded)
+				return loaded, nil
 			},
-			func() {
-				a.showCyclePickerWithCycles(a.teamCycles, contextLine, onSelect)
+			func(loaded []linearapi.Cycle) {
+				a.teamCycles = loaded
+				a.showCyclePickerWithCycles(loaded, contextLine, onSelect)
 			},
 		)
 		return
@@ -2720,19 +2695,10 @@ func (a *App) ShowProjectPicker(contextLine string, onSelect func(projectID stri
 	logger.Debug("tui.app: showing project picker")
 	projects := a.teamProjects
 	if len(projects) == 0 {
-		a.loadPickerData(
-			"projects for picker",
-			func() bool { return len(a.teamProjects) > 0 },
-			func(ctx context.Context, teamID string) error {
-				loadedProjects, err := a.cache.GetProjects(ctx, teamID)
-				if err != nil {
-					return err
-				}
-				a.teamProjects = loadedProjects
-				return nil
-			},
-			func() {
-				a.showProjectPickerWithProjects(a.teamProjects, contextLine, onSelect)
+		loadPickerData(a, "projects for picker", a.cache.GetProjects,
+			func(loaded []linearapi.Project) {
+				a.teamProjects = loaded
+				a.showProjectPickerWithProjects(loaded, contextLine, onSelect)
 			},
 		)
 		return

@@ -65,7 +65,7 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 	a.queueUpdateDraw(func() {
 		teamNode := a.findTeamTreeNode(team.ID)
 		if teamNode == nil {
-			go a.refreshIssues()
+			a.refreshIssues()
 			return
 		}
 		// Leave children unpopulated on fetch errors so expanding the team retries.
@@ -85,7 +85,7 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 		a.navigationTree.SetCurrentNode(target)
 		nav, ok := target.GetReference().(*NavigationNode)
 		if !ok {
-			go a.refreshIssues()
+			a.refreshIssues()
 			return
 		}
 		a.onNavigationSelected(nav)

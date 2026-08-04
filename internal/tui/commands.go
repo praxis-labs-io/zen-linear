@@ -254,7 +254,7 @@ func DefaultCommands(app *App) []Command {
 			ShortcutRune: 'r',
 			Run: func(a *App) {
 				a.flashStatus("Refreshing issues...")
-				go a.refreshIssues()
+				a.refreshIssues()
 			},
 		},
 		{
@@ -664,7 +664,7 @@ func DefaultCommands(app *App) []Command {
 								if len(issue.Children) > 0 {
 									// Linear may archive sub-issues with the
 									// parent; only a fetch answers for them.
-									go a.refreshIssues()
+									a.refreshIssues()
 								} else {
 									a.applyIssueRemoval(issue.ID)
 								}

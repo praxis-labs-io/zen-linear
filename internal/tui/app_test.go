@@ -647,6 +647,101 @@ func TestResetCachedStateClearsSearch(t *testing.T) {
 	}
 }
 
+func TestResetCachedStateClearsPendingSectionRenders(t *testing.T) {
+	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+	app.pendingSectionRenders = map[IssuesSection]string{IssuesSectionMy: "issue-1"}
+
+	app.resetCachedState()
+
+	if len(app.pendingSectionRenders) != 0 {
+		t.Fatalf("pendingSectionRenders = %v, want empty", app.pendingSectionRenders)
+	}
+}
+
+// TestAssignMe_DuringCurrentUserFetch drives assign_me through the real command
+// handler while the current-user fetch is still in flight, on both sides of the
+// queued write that installs the user.
+func TestAssignMe_DuringCurrentUserFetch(t *testing.T) {
+	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
+	app.queueUpdateDraw = func(f func()) { f() }
+
+	release := make(chan struct{})
+	user := linearapi.User{ID: "user-1", Name: "Test User", DisplayName: "Tester"}
+	app.fetchCurrentUserFunc = func(context.Context) (linearapi.User, error) {
+		<-release
+		return user, nil
+	}
+
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "First", State: "Todo"}
+	app.issuesMu.Lock()
+	app.selectedIssue = &issue
+	app.issuesMu.Unlock()
+
+	var assignedMu sync.Mutex
+	var assigned []string
+	// The empty response stops applyIssueUpdate at its first check. What the
+	// command sent is the subject here, and a repaint would outlive the test on
+	// the update goroutines the dispatch loop below leaves in flight.
+	app.updateIssueFunc = func(_ context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
+		assignedMu.Lock()
+		if input.AssigneeID != nil {
+			assigned = append(assigned, *input.AssigneeID)
+		}
+		assignedMu.Unlock()
+		return linearapi.Issue{}, nil
+	}
+	assignedIDs := func() []string {
+		assignedMu.Lock()
+		defer assignedMu.Unlock()
+		return slices.Clone(assigned)
+	}
+
+	assignMe := findCommandByID(DefaultCommands(app), "assign_me")
+	if assignMe == nil {
+		t.Fatal("assign_me command not found")
+	}
+	// Every dispatch goes through the same queue the fetch writes through, the
+	// contract the command relies on to see a whole user or none.
+	dispatch := func() { app.QueueUpdateDraw(func() { assignMe.Run(app) }) }
+
+	dispatch()
+	if got := assignedIDs(); len(got) != 0 {
+		t.Fatalf("assigned before the user loaded = %v, want none", got)
+	}
+	var status string
+	app.QueueUpdateDraw(func() { status = app.statusMessage })
+	if status != "No issue or current user selected" {
+		t.Fatalf("status message = %q, want the no-user message", status)
+	}
+
+	// Dispatch across the window where the fetch lands, so the command handler
+	// and the queued write overlap.
+	hammered := make(chan struct{})
+	go func() {
+		defer close(hammered)
+		for i := 0; i < 50; i++ {
+			dispatch()
+		}
+	}()
+	loaded := make(chan struct{})
+	go func() {
+		defer close(loaded)
+		app.loadCurrentUser(context.Background())
+	}()
+	close(release)
+	<-loaded
+	<-hammered
+
+	dispatch()
+	waitForCondition(t, time.Second, func() bool { return len(assignedIDs()) > 0 })
+	for _, id := range assignedIDs() {
+		if id != user.ID {
+			t.Fatalf("assigned ID = %q, want %q", id, user.ID)
+		}
+	}
+}
+
 func TestUpdateDetailsView_IncludesCycle(t *testing.T) {
 	cfg := config.Config{
 		PageSize: 1,
