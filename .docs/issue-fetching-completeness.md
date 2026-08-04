@@ -23,7 +23,7 @@ Implement full cursor pagination for issue fetching to avoid missing issues in l
 - Keep existing defaults (`LINEAR_PAGE_SIZE`) as per-page size.
 
 ## Architecture
-- `internal/linearapi/client.go` owns pagination and aggregation of issue pages.
+- `internal/linearapi/issues_query.go` owns pagination and aggregation of issue pages.
 - `internal/tui/app.go` initiates issue fetching and surfaces progress via the status bar.
 - Data flow: TUI triggers fetch → Linear API client paginates → progress callback updates UI → final aggregated issues update UI.
 
@@ -49,6 +49,6 @@ flowchart TD
 - [ ] Evaluate pagination latency in large workspaces.
 
 ## Relevant Files
-- `internal/linearapi/client.go`
+- `internal/linearapi/issues_query.go`
 - `internal/linearapi/client_test.go`
 - `internal/tui/app.go`

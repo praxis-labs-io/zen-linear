@@ -85,7 +85,7 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 	}
 
 	searchTerm := strings.TrimSpace(params.Search)
-	// Build filter for team/project/state constraints only (search handles the text matching).
+	// Linear's search term does the text matching, so the filter carries the rest.
 	filter := buildStructuredIssueFilter(params)
 
 	var afterCursor *graphql.String
@@ -323,7 +323,6 @@ func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesPa
 	return issues, nil
 }
 
-// customViewIssuesPage fetches a single page of a Linear custom view's issues.
 // IssueMatchesScope reports whether an issue is inside the scope the params
 // describe, asking the server the same question the list query asks so a
 // custom view's own filter is honored. The params' IDs field is ignored.
@@ -371,6 +370,7 @@ func (c *Client) IssueMatchesScope(ctx context.Context, params FetchIssuesParams
 	return len(query.CustomView.Issues.Nodes) > 0, nil
 }
 
+// customViewIssuesPage fetches a single page of a Linear custom view's issues.
 func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {
