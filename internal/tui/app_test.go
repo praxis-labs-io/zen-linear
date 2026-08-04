@@ -647,13 +647,31 @@ func TestResetCachedStateClearsSearch(t *testing.T) {
 	}
 }
 
-func TestResetCachedStateClearsPendingSectionRenders(t *testing.T) {
-	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
-	app.queueUpdateDraw = func(f func()) { f() }
-	app.pendingSectionRenders = map[IssuesSection]string{IssuesSectionMy: "issue-1"}
+// Clearing the row models is not enough. A tab that is off screen keeps the
+// cells it was last painted with, so a workspace switch used to leave the
+// previous workspace's issues sitting in the My tab until something repainted
+// it, which for a failed fetch is never.
+func TestResetCachedStateClearsOffScreenSectionTables(t *testing.T) {
+	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", AssigneeID: "user-1", Assignee: "Me"},
+	})
+	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
+	app.rebuildIssueRowModels()
+	holdDetailFetches(t, app)
+
+	// Paint My, then move off it so it holds this workspace's rows unseen.
+	app.activeIssuesSection = IssuesSectionMy
+	app.renderIssueSections(map[IssuesSection]string{IssuesSectionMy: "issue-1"})
+	app.activeIssuesSection = IssuesSectionAll
+	if len(renderedTitles(app, IssuesSectionMy)) == 0 {
+		t.Fatal("My was never painted, so this test proves nothing")
+	}
 
 	app.resetCachedState()
 
+	if got := renderedTitles(app, IssuesSectionMy); len(got) != 0 {
+		t.Fatalf("My still shows %v after a reset, want no rows", got)
+	}
 	if len(app.pendingSectionRenders) != 0 {
 		t.Fatalf("pendingSectionRenders = %v, want empty", app.pendingSectionRenders)
 	}
@@ -725,9 +743,10 @@ func TestAssignMe_DuringCurrentUserFetch(t *testing.T) {
 		}
 	}()
 	loaded := make(chan struct{})
+	fetchUser, generation := app.fetchCurrentUserFunc, app.resetGeneration.Load()
 	go func() {
 		defer close(loaded)
-		app.loadCurrentUser(context.Background())
+		app.loadCurrentUser(context.Background(), fetchUser, generation)
 	}()
 	close(release)
 	<-loaded

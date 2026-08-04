@@ -274,6 +274,10 @@ type App struct {
 	pendingRefreshAllowFocusChange bool
 	pickerActive                   bool
 	refreshGeneration              atomic.Int64
+	// resetGeneration counts workspace/settings resets, not refreshes, so a
+	// fetch in flight across one can tell it belongs to the workspace the user
+	// left. refreshGeneration is unusable for that: every refresh bumps it.
+	resetGeneration atomic.Int64
 
 	// Lazy loading helpers (overridable in tests)
 	fetchIssuesPage         func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error)
@@ -400,6 +404,11 @@ func (a *App) Run() error {
 
 // loadInitialData fetches user, navigation, and issues in a background goroutine.
 func (a *App) loadInitialData() {
+	// Snapshot the seam and the generation here: applySettings reassigns the
+	// one and resetCachedState bumps the other, both on the UI thread, while
+	// the goroutines below run.
+	fetchUser := a.fetchCurrentUserFunc
+	generation := a.resetGeneration.Load()
 	go func() {
 		started := time.Now()
 		ctx := context.Background()
@@ -412,7 +421,7 @@ func (a *App) loadInitialData() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a.loadCurrentUser(ctx)
+			a.loadCurrentUser(ctx, fetchUser, generation)
 		}()
 
 		teams, favorites, err := a.fetchNavigationData(ctx)
@@ -420,9 +429,14 @@ func (a *App) loadInitialData() {
 		logger.Debug("tui.app: startup fetches completed elapsed=%s", time.Since(started))
 		if err != nil {
 			logger.ErrorWithErr(err, "tui.app: failed to load teams")
+			// The error needs its own draw. The refresh sets the status bar to
+			// "Loading..." synchronously, so sharing a closure means tview only
+			// ever paints the second message.
 			a.app.QueueUpdateDraw(func() {
 				a.updateStatusBarWithError(err)
-				// No tree, but All Issues does not need one.
+			})
+			// No tree, but All Issues does not need one.
+			a.app.QueueUpdateDraw(func() {
 				a.refreshIssuesWithFocusChange(false)
 			})
 			return
@@ -446,13 +460,20 @@ func (a *App) loadInitialData() {
 // loadCurrentUser fetches the authenticated user and installs it on the UI
 // thread. Callers must run it off the event loop; the queued write is what
 // orders it against readers like GetCurrentUser and rebuildIssueRowModels.
-func (a *App) loadCurrentUser(ctx context.Context) {
-	user, err := a.fetchCurrentUserFunc(ctx)
+// generation is the value read before the fetch started: a workspace switch
+// bumps it, and a user from the workspace the user left must not land in the
+// one they are now in.
+func (a *App) loadCurrentUser(ctx context.Context, fetchUser func(context.Context) (linearapi.User, error), generation int64) {
+	user, err := fetchUser(ctx)
 	if err != nil {
 		logger.Warning("tui.app: failed to load current user error=%v", err)
 		return
 	}
 	a.QueueUpdateDraw(func() {
+		if generation != a.resetGeneration.Load() {
+			logger.Debug("tui.app: discarding superseded current user user=%s", user.DisplayName)
+			return
+		}
 		a.currentUser = &user
 	})
 	logger.Debug("tui.app: current user loaded user=%s", user.DisplayName)
@@ -466,9 +487,10 @@ func (a *App) applySettings(newCfg config.Config) {
 	logLevel := parseLogLevel(newCfg.LogLevel)
 	if err := logger.Reinit(newCfg.LogFile, logLevel); err != nil {
 		logger.ErrorWithErr(err, "tui.app: failed to reinitialize logger")
-		a.QueueUpdateDraw(func() {
-			a.updateStatusBarWithError(err)
-		})
+		// Queueing here would hang the app: the settings save and the workspace
+		// switcher both call this from the event loop, and QueueUpdateDraw waits
+		// on that same loop to drain it.
+		a.updateStatusBarWithError(err)
 		return
 	}
 	logger.Debug("tui.app: settings applied log_file=%s log_level=%s", newCfg.LogFile, newCfg.LogLevel)
@@ -767,7 +789,15 @@ func (a *App) resetCachedState() {
 	a.searchReturnSection = IssuesSectionAll
 	a.activeIssuesSection = IssuesSectionAll
 	a.expandedState = make(map[string]bool)
+	// Clearing the models is not enough: an off-screen tab keeps its painted
+	// cells until something repaints it, and dropping the pending markers
+	// removes the only thing that would have.
 	a.pendingSectionRenders = nil
+	for _, section := range []IssuesSection{IssuesSectionAll, IssuesSectionMy} {
+		if table := a.tableForSection(section); table != nil {
+			table.Clear()
+		}
+	}
 
 	a.isLoading = false
 	a.pendingRefresh = false
@@ -775,6 +805,7 @@ func (a *App) resetCachedState() {
 	a.pendingRefreshAllowFocusChange = true
 	// Bump generation to prevent in-flight refreshes from updating UI.
 	a.refreshGeneration.Add(1)
+	a.resetGeneration.Add(1)
 	a.fetchingIssueID = ""
 }
 
@@ -2500,11 +2531,6 @@ func (a *App) FetchTeamUsers(teamID string) ([]linearapi.User, error) {
 	return a.cache.GetUsers(context.Background(), teamID)
 }
 
-// GetTeamProjects returns the projects for the currently selected team.
-func (a *App) GetTeamProjects() []linearapi.Project {
-	return a.teamProjects
-}
-
 // GetTeamCycles returns the cycles for the currently selected team.
 func (a *App) GetTeamCycles() []linearapi.Cycle {
 	return a.teamCycles
@@ -2519,11 +2545,6 @@ func (a *App) FetchTeamCycles(teamID string) ([]linearapi.Cycle, error) {
 	}
 	sortCyclesForNavigation(cycles)
 	return cycles, nil
-}
-
-// GetWorkflowStates returns the workflow states for the currently selected team.
-func (a *App) GetWorkflowStates() []linearapi.WorkflowState {
-	return a.workflowStates
 }
 
 // QueueUpdateDraw queues a UI update function to be run in the main thread.
