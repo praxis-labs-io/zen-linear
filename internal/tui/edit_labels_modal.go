@@ -177,8 +177,11 @@ func (elm *EditLabelsModal) getSelectedLabelIDs() []string {
 // Hide hides the edit labels modal.
 func (elm *EditLabelsModal) Hide() {
 	elm.app.pages.RemovePage("edit_labels")
-	elm.app.updateFocus()
+	elm.app.restoreModalFocus()
 }
+
+// Focus returns keyboard focus to the list, for when an overlay closes.
+func (elm *EditLabelsModal) Focus() { elm.app.app.SetFocus(elm.list) }
 
 // HandleKey handles keyboard input for the edit labels modal.
 func (elm *EditLabelsModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {

@@ -55,6 +55,9 @@ func (ccm *CreateCommentModal) Hide() {
 	ccm.fm.Hide("create_comment")
 }
 
+// Focus returns keyboard focus to the form, for when an overlay closes.
+func (ccm *CreateCommentModal) Focus() { ccm.fm.Focus() }
+
 // HandleKey handles keyboard input for the create comment modal.
 func (ccm *CreateCommentModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return ccm.fm.HandleKey(event)

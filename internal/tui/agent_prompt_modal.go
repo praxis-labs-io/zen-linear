@@ -88,6 +88,9 @@ func (am *AgentPromptModal) Hide() {
 	am.fm.Hide("agent_prompt")
 }
 
+// Focus returns keyboard focus to the form, for when an overlay closes.
+func (am *AgentPromptModal) Focus() { am.fm.Focus() }
+
 // HandleKey handles keyboard input for the prompt modal.
 func (am *AgentPromptModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return am.fm.HandleKey(event)

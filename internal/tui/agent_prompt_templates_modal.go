@@ -143,8 +143,11 @@ func (pm *AgentPromptTemplatesModal) Show(templates []config.AgentPromptTemplate
 // Hide hides the prompt templates modal.
 func (pm *AgentPromptTemplatesModal) Hide() {
 	pm.app.pages.RemovePage("prompt_templates")
-	pm.app.updateFocus()
+	pm.app.restoreModalFocus()
 }
+
+// Focus returns keyboard focus to the template list, for when an overlay closes.
+func (pm *AgentPromptTemplatesModal) Focus() { pm.app.app.SetFocus(pm.list) }
 
 // HandleKey handles keyboard input for the prompt templates modal.
 func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {

@@ -278,7 +278,6 @@ type App struct {
 	pendingRefresh                 bool
 	pendingRefreshIssueID          string
 	pendingRefreshAllowFocusChange bool
-	pickerActive                   bool
 	refreshGeneration              atomic.Int64
 	// resetGeneration counts workspace/settings resets, not refreshes, so a
 	// fetch in flight across one can tell it belongs to the workspace the user
@@ -1131,66 +1130,8 @@ func (a *App) bindGlobalKeys() {
 // handleGlobalKey is the app's single input capture: modals first, then the
 // palette and search input, then global keys, then the focused pane.
 func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
-	if a.pages.HasPage("confirmation") && a.confirmationModal != nil {
-		return a.confirmationModal.HandleKey(event)
-	}
-
-	// Handle picker modal if active
-	if a.pickerActive {
-		return a.pickerModal.HandleKey(event)
-	}
-
-	// Check if create issue modal is visible and handle its keys
-	if a.pages.HasPage("create_issue") && a.createIssueModal != nil {
-		return a.createIssueModal.HandleKey(event)
-	}
-
-	// Check if create comment modal is visible and handle its keys
-	if a.pages.HasPage("create_comment") && a.createCommentModal != nil {
-		return a.createCommentModal.HandleKey(event)
-	}
-
-	// Check if edit title modal is visible and handle its keys
-	if a.pages.HasPage("edit_title") && a.editTitleModal != nil {
-		return a.editTitleModal.HandleKey(event)
-	}
-
-	// Check if edit description modal is visible and handle its keys
-	if a.pages.HasPage("edit_description") && a.editDescriptionModal != nil {
-		return a.editDescriptionModal.HandleKey(event)
-	}
-
-	// Check if edit labels modal is visible and handle its keys
-	if a.pages.HasPage("edit_labels") && a.editLabelsModal != nil {
-		return a.editLabelsModal.HandleKey(event)
-	}
-
-	if a.pages.HasPage("text_input") && a.textInputModal != nil {
-		return a.textInputModal.HandleKey(event)
-	}
-
-	if a.pages.HasPage("multi_select") && a.multiSelectModal != nil {
-		return a.multiSelectModal.HandleKey(event)
-	}
-
-	// Check if settings modal is visible and handle its keys
-	if a.pages.HasPage("settings") && a.settingsModal != nil {
-		return a.settingsModal.HandleKey(event)
-	}
-
-	// Check if prompt templates modal is visible and handle its keys
-	if a.pages.HasPage("prompt_templates") && a.promptTemplatesModal != nil {
-		return a.promptTemplatesModal.HandleKey(event)
-	}
-
-	// Check if agent prompt modal is visible and handle its keys
-	if a.pages.HasPage("agent_prompt") && a.agentPromptModal != nil {
-		return a.agentPromptModal.HandleKey(event)
-	}
-
-	// Check if agent output modal is visible and handle its keys
-	if a.pages.HasPage("agent_output") && a.agentOutputModal != nil {
-		return a.agentOutputModal.HandleKey(event)
+	if modal := a.activeModal(); modal != nil {
+		return modal.HandleKey(event)
 	}
 
 	// Handle palette first if it's open
@@ -2191,9 +2132,7 @@ func (a *App) regroupIssues(message string) {
 // showSortByPicker selects the list ordering. Every row is a whole ordering,
 // so one keystroke settles it.
 func (a *App) showSortByPicker() {
-	a.pickerActive = true
 	a.pickerModal.Show("Sort Issues By", sortOrderingPickerItems(a.configuredSortFields), func(item PickerItem) {
-		a.pickerActive = false
 		a.setSortFields(parseSortFields(strings.Split(item.ID, ",")))
 	})
 }
@@ -2213,9 +2152,7 @@ func groupDimensionPickerItems() []PickerItem {
 
 // showGroupByPicker selects the primary grouping dimension.
 func (a *App) showGroupByPicker() {
-	a.pickerActive = true
 	a.pickerModal.Show("Group Issues By", groupDimensionPickerItems(), func(item PickerItem) {
-		a.pickerActive = false
 		// A manual grouping choice outranks the active view's for the
 		// session.
 		a.groupingOverridden = true
@@ -2243,9 +2180,7 @@ func (a *App) showSubgroupByPicker() {
 			items = append(items, item)
 		}
 	}
-	a.pickerActive = true
 	a.pickerModal.Show("Subgroup Issues By", items, func(item PickerItem) {
-		a.pickerActive = false
 		a.groupingOverridden = true
 		a.config.SubgroupBy = item.ID
 		if item.ID == GroupByNone {
@@ -2581,9 +2516,7 @@ func (a *App) showStatusPickerWithStates(states []linearapi.WorkflowState, conte
 		})
 	}
 
-	a.pickerActive = true
 	a.pickerModal.ShowWithContext("Select Status", contextLine, items, func(item PickerItem) {
-		a.pickerActive = false
 		onSelect(item.ID)
 	})
 }
@@ -2618,9 +2551,7 @@ func (a *App) showUserPickerWithUsers(users []linearapi.User, contextLine string
 		})
 	}
 
-	a.pickerActive = true
 	a.pickerModal.ShowWithContext("Select Assignee", contextLine, items, func(item PickerItem) {
-		a.pickerActive = false
 		onSelect(item.ID)
 	})
 }
@@ -2668,9 +2599,7 @@ func (a *App) showCyclePickerWithCycles(cycles []linearapi.Cycle, contextLine st
 		})
 	}
 
-	a.pickerActive = true
 	a.pickerModal.ShowWithContext("Select Cycle", contextLine, items, func(item PickerItem) {
-		a.pickerActive = false
 		onSelect(item.ID)
 	})
 }
@@ -2701,9 +2630,7 @@ func (a *App) showProjectPickerWithProjects(projects []linearapi.Project, contex
 		})
 	}
 
-	a.pickerActive = true
 	a.pickerModal.ShowWithContext("Select Project", contextLine, items, func(item PickerItem) {
-		a.pickerActive = false
 		onSelect(item.ID)
 	})
 }
@@ -2735,9 +2662,7 @@ func (a *App) ShowParentIssuePicker(contextLine string, onSelect func(parentID s
 	}
 	logger.Debug("tui.app: parent issue picker items count=%d", len(items))
 
-	a.pickerActive = true
 	a.pickerModal.ShowWithContext("Select Parent Issue", contextLine, items, func(item PickerItem) {
-		a.pickerActive = false
 		onSelect(item.ID)
 	})
 }

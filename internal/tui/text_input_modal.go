@@ -45,6 +45,9 @@ func (tm *TextInputModal) Hide() {
 	tm.fm.Hide("text_input")
 }
 
+// Focus returns keyboard focus to the form, for when an overlay closes.
+func (tm *TextInputModal) Focus() { tm.fm.Focus() }
+
 // HandleKey handles keyboard input for the text input modal.
 func (tm *TextInputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	// Plain Enter submits here; the shared form default would only move focus.

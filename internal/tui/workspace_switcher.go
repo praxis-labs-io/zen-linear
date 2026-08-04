@@ -40,10 +40,8 @@ func (a *App) showWorkspacePicker() {
 		a.flashStatus("No workspaces configured — add a workspaces list to config.json")
 		return
 	}
-	a.pickerActive = true
 	items := workspacePickerItems(a.config.Workspaces, a.activeWorkspaceName)
 	a.pickerModal.Show("Switch Workspace", items, func(item PickerItem) {
-		a.pickerActive = false
 		a.switchWorkspace(item.ID)
 	})
 }

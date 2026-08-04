@@ -52,8 +52,11 @@ func (cm *ConfirmationModal) Show(title, message, confirmLabel string, onConfirm
 // Hide closes the confirmation prompt.
 func (cm *ConfirmationModal) Hide() {
 	cm.app.pages.RemovePage("confirmation")
-	cm.app.updateFocus()
+	cm.app.restoreModalFocus()
 }
+
+// Focus returns keyboard focus to the buttons, for when an overlay closes.
+func (cm *ConfirmationModal) Focus() { cm.app.app.SetFocus(cm.modal) }
 
 // HandleKey handles confirmation-level shortcuts.
 func (cm *ConfirmationModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {

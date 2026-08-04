@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -133,6 +134,24 @@ func TestModalDispatchRoutesToTheOpenModal(t *testing.T) {
 				t.Fatalf("Escape moved focus to %v, want %v untouched", app.focusedPane, focused)
 			}
 		})
+	}
+}
+
+// TestOverlayRestoresFocusToTheModalBeneath covers what the picker's own
+// focus-restore missed: it named create_issue and edit_title, so closing a
+// picker over any other modal handed focus to a pane instead.
+func TestOverlayRestoresFocusToTheModalBeneath(t *testing.T) {
+	app := newUXTestApp(t)
+	openModal(t, app, "text_input")
+	openModal(t, app, "picker")
+
+	escape(app)
+
+	if app.pages.HasPage("picker") {
+		t.Fatal("Escape did not close the picker")
+	}
+	if got := app.app.GetFocus(); got != tview.Primitive(app.textInputModal.input) {
+		t.Fatalf("focus after closing the picker = %T, want the text input field", got)
 	}
 }
 

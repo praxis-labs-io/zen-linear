@@ -371,6 +371,9 @@ func (sm *SettingsModal) Hide() {
 	sm.fm.Hide("settings")
 }
 
+// Focus returns keyboard focus to the form, for when an overlay closes.
+func (sm *SettingsModal) Focus() { sm.fm.Focus() }
+
 // HandleKey handles keyboard input for the settings modal.
 func (sm *SettingsModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return sm.fm.HandleKey(event)

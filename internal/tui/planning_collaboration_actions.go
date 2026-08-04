@@ -151,9 +151,7 @@ func (a *App) showSetPriorityPicker() {
 	// The picker names this issue, so the write targets it even if a refresh
 	// moves the selection while the picker is open.
 	issueID := issue.ID
-	a.pickerActive = true
 	a.pickerModal.ShowWithContext("Set Priority", a.issueContextLine(*issue), items, func(item PickerItem) {
-		a.pickerActive = false
 		priority, err := strconv.Atoi(item.ID)
 		if err != nil {
 			a.updateStatusBarWithError(err)
@@ -253,9 +251,7 @@ func (a *App) showProjectMilestonePicker(title string, onSelect func(linearapi.P
 				items = append(items, PickerItem{ID: milestone.ID, Label: label})
 				byID[milestone.ID] = milestone
 			}
-			a.pickerActive = true
 			a.pickerModal.ShowWithContext(title, contextLine, items, func(item PickerItem) {
-				a.pickerActive = false
 				if onSelect != nil {
 					onSelect(byID[item.ID])
 				}
@@ -303,9 +299,7 @@ func (a *App) showFilterIssuesPicker() {
 		{ID: "estimate", Label: "Estimate"},
 		{ID: "clear", Label: "Clear filters"},
 	}
-	a.pickerActive = true
 	a.pickerModal.Show("Filter Issues", items, func(item PickerItem) {
-		a.pickerActive = false
 		switch item.ID {
 		case "assignee":
 			a.showAssigneeFilter()
@@ -497,10 +491,8 @@ func (a *App) showAddIssueRelationPicker() {
 		a.flashStatus("No issue selected")
 		return
 	}
-	a.pickerActive = true
 	contextLine := a.issueContextLine(*issue)
 	a.pickerModal.ShowWithContext("Relation Type", contextLine, issueRelationTypeLabels, func(item PickerItem) {
-		a.pickerActive = false
 		a.textInputModal.ShowWithContext("Related Issue", "Issue ID: ", "", contextLine, func(targetIssueID string) {
 			a.createIssueRelationForSelectedIssue(item.ID, targetIssueID)
 		})
@@ -556,9 +548,7 @@ func (a *App) showRemoveIssueRelationPicker() {
 			Label: relation.DisplayType() + " " + formatIssueReference(ref),
 		})
 	}
-	a.pickerActive = true
 	a.pickerModal.ShowWithContext("Remove Relation", a.issueContextLine(*issue), items, func(item PickerItem) {
-		a.pickerActive = false
 		a.deleteIssueRelationForSelectedIssue(item.ID)
 	})
 }
@@ -688,9 +678,7 @@ func (a *App) runAttachmentAction(title string, action func(linearapi.Attachment
 		byID[attachment.ID] = attachment
 		items = append(items, PickerItem{ID: attachment.ID, Label: label})
 	}
-	a.pickerActive = true
 	a.pickerModal.ShowWithContext(title, a.issueContextLine(*issue), items, func(item PickerItem) {
-		a.pickerActive = false
 		action(byID[item.ID])
 	})
 }

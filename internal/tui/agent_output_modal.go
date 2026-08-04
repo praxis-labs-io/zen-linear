@@ -265,8 +265,11 @@ func (om *AgentOutputModal) Hide() {
 	om.stopFlushTicker()
 	om.spinner.Stop()
 	om.app.pages.RemovePage("agent_output")
-	om.app.updateFocus()
+	om.app.restoreModalFocus()
 }
+
+// Focus returns keyboard focus to the stream view, for when an overlay closes.
+func (om *AgentOutputModal) Focus() { om.app.app.SetFocus(om.streamView) }
 
 // HandleKey handles keyboard input for the output modal.
 func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
