@@ -175,16 +175,14 @@ type App struct {
 	navNodeLabels          map[*tview.TreeNode]navNodeLabel
 	favorites              []linearapi.Favorite
 	favoritesGroup         *tview.TreeNode
-	issuesTable            *tview.Table // Legacy - kept for backward compatibility during migration
-	myIssuesTable          *tview.Table
-	otherIssuesTable       *tview.Table
 	allIssuesTable         *tview.Table
+	myIssuesTable          *tview.Table
 	searchInput            *tview.InputField
 	searchResultsTable     *tview.Table
 	searchPanel            *tview.Flex     // Search tab shell: input row + body
 	searchBody             *tview.Flex     // Swappable slot: results table or placeholder
 	searchPlaceholder      *tview.TextView // Centered empty/loading/error message
-	issuesColumn           *tview.Flex     // Vertical flex containing My/Other tables
+	issuesColumn           *tview.Flex     // Vertical flex holding the active issues tab
 	detailsView            *tview.Flex     // Flex container for details (description + comments)
 	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
 	detailsCommentsView    *tview.TextView // Scrollable comments view
@@ -216,18 +214,14 @@ type App struct {
 	selectedNavigation  *NavigationNode
 	issues              []linearapi.Issue
 	focusedPane         FocusTarget
-	activeIssuesSection IssuesSection // Tracks which issues section (My/Other) is currently active
+	activeIssuesSection IssuesSection // Which issues tab is on screen: All, My, or Search
 
-	// Issue tree state (for sub-issue hierarchy)
-	// Legacy fields - kept for backward compatibility during migration
-	issueRows []IssueRow                  // Flattened rows for table rendering
-	idToIssue map[string]*linearapi.Issue // Quick lookup by issue ID
-	// Per-section issue tree state
-	myIssueRows    []IssueRow                  // Flattened rows for "My Issues" table
-	myIDToIssue    map[string]*linearapi.Issue // Quick lookup by issue ID for "My Issues"
-	otherIssueRows []IssueRow                  // Flattened rows for "Other Issues" table
-	otherIDToIssue map[string]*linearapi.Issue // Quick lookup by issue ID for "Other Issues"
-	expandedState  map[string]bool             // Expanded state for parent issues (shared across sections)
+	// Per-section issue tree state (for sub-issue hierarchy)
+	allIssueRows  []IssueRow                  // Flattened rows for the "All Issues" table
+	allIDToIssue  map[string]*linearapi.Issue // Quick lookup by issue ID for "All Issues"
+	myIssueRows   []IssueRow                  // Flattened rows for the "My Issues" table
+	myIDToIssue   map[string]*linearapi.Issue // Quick lookup by issue ID for "My Issues"
+	expandedState map[string]bool             // Expanded state for parent issues (shared across sections)
 	// pendingSectionRenders holds sections whose cells are stale because they
 	// were off screen when the model changed, keyed to the row they should
 	// select once painted.
@@ -350,11 +344,9 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		configuredSortFields: parseSortFields(cfg.SortBy),
 		expandedState:        make(map[string]bool),
 		navNodeLabels:        make(map[*tview.TreeNode]navNodeLabel),
-		idToIssue:            make(map[string]*linearapi.Issue),
+		allIDToIssue:         make(map[string]*linearapi.Issue),
 		myIDToIssue:          make(map[string]*linearapi.Issue),
-		otherIDToIssue:       make(map[string]*linearapi.Issue),
 		searchIDToIssue:      make(map[string]*linearapi.Issue),
-		activeIssuesSection:  IssuesSectionMy, // Default to My Issues (falls back to Other when empty)
 		agentPromptTemplates: templates,
 		activeWorkspaceName:  workspaceNameForKey(cfg.Workspaces, cfg.LinearAPIKey),
 		// Details opens on demand (Enter or the palette toggle); the list
@@ -559,13 +551,9 @@ func (a *App) applyThemeToComponents() {
 		a.applyIssuesTableTheme(a.myIssuesTable)
 		renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, a.selectedIssueID(IssuesSectionMy), a.theme, a.issueColumns())
 	}
-	if a.otherIssuesTable != nil {
-		a.applyIssuesTableTheme(a.otherIssuesTable)
-		renderIssuesTableModel(a.otherIssuesTable, a.otherIssueRows, a.otherIDToIssue, a.selectedIssueID(IssuesSectionOther), a.theme, a.issueColumns())
-	}
 	if a.allIssuesTable != nil {
 		a.applyIssuesTableTheme(a.allIssuesTable)
-		renderIssuesTableModel(a.allIssuesTable, a.issueRows, a.idToIssue, a.selectedIssueID(IssuesSectionAll), a.theme, a.issueColumns())
+		renderIssuesTableModel(a.allIssuesTable, a.allIssueRows, a.allIDToIssue, a.selectedIssueID(IssuesSectionAll), a.theme, a.issueColumns())
 	}
 	if a.searchPanel != nil {
 		// Rebuild the panel so the input picks up the new InputBg (tview
@@ -717,17 +705,7 @@ func (a *App) applySelectionStyleToTree(node *tview.TreeNode) {
 }
 
 func (a *App) selectedIssueID(section IssuesSection) string {
-	var table *tview.Table
-	switch section {
-	case IssuesSectionMy:
-		table = a.myIssuesTable
-	case IssuesSectionOther:
-		table = a.otherIssuesTable
-	case IssuesSectionAll:
-		table = a.allIssuesTable
-	case IssuesSectionSearch:
-		table = a.searchResultsTable
-	}
+	table := a.tableForSection(section)
 	if table == nil {
 		return ""
 	}
@@ -747,12 +725,10 @@ func (a *App) resetCachedState() {
 	a.issuesMu.Lock()
 	a.selectedIssue = nil
 	a.issues = nil
-	a.issueRows = nil
-	a.idToIssue = make(map[string]*linearapi.Issue)
+	a.allIssueRows = nil
+	a.allIDToIssue = make(map[string]*linearapi.Issue)
 	a.myIssueRows = nil
 	a.myIDToIssue = make(map[string]*linearapi.Issue)
-	a.otherIssueRows = nil
-	a.otherIDToIssue = make(map[string]*linearapi.Issue)
 	a.issuesMu.Unlock()
 
 	a.selectedNavigation = nil
@@ -774,8 +750,8 @@ func (a *App) resetCachedState() {
 	a.updateSearchBody()
 	a.cancelSearchDebounce()
 	a.searchInputFocused = false
-	a.searchReturnSection = IssuesSectionMy
-	a.activeIssuesSection = IssuesSectionOther
+	a.searchReturnSection = IssuesSectionAll
+	a.activeIssuesSection = IssuesSectionAll
 	a.expandedState = make(map[string]bool)
 
 	a.isLoading = false
@@ -1038,17 +1014,13 @@ func cycleNavigationRank(cycle linearapi.Cycle) int {
 func (a *App) buildLayout() {
 	// Build all panes
 	a.navigationTree = a.buildNavigationTree()
-	// Build My Issues and Other Issues tables
-	a.myIssuesTable = a.buildIssuesTable(" My Issues ", IssuesSectionMy)
-	a.otherIssuesTable = a.buildIssuesTable(" Other Issues ", IssuesSectionOther)
 	a.allIssuesTable = a.buildIssuesTable(" All Issues ", IssuesSectionAll)
+	a.myIssuesTable = a.buildIssuesTable(" My Issues ", IssuesSectionMy)
 	a.buildSearchPanel()
 	// Create vertical flex for issues column
 	a.issuesColumn = tview.NewFlex().SetDirection(tview.FlexRow)
-	// Initially show only Other Issues table (My Issues will be added when issues are loaded)
-	a.issuesColumn.AddItem(a.otherIssuesTable, 0, 1, false)
-	// Legacy table for backward compatibility (will be removed after migration)
-	a.issuesTable = a.otherIssuesTable
+	// All is the tab the app opens on; the others mount on a tab switch.
+	a.issuesColumn.AddItem(a.allIssuesTable, 0, 1, false)
 	a.detailsView = a.buildDetailsView()
 	a.statusBar = a.buildStatusBar()
 
@@ -1103,159 +1075,126 @@ func (a *App) buildLayout() {
 
 // bindGlobalKeys sets up global keyboard shortcuts.
 func (a *App) bindGlobalKeys() {
-	a.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if a.pages.HasPage("confirmation") && a.confirmationModal != nil {
-			return a.confirmationModal.HandleKey(event)
-		}
+	a.app.SetInputCapture(a.handleGlobalKey)
+}
 
-		// Handle picker modal if active
-		if a.pickerActive {
-			return a.pickerModal.HandleKey(event)
-		}
+// handleGlobalKey is the app's single input capture: modals first, then the
+// palette and search input, then global keys, then the focused pane.
+func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
+	if a.pages.HasPage("confirmation") && a.confirmationModal != nil {
+		return a.confirmationModal.HandleKey(event)
+	}
 
-		// Check if create issue modal is visible and handle its keys
-		if a.pages.HasPage("create_issue") && a.createIssueModal != nil {
-			return a.createIssueModal.HandleKey(event)
-		}
+	// Handle picker modal if active
+	if a.pickerActive {
+		return a.pickerModal.HandleKey(event)
+	}
 
-		// Check if create comment modal is visible and handle its keys
-		if a.pages.HasPage("create_comment") && a.createCommentModal != nil {
-			return a.createCommentModal.HandleKey(event)
-		}
+	// Check if create issue modal is visible and handle its keys
+	if a.pages.HasPage("create_issue") && a.createIssueModal != nil {
+		return a.createIssueModal.HandleKey(event)
+	}
 
-		// Check if edit title modal is visible and handle its keys
-		if a.pages.HasPage("edit_title") && a.editTitleModal != nil {
-			return a.editTitleModal.HandleKey(event)
-		}
+	// Check if create comment modal is visible and handle its keys
+	if a.pages.HasPage("create_comment") && a.createCommentModal != nil {
+		return a.createCommentModal.HandleKey(event)
+	}
 
-		// Check if edit description modal is visible and handle its keys
-		if a.pages.HasPage("edit_description") && a.editDescriptionModal != nil {
-			return a.editDescriptionModal.HandleKey(event)
-		}
+	// Check if edit title modal is visible and handle its keys
+	if a.pages.HasPage("edit_title") && a.editTitleModal != nil {
+		return a.editTitleModal.HandleKey(event)
+	}
 
-		// Check if edit labels modal is visible and handle its keys
-		if a.pages.HasPage("edit_labels") && a.editLabelsModal != nil {
-			return a.editLabelsModal.HandleKey(event)
-		}
+	// Check if edit description modal is visible and handle its keys
+	if a.pages.HasPage("edit_description") && a.editDescriptionModal != nil {
+		return a.editDescriptionModal.HandleKey(event)
+	}
 
-		if a.pages.HasPage("text_input") && a.textInputModal != nil {
-			return a.textInputModal.HandleKey(event)
-		}
+	// Check if edit labels modal is visible and handle its keys
+	if a.pages.HasPage("edit_labels") && a.editLabelsModal != nil {
+		return a.editLabelsModal.HandleKey(event)
+	}
 
-		if a.pages.HasPage("multi_select") && a.multiSelectModal != nil {
-			return a.multiSelectModal.HandleKey(event)
-		}
+	if a.pages.HasPage("text_input") && a.textInputModal != nil {
+		return a.textInputModal.HandleKey(event)
+	}
 
-		// Check if settings modal is visible and handle its keys
-		if a.pages.HasPage("settings") && a.settingsModal != nil {
-			return a.settingsModal.HandleKey(event)
-		}
+	if a.pages.HasPage("multi_select") && a.multiSelectModal != nil {
+		return a.multiSelectModal.HandleKey(event)
+	}
 
-		// Check if prompt templates modal is visible and handle its keys
-		if a.pages.HasPage("prompt_templates") && a.promptTemplatesModal != nil {
-			return a.promptTemplatesModal.HandleKey(event)
-		}
+	// Check if settings modal is visible and handle its keys
+	if a.pages.HasPage("settings") && a.settingsModal != nil {
+		return a.settingsModal.HandleKey(event)
+	}
 
-		// Check if agent prompt modal is visible and handle its keys
-		if a.pages.HasPage("agent_prompt") && a.agentPromptModal != nil {
-			return a.agentPromptModal.HandleKey(event)
-		}
+	// Check if prompt templates modal is visible and handle its keys
+	if a.pages.HasPage("prompt_templates") && a.promptTemplatesModal != nil {
+		return a.promptTemplatesModal.HandleKey(event)
+	}
 
-		// Check if agent output modal is visible and handle its keys
-		if a.pages.HasPage("agent_output") && a.agentOutputModal != nil {
-			return a.agentOutputModal.HandleKey(event)
-		}
+	// Check if agent prompt modal is visible and handle its keys
+	if a.pages.HasPage("agent_prompt") && a.agentPromptModal != nil {
+		return a.agentPromptModal.HandleKey(event)
+	}
 
-		// Handle palette first if it's open
-		if a.focusedPane == FocusPalette {
-			return a.handlePaletteKey(event)
-		}
+	// Check if agent output modal is visible and handle its keys
+	if a.pages.HasPage("agent_output") && a.agentOutputModal != nil {
+		return a.agentOutputModal.HandleKey(event)
+	}
 
-		// The search input owns keys next, so typed letters reach the field
-		// instead of firing global or pane shortcuts.
-		if a.searchInputActive() {
-			return a.handleSearchInputKey(event)
-		}
+	// Handle palette first if it's open
+	if a.focusedPane == FocusPalette {
+		return a.handlePaletteKey(event)
+	}
 
-		// Global shortcuts (only when not in palette)
-		switch event.Key() {
-		case tcell.KeyCtrlC:
+	// The search input owns keys next, so typed letters reach the field
+	// instead of firing global or pane shortcuts.
+	if a.searchInputActive() {
+		return a.handleSearchInputKey(event)
+	}
+
+	// Global shortcuts (only when not in palette)
+	switch event.Key() {
+	case tcell.KeyCtrlC:
+		a.app.Stop()
+		return nil
+	case tcell.KeyTab, tcell.KeyBacktab:
+		// Tab moves between panes and nothing else. The Details/Comments
+		// tabs inside the details pane belong to that pane's tab keys.
+		if a.focusedPane != FocusPalette {
+			if event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0 {
+				a.cyclePanesBackward()
+			} else {
+				a.cyclePanesForward()
+			}
+		}
+		return nil
+	case tcell.KeyRune:
+		switch event.Rune() {
+		case a.actionKey("quit", 'q'):
 			a.app.Stop()
 			return nil
-		case tcell.KeyTab, tcell.KeyBacktab:
-			// Tab cycles forward through panes (Navigation -> Issues -> Details)
-			// When in Details pane, first cycle between description and comments
-			// Only cycle when not in palette or modals
-			isBackward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
-			if a.focusedPane != FocusPalette {
-				if a.focusedPane == FocusDetails {
-					if !a.detailsCommentsVisible {
-						if isBackward {
-							a.cyclePanesBackward()
-						} else {
-							a.cyclePanesForward()
-						}
-						return nil
-					}
-					// Cycle between description and comments within details pane
-					if !isBackward {
-						// Tab: description -> comments -> next pane
-						if a.focusedDetailsView {
-							// Currently on comments, move to next pane
-							a.focusedDetailsView = false // Reset for next time
-							a.cyclePanesForward()
-						} else {
-							// Currently on description, move to comments
-							a.focusedDetailsView = true
-							a.updateFocus()
-						}
-					} else {
-						// Shift+Tab: comments -> description -> previous pane
-						if a.focusedDetailsView {
-							// Currently on comments, move to description
-							a.focusedDetailsView = false
-							a.updateFocus()
-						} else {
-							// Currently on description, move to previous pane
-							a.cyclePanesBackward()
-						}
-					}
-				} else {
-					if isBackward {
-						// Shift+Tab cycles backward
-						a.cyclePanesBackward()
-					} else {
-						a.cyclePanesForward()
-					}
-				}
-			}
+		case a.actionKey("open_palette", ':'):
+			a.openPalette()
 			return nil
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case a.actionKey("quit", 'q'):
-				a.app.Stop()
-				return nil
-			case a.actionKey("open_palette", ':'):
-				a.openPalette()
-				return nil
-			case a.actionKey("search", '/'):
-				a.openSearchTab()
-				return nil
-			}
+		case a.actionKey("search", '/'):
+			a.openSearchTab()
+			return nil
 		}
+	}
 
-		// Pane-specific shortcuts
-		switch a.focusedPane {
-		case FocusNavigation:
-			return a.handleNavigationKey(event)
-		case FocusIssues:
-			return a.handleIssuesKey(event)
-		case FocusDetails:
-			return a.handleDetailsKey(event)
-		}
+	// Pane-specific shortcuts
+	switch a.focusedPane {
+	case FocusNavigation:
+		return a.handleNavigationKey(event)
+	case FocusIssues:
+		return a.handleIssuesKey(event)
+	case FocusDetails:
+		return a.handleDetailsKey(event)
+	}
 
-		return event
-	})
+	return event
 }
 
 // runCommandShortcut fires the palette command bound to the rune, if any.
@@ -1315,7 +1254,7 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEscape:
 		// Esc in the search results returns to the search input.
-		if a.effectiveIssuesSection() == IssuesSectionSearch {
+		if a.activeIssuesSection == IssuesSectionSearch {
 			a.focusSearchInput()
 			return nil
 		}
@@ -1375,7 +1314,7 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 		a.updateFocus()
 		return nil
 	case tcell.KeyRune:
-		switch event.Rune() {
+		switch r := event.Rune(); r {
 		case 'h':
 			a.focusedPane = FocusIssues
 			a.updateFocus()
@@ -1387,6 +1326,13 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 				a.updateFocus()
 			}
 			return nil
+		case 'j', 'k', 'g', 'G':
+			// Scrolling keys stay with the text view.
+		default:
+			// Command shortcuts work from the details pane too.
+			if a.runCommandShortcut(r) {
+				return nil
+			}
 		}
 	}
 	return event
@@ -1431,89 +1377,46 @@ func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// cyclePanesForward cycles focus forward through panes.
-// When in Issues pane, cycles: My Issues -> Other Issues -> Details
-// Otherwise cycles: Navigation -> Issues -> Details -> Navigation
-func (a *App) cyclePanesForward() {
-	switch a.focusedPane {
-	case FocusNavigation:
-		a.focusedPane = FocusIssues
-		// Set to My Issues if available, otherwise Other Issues. The Search
-		// tab keeps its place: tabbing away and back must not clear it.
-		if a.activeIssuesSection != IssuesSectionSearch {
-			if len(a.myIssueRows) > 0 {
-				a.activeIssuesSection = IssuesSectionMy
-			} else {
-				a.activeIssuesSection = IssuesSectionOther
-			}
+// visiblePanes lists the panes Tab can reach, in screen order. A hidden pane
+// is not one of them: cycling onto it would land focus somewhere updateFocus
+// has to bounce back, which reads as Tab getting stuck.
+func (a *App) visiblePanes() []FocusTarget {
+	panes := make([]FocusTarget, 0, 3)
+	if !a.navigationHidden {
+		panes = append(panes, FocusNavigation)
+	}
+	panes = append(panes, FocusIssues)
+	if !a.detailsHidden {
+		panes = append(panes, FocusDetails)
+	}
+	return panes
+}
+
+// cyclePanes moves focus one pane in the given direction (+1 forward, -1
+// backward), wrapping. The issues tab and the details tab on screen are their
+// own panes' business, so both stay put.
+func (a *App) cyclePanes(direction int) {
+	panes := a.visiblePanes()
+	current := 0
+	for i, pane := range panes {
+		if pane == a.focusedPane {
+			current = i
+			break
 		}
-	case FocusIssues:
-		switch {
-		case a.activeIssuesSection == IssuesSectionSearch:
-			// The Search tab is a single section; no My/Other shuffle.
-			a.focusedPane = FocusDetails
-			a.focusedDetailsView = false
-		case len(a.myIssueRows) > 0 && len(a.otherIssueRows) > 0:
-			if a.activeIssuesSection == IssuesSectionMy {
-				// Switch from My Issues to Other Issues
-				a.activeIssuesSection = IssuesSectionOther
-			} else {
-				// Switch from Other Issues to Details pane
-				a.focusedPane = FocusDetails
-				a.focusedDetailsView = false // Start with description
-			}
-		default:
-			// Only one section exists, move to Details
-			a.focusedPane = FocusDetails
-			a.focusedDetailsView = false // Start with description
-		}
-	case FocusDetails:
-		a.focusedPane = FocusNavigation
-		// FocusPalette is excluded from cycling
+	}
+	a.focusedPane = panes[((current+direction)%len(panes)+len(panes))%len(panes)]
+	if a.focusedPane == FocusDetails {
+		// Enter on the description, the same way Right and l enter it.
+		a.focusedDetailsView = false
 	}
 	a.updateFocus()
 }
 
-// cyclePanesBackward cycles focus backward through panes.
-// When in Issues pane, cycles: Other Issues -> My Issues -> Navigation
-// Otherwise cycles: Details -> Issues (My Issues preferred) -> Navigation -> Details
-func (a *App) cyclePanesBackward() {
-	switch a.focusedPane {
-	case FocusNavigation:
-		a.focusedPane = FocusDetails
-		a.focusedDetailsView = false // Start with description
-	case FocusIssues:
-		switch {
-		case a.activeIssuesSection == IssuesSectionSearch:
-			// The Search tab is a single section; no My/Other shuffle.
-			a.focusedPane = FocusNavigation
-		case len(a.myIssueRows) > 0 && len(a.otherIssueRows) > 0:
-			if a.activeIssuesSection == IssuesSectionOther {
-				// Switch from Other Issues to My Issues
-				a.activeIssuesSection = IssuesSectionMy
-			} else {
-				// Switch from My Issues to Navigation pane
-				a.focusedPane = FocusNavigation
-			}
-		default:
-			// Only one section exists, move to Navigation
-			a.focusedPane = FocusNavigation
-		}
-	case FocusDetails:
-		a.focusedPane = FocusIssues
-		// Set to My Issues if available, otherwise Other Issues (consistent
-		// with forward cycle). The Search tab keeps its place.
-		if a.activeIssuesSection != IssuesSectionSearch {
-			if len(a.myIssueRows) > 0 {
-				a.activeIssuesSection = IssuesSectionMy
-			} else {
-				a.activeIssuesSection = IssuesSectionOther
-			}
-		}
-		// FocusPalette is excluded from cycling
-	}
-	a.updateFocus()
-}
+// cyclePanesForward cycles focus forward: Navigation, Issues, Details, wrap.
+func (a *App) cyclePanesForward() { a.cyclePanes(1) }
+
+// cyclePanesBackward cycles focus backward: Details, Issues, Navigation, wrap.
+func (a *App) cyclePanesBackward() { a.cyclePanes(-1) }
 
 // updateFocus updates the focus state of all panes.
 func (a *App) updateFocus() {
@@ -1531,7 +1434,6 @@ func (a *App) updateFocus() {
 		a.app.SetFocus(a.navigationTree)
 		a.navigationTree.SetBorderColor(a.theme.BorderFocus)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
@@ -1541,17 +1443,16 @@ func (a *App) updateFocus() {
 	case FocusIssues:
 		// Focus the visible issues section
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
-		if a.effectiveIssuesSection() == IssuesSectionSearch {
+		if a.activeIssuesSection == IssuesSectionSearch {
 			a.searchPanel.SetBorderColor(a.theme.BorderFocus)
 			if a.searchInputFocused {
 				a.app.SetFocus(a.searchInput)
 			} else {
 				a.app.SetFocus(a.searchResultsTable)
 			}
-		} else if table := a.tableForSection(a.effectiveIssuesSection()); table != nil {
+		} else if table := a.tableForSection(a.activeIssuesSection); table != nil {
 			a.app.SetFocus(table)
 			table.SetBorderColor(a.theme.BorderFocus)
 		}
@@ -1577,7 +1478,6 @@ func (a *App) updateFocus() {
 		}
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
 		// Update all pane titles
@@ -1586,7 +1486,6 @@ func (a *App) updateFocus() {
 		a.app.SetFocus(a.paletteInput)
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.otherIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
@@ -1613,8 +1512,6 @@ func (a *App) updateAllPaneTitles() {
 	issuesTitle := a.issuesTabsTitle(isIssuesFocused)
 	a.myIssuesTable.SetTitle(issuesTitle)
 	a.myIssuesTable.SetTitleColor(a.theme.Foreground)
-	a.otherIssuesTable.SetTitle(issuesTitle)
-	a.otherIssuesTable.SetTitleColor(a.theme.Foreground)
 	a.allIssuesTable.SetTitle(issuesTitle)
 	a.allIssuesTable.SetTitleColor(a.theme.Foreground)
 	if a.searchPanel != nil {
@@ -1988,15 +1885,14 @@ func (a *App) updateIssuesColumnLayout() {
 
 	// A tab about to come on screen may still be holding cells from before the
 	// last model change.
-	a.flushPendingSectionRender(a.effectiveIssuesSection())
+	a.flushPendingSectionRender(a.activeIssuesSection)
 
-	// Without any My Issues, that tab disappears (without forgetting the
-	// active choice: My re-applies once it has rows). The Search tab mounts
-	// its input-plus-results panel instead of a bare table.
-	if a.effectiveIssuesSection() == IssuesSectionSearch {
+	// The three tabs are fixed, so an empty one mounts and shows itself empty.
+	// The Search tab mounts its input-plus-results panel instead of a table.
+	if a.activeIssuesSection == IssuesSectionSearch {
 		a.issuesColumn.AddItem(a.searchPanel, 0, 1, false)
 	} else {
-		a.issuesColumn.AddItem(a.tableForSection(a.effectiveIssuesSection()), 0, 1, false)
+		a.issuesColumn.AddItem(a.tableForSection(a.activeIssuesSection), 0, 1, false)
 	}
 
 	// Update all pane titles to reflect current state
@@ -2037,42 +1933,36 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 	a.updateStatusBar()
 }
 
-// rebuildIssuesTables rebuilds issue rows and renders tables, returning the selected issue.
+// rebuildIssuesTables rebuilds issue rows and renders tables, returning the
+// selected issue. The returned issue is a copy: the id maps point into the
+// a.issues backing array, which later edits re-sort and splice in place.
 func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	a.rebuildIssueRowModels()
 
 	a.renderIssueSections(a.sectionSelectionsFor(targetIssueID))
-
-	// Show the active tab (after target selection may have switched it).
 	a.updateIssuesColumnLayout()
 
-	// Select issue and update details.
-	var selectedIssue *linearapi.Issue
+	var found *linearapi.Issue
 	if targetIssueID != "" {
-		if issue, ok := a.myIDToIssue[targetIssueID]; ok {
-			selectedIssue = issue
-		} else if issue, ok := a.otherIDToIssue[targetIssueID]; ok {
-			selectedIssue = issue
+		found = a.allIDToIssue[targetIssueID]
+	}
+
+	// Without a target, fall back to the first issue row of the tab on screen,
+	// skipping group headers, which carry no issue. Falling back to All instead
+	// would hand the caller an issue from a tab the user is not looking at. The
+	// Search tab keeps its own selection.
+	if found == nil && a.activeIssuesSection != IssuesSectionSearch {
+		rows := a.rowsForSection(a.activeIssuesSection)
+		if first := nextIssueRow(rows, 0, 1); first > 0 {
+			found = a.issueMapForSection(a.activeIssuesSection)[rows[first-1].IssueID]
 		}
 	}
 
-	// If no target issue, default to the first issue row (skipping group
-	// headers, which carry no issue). The Search tab keeps its own selection.
-	if selectedIssue == nil && a.activeIssuesSection != IssuesSectionSearch {
-		if first := nextIssueRow(a.myIssueRows, 0, 1); first > 0 {
-			if issue, ok := a.myIDToIssue[a.myIssueRows[first-1].IssueID]; ok {
-				selectedIssue = issue
-				a.activeIssuesSection = IssuesSectionMy
-			}
-		} else if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
-			if issue, ok := a.otherIDToIssue[a.otherIssueRows[first-1].IssueID]; ok {
-				selectedIssue = issue
-				a.activeIssuesSection = IssuesSectionOther
-			}
-		}
+	if found == nil {
+		return nil
 	}
-
-	return selectedIssue
+	selected := *found
+	return &selected
 }
 
 // pageMerge carries dedup state across the pages of one refresh, so merging a
@@ -2223,13 +2113,7 @@ func (a *App) toggleGroupCollapse(section IssuesSection, header IssueRow) {
 	a.updateDetailsView()
 
 	// Re-select the toggled header so repeated presses toggle in place.
-	var table *tview.Table
-	switch section {
-	case IssuesSectionMy:
-		table = a.myIssuesTable
-	case IssuesSectionOther:
-		table = a.otherIssuesTable
-	}
+	table := a.tableForSection(section)
 	if table == nil {
 		return
 	}
@@ -2368,17 +2252,10 @@ func (a *App) onIssueSelected(issue linearapi.Issue) {
 
 // toggleIssueExpanded toggles the expand/collapse state of a parent issue.
 func (a *App) toggleIssueExpanded(issueID string) {
-	// Check both sections for the issue
-	var issue *linearapi.Issue
-	var ok bool
-	if issue, ok = a.myIDToIssue[issueID]; !ok {
-		if issue, ok = a.otherIDToIssue[issueID]; !ok {
-			logger.Debug("tui.app: issue not found for toggle issue_id=%s", issueID)
-			return
-		}
-	}
-
-	if issue == nil {
+	// All holds every fetched issue, whichever tab the press came from.
+	issue, ok := a.allIDToIssue[issueID]
+	if !ok || issue == nil {
+		logger.Debug("tui.app: issue not found for toggle issue_id=%s", issueID)
 		return
 	}
 
@@ -2392,42 +2269,8 @@ func (a *App) toggleIssueExpanded(issueID string) {
 
 	ToggleExpanded(a.expandedState, issueID)
 
-	// Rebuild rows for both sections
-	currentUserID := ""
-	if a.currentUser != nil {
-		currentUserID = a.currentUser.ID
-	}
-	a.issuesMu.RLock()
-	issues := a.issues
-	a.issuesMu.RUnlock()
-	myIssues, otherIssues := splitIssuesByAssignee(issues, currentUserID)
-	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues)
-	a.otherIssueRows, a.otherIDToIssue = a.buildIssueRowsFor(otherIssues)
-
-	// The All Issues tab renders the full list.
-	a.issueRows, a.idToIssue = a.buildIssueRowsFor(issues)
-
-	// Render the tables, selecting the toggled issue
-	var selectedMyIssueID, selectedOtherIssueID string
-	selectedAllIssueID := issueID
-	sectionPinned := a.activeIssuesSection == IssuesSectionAll || a.activeIssuesSection == IssuesSectionSearch
-	if _, ok := a.myIDToIssue[issueID]; ok {
-		selectedMyIssueID = issueID
-		if !sectionPinned {
-			a.activeIssuesSection = IssuesSectionMy
-		}
-	} else if _, ok := a.otherIDToIssue[issueID]; ok {
-		selectedOtherIssueID = issueID
-		if !sectionPinned {
-			a.activeIssuesSection = IssuesSectionOther
-		}
-	}
-
-	a.renderIssueSections(map[IssuesSection]string{
-		IssuesSectionMy:    selectedMyIssueID,
-		IssuesSectionOther: selectedOtherIssueID,
-		IssuesSectionAll:   selectedAllIssueID,
-	})
+	a.rebuildIssueRowModels()
+	a.renderIssueSections(a.sectionSelectionsFor(issueID))
 	a.updateIssuesColumnLayout()
 }
 

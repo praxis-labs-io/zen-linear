@@ -184,8 +184,8 @@ func (a *App) clearSearchResults() {
 
 // openSearchTab shows the Search tab and focuses its input.
 func (a *App) openSearchTab() {
-	if a.effectiveIssuesSection() != IssuesSectionSearch {
-		a.searchReturnSection = a.effectiveIssuesSection()
+	if a.activeIssuesSection != IssuesSectionSearch {
+		a.searchReturnSection = a.activeIssuesSection
 	}
 	a.activeIssuesSection = IssuesSectionSearch
 	a.focusedPane = FocusIssues
@@ -203,7 +203,7 @@ func (a *App) focusSearchInput() {
 // searchInputActive reports whether typed keys belong to the search input.
 func (a *App) searchInputActive() bool {
 	return a.focusedPane == FocusIssues &&
-		a.effectiveIssuesSection() == IssuesSectionSearch &&
+		a.activeIssuesSection == IssuesSectionSearch &&
 		a.searchInputFocused
 }
 

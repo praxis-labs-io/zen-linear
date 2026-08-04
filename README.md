@@ -33,7 +33,7 @@ Issues
 - Linear-style columns, configurable order and visibility
 - Grouping and subgrouping by status, priority, assignee, cycle, project, or
   milestone, with collapsible headers
-- My, Other, and All tabs with lazygit-style tab strips
+- All, My, and Search tabs with lazygit-style tab strips
 - Sort by updated, created, priority, or status
 - Details drawer with themed markdown, comments, attachments, and branch name
 

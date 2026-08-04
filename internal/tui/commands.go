@@ -831,14 +831,16 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No parent issue")
 					return
 				}
-				// Try to navigate to parent in the table
-				parentRow := a.getRowForIssue(issue.Parent.ID)
-				if parentRow > 0 {
-					a.issuesTable.Select(parentRow, 0)
-					if parent := a.getIssueFromRow(parentRow); parent != nil {
-						a.onIssueSelected(*parent)
-					}
+				if a.jumpToParent(issue.Parent.ID) {
+					return
 				}
+				// A loaded parent with no row is hidden behind a collapsed
+				// group or ancestor, which is not the same as never fetched.
+				if _, loaded := a.allIDToIssue[issue.Parent.ID]; loaded {
+					a.flashStatus("Parent issue is hidden by a collapsed group")
+					return
+				}
+				a.flashStatus("Parent issue not loaded")
 			},
 		},
 		{

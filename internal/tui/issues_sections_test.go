@@ -6,169 +6,128 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
-func TestSplitIssuesByAssignee(t *testing.T) {
+func TestMyIssues(t *testing.T) {
 	currentUserID := "user-123"
 
 	tests := []struct {
-		name           string
-		issues         []linearapi.Issue
-		currentUserID  string
-		wantMyCount    int
-		wantOtherCount int
+		name          string
+		issues        []linearapi.Issue
+		currentUserID string
+		wantIDs       []string
 	}{
 		{
-			name: "no current user - all issues go to other",
+			name: "no current user - My is empty",
 			issues: []linearapi.Issue{
 				{ID: "1", AssigneeID: "user-123"},
 				{ID: "2", AssigneeID: "user-456"},
 			},
-			currentUserID:  "",
-			wantMyCount:    0,
-			wantOtherCount: 2,
+			currentUserID: "",
+			wantIDs:       nil,
 		},
 		{
-			name: "mixed assignment - correct partition",
+			name: "mixed assignment - only mine",
 			issues: []linearapi.Issue{
-				{ID: "1", AssigneeID: "user-123"},
+				{ID: "1", AssigneeID: currentUserID},
 				{ID: "2", AssigneeID: "user-456"},
-				{ID: "3", AssigneeID: "user-123"},
+				{ID: "3", AssigneeID: currentUserID},
 				{ID: "4", AssigneeID: ""},
 			},
-			currentUserID:  currentUserID,
-			wantMyCount:    2,
-			wantOtherCount: 2,
+			currentUserID: currentUserID,
+			wantIDs:       []string{"1", "3"},
 		},
 		{
-			name: "unassigned issues go to other",
+			name: "unassigned issues stay out",
 			issues: []linearapi.Issue{
 				{ID: "1", AssigneeID: ""},
 				{ID: "2", AssigneeID: ""},
 				{ID: "3", AssigneeID: currentUserID},
 			},
-			currentUserID:  currentUserID,
-			wantMyCount:    1,
-			wantOtherCount: 2,
+			currentUserID: currentUserID,
+			wantIDs:       []string{"3"},
 		},
 		{
-			name: "all my issues",
-			issues: []linearapi.Issue{
-				{ID: "1", AssigneeID: currentUserID},
-				{ID: "2", AssigneeID: currentUserID},
-			},
-			currentUserID:  currentUserID,
-			wantMyCount:    2,
-			wantOtherCount: 0,
+			name:          "empty issues list",
+			issues:        []linearapi.Issue{},
+			currentUserID: currentUserID,
+			wantIDs:       nil,
 		},
 		{
-			name: "all other issues",
-			issues: []linearapi.Issue{
-				{ID: "1", AssigneeID: "user-456"},
-				{ID: "2", AssigneeID: "user-789"},
-			},
-			currentUserID:  currentUserID,
-			wantMyCount:    0,
-			wantOtherCount: 2,
-		},
-		{
-			name:           "empty issues list",
-			issues:         []linearapi.Issue{},
-			currentUserID:  currentUserID,
-			wantMyCount:    0,
-			wantOtherCount: 0,
-		},
-		{
-			name: "children follow parent section - parent in my, children unassigned",
+			name: "my parent brings its children",
 			issues: []linearapi.Issue{
 				{ID: "parent-1", AssigneeID: currentUserID},
 				{ID: "child-1", AssigneeID: "", Parent: &linearapi.IssueRef{ID: "parent-1"}},
-				{ID: "child-2", AssigneeID: "", Parent: &linearapi.IssueRef{ID: "parent-1"}},
+				{ID: "child-2", AssigneeID: "user-456", Parent: &linearapi.IssueRef{ID: "parent-1"}},
 			},
-			currentUserID:  currentUserID,
-			wantMyCount:    3, // Parent + 2 children
-			wantOtherCount: 0,
+			currentUserID: currentUserID,
+			wantIDs:       []string{"parent-1", "child-1", "child-2"},
 		},
 		{
-			name: "children follow parent section - parent unassigned, children assigned to me",
-			issues: []linearapi.Issue{
-				{ID: "parent-2", AssigneeID: ""},
-				{ID: "child-3", AssigneeID: currentUserID, Parent: &linearapi.IssueRef{ID: "parent-2"}},
-				{ID: "child-4", AssigneeID: currentUserID, Parent: &linearapi.IssueRef{ID: "parent-2"}},
-			},
-			currentUserID:  currentUserID,
-			wantMyCount:    0,
-			wantOtherCount: 3, // Parent + 2 children
-		},
-		{
-			name: "nested children follow parent section",
+			name: "descent reaches grandchildren",
 			issues: []linearapi.Issue{
 				{ID: "parent-3", AssigneeID: currentUserID},
 				{ID: "child-5", AssigneeID: "", Parent: &linearapi.IssueRef{ID: "parent-3"}},
 				{ID: "grandchild-1", AssigneeID: "", Parent: &linearapi.IssueRef{ID: "child-5"}},
 			},
-			currentUserID:  currentUserID,
-			wantMyCount:    3, // Parent + child + grandchild
-			wantOtherCount: 0,
+			currentUserID: currentUserID,
+			wantIDs:       []string{"parent-3", "child-5", "grandchild-1"},
+		},
+		{
+			// ZNL-26: the parent's owner used to win, dropping the child out of My.
+			name: "my child stays when its parent belongs to someone else",
+			issues: []linearapi.Issue{
+				{ID: "parent-2", AssigneeID: "user-456"},
+				{ID: "child-3", AssigneeID: currentUserID, Parent: &linearapi.IssueRef{ID: "parent-2"}},
+			},
+			currentUserID: currentUserID,
+			wantIDs:       []string{"child-3"},
+		},
+		{
+			name: "a child of mine is not dragged out by an unassigned parent",
+			issues: []linearapi.Issue{
+				{ID: "parent-4", AssigneeID: ""},
+				{ID: "child-6", AssigneeID: currentUserID, Parent: &linearapi.IssueRef{ID: "parent-4"}},
+			},
+			currentUserID: currentUserID,
+			wantIDs:       []string{"child-6"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			my, other := splitIssuesByAssignee(tt.issues, tt.currentUserID)
+			got := myIssues(tt.issues, tt.currentUserID)
 
-			if len(my) != tt.wantMyCount {
-				t.Errorf("splitIssuesByAssignee() my count = %d, want %d", len(my), tt.wantMyCount)
+			gotIDs := make([]string, 0, len(got))
+			for _, issue := range got {
+				gotIDs = append(gotIDs, issue.ID)
 			}
-
-			if len(other) != tt.wantOtherCount {
-				t.Errorf("splitIssuesByAssignee() other count = %d, want %d", len(other), tt.wantOtherCount)
+			if len(gotIDs) != len(tt.wantIDs) {
+				t.Fatalf("myIssues() = %v, want %v", gotIDs, tt.wantIDs)
 			}
-
-			// Build a map of issue IDs to their section (true = my, false = other)
-			myIDs := make(map[string]bool)
-			for _, issue := range my {
-				myIDs[issue.ID] = true
-			}
-			otherIDs := make(map[string]bool)
-			for _, issue := range other {
-				otherIDs[issue.ID] = true
-			}
-
-			// Verify correctness: top-level my issues have correct assignee
-			// Children may have different assignees but should follow parent
-			for _, issue := range my {
-				if issue.Parent == nil {
-					// Top-level issue must have correct assignee
-					if issue.AssigneeID != tt.currentUserID {
-						t.Errorf("splitIssuesByAssignee() my top-level issue %s has AssigneeID %s, want %s", issue.ID, issue.AssigneeID, tt.currentUserID)
-					}
-				} else {
-					// Child issue - verify parent is also in "my" section
-					if !myIDs[issue.Parent.ID] {
-						t.Errorf("splitIssuesByAssignee() my child issue %s has parent %s not in my section", issue.ID, issue.Parent.ID)
-					}
+			for i, id := range tt.wantIDs {
+				if gotIDs[i] != id {
+					t.Fatalf("myIssues() = %v, want %v", gotIDs, tt.wantIDs)
 				}
-			}
-
-			// Verify correctness: top-level other issues don't have current user as assignee
-			// Children may have current user as assignee but should follow parent
-			for _, issue := range other {
-				if issue.Parent == nil {
-					// Top-level issue must not have current user as assignee
-					if issue.AssigneeID == tt.currentUserID {
-						t.Errorf("splitIssuesByAssignee() other top-level issue %s has AssigneeID %s, should not match current user", issue.ID, issue.AssigneeID)
-					}
-				} else {
-					// Child issue - verify parent is also in "other" section
-					if !otherIDs[issue.Parent.ID] {
-						t.Errorf("splitIssuesByAssignee() other child issue %s has parent %s not in other section", issue.ID, issue.Parent.ID)
-					}
-				}
-			}
-
-			// Verify all issues are accounted for
-			if len(my)+len(other) != len(tt.issues) {
-				t.Errorf("splitIssuesByAssignee() total issues = %d, want %d", len(my)+len(other), len(tt.issues))
 			}
 		})
+	}
+}
+
+// TestMyIssues_ChildKeepsItsPlaceWhenTheParentPaginatesIn is ZNL-26 as the user
+// hit it: the child arrived on an early page and showed in My, then a later
+// page brought its parent in and the old split moved it out from under the
+// cursor.
+func TestMyIssues_ChildKeepsItsPlaceWhenTheParentPaginatesIn(t *testing.T) {
+	currentUserID := "user-123"
+	child := linearapi.Issue{ID: "child", AssigneeID: currentUserID, Parent: &linearapi.IssueRef{ID: "parent"}}
+	parent := linearapi.Issue{ID: "parent", AssigneeID: "user-456"}
+
+	firstPage := myIssues([]linearapi.Issue{child}, currentUserID)
+	if len(firstPage) != 1 || firstPage[0].ID != "child" {
+		t.Fatalf("first page: My = %v, want the child", firstPage)
+	}
+
+	secondPage := myIssues([]linearapi.Issue{child, parent}, currentUserID)
+	if len(secondPage) != 1 || secondPage[0].ID != "child" {
+		t.Fatalf("after the parent loads: My = %v, want the child to stay", secondPage)
 	}
 }

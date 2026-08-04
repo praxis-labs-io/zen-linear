@@ -240,20 +240,6 @@ func issueColumnCell(name string, issue *linearapi.Issue, identifierPrefix strin
 	return "", theme.SecondaryText
 }
 
-// getIssueFromRow returns the issue for a given table row (accounting for header).
-// Returns nil if the row is invalid.
-// This is a convenience wrapper that uses the current app's issueRows and idToIssue.
-func (a *App) getIssueFromRow(row int) *linearapi.Issue {
-	return getIssueFromRowModel(row, a.issueRows, a.idToIssue)
-}
-
-// getRowForIssue returns the table row for a given issue ID.
-// Returns -1 if not found.
-// This is a convenience wrapper that uses the current app's issueRows.
-func (a *App) getRowForIssue(issueID string) int {
-	return getRowForIssueModel(issueID, a.issueRows)
-}
-
 // getIssueFromRowModel returns the issue for a given table row using the provided model.
 // Returns nil if the row is invalid.
 func getIssueFromRowModel(row int, rows []IssueRow, idToIssue map[string]*linearapi.Issue) *linearapi.Issue {
@@ -282,10 +268,10 @@ func getRowForIssueModel(issueID string, rows []IssueRow) int {
 // IssuesSection represents which issues section is active.
 type IssuesSection int
 
+// All is the zero value so a freshly built App opens on it.
 const (
-	IssuesSectionMy IssuesSection = iota
-	IssuesSectionOther
-	IssuesSectionAll
+	IssuesSectionAll IssuesSection = iota
+	IssuesSectionMy
 	IssuesSectionSearch
 )
 
@@ -358,17 +344,6 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					a.onIssueSelected(*issue)
 					a.activeIssuesSection = section
 				}
-			} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
-				// At bottom - move to the Other Issues table
-				a.activeIssuesSection = IssuesSectionOther
-				a.updateIssuesColumnLayout()
-				if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
-					selectIssueRow(a.otherIssuesTable, a.otherIssueRows, first)
-					if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
-						a.onIssueSelected(*issue)
-					}
-				}
-				a.updateFocus()
 			}
 			return nil
 		case tcell.KeyUp:
@@ -379,17 +354,6 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					a.onIssueSelected(*issue)
 					a.activeIssuesSection = section
 				}
-			} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
-				// At top - move to the My Issues table
-				a.activeIssuesSection = IssuesSectionMy
-				a.updateIssuesColumnLayout()
-				if last := nextIssueRow(a.myIssueRows, len(a.myIssueRows)+1, -1); last > 0 {
-					a.myIssuesTable.Select(last, 0)
-					if issue := a.getIssueFromRowForSection(last, IssuesSectionMy); issue != nil {
-						a.onIssueSelected(*issue)
-					}
-				}
-				a.updateFocus()
 			} else if section == IssuesSectionSearch {
 				// At top of search results - return to the search input
 				a.focusSearchInput()
@@ -403,12 +367,10 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 // rowsForSection returns the row model for the specified section.
 func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 	switch section {
+	case IssuesSectionAll:
+		return a.allIssueRows
 	case IssuesSectionMy:
 		return a.myIssueRows
-	case IssuesSectionOther:
-		return a.otherIssueRows
-	case IssuesSectionAll:
-		return a.issueRows
 	case IssuesSectionSearch:
 		return a.searchIssueRows
 	}
@@ -418,12 +380,10 @@ func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 // issueMapForSection returns the id lookup backing a section's rows.
 func (a *App) issueMapForSection(section IssuesSection) map[string]*linearapi.Issue {
 	switch section {
+	case IssuesSectionAll:
+		return a.allIDToIssue
 	case IssuesSectionMy:
 		return a.myIDToIssue
-	case IssuesSectionOther:
-		return a.otherIDToIssue
-	case IssuesSectionAll:
-		return a.idToIssue
 	case IssuesSectionSearch:
 		return a.searchIDToIssue
 	}
@@ -439,7 +399,7 @@ func (a *App) renderIssueSections(selected map[IssuesSection]string) {
 	if a.pendingSectionRenders == nil {
 		a.pendingSectionRenders = make(map[IssuesSection]string, len(selected))
 	}
-	active := a.effectiveIssuesSection()
+	active := a.activeIssuesSection
 	for section, issueID := range selected {
 		if section == active {
 			delete(a.pendingSectionRenders, section)
@@ -524,17 +484,6 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 				a.onIssueSelected(*issue)
 				a.activeIssuesSection = section
 			}
-		} else if section == IssuesSectionMy && len(a.otherIssueRows) > 0 {
-			// At bottom of this section - move to the Other Issues table
-			a.activeIssuesSection = IssuesSectionOther
-			a.updateIssuesColumnLayout()
-			if first := nextIssueRow(a.otherIssueRows, 0, 1); first > 0 {
-				selectIssueRow(a.otherIssuesTable, a.otherIssueRows, first)
-				if issue := a.getIssueFromRowForSection(first, IssuesSectionOther); issue != nil {
-					a.onIssueSelected(*issue)
-				}
-			}
-			a.updateFocus()
 		}
 		return nil
 	case 'k':
@@ -545,17 +494,6 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 				a.onIssueSelected(*issue)
 				a.activeIssuesSection = section
 			}
-		} else if section == IssuesSectionOther && len(a.myIssueRows) > 0 {
-			// At top of this section - move to the My Issues table
-			a.activeIssuesSection = IssuesSectionMy
-			a.updateIssuesColumnLayout()
-			if last := nextIssueRow(a.myIssueRows, len(a.myIssueRows)+1, -1); last > 0 {
-				a.myIssuesTable.Select(last, 0)
-				if issue := a.getIssueFromRowForSection(last, IssuesSectionMy); issue != nil {
-					a.onIssueSelected(*issue)
-				}
-			}
-			a.updateFocus()
 		} else if section == IssuesSectionSearch {
 			// At top of search results - return to the search input
 			a.focusSearchInput()
@@ -582,54 +520,10 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 			}
 		}
 		return nil
-	case 'l':
-		if section == IssuesSectionSearch {
-			return nil // search results are a flat list
-		}
-		// Expand current parent issue
-		row, _ := table.GetSelection()
-		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
-			if len(issue.Children) > 0 && !a.expandedState[issue.ID] {
-				a.toggleIssueExpanded(issue.ID)
-				a.activeIssuesSection = section
-			}
-		}
-		return nil
-	case 'h':
-		if section == IssuesSectionSearch {
-			return nil // search results are a flat list
-		}
-		// Collapse current parent issue, or go to parent if on child
-		row, _ := table.GetSelection()
-		if issue := a.getIssueFromRowForSection(row, section); issue != nil {
-			if len(issue.Children) > 0 && a.expandedState[issue.ID] {
-				// Collapse this parent
-				a.toggleIssueExpanded(issue.ID)
-				a.activeIssuesSection = section
-			} else if issue.Parent != nil {
-				// Navigate to parent - may be in different section
-				parentRow := a.getRowForIssueInSection(issue.Parent.ID, IssuesSectionMy)
-				if parentRow > 0 {
-					a.activeIssuesSection = IssuesSectionMy
-					a.myIssuesTable.Select(parentRow, 0)
-					if parent := a.getIssueFromRowForSection(parentRow, IssuesSectionMy); parent != nil {
-						a.onIssueSelected(*parent)
-					}
-					a.updateFocus()
-				} else {
-					parentRow = a.getRowForIssueInSection(issue.Parent.ID, IssuesSectionOther)
-					if parentRow > 0 {
-						a.activeIssuesSection = IssuesSectionOther
-						a.otherIssuesTable.Select(parentRow, 0)
-						if parent := a.getIssueFromRowForSection(parentRow, IssuesSectionOther); parent != nil {
-							a.onIssueSelected(*parent)
-						}
-						a.updateFocus()
-					}
-				}
-			}
-		}
-		return nil
+	// h and l never arrive here: handleIssuesKey claims them for pane movement,
+	// which is what the README documents. Space expands, p jumps to the parent.
+	// g only arrives when no command shortcut owns it, and edit_labels holds it
+	// by default, so go-to-top above is dead until ZNL-32 reworks the defaults.
 	case a.actionKey("columns_left", 'H'):
 		scrollIssueColumns(table, 'H')
 		return nil
@@ -659,39 +553,12 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 
 // getIssueFromRowForSection returns the issue for a given table row in the specified section.
 func (a *App) getIssueFromRowForSection(row int, section IssuesSection) *linearapi.Issue {
-	var rows []IssueRow
-	var idToIssue map[string]*linearapi.Issue
-	switch section {
-	case IssuesSectionMy:
-		rows = a.myIssueRows
-		idToIssue = a.myIDToIssue
-	case IssuesSectionOther:
-		rows = a.otherIssueRows
-		idToIssue = a.otherIDToIssue
-	case IssuesSectionAll:
-		rows = a.issueRows
-		idToIssue = a.idToIssue
-	case IssuesSectionSearch:
-		rows = a.searchIssueRows
-		idToIssue = a.searchIDToIssue
-	}
-	return getIssueFromRowModel(row, rows, idToIssue)
+	return getIssueFromRowModel(row, a.rowsForSection(section), a.issueMapForSection(section))
 }
 
 // getRowForIssueInSection returns the table row for a given issue ID in the specified section.
 func (a *App) getRowForIssueInSection(issueID string, section IssuesSection) int {
-	var rows []IssueRow
-	switch section {
-	case IssuesSectionMy:
-		rows = a.myIssueRows
-	case IssuesSectionOther:
-		rows = a.otherIssueRows
-	case IssuesSectionAll:
-		rows = a.issueRows
-	case IssuesSectionSearch:
-		rows = a.searchIssueRows
-	}
-	return getRowForIssueModel(issueID, rows)
+	return getRowForIssueModel(issueID, a.rowsForSection(section))
 }
 
 // buildFlatSearchRows maps search results 1:1 to rows, preserving the API's
