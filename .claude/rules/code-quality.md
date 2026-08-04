@@ -42,7 +42,7 @@ Search these before hand-building anything:
 - **Modals**: `FormModal` (`internal/tui/form_modal.go`) for forms; any hand-built overlay panel needs `panel.Box = tview.NewBox()` first or the layer beneath bleeds through.
 - **Issue list**: columns live in the `issueColumnSpecs` registry (`internal/tui/issues_table.go`); rows come from `BuildGroupedIssueRows` and header rows must be skipped or special-cased when walking or selecting.
 - **Keybindings**: resolve through `actionKey(action, fallback)` or the command shortcut map. Never compare against a hardcoded rune in a key handler.
-- **GraphQL**: extend the struct-tagged selections in `internal/linearapi/client.go`; verify field placement against the Linear schema, one bad field silently kills the whole query.
+- **GraphQL**: extend the struct-tagged selections in the matching `internal/linearapi` domain file (`issues_query.go`, `issue_detail.go`, `issue_mutations.go`, `metadata.go`, `favorites.go`, `comments.go`, `teams.go`); verify field placement against the Linear schema, one bad field silently kills the whole query. A new input type also needs its `GetGraphQLType` and `MarshalJSON` in `types.go`, where all the others live, or shurcooL/graphql sends the Go type name and Linear rejects the call.
 
 ## Tests
 
@@ -52,4 +52,4 @@ Search these before hand-building anything:
 
 ## File size
 
-- Keep files focused. `app.go` and `client.go` are already too big; don't make that worse, and don't grow a new file past what one sitting can review.
+- Keep files focused. `app.go` and `client_test.go` are already too big; don't make that worse, and don't grow a new file past what one sitting can review.
