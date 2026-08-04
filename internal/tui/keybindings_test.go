@@ -62,7 +62,7 @@ type reorderHarness struct {
 // second, so a move up has somewhere to go.
 func newReorderHarness(t *testing.T) *reorderHarness {
 	t.Helper()
-	h := &reorderHarness{app: newUXTestApp(), settled: make(chan struct{}, 1)}
+	h := &reorderHarness{app: newUXTestApp(t), settled: make(chan struct{}, 1)}
 	h.app.updateFavoriteSortFunc = func(_ context.Context, favoriteID string, _ float64) error {
 		h.moved = append(h.moved, favoriteID)
 		return nil
@@ -127,7 +127,7 @@ func TestFavoriteMoveKeysDefaultToShiftJK(t *testing.T) {
 // TestFavoriteMoveKeysFallThroughOnNonFavorites verifies the keys stay with the
 // tree when the cursor is not on a favorite, rather than raising an error.
 func TestFavoriteMoveKeysFallThroughOnNonFavorites(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.updateFavoriteSortFunc = func(context.Context, string, float64) error {
 		t.Error("reorder must not reach the API for a non-favorite")
 		return nil

@@ -90,6 +90,7 @@ func TestRefreshAppliesCustomViewPreferences(t *testing.T) {
 		CacheTTL: time.Minute,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 
@@ -172,6 +173,7 @@ func TestRefreshFallsBackWhenViewPreferencesFail(t *testing.T) {
 		GroupBy:  GroupByAssignee,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
 

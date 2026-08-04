@@ -21,7 +21,7 @@ func tabKey(app *App, backward bool) {
 }
 
 func TestTabSkipsTheHiddenDetailsPane(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	if !app.detailsHidden {
 		t.Fatal("details pane starts open; this test covers the closed case")
 	}
@@ -40,7 +40,7 @@ func TestTabSkipsTheHiddenDetailsPane(t *testing.T) {
 }
 
 func TestTabSkipsTheHiddenNavigationPane(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.detailsHidden = false
 	app.navigationHidden = true
 	app.focusedPane = FocusIssues
@@ -58,7 +58,7 @@ func TestTabSkipsTheHiddenNavigationPane(t *testing.T) {
 // Tab is pane navigation. Details and Comments are a tab strip inside one pane,
 // and Tab used to walk them, which made the pane cycle take two presses to leave.
 func TestTabLeavesTheDetailsPaneWithoutWalkingItsTabs(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.detailsHidden = false
 	app.detailsCommentsVisible = true
 	app.focusedPane = FocusDetails
@@ -75,7 +75,7 @@ func TestTabLeavesTheDetailsPaneWithoutWalkingItsTabs(t *testing.T) {
 }
 
 func TestShiftTabLeavesTheDetailsPaneWithoutWalkingItsTabs(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.detailsHidden = false
 	app.detailsCommentsVisible = true
 	app.focusedPane = FocusDetails
@@ -107,6 +107,7 @@ func TestPaneTogglesFireFromTheDetailsPane(t *testing.T) {
 			"toggle_details_pane":    "}",
 		},
 	}, nil)
+	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails
@@ -127,7 +128,7 @@ func TestPaneTogglesFireFromTheDetailsPane(t *testing.T) {
 }
 
 func TestDetailsPaneKeepsItsScrollKeys(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails
 
@@ -140,7 +141,7 @@ func TestDetailsPaneKeepsItsScrollKeys(t *testing.T) {
 }
 
 func TestDetailsTabKeysStillCycleItsTabs(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.detailsHidden = false
 	app.detailsCommentsVisible = true
 	app.focusedPane = FocusDetails

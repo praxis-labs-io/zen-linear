@@ -305,7 +305,7 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 		}
 		issue := a.getIssueFromRowForSection(row, section)
 		if issue != nil {
-			a.onIssueSelected(*issue)
+			a.selectIssueNow(*issue)
 		}
 		a.toggleDetailsPane()
 	})
@@ -331,7 +331,7 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 				return nil
 			}
 			if issue := a.getIssueFromRowForSection(row, section); issue != nil {
-				a.onIssueSelected(*issue)
+				a.selectIssueNow(*issue)
 				a.activeIssuesSection = section
 			}
 			a.toggleDetailsPane()

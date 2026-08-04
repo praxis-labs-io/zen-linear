@@ -260,6 +260,12 @@ type App struct {
 	searchFetchGeneration    atomic.Int64
 	searchFetchCancel        context.CancelFunc
 
+	detailDebounceTimer      *time.Timer
+	detailDebounceMu         sync.Mutex
+	detailDebounceGeneration atomic.Int64
+	detailFetchGeneration    atomic.Int64
+	detailFetchCancel        context.CancelFunc
+
 	// Cached metadata for currently selected team
 	currentUser    *linearapi.User
 	teamUsers      []linearapi.User
@@ -298,6 +304,7 @@ type App struct {
 	fetchCyclesFunc         func(context.Context, string) ([]linearapi.Cycle, error)
 	fetchCurrentUserFunc    func(context.Context) (linearapi.User, error)
 	preloadTeamMetadataFunc func(string)
+	detailDebounce          time.Duration
 
 	createFavoriteFunc     func(context.Context, linearapi.FavoriteTarget) (linearapi.Favorite, error)
 	deleteFavoriteFunc     func(context.Context, string) error
@@ -307,9 +314,6 @@ type App struct {
 
 	// UI update mutex (for test safety when queueUpdateDraw executes immediately)
 	uiUpdateMu sync.Mutex
-
-	// Race-safety for issue detail fetching
-	fetchingIssueID string // Tracks which issue ID we're currently fetching
 
 	// Details pane sub-view focus
 	focusedDetailsView     bool // false = description, true = comments
@@ -806,7 +810,7 @@ func (a *App) resetCachedState() {
 	// Bump generation to prevent in-flight refreshes from updating UI.
 	a.refreshGeneration.Add(1)
 	a.resetGeneration.Add(1)
-	a.fetchingIssueID = ""
+	a.abandonDetailFetch()
 }
 
 // parseLogLevel converts a string log level to a logger.LogLevel.
@@ -2252,45 +2256,6 @@ func (a *App) showSubgroupByPicker() {
 	})
 }
 
-// onIssueSelected handles when an issue is selected.
-func (a *App) onIssueSelected(issue linearapi.Issue) {
-	logger.Debug("tui.app: issue selected issue=%s", issue.Identifier)
-	// Set selected issue immediately for quick UI feedback
-	a.issuesMu.Lock()
-	a.selectedIssue = &issue
-	a.issuesMu.Unlock()
-	a.updateDetailsView()
-
-	// Fetch full issue details (including comments) in background
-	issueID := issue.ID
-	a.fetchingIssueID = issueID
-
-	go func() {
-		logger.Debug("tui.app: fetching full issue details issue=%s", issue.Identifier)
-		ctx := context.Background()
-		fetchIssue := a.fetchIssueByID
-		if fetchIssue == nil {
-			fetchIssue = a.api.FetchIssueByID
-		}
-		fullIssue, err := fetchIssue(ctx, issueID)
-
-		a.QueueUpdateDraw(func() {
-			// Race-safety: only apply if this is still the issue we're fetching
-			if a.fetchingIssueID == issueID {
-				if err != nil {
-					logger.ErrorWithErr(err, "tui.app: failed to fetch full issue details issue=%s", issue.Identifier)
-					// Keep the partial issue data we already have
-					return
-				}
-				a.issuesMu.Lock()
-				a.selectedIssue = &fullIssue
-				a.issuesMu.Unlock()
-				a.updateDetailsView()
-			}
-		})
-	}()
-}
-
 // toggleIssueExpanded toggles the expand/collapse state of a parent issue.
 func (a *App) toggleIssueExpanded(issueID string) {
 	// All holds every fetched issue, whichever tab the press came from.
@@ -2934,22 +2899,7 @@ func (a *App) ShowEditDescriptionModal() {
 
 				// Refetch the full issue so the details pane shows the new
 				// description without losing comments.
-				a.fetchingIssueID = issueID
-				go func() {
-					fullIssue, fetchErr := a.api.FetchIssueByID(ctx, issueID)
-					a.QueueUpdateDraw(func() {
-						if a.fetchingIssueID == issueID {
-							if fetchErr != nil {
-								logger.ErrorWithErr(fetchErr, "tui.app: failed to refresh issue after description update issue=%s", issueID)
-								return
-							}
-							a.issuesMu.Lock()
-							a.selectedIssue = &fullIssue
-							a.issuesMu.Unlock()
-							a.updateDetailsView()
-						}
-					})
-				}()
+				a.loadIssueDetailsByID(issueID)
 			})
 		}()
 	})

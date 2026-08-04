@@ -236,7 +236,7 @@ func (a *App) handleSearchInputKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		a.searchResultsTable.Select(row, 0)
 		if issue := a.getIssueFromRowForSection(row, IssuesSectionSearch); issue != nil {
-			a.onIssueSelected(*issue)
+			a.selectIssueNow(*issue)
 		}
 		a.updateFocus()
 		return nil

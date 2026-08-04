@@ -67,7 +67,7 @@ func navTreeLabelsByLevel(app *App) []struct {
 }
 
 func TestPadNavigationTree_FitsEveryNodeToItsLevelWidth(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(3), nil)
 
 	const width = 30
@@ -94,7 +94,7 @@ func TestPadNavigationTree_FitsEveryNodeToItsLevelWidth(t *testing.T) {
 // asserted here, because a unit test cannot see that the work was skipped
 // without pinning an invariant the code should not have.
 func TestPadNavigationTree_IsIdempotentAtAnUnchangedWidth(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(3), nil)
 
 	app.padNavigationTree(30)
@@ -112,7 +112,7 @@ func TestPadNavigationTree_IsIdempotentAtAnUnchangedWidth(t *testing.T) {
 // current, anything that relabels a node outside padNavigationNode would be
 // silently discarded and the pane would show stale text until a resize.
 func TestPadNavigationTree_PicksUpALabelChangedElsewhere(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(3), nil)
 	app.padNavigationTree(30)
 
@@ -131,7 +131,7 @@ func TestPadNavigationTree_PicksUpALabelChangedElsewhere(t *testing.T) {
 }
 
 func TestPadNavigationTree_RefitsOnWidthChange(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(3), nil)
 	app.padNavigationTree(30)
 	before := navTreeLabels(app)
@@ -153,7 +153,7 @@ func TestPadNavigationTree_RefitsOnWidthChange(t *testing.T) {
 // TestPadNavigationTree_FitsNodesAddedAfterTheFirstDraw covers lazily added
 // children: expanding a team inserts nodes the cache has never seen.
 func TestPadNavigationTree_FitsNodesAddedAfterTheFirstDraw(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(1), nil)
 	app.padNavigationTree(30)
 
@@ -172,7 +172,7 @@ func TestPadNavigationTree_FitsNodesAddedAfterTheFirstDraw(t *testing.T) {
 }
 
 func TestForgetNavNodeLabels_DropsTheSubtree(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(2), nil)
 	app.padNavigationTree(30)
 
@@ -204,7 +204,7 @@ func benchNavTree(app *App, teams, childrenPerTeam int) {
 }
 
 func BenchmarkPadNavigationTree_SteadyState(b *testing.B) {
-	app := newUXTestApp()
+	app := newUXTestApp(b)
 	benchNavTree(app, 20, 19)
 	app.padNavigationTree(30)
 
@@ -215,7 +215,7 @@ func BenchmarkPadNavigationTree_SteadyState(b *testing.B) {
 }
 
 func BenchmarkPadNavigationTree_AfterResize(b *testing.B) {
-	app := newUXTestApp()
+	app := newUXTestApp(b)
 	benchNavTree(app, 20, 19)
 
 	b.ResetTimer()

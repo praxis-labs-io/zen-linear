@@ -357,8 +357,9 @@ func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 		a.updateDetailsView()
 	case selectTarget && target != nil:
 		// The selection moves to a different issue; render and fetch its
-		// details the same way a cursor move would.
-		a.onIssueSelected(*target)
+		// details. The list moved under the user, not the cursor, so there is
+		// nothing to debounce.
+		a.selectIssueNow(*target)
 	case selectTarget:
 		a.issuesMu.Lock()
 		a.selectedIssue = nil
@@ -367,34 +368,6 @@ func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 	default:
 		a.updateDetailsView()
 	}
-}
-
-// refreshIssueDetails refetches one issue so the details pane picks up data the
-// list query never carries: comments, relations, subscribers, attachments.
-// Nothing the list renders changes, so the list is left alone.
-func (a *App) refreshIssueDetails(issueID string) {
-	fetchIssue := a.fetchIssueByID
-	if fetchIssue == nil {
-		fetchIssue = a.api.FetchIssueByID
-	}
-	a.fetchingIssueID = issueID
-	go func() {
-		fullIssue, err := fetchIssue(context.Background(), issueID)
-		a.QueueUpdateDraw(func() {
-			// A newer selection owns the details pane.
-			if a.fetchingIssueID != issueID {
-				return
-			}
-			if err != nil {
-				logger.ErrorWithErr(err, "tui.issue_update: failed to refresh issue details issue_id=%s", issueID)
-				return
-			}
-			a.issuesMu.Lock()
-			a.selectedIssue = &fullIssue
-			a.issuesMu.Unlock()
-			a.updateDetailsView()
-		})
-	}()
 }
 
 // rebuildIssueRowModels rebuilds every section's rows from the issue list.

@@ -11,7 +11,7 @@ import (
 // without a control must be carried through or an in-app save silently
 // strips it from the user's config.
 func TestSettingsFormRoundTripPreservesConfig(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.config.GroupBy = "status"
 	app.config.SubgroupBy = "project"
 	app.config.SortBy = []string{"status", "priority"}

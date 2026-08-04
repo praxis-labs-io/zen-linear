@@ -26,6 +26,7 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 		AgentModel:    "gpt-5.2",
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 
 	// Use a mutex to synchronize access to pages and other shared state
 	var pagesMu sync.Mutex
@@ -152,6 +153,7 @@ func TestDefaultCommands_GatesAskAgent(t *testing.T) {
 		AgentSandbox:  config.DefaultAgentSandbox,
 	}
 	app := NewApp(&linearapi.Client{}, cfg, nil)
+	stopDetailTimersOnCleanup(t, app)
 
 	app.agentRunner = &agents.Runner{
 		LookPath: func(string) (string, error) {

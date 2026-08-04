@@ -14,7 +14,8 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
-func newUXTestApp() *App {
+func newUXTestApp(t testing.TB) *App {
+	t.Helper()
 	app := NewApp(&linearapi.Client{}, config.Config{
 		PageSize: 1,
 		CacheTTL: time.Minute,
@@ -22,7 +23,22 @@ func newUXTestApp() *App {
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.teamUsers = []linearapi.User{{ID: "user-1", Name: "Test User"}}
 	app.teamCycles = []linearapi.Cycle{{ID: "cycle-1", Name: "Test Cycle", Number: 1}}
+	stopDetailTimersOnCleanup(t, app)
 	return app
+}
+
+// stopDetailTimersOnCleanup keeps a debounce timer armed by a selection from
+// outliving the test and repainting into the next one's app. Taking uiUpdateMu
+// waits out a callback already inside QueueUpdateDraw; the generation bump stops
+// every later one. Tests that build an App directly need this too.
+func stopDetailTimersOnCleanup(t testing.TB, app *App) {
+	t.Helper()
+	t.Cleanup(func() {
+		app.cancelDetailDebounce()
+		app.uiUpdateMu.Lock()
+		app.detailFetchGeneration.Add(1)
+		app.uiUpdateMu.Unlock()
+	})
 }
 
 func TestPaletteController_FilterCommandsMatchesAllQueryTokens(t *testing.T) {
@@ -44,7 +60,7 @@ func TestPaletteController_FilterCommandsMatchesAllQueryTokens(t *testing.T) {
 }
 
 func TestOpenSearchTabFocusesInput(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 
 	app.openSearchTab()
 
@@ -66,7 +82,7 @@ func TestOpenSearchTabFocusesInput(t *testing.T) {
 }
 
 func TestDetailsCommentsTabAlwaysVisibleWithCount(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
 	app.issuesMu.Lock()
@@ -97,7 +113,7 @@ func TestDetailsCommentsTabAlwaysVisibleWithCount(t *testing.T) {
 }
 
 func TestIssueContextLineShownInModals(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ZEN-9", Title: "A very important thing"}
 	line := app.issueContextLine(issue)
 	if !strings.Contains(line, "ZEN-9") || !strings.Contains(line, "A very important thing") {
@@ -129,7 +145,7 @@ func TestIssueContextLineShownInModals(t *testing.T) {
 }
 
 func TestSettingsModalShowsAndBuildsSearchDebounceSetting(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.config.SearchDebounce = 450 * time.Millisecond
 	modal := app.settingsModal
 
@@ -151,7 +167,7 @@ func TestSettingsModalShowsAndBuildsSearchDebounceSetting(t *testing.T) {
 }
 
 func TestSettingsModalShowsAndBuildsDefaultNavigationSettings(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	app.config.DefaultTeam = "NEX"
 	app.config.DefaultProject = "Website"
 	modal := app.settingsModal
@@ -181,7 +197,7 @@ func TestSettingsModalShowsAndBuildsDefaultNavigationSettings(t *testing.T) {
 }
 
 func TestCreateIssueModalShowWithOptionsResetsFocusAndShowsParentContext(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	modal := app.createIssueModal
 	app.app.SetFocus(modal.fm.order[len(modal.fm.order)-1])
 
@@ -207,7 +223,7 @@ func TestCreateIssueModalShowWithOptionsResetsFocusAndShowsParentContext(t *test
 }
 
 func TestCreateIssueModalEscapeClosesOpenDropdownBeforeModal(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	modal := app.createIssueModal
 	modal.Show("team-1", "", func(title, description, teamID, projectID, assigneeID, cycleID string, priority int) {})
 	app.app.SetFocus(modal.assigneeField)
@@ -224,7 +240,7 @@ func TestCreateIssueModalEscapeClosesOpenDropdownBeforeModal(t *testing.T) {
 }
 
 func TestEditLabelsModalShowsFocusAndTogglesWithSpaceAndT(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	modal := app.editLabelsModal
 	var saved []string
 	labels := []linearapi.IssueLabel{
@@ -267,7 +283,7 @@ func TestEditLabelsModalShowsFocusAndTogglesWithSpaceAndT(t *testing.T) {
 }
 
 func TestShowParentIssuePickerExcludesSelectedIssueAndDescendants(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	selected := linearapi.Issue{
 		ID:         "selected",
 		Identifier: "LTUI-1",
@@ -296,7 +312,7 @@ func TestShowParentIssuePickerExcludesSelectedIssueAndDescendants(t *testing.T) 
 }
 
 func TestDestructiveCommandsOpenConfirmationBeforeMutation(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	parent := &linearapi.IssueRef{ID: "parent-1", Identifier: "LTUI-1", Title: "Parent"}
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "LTUI-2", Title: "Child", Parent: parent}
 	app.issuesMu.Lock()
@@ -324,7 +340,7 @@ func TestDestructiveCommandsOpenConfirmationBeforeMutation(t *testing.T) {
 }
 
 func TestNoOpCommandsShowStatusFeedback(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 
 	openBrowser := findCommandByID(DefaultCommands(app), "open_browser")
 	if openBrowser == nil {
@@ -349,7 +365,7 @@ func TestNoOpCommandsShowStatusFeedback(t *testing.T) {
 }
 
 func TestAgentOutputModalFailureSetsErrorStatusAndFinalSummary(t *testing.T) {
-	app := newUXTestApp()
+	app := newUXTestApp(t)
 	modal := app.agentOutputModal
 	modal.Show(" Cursor Output ", func() {})
 
