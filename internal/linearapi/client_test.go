@@ -1493,32 +1493,43 @@ func TestCreateIssue_SendsPriority(t *testing.T) {
 }
 
 func TestCreateIssue_RejectsOutOfRangePriority(t *testing.T) {
-	hit := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hit = true
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(mutationIssueResponse("issueCreate")))
-	}))
-	defer server.Close()
-
-	client := NewClient(ClientConfig{
-		Token:    "test-token",
-		Endpoint: server.URL,
-	})
-
-	_, err := client.CreateIssue(context.Background(), CreateIssueInput{
-		TeamID:   "team-1",
-		Title:    "Bad priority",
-		Priority: maxPriority + 1,
-	})
-	if err == nil {
-		t.Fatal("CreateIssue() with out-of-range priority: want error, got nil")
+	cases := []struct {
+		name     string
+		priority int
+	}{
+		{"above max", maxPriority + 1},
+		{"negative", -1},
 	}
-	if !strings.Contains(err.Error(), "out of range") {
-		t.Errorf("error = %v, want it to mention out of range", err)
-	}
-	if hit {
-		t.Error("server was called; priority validation should short-circuit before the request")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hit := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hit = true
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(mutationIssueResponse("issueCreate")))
+			}))
+			defer server.Close()
+
+			client := NewClient(ClientConfig{
+				Token:    "test-token",
+				Endpoint: server.URL,
+			})
+
+			_, err := client.CreateIssue(context.Background(), CreateIssueInput{
+				TeamID:   "team-1",
+				Title:    "Bad priority",
+				Priority: tc.priority,
+			})
+			if err == nil {
+				t.Fatalf("CreateIssue() priority=%d: want error, got nil", tc.priority)
+			}
+			if !strings.Contains(err.Error(), "out of range") {
+				t.Errorf("error = %v, want it to mention out of range", err)
+			}
+			if hit {
+				t.Error("server was called; priority validation should short-circuit before the request")
+			}
+		})
 	}
 }
 

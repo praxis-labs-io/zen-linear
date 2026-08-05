@@ -48,7 +48,8 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 	if input.AssigneeID != "" {
 		issueInput["assigneeId"] = graphql.ID(input.AssigneeID)
 	}
-	if input.Priority > 0 {
+	// Priority 0 means "unset" on create, so skip it; any other value is validated.
+	if input.Priority != 0 {
 		priority, err := priorityValue(input.Priority)
 		if err != nil {
 			return Issue{}, fmt.Errorf("create issue: %w", err)
