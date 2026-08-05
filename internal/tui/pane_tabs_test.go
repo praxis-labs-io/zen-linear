@@ -268,8 +268,8 @@ func TestJumpToSection_EmptyTabDropsTheSelection(t *testing.T) {
 	}
 }
 
-// rebuildIssuesTables resolves through allIDToIssue, whose values point into the
-// a.issues backing array that in-place sorts and splices mutate.
+// rebuildIssuesTables resolves through allIDToIssue, whose values point into a
+// snapshot of the list that the next rebuild replaces.
 func TestRebuildIssuesTables_ReturnsACopyNotAnAlias(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},

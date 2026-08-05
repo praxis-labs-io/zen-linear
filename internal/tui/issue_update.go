@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 	"github.com/zen-linear/zen-linear/internal/logger"
@@ -330,8 +331,8 @@ func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 }
 
 // repointSelection re-resolves the details pane after the row models changed.
-// The id maps point into the a.issues backing array, which later edits re-sort
-// and splice in place, so the selection always keeps its own copy.
+// The id maps point into a snapshot of the list that the next rebuild replaces,
+// so the selection always keeps its own copy.
 func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 	a.issuesMu.RLock()
 	previousSelected := a.selectedIssue
@@ -363,7 +364,10 @@ func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 // rebuildIssueRowModels rebuilds every section's rows from the issue list.
 func (a *App) rebuildIssueRowModels() {
 	a.issuesMu.RLock()
-	issues := a.issues
+	// The id maps below point into whatever slice they index, and pagination
+	// re-sorts a.issues in place between paints. Index a snapshot, or a lookup
+	// inside that window returns whichever issue now sits in the slot.
+	issues := slices.Clone(a.issues)
 	a.issuesMu.RUnlock()
 
 	currentUserID := ""
