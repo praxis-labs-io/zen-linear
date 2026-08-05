@@ -1,0 +1,1 @@
+query($after:String$filter:ProjectMilestoneFilter!$first:Int!$includeArchived:Boolean!){projectMilestones(first: $first, after: $after, filter: $filter, includeArchived: $includeArchived){nodes{id,name,targetDate,status,sortOrder,progress,project{id}},pageInfo{hasNextPage,endCursor}}}

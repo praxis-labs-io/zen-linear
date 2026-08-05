@@ -1,0 +1,1 @@
+query($after:String$first:Int!$includeArchived:Boolean!$teamId:String!){team(id: $teamId){cycles(first: $first, after: $after, includeArchived: $includeArchived){nodes{id,name,number,description,startsAt,endsAt,isActive,isFuture,isPast,isNext,isPrevious,createdAt,updatedAt,team{id}},pageInfo{hasNextPage,endCursor}}}}

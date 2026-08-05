@@ -1,0 +1,1 @@
+mutation($input:CommentCreateInput!){commentCreate(input: $input){success,comment{id,body,createdAt,updatedAt,user{id,name,displayName,email,isMe}}}}

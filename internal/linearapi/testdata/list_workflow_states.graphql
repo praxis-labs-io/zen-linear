@@ -1,0 +1,1 @@
+query($teamId:String!){team(id: $teamId){states{nodes{id,name,type,position}}}}

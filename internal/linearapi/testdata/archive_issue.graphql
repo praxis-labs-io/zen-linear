@@ -1,0 +1,1 @@
+mutation($id:String!){issueArchive(id: $id){success}}

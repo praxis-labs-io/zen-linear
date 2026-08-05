@@ -1,0 +1,1 @@
+query($teamId:String!){team(id: $teamId){members{nodes{id,name,displayName,email,isMe}}}}

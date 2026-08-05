@@ -1,0 +1,1 @@
+mutation($id:String!){favoriteDelete(id: $id){success}}
