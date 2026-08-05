@@ -734,7 +734,19 @@ func TestFetchIssueByID_ParsesRelationsSubscribersAndAttachments(t *testing.T) {
 					"createdAt": "2025-01-02T00:00:00Z",
 					"updatedAt": "2025-01-03T00:00:00Z"
 				}]},
-				"comments": {"nodes": []}
+				"comments": {"nodes": [{
+					"id": "comment-1",
+					"body": "First pass looks right.",
+					"createdAt": "2025-01-04T00:00:00Z",
+					"updatedAt": "2025-01-05T00:00:00Z",
+					"user": {
+						"id": "user-2",
+						"name": "Grace",
+						"displayName": "Grace Hopper",
+						"email": "grace@example.com",
+						"isMe": false
+					}
+				}]}
 			}
 		}
 	}`
@@ -753,6 +765,29 @@ func TestFetchIssueByID_ParsesRelationsSubscribersAndAttachments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchIssueByID() error: %v", err)
 	}
+	// The shared selection reaches the detail node through an embedded struct,
+	// so these assertions are what prove the flattened response still lands.
+	if issue.ID != "issue-1" || issue.Identifier != "ABC-1" || issue.Title != "Full issue" {
+		t.Fatalf("issue identity = %q/%q/%q, want issue-1/ABC-1/Full issue", issue.ID, issue.Identifier, issue.Title)
+	}
+	if issue.State != "Todo" || issue.StateID != "state-1" {
+		t.Fatalf("state = %q/%q, want Todo/state-1", issue.State, issue.StateID)
+	}
+	if issue.Priority != 1 || issue.TeamID != "team-1" || issue.ProjectID != "project-1" {
+		t.Fatalf("priority/team/project = %d/%q/%q, want 1/team-1/project-1", issue.Priority, issue.TeamID, issue.ProjectID)
+	}
+	if issue.URL != "https://linear.app/issue/ABC-1" {
+		t.Fatalf("URL = %q, want the issue url", issue.URL)
+	}
+	if issue.DueDate == nil || *issue.DueDate != "2026-06-15" {
+		t.Fatalf("DueDate = %v, want 2026-06-15", issue.DueDate)
+	}
+	if issue.Estimate == nil || *issue.Estimate != 3 {
+		t.Fatalf("Estimate = %v, want 3", issue.Estimate)
+	}
+	if issue.ProjectMilestone == nil || issue.ProjectMilestone.Name != "Beta" {
+		t.Fatalf("ProjectMilestone = %+v, want Beta", issue.ProjectMilestone)
+	}
 	if len(issue.Relations) != 2 {
 		t.Fatalf("Relations length = %d, want 2", len(issue.Relations))
 	}
@@ -767,6 +802,19 @@ func TestFetchIssueByID_ParsesRelationsSubscribersAndAttachments(t *testing.T) {
 	}
 	if len(issue.Attachments) != 1 || issue.Attachments[0].SourceType != "github" || issue.Attachments[0].URL == "" {
 		t.Fatalf("Attachments = %+v, want one GitHub attachment", issue.Attachments)
+	}
+	if len(issue.Comments) != 1 {
+		t.Fatalf("Comments length = %d, want 1", len(issue.Comments))
+	}
+	comment := issue.Comments[0]
+	if comment.Body != "First pass looks right." || comment.Author.DisplayName != "Grace Hopper" {
+		t.Fatalf("comment = %+v, want Grace Hopper's body", comment)
+	}
+	if comment.IssueID != "issue-1" {
+		t.Fatalf("comment.IssueID = %q, want issue-1", comment.IssueID)
+	}
+	if comment.CreatedAt.IsZero() || comment.UpdatedAt.Equal(comment.CreatedAt) {
+		t.Fatalf("comment timestamps = %v/%v, want distinct non-zero times", comment.CreatedAt, comment.UpdatedAt)
 	}
 }
 

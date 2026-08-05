@@ -1,0 +1,1 @@
+mutation($id:String!$input:FavoriteUpdateInput!){favoriteUpdate(id: $id, input: $input){success}}

@@ -1,406 +1,207 @@
 package linearapi
 
-import (
-	"reflect"
-)
-
-func parseCycleRefValue(v reflect.Value) *CycleRef {
-	if !v.IsValid() {
+// toRef converts the cycle selection into a CycleRef, treating a missing id as
+// no cycle.
+func (n *cycleRefNode) toRef() *CycleRef {
+	if n == nil || n.ID == "" {
 		return nil
 	}
-	if v.Kind() == reflect.Interface {
-		if v.IsNil() {
-			return nil
-		}
-		v = v.Elem()
-	}
-	if v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return nil
-		}
-		v = v.Elem()
-	}
 
-	id := reflectStringField(v, "ID")
-	if id == "" {
-		return nil
+	name := ""
+	if n.Name != nil {
+		name = string(*n.Name)
 	}
 
 	return &CycleRef{
-		ID:         id,
-		Name:       reflectStringField(v, "Name"),
-		Number:     reflectIntField(v, "Number"),
-		StartsAt:   parseTime(reflectStringField(v, "StartsAt")),
-		EndsAt:     parseTime(reflectStringField(v, "EndsAt")),
-		IsActive:   reflectBoolField(v, "IsActive"),
-		IsFuture:   reflectBoolField(v, "IsFuture"),
-		IsPast:     reflectBoolField(v, "IsPast"),
-		IsNext:     reflectBoolField(v, "IsNext"),
-		IsPrevious: reflectBoolField(v, "IsPrevious"),
+		ID:         string(n.ID),
+		Name:       name,
+		Number:     int(n.Number),
+		StartsAt:   parseTime(string(n.StartsAt)),
+		EndsAt:     parseTime(string(n.EndsAt)),
+		IsActive:   bool(n.IsActive),
+		IsFuture:   bool(n.IsFuture),
+		IsPast:     bool(n.IsPast),
+		IsNext:     bool(n.IsNext),
+		IsPrevious: bool(n.IsPrevious),
 	}
 }
 
-func parseProjectMilestoneRefValue(v reflect.Value) *ProjectMilestoneRef {
-	if !v.IsValid() {
-		return nil
-	}
-	if v.Kind() == reflect.Interface {
-		if v.IsNil() {
-			return nil
-		}
-		v = v.Elem()
-	}
-	if v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return nil
-		}
-		v = v.Elem()
-	}
-
-	id := reflectStringField(v, "ID")
-	if id == "" {
+// toRef converts the milestone selection into a ProjectMilestoneRef, treating a
+// missing id as no milestone. SortOrder and Progress stay zero because no issue
+// selection requests them, so anything ranking milestones by SortOrder ties.
+func (n *projectMilestoneRefNode) toRef() *ProjectMilestoneRef {
+	if n == nil || n.ID == "" {
 		return nil
 	}
 
 	var targetDate *string
-	if value := reflectStringField(v, "TargetDate"); value != "" {
+	if n.TargetDate != nil && *n.TargetDate != "" {
+		value := string(*n.TargetDate)
 		targetDate = &value
-	}
-	projectID := ""
-	projectField := v.FieldByName("Project")
-	if projectField.IsValid() {
-		projectID = reflectStringField(projectField, "ID")
 	}
 
 	return &ProjectMilestoneRef{
-		ID:         id,
-		Name:       reflectStringField(v, "Name"),
-		ProjectID:  projectID,
+		ID:         string(n.ID),
+		Name:       string(n.Name),
+		ProjectID:  string(n.Project.ID),
 		TargetDate: targetDate,
-		Status:     reflectStringField(v, "Status"),
-		SortOrder:  reflectFloatField(v, "SortOrder"),
-		Progress:   reflectFloatField(v, "Progress"),
+		Status:     string(n.Status),
 	}
 }
 
-func reflectStringField(v reflect.Value, name string) string {
-	if !v.IsValid() {
-		return ""
+// toRelation converts a relation node from the perspective of the issue that
+// was fetched; inverse marks the ones that point back at it.
+func (n issueRelationNode) toRelation(inverse bool) IssueRelation {
+	return IssueRelation{
+		ID:   string(n.ID),
+		Type: string(n.Type),
+		Issue: IssueRef{
+			ID:         string(n.Issue.ID),
+			Identifier: string(n.Issue.Identifier),
+			Title:      string(n.Issue.Title),
+		},
+		RelatedIssue: IssueRef{
+			ID:         string(n.RelatedIssue.ID),
+			Identifier: string(n.RelatedIssue.Identifier),
+			Title:      string(n.RelatedIssue.Title),
+		},
+		Inverse: inverse,
 	}
-	field := v.FieldByName(name)
-	if !field.IsValid() {
-		return ""
+}
+
+// toIssue converts the shared issue selection into an Issue. Relations,
+// Subscribers and Attachments are not part of this selection; issueDetailNode
+// fills them.
+func (n issueQueryNode) toIssue() Issue {
+	issue := Issue{
+		ID:               string(n.ID),
+		Identifier:       string(n.Identifier),
+		Title:            string(n.Title),
+		State:            string(n.State.Name),
+		StateID:          string(n.State.ID),
+		Priority:         int(n.Priority),
+		UpdatedAt:        parseTime(string(n.UpdatedAt)),
+		CreatedAt:        parseTime(string(n.CreatedAt)),
+		TeamID:           string(n.Team.ID),
+		Cycle:            n.Cycle.toRef(),
+		ProjectMilestone: n.ProjectMilestone.toRef(),
+		URL:              string(n.URL),
+		BranchName:       string(n.BranchName),
+		Archived:         n.ArchivedAt != nil,
+		Relations:        make([]IssueRelation, 0),
 	}
-	if field.Kind() == reflect.Pointer {
-		if field.IsNil() {
-			return ""
+
+	if n.Assignee != nil {
+		issue.AssigneeID = string(n.Assignee.ID)
+		issue.Assignee = string(n.Assignee.Name)
+	}
+	if n.Description != nil {
+		issue.Description = string(*n.Description)
+	}
+	if n.Project != nil {
+		issue.ProjectID = string(n.Project.ID)
+		issue.ProjectName = string(n.Project.Name)
+	}
+	if n.DueDate != nil && *n.DueDate != "" {
+		value := string(*n.DueDate)
+		issue.DueDate = &value
+	}
+	if n.Estimate != nil {
+		value := float64(*n.Estimate)
+		issue.Estimate = &value
+	}
+	if n.Parent != nil {
+		issue.Parent = &IssueRef{
+			ID:         string(n.Parent.ID),
+			Identifier: string(n.Parent.Identifier),
+			Title:      string(n.Parent.Title),
 		}
-		field = field.Elem()
 	}
-	if field.Kind() == reflect.String {
-		return field.String()
-	}
-	return ""
-}
 
-func reflectStringPointerField(v reflect.Value, name string) *string {
-	value := reflectStringField(v, name)
-	if value == "" {
-		return nil
-	}
-	return &value
-}
-
-func reflectIntField(v reflect.Value, name string) int {
-	if !v.IsValid() {
-		return 0
-	}
-	field := v.FieldByName(name)
-	if !field.IsValid() {
-		return 0
-	}
-	switch field.Kind() {
-	case reflect.Float32, reflect.Float64:
-		return int(field.Float())
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return int(field.Int())
-	default:
-		return 0
-	}
-}
-
-func reflectFloatField(v reflect.Value, name string) float64 {
-	if !v.IsValid() {
-		return 0
-	}
-	field := v.FieldByName(name)
-	if !field.IsValid() {
-		return 0
-	}
-	if field.Kind() == reflect.Pointer {
-		if field.IsNil() {
-			return 0
-		}
-		field = field.Elem()
-	}
-	switch field.Kind() {
-	case reflect.Float32, reflect.Float64:
-		return field.Float()
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return float64(field.Int())
-	default:
-		return 0
-	}
-}
-
-func reflectFloatPointerField(v reflect.Value, name string) *float64 {
-	if !v.IsValid() {
-		return nil
-	}
-	field := v.FieldByName(name)
-	if !field.IsValid() {
-		return nil
-	}
-	if field.Kind() == reflect.Pointer {
-		if field.IsNil() {
-			return nil
-		}
-		field = field.Elem()
-	}
-	switch field.Kind() {
-	case reflect.Float32, reflect.Float64:
-		value := field.Float()
-		return &value
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		value := float64(field.Int())
-		return &value
-	default:
-		return nil
-	}
-}
-
-func reflectBoolField(v reflect.Value, name string) bool {
-	if !v.IsValid() {
-		return false
-	}
-	field := v.FieldByName(name)
-	if !field.IsValid() {
-		return false
-	}
-	if field.Kind() == reflect.Bool {
-		return field.Bool()
-	}
-	return false
-}
-
-func parseIssueRefValue(v reflect.Value) IssueRef {
-	return IssueRef{
-		ID:         reflectStringField(v, "ID"),
-		Identifier: reflectStringField(v, "Identifier"),
-		Title:      reflectStringField(v, "Title"),
-	}
-}
-
-func parseIssueRelationNodes(v reflect.Value, inverse bool) []IssueRelation {
-	if !v.IsValid() {
-		return nil
-	}
-	nodesField := v.FieldByName("Nodes")
-	if !nodesField.IsValid() {
-		return nil
-	}
-	relations := make([]IssueRelation, 0, nodesField.Len())
-	for i := 0; i < nodesField.Len(); i++ {
-		node := nodesField.Index(i)
-		relations = append(relations, IssueRelation{
-			ID:           reflectStringField(node, "ID"),
-			Type:         reflectStringField(node, "Type"),
-			Issue:        parseIssueRefValue(node.FieldByName("Issue")),
-			RelatedIssue: parseIssueRefValue(node.FieldByName("RelatedIssue")),
-			Inverse:      inverse,
+	issue.Labels = make([]IssueLabel, 0, len(n.Labels.Nodes))
+	for _, label := range n.Labels.Nodes {
+		issue.Labels = append(issue.Labels, IssueLabel{
+			ID:    string(label.ID),
+			Name:  string(label.Name),
+			Color: string(label.Color),
 		})
 	}
-	return relations
-}
 
-func parseUserNodes(v reflect.Value) []User {
-	if !v.IsValid() {
-		return nil
-	}
-	nodesField := v.FieldByName("Nodes")
-	if !nodesField.IsValid() {
-		return nil
-	}
-	users := make([]User, 0, nodesField.Len())
-	for i := 0; i < nodesField.Len(); i++ {
-		node := nodesField.Index(i)
-		users = append(users, User{
-			ID:          reflectStringField(node, "ID"),
-			Name:        reflectStringField(node, "Name"),
-			DisplayName: reflectStringField(node, "DisplayName"),
-			Email:       reflectStringField(node, "Email"),
-			IsMe:        reflectBoolField(node, "IsMe"),
+	issue.Children = make([]IssueChildRef, 0, len(n.Children.Nodes))
+	for _, child := range n.Children.Nodes {
+		issue.Children = append(issue.Children, IssueChildRef{
+			ID:         string(child.ID),
+			Identifier: string(child.Identifier),
+			Title:      string(child.Title),
+			State:      string(child.State.Name),
+			StateID:    string(child.State.ID),
 		})
 	}
-	return users
+
+	return issue
 }
 
-func parseAttachmentNodes(v reflect.Value) []Attachment {
-	if !v.IsValid() {
-		return nil
+// toIssue converts the detail selection, adding the connections the shared
+// selection leaves out.
+func (n issueDetailNode) toIssue() Issue {
+	issue := n.issueQueryNode.toIssue()
+
+	for _, relation := range n.Relations.Nodes {
+		issue.Relations = append(issue.Relations, relation.toRelation(false))
 	}
-	nodesField := v.FieldByName("Nodes")
-	if !nodesField.IsValid() {
-		return nil
+	for _, relation := range n.InverseRelations.Nodes {
+		issue.Relations = append(issue.Relations, relation.toRelation(true))
 	}
-	attachments := make([]Attachment, 0, nodesField.Len())
-	for i := 0; i < nodesField.Len(); i++ {
-		node := nodesField.Index(i)
-		attachments = append(attachments, Attachment{
-			ID:         reflectStringField(node, "ID"),
-			Title:      reflectStringField(node, "Title"),
-			Subtitle:   reflectStringField(node, "Subtitle"),
-			URL:        reflectStringField(node, "URL"),
-			SourceType: reflectStringField(node, "SourceType"),
-			CreatedAt:  parseTime(reflectStringField(node, "CreatedAt")),
-			UpdatedAt:  parseTime(reflectStringField(node, "UpdatedAt")),
+
+	issue.Subscribers = make([]User, 0, len(n.Subscribers.Nodes))
+	for _, node := range n.Subscribers.Nodes {
+		issue.Subscribers = append(issue.Subscribers, User{
+			ID:          string(node.ID),
+			Name:        string(node.Name),
+			DisplayName: string(node.DisplayName),
+			Email:       string(node.Email),
+			IsMe:        bool(node.IsMe),
 		})
 	}
-	return attachments
-}
 
-// parseIssueNode converts a GraphQL issue node to an Issue struct.
-func (c *Client) parseIssueNode(node interface{}) Issue {
-	// Use type assertion to handle the node
-	// This is a workaround since Go generics with GraphQL structs are complex
-	v := reflect.ValueOf(node)
-
-	id := v.FieldByName("ID").String()
-	identifier := v.FieldByName("Identifier").String()
-	title := v.FieldByName("Title").String()
-
-	stateField := v.FieldByName("State")
-	stateID := stateField.FieldByName("ID").String()
-	stateName := stateField.FieldByName("Name").String()
-
-	updatedAt := parseTime(v.FieldByName("UpdatedAt").String())
-	createdAt := parseTime(v.FieldByName("CreatedAt").String())
-
-	priority := int(v.FieldByName("Priority").Float())
-
-	assignee := ""
-	assigneeID := ""
-	assigneeField := v.FieldByName("Assignee")
-	if assigneeField.IsValid() && assigneeField.Kind() == reflect.Pointer && !assigneeField.IsNil() {
-		assigneeID = assigneeField.Elem().FieldByName("ID").String()
-		assignee = assigneeField.Elem().FieldByName("Name").String()
-	}
-
-	description := ""
-	descField := v.FieldByName("Description")
-	if descField.IsValid() && descField.Kind() == reflect.Pointer && !descField.IsNil() {
-		description = descField.Elem().String()
-	}
-
-	teamID := v.FieldByName("Team").FieldByName("ID").String()
-
-	projectID := ""
-	projectName := ""
-	projectField := v.FieldByName("Project")
-	if projectField.IsValid() && projectField.Kind() == reflect.Pointer && !projectField.IsNil() {
-		projectID = projectField.Elem().FieldByName("ID").String()
-		projectName = reflectStringField(projectField.Elem(), "Name")
-	}
-
-	cycle := parseCycleRefValue(v.FieldByName("Cycle"))
-	dueDate := reflectStringPointerField(v, "DueDate")
-	estimate := reflectFloatPointerField(v, "Estimate")
-	projectMilestone := parseProjectMilestoneRefValue(v.FieldByName("ProjectMilestone"))
-
-	url := v.FieldByName("URL").String()
-	branchName := reflectStringField(v, "BranchName")
-
-	archivedField := v.FieldByName("ArchivedAt")
-	archived := archivedField.IsValid() && archivedField.Kind() == reflect.Pointer && !archivedField.IsNil()
-
-	// Parse labels
-	labels := make([]IssueLabel, 0)
-	labelsConn := v.FieldByName("Labels")
-	if labelsConn.IsValid() {
-		labelsField := labelsConn.FieldByName("Nodes")
-		labels = make([]IssueLabel, 0, labelsField.Len())
-		for i := 0; i < labelsField.Len(); i++ {
-			lbl := labelsField.Index(i)
-			labels = append(labels, IssueLabel{
-				ID:    lbl.FieldByName("ID").String(),
-				Name:  lbl.FieldByName("Name").String(),
-				Color: lbl.FieldByName("Color").String(),
-			})
+	issue.Attachments = make([]Attachment, 0, len(n.Attachments.Nodes))
+	for _, node := range n.Attachments.Nodes {
+		subtitle := ""
+		if node.Subtitle != nil {
+			subtitle = string(*node.Subtitle)
 		}
-	}
-
-	// Parse parent
-	var parent *IssueRef
-	parentField := v.FieldByName("Parent")
-	if parentField.IsValid() && parentField.Kind() == reflect.Pointer && !parentField.IsNil() {
-		parent = &IssueRef{
-			ID:         parentField.Elem().FieldByName("ID").String(),
-			Identifier: parentField.Elem().FieldByName("Identifier").String(),
-			Title:      parentField.Elem().FieldByName("Title").String(),
+		sourceType := ""
+		if node.SourceType != nil {
+			sourceType = string(*node.SourceType)
 		}
+		issue.Attachments = append(issue.Attachments, Attachment{
+			ID:         string(node.ID),
+			Title:      string(node.Title),
+			Subtitle:   subtitle,
+			URL:        string(node.URL),
+			SourceType: sourceType,
+			CreatedAt:  parseTime(string(node.CreatedAt)),
+			UpdatedAt:  parseTime(string(node.UpdatedAt)),
+		})
 	}
 
-	// Parse children
-	children := make([]IssueChildRef, 0)
-	childrenConn := v.FieldByName("Children")
-	if childrenConn.IsValid() {
-		childrenField := childrenConn.FieldByName("Nodes")
-		children = make([]IssueChildRef, 0, childrenField.Len())
-		for i := 0; i < childrenField.Len(); i++ {
-			child := childrenField.Index(i)
-			children = append(children, IssueChildRef{
-				ID:         child.FieldByName("ID").String(),
-				Identifier: child.FieldByName("Identifier").String(),
-				Title:      child.FieldByName("Title").String(),
-				State:      child.FieldByName("State").FieldByName("Name").String(),
-				StateID:    child.FieldByName("State").FieldByName("ID").String(),
-			})
-		}
+	issue.Comments = make([]Comment, 0, len(n.Comments.Nodes))
+	for _, node := range n.Comments.Nodes {
+		issue.Comments = append(issue.Comments, Comment{
+			ID:        string(node.ID),
+			Body:      string(node.Body),
+			CreatedAt: parseTime(string(node.CreatedAt)),
+			UpdatedAt: parseTime(string(node.UpdatedAt)),
+			Author: User{
+				ID:          string(node.User.ID),
+				Name:        string(node.User.Name),
+				DisplayName: string(node.User.DisplayName),
+				Email:       string(node.User.Email),
+				IsMe:        bool(node.User.IsMe),
+			},
+			IssueID: string(n.ID),
+		})
 	}
 
-	relations := make([]IssueRelation, 0)
-	relations = append(relations, parseIssueRelationNodes(v.FieldByName("Relations"), false)...)
-	relations = append(relations, parseIssueRelationNodes(v.FieldByName("InverseRelations"), true)...)
-	subscribers := parseUserNodes(v.FieldByName("Subscribers"))
-	attachments := parseAttachmentNodes(v.FieldByName("Attachments"))
-
-	return Issue{
-		ID:               id,
-		Identifier:       identifier,
-		Title:            title,
-		State:            stateName,
-		StateID:          stateID,
-		Assignee:         assignee,
-		AssigneeID:       assigneeID,
-		Priority:         priority,
-		UpdatedAt:        updatedAt,
-		CreatedAt:        createdAt,
-		Description:      description,
-		TeamID:           teamID,
-		ProjectID:        projectID,
-		ProjectName:      projectName,
-		Cycle:            cycle,
-		DueDate:          dueDate,
-		Estimate:         estimate,
-		ProjectMilestone: projectMilestone,
-		URL:              url,
-		BranchName:       branchName,
-		Archived:         archived,
-		Labels:           labels,
-		Parent:           parent,
-		Children:         children,
-		Relations:        relations,
-		Subscribers:      subscribers,
-		Attachments:      attachments,
-	}
+	return issue
 }

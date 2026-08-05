@@ -1,0 +1,1 @@
+{issueLabels(first: 250){nodes{id,name,color}}}

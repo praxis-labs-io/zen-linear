@@ -58,7 +58,7 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 		return Issue{}, fmt.Errorf("create issue: operation failed")
 	}
 
-	return c.parseIssueNode(mutation.IssueCreate.Issue), nil
+	return mutation.IssueCreate.Issue.toIssue(), nil
 }
 
 // UpdateIssue updates an existing issue.
@@ -158,7 +158,7 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 		return Issue{}, fmt.Errorf("update issue %s: operation failed", input.ID)
 	}
 
-	return c.parseIssueNode(mutation.IssueUpdate.Issue), nil
+	return mutation.IssueUpdate.Issue.toIssue(), nil
 }
 
 // CreateIssueRelation creates a relation between two issues.
@@ -263,7 +263,7 @@ func (c *Client) setIssueSubscription(ctx context.Context, issueID string, subsc
 		if !bool(mutation.IssueSubscribe.Success) {
 			return Issue{}, fmt.Errorf("subscribe to issue %s: operation failed", issueID)
 		}
-		return c.parseIssueNode(mutation.IssueSubscribe.Issue), nil
+		return mutation.IssueSubscribe.Issue.toIssue(), nil
 	}
 
 	var mutation struct {
@@ -279,7 +279,7 @@ func (c *Client) setIssueSubscription(ctx context.Context, issueID string, subsc
 	if !bool(mutation.IssueUnsubscribe.Success) {
 		return Issue{}, fmt.Errorf("unsubscribe from issue %s: operation failed", issueID)
 	}
-	return c.parseIssueNode(mutation.IssueUnsubscribe.Issue), nil
+	return mutation.IssueUnsubscribe.Issue.toIssue(), nil
 }
 
 // ArchiveIssue archives an issue.

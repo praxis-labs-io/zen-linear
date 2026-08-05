@@ -1,0 +1,1 @@
+mutation($input:IssueRelationCreateInput!){issueRelationCreate(input: $input){success,issueRelation{id,type,issue{id,identifier,title},relatedIssue{id,identifier,title}}}}

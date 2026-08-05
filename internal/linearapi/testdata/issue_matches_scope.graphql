@@ -1,0 +1,1 @@
+query($filter:IssueFilter!$first:Int!$id:String!){customView(id: $id){issues(first: $first, filter: $filter){nodes{id}}}}

@@ -1,0 +1,1 @@
+query($id:String!){customView(id: $id){userViewPreferences{preferences{issueGrouping,issueSubGrouping,viewOrdering,viewOrderingDirection}},organizationViewPreferences{preferences{issueGrouping,issueSubGrouping,viewOrdering,viewOrderingDirection}},viewPreferencesValues{issueGrouping,issueSubGrouping,viewOrdering,viewOrderingDirection}}}
