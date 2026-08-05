@@ -9,149 +9,75 @@ import (
 	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
+// issueRelationNode is the relation selection, shared by an issue's relations
+// and inverseRelations connections.
+type issueRelationNode struct {
+	ID    graphql.String
+	Type  graphql.String
+	Issue struct {
+		ID         graphql.String
+		Identifier graphql.String
+		Title      graphql.String
+	}
+	RelatedIssue struct {
+		ID         graphql.String
+		Identifier graphql.String
+		Title      graphql.String
+	}
+}
+
+// issueDetailNode is issueQueryNode plus the connections only the details pane
+// needs. The embedded selection is untagged and declared first, which is what
+// makes shurcooL/graphql inline its fields flat and in the original order.
+type issueDetailNode struct {
+	issueQueryNode
+	Relations struct {
+		Nodes []issueRelationNode
+	} `graphql:"relations(first: 50)"`
+	InverseRelations struct {
+		Nodes []issueRelationNode
+	} `graphql:"inverseRelations(first: 50)"`
+	Subscribers struct {
+		Nodes []struct {
+			ID          graphql.String
+			Name        graphql.String
+			DisplayName graphql.String
+			Email       graphql.String
+			IsMe        graphql.Boolean
+		}
+	} `graphql:"subscribers(first: 50)"`
+	Attachments struct {
+		Nodes []struct {
+			ID         graphql.String
+			Title      graphql.String
+			Subtitle   *graphql.String
+			URL        graphql.String
+			SourceType *graphql.String
+			CreatedAt  graphql.String
+			UpdatedAt  graphql.String
+		}
+	} `graphql:"attachments(first: 50)"`
+	Comments struct {
+		Nodes []struct {
+			ID        graphql.String
+			Body      graphql.String
+			CreatedAt graphql.String
+			UpdatedAt graphql.String
+			User      struct {
+				ID          graphql.String
+				Name        graphql.String
+				DisplayName graphql.String
+				Email       graphql.String
+				IsMe        graphql.Boolean
+			}
+		}
+	} `graphql:"comments(first: 100, orderBy: createdAt)"`
+}
+
 // FetchIssueByID fetches a single issue by its ID.
 func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 	var query struct {
-		Issue struct {
-			ID         graphql.String
-			Identifier graphql.String
-			Title      graphql.String
-			State      struct {
-				ID   graphql.String
-				Name graphql.String
-			}
-			Assignee *struct {
-				ID   graphql.String
-				Name graphql.String
-			}
-			Priority    graphql.Float
-			UpdatedAt   graphql.String
-			CreatedAt   graphql.String
-			Description *graphql.String
-			Team        struct {
-				ID graphql.String
-			}
-			Project *struct {
-				ID   graphql.String
-				Name graphql.String
-			}
-			Cycle *struct {
-				ID         graphql.String
-				Name       *graphql.String
-				Number     graphql.Float
-				StartsAt   graphql.String
-				EndsAt     graphql.String
-				IsActive   graphql.Boolean
-				IsFuture   graphql.Boolean
-				IsPast     graphql.Boolean
-				IsNext     graphql.Boolean
-				IsPrevious graphql.Boolean
-			}
-			DueDate          *graphql.String
-			Estimate         *graphql.Float
-			ProjectMilestone *struct {
-				ID         graphql.String
-				Name       graphql.String
-				TargetDate *graphql.String
-				Status     graphql.String
-				Project    struct {
-					ID graphql.String
-				}
-			}
-			Labels struct {
-				Nodes []struct {
-					ID    graphql.String
-					Name  graphql.String
-					Color graphql.String
-				}
-			}
-			URL        graphql.String
-			BranchName graphql.String
-			ArchivedAt *graphql.String
-			Parent     *struct {
-				ID         graphql.String
-				Identifier graphql.String
-				Title      graphql.String
-			}
-			Children struct {
-				Nodes []struct {
-					ID         graphql.String
-					Identifier graphql.String
-					Title      graphql.String
-					State      struct {
-						ID   graphql.String
-						Name graphql.String
-					}
-				}
-			}
-			Relations struct {
-				Nodes []struct {
-					ID    graphql.String
-					Type  graphql.String
-					Issue struct {
-						ID         graphql.String
-						Identifier graphql.String
-						Title      graphql.String
-					}
-					RelatedIssue struct {
-						ID         graphql.String
-						Identifier graphql.String
-						Title      graphql.String
-					}
-				}
-			} `graphql:"relations(first: 50)"`
-			InverseRelations struct {
-				Nodes []struct {
-					ID    graphql.String
-					Type  graphql.String
-					Issue struct {
-						ID         graphql.String
-						Identifier graphql.String
-						Title      graphql.String
-					}
-					RelatedIssue struct {
-						ID         graphql.String
-						Identifier graphql.String
-						Title      graphql.String
-					}
-				}
-			} `graphql:"inverseRelations(first: 50)"`
-			Subscribers struct {
-				Nodes []struct {
-					ID          graphql.String
-					Name        graphql.String
-					DisplayName graphql.String
-					Email       graphql.String
-					IsMe        graphql.Boolean
-				}
-			} `graphql:"subscribers(first: 50)"`
-			Attachments struct {
-				Nodes []struct {
-					ID         graphql.String
-					Title      graphql.String
-					Subtitle   *graphql.String
-					URL        graphql.String
-					SourceType *graphql.String
-					CreatedAt  graphql.String
-					UpdatedAt  graphql.String
-				}
-			} `graphql:"attachments(first: 50)"`
-			Comments struct {
-				Nodes []struct {
-					ID        graphql.String
-					Body      graphql.String
-					CreatedAt graphql.String
-					UpdatedAt graphql.String
-					User      struct {
-						ID          graphql.String
-						Name        graphql.String
-						DisplayName graphql.String
-						Email       graphql.String
-						IsMe        graphql.Boolean
-					}
-				}
-			} `graphql:"comments(first: 100, orderBy: createdAt)"`
-		} `graphql:"issue(id: $id)"`
+		Issue issueDetailNode `graphql:"issue(id: $id)"`
 	}
 
 	variables := map[string]interface{}{
@@ -173,7 +99,7 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 		return Issue{}, fmt.Errorf("fetch issue %s: %w", id, err)
 	}
 
-	issue := c.parseIssueNode(query.Issue)
+	issue := query.Issue.toIssue()
 
 	// Parse comments
 	comments := make([]Comment, 0, len(query.Issue.Comments.Nodes))

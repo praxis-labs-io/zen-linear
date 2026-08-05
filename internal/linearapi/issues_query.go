@@ -96,79 +96,7 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 
 	var query struct {
 		SearchIssues struct {
-			Nodes []struct {
-				ID         graphql.String
-				Identifier graphql.String
-				Title      graphql.String
-				State      struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Assignee *struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Priority    graphql.Float
-				UpdatedAt   graphql.String
-				CreatedAt   graphql.String
-				Description *graphql.String
-				Team        struct {
-					ID graphql.String
-				}
-				Project *struct {
-					ID   graphql.String
-					Name graphql.String
-				}
-				Cycle *struct {
-					ID         graphql.String
-					Name       *graphql.String
-					Number     graphql.Float
-					StartsAt   graphql.String
-					EndsAt     graphql.String
-					IsActive   graphql.Boolean
-					IsFuture   graphql.Boolean
-					IsPast     graphql.Boolean
-					IsNext     graphql.Boolean
-					IsPrevious graphql.Boolean
-				}
-				DueDate          *graphql.String
-				Estimate         *graphql.Float
-				ProjectMilestone *struct {
-					ID         graphql.String
-					Name       graphql.String
-					TargetDate *graphql.String
-					Status     graphql.String
-					Project    struct {
-						ID graphql.String
-					}
-				}
-				Labels struct {
-					Nodes []struct {
-						ID    graphql.String
-						Name  graphql.String
-						Color graphql.String
-					}
-				}
-				URL        graphql.String
-				BranchName graphql.String
-				ArchivedAt *graphql.String
-				Parent     *struct {
-					ID         graphql.String
-					Identifier graphql.String
-					Title      graphql.String
-				}
-				Children struct {
-					Nodes []struct {
-						ID         graphql.String
-						Identifier graphql.String
-						Title      graphql.String
-						State      struct {
-							ID   graphql.String
-							Name graphql.String
-						}
-					}
-				}
-			}
+			Nodes    []issueQueryNode
 			PageInfo struct {
 				HasNextPage graphql.Boolean
 				EndCursor   graphql.String
@@ -191,7 +119,7 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 
 	issues := make([]Issue, 0, len(query.SearchIssues.Nodes))
 	for _, node := range query.SearchIssues.Nodes {
-		issue := c.parseIssueNode(node)
+		issue := node.toIssue()
 		issues = append(issues, issue)
 	}
 
@@ -416,7 +344,7 @@ func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesPar
 
 	issues := make([]Issue, 0, len(query.CustomView.Issues.Nodes))
 	for _, node := range query.CustomView.Issues.Nodes {
-		issues = append(issues, c.parseIssueNode(node))
+		issues = append(issues, node.toIssue())
 	}
 
 	hasNext := bool(query.CustomView.Issues.PageInfo.HasNextPage)
@@ -431,6 +359,32 @@ func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesPar
 		HasNext:   hasNext,
 		EndCursor: endCursor,
 	}, nil
+}
+
+// cycleRefNode is the cycle selection carried on an issue.
+type cycleRefNode struct {
+	ID         graphql.String
+	Name       *graphql.String
+	Number     graphql.Float
+	StartsAt   graphql.String
+	EndsAt     graphql.String
+	IsActive   graphql.Boolean
+	IsFuture   graphql.Boolean
+	IsPast     graphql.Boolean
+	IsNext     graphql.Boolean
+	IsPrevious graphql.Boolean
+}
+
+// projectMilestoneRefNode is the milestone selection carried on an issue. It is
+// narrower than the one ListProjectMilestones uses.
+type projectMilestoneRefNode struct {
+	ID         graphql.String
+	Name       graphql.String
+	TargetDate *graphql.String
+	Status     graphql.String
+	Project    struct {
+		ID graphql.String
+	}
 }
 
 // issueQueryNode is the GraphQL selection for a single issue, shared by the
@@ -461,30 +415,11 @@ type issueQueryNode struct {
 		ID   graphql.String
 		Name graphql.String
 	}
-	Cycle *struct {
-		ID         graphql.String
-		Name       *graphql.String
-		Number     graphql.Float
-		StartsAt   graphql.String
-		EndsAt     graphql.String
-		IsActive   graphql.Boolean
-		IsFuture   graphql.Boolean
-		IsPast     graphql.Boolean
-		IsNext     graphql.Boolean
-		IsPrevious graphql.Boolean
-	}
+	Cycle            *cycleRefNode
 	DueDate          *graphql.String
 	Estimate         *graphql.Float
-	ProjectMilestone *struct {
-		ID         graphql.String
-		Name       graphql.String
-		TargetDate *graphql.String
-		Status     graphql.String
-		Project    struct {
-			ID graphql.String
-		}
-	}
-	Labels struct {
+	ProjectMilestone *projectMilestoneRefNode
+	Labels           struct {
 		Nodes []struct {
 			ID    graphql.String
 			Name  graphql.String
@@ -560,7 +495,7 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 
 	issues := make([]Issue, 0, len(query.Issues.Nodes))
 	for _, node := range query.Issues.Nodes {
-		issue := c.parseIssueNode(node)
+		issue := node.toIssue()
 		issues = append(issues, issue)
 	}
 
