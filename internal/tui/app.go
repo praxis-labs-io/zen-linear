@@ -459,6 +459,9 @@ func (a *App) resetCachedState() {
 	a.refreshGeneration.Add(1)
 	a.resetGeneration.Add(1)
 	a.abandonDetailFetch()
+	// Clearing selectedIssue leaves the pane painted with an issue nothing can
+	// act on: GetSelectedIssue is already nil.
+	a.updateDetailsView()
 }
 
 // parseLogLevel converts a string log level to a logger.LogLevel.

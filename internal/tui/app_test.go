@@ -661,6 +661,29 @@ func TestResetCachedStateClearsSearch(t *testing.T) {
 	}
 }
 
+// A workspace switch clears the selection, and the details pane used to keep
+// painting the issue from the workspace being left until the new list landed.
+// GetSelectedIssue is already nil there, so every command aimed at what the
+// pane showed did nothing.
+func TestResetCachedStateEmptiesTheDetailsPane(t *testing.T) {
+	app := newUXTestApp(t)
+	app.detailsHidden = false
+	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"}
+	app.updateDetailsView()
+	if !strings.Contains(app.detailsDescriptionView.GetText(true), "Alpha") {
+		t.Fatal("the details pane never showed the issue, so this test proves nothing")
+	}
+
+	app.resetCachedState()
+
+	if got := app.detailsDescriptionView.GetText(true); strings.Contains(got, "Alpha") {
+		t.Fatalf("details pane still shows the old workspace's issue: %q", got)
+	}
+	if app.GetSelectedIssue() != nil {
+		t.Error("GetSelectedIssue() returned an issue after a reset")
+	}
+}
+
 // Clearing the row models is not enough. A tab that is off screen keeps the
 // cells it was last painted with, so a workspace switch used to leave the
 // previous workspace's issues sitting in the My tab until something repainted
