@@ -139,9 +139,8 @@ func (a *App) currentFetchParams(orderBy string) linearapi.FetchIssuesParams {
 }
 
 // refreshIssues fetches issues from the API and updates the UI.
-// If issueID is provided, that issue will be selected after refresh.
-func (a *App) refreshIssues(issueID ...string) {
-	a.refreshIssuesWithFocusChange(true, issueID...)
+func (a *App) refreshIssues() {
+	a.refreshIssuesWithFocusChange(true)
 }
 
 // refreshIssuesWithFocusChange fetches issues and optionally shifts focus to the
