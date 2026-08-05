@@ -78,6 +78,10 @@ Scratch, never committed. `docs/` describes only what is true today. Durable con
 
 `cmd/zen-linear` is the entrypoint; everything lives in `internal/`: `linearapi` (GraphQL client via shurcooL/graphql), `tui` (tview app — the bulk), `config`, `auth`, `cache`, `agents`, `logger`.
 
+### App wiring
+
+`internal/tui/app.go` is the `App` struct, the `FocusTarget` enum, and the lifecycle around them: `NewApp`, `Run`, `loadInitialData`, `loadCurrentUser`, `applySettings`, `resetCachedState`, `buildLayout`, plus `selectedIssueID` and `parseLogLevel`. The rest splits by area: `theme_apply.go` (theme and density restyling, `rebuildModals`), `navigation_data.go` (tree fetch and build), `key_dispatch.go` (`bindGlobalKeys` and the per-pane handlers), `pane_focus.go` (Tab cycling, focus, pane titles), `issues_refresh.go` (search debounce, fetch, pagination merge, render), `issue_grouping.go` (columns, grouping, sort fields), `issue_filters.go` (`IssueFilters` and its summary formatters), `pickers.go` (`loadPickerData` and the `Show*Picker` set), `modal_launchers.go` (the `Show*Modal` set), `app_accessors.go` (the getters commands call). The status bar updates sit in `status_bar.go` beside `buildStatusBar`, and `SortField` in `issue_sort.go` beside its comparator. `app_test.go` did not follow the split.
+
 ### Config plumbing (the most common trap)
 
 `internal/config` has a triple: `SettingsFile` (pointer fields, what's on disk) → `Settings` → `Config`. The settings modal saves via `settingsFromForm`, which rebuilds the file from form controls — **any config field without a form control (workspaces, default_workspace, group_by, subgroup_by, columns, keybindings) must be explicitly carried through there, or an in-app settings save silently strips it from the user's config**. Every new field needs: the triple, a validator in `settings.go`, and the carry-through.
@@ -110,9 +114,17 @@ Modal panels: `tview.NewFlex` (and Grid) set `dontClear`, so a Flex never paints
 
 ### GraphQL client
 
-`internal/linearapi` splits by domain: `client.go` (construction, auth transport), `retry.go` (429/5xx backoff, wrapping the auth transport), `types.go` (domain structs plus every input type's `GetGraphQLType` and `MarshalJSON`), `teams.go`, `favorites.go`, `metadata.go` (projects, milestones, cycles, users, workflow states, labels), `issue_filters.go`, `issues_query.go`, `issue_parse.go` (the reflection parser), `issue_detail.go`, `issue_mutations.go`, `comments.go`. Tests did not follow the split: `client_test.go` covers most of the package, alongside `favorites_test.go` and `retry_test.go`.
+`internal/linearapi` splits by domain: `client.go` (construction, auth transport), `retry.go` (429/5xx backoff, wrapping the auth transport), `types.go` (domain structs plus every input type's `GetGraphQLType` and `MarshalJSON`), `teams.go`, `favorites.go`, `metadata.go` (projects, milestones, cycles, users, workflow states, labels), `issue_filters.go`, `issues_query.go`, `issue_parse.go` (`toIssue`/`toRef` conversions off the query node types), `issue_detail.go`, `issue_mutations.go`, `comments.go`. Tests did not follow the split: `client_test.go` covers most of the package, alongside `favorites_test.go`, `retry_test.go`, and `query_golden_test.go`.
 
 Queries are struct-tagged shurcooL/graphql selections. A field the schema doesn't allow in that position makes Linear reject the entire query — one bad field in the `Attachments` node once silently broke attachments, comments, and GitHub links together. Verify field placement against the Linear schema when extending a selection, and live-test fetches.
+
+One issue selection serves every call site. `issueQueryNode` (`issues_query.go`) is the list, search, custom-view, and mutation shape; `issueDetailNode` (`issue_detail.go`) **embeds it untagged and first**, which is what makes shurcooL inline its fields flat and in order, then adds the five connections only the details pane needs. Tag that embedded field or move it and the whole selection changes shape.
+
+`testdata/*.graphql` holds the exact outgoing query for each of the package's `c.client.query`/`mutate` sites, and `query_golden_test.go` fails if any of them drifts. **A refactor of the query structs is only safe when that diff stays empty.** A new call site needs a case in `goldenQueryCases()`; `TestQueryGoldensCoverEveryCallSite` counts the sites in the sources and fails when the table falls behind. Regenerate with:
+
+```sh
+ZEN_UPDATE_GOLDENS=1 go test ./internal/linearapi -run TestQueryGoldens
+```
 
 ### Agent providers
 

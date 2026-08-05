@@ -52,4 +52,4 @@ Search these before hand-building anything:
 
 ## File size
 
-- Keep files focused. `app.go` and `client_test.go` are already too big; don't make that worse, and don't grow a new file past what one sitting can review.
+- Keep files focused. `client_test.go` and `app_test.go` are already too big; don't make that worse, and don't grow a new file past what one sitting can review.
