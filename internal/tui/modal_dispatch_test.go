@@ -28,6 +28,21 @@ var modalDispatchGolden = []string{
 	"agent_output",
 }
 
+// TestModalDispatchGoldenCoversTheRegistry keeps the two lists the same length
+// and the same order. Without it a fourteenth modal added to the registry and
+// forgotten here is skipped by every test in this file and the suite stays
+// green.
+func TestModalDispatchGoldenCoversTheRegistry(t *testing.T) {
+	if len(modalBindings) != len(modalDispatchGolden) {
+		t.Fatalf("registry has %d modals, golden list has %d", len(modalBindings), len(modalDispatchGolden))
+	}
+	for i, binding := range modalBindings {
+		if binding.page != modalDispatchGolden[i] {
+			t.Fatalf("registry[%d] is %q, golden list says %q", i, binding.page, modalDispatchGolden[i])
+		}
+	}
+}
+
 // openModal opens one modal through the same call the app makes, so the test
 // exercises whatever state that path sets up. The picker goes through a real
 // command rather than PickerModal.Show, which no caller uses on its own.
@@ -69,8 +84,12 @@ func openModal(t *testing.T, app *App, page string) {
 	}
 }
 
+func sendKey(app *App, key tcell.Key) {
+	app.handleGlobalKey(tcell.NewEventKey(key, 0, tcell.ModNone))
+}
+
 func escape(app *App) {
-	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	sendKey(app, tcell.KeyEscape)
 }
 
 // openPages reports which of the golden pages are currently up.
@@ -189,6 +208,48 @@ func TestOverlayRestoresFocusToTheModalBeneath(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestOverlayRestoresTheFieldTheUserWasIn covers the two modals whose focus
+// moves inside them. Restoring their opening default drops the user somewhere
+// they did not leave, and on the templates modal that is destructive: the list
+// arms 'a' and 'd' as add and delete, so a typed 'd' removes a template.
+func TestOverlayRestoresTheFieldTheUserWasIn(t *testing.T) {
+	t.Run("prompt_templates", func(t *testing.T) {
+		app := newUXTestApp(t)
+		openModal(t, app, "prompt_templates")
+		sendKey(app, tcell.KeyEnter)
+
+		want := tview.Primitive(app.promptTemplatesModal.nameField)
+		if app.app.GetFocus() != want {
+			t.Fatal("Enter on a template did not move focus to the name field")
+		}
+
+		openModal(t, app, "picker")
+		escape(app)
+
+		if got := app.app.GetFocus(); got != want {
+			t.Fatalf("focus after the overlay closed = %T, want the name field", got)
+		}
+	})
+
+	t.Run("agent_output", func(t *testing.T) {
+		app := newUXTestApp(t)
+		openModal(t, app, "agent_output")
+		sendKey(app, tcell.KeyTab)
+
+		want := tview.Primitive(app.agentOutputModal.finalView)
+		if app.app.GetFocus() != want {
+			t.Fatal("Tab did not move focus to the final view")
+		}
+
+		openModal(t, app, "picker")
+		escape(app)
+
+		if got := app.app.GetFocus(); got != want {
+			t.Fatalf("focus after the overlay closed = %T, want the final view", got)
+		}
+	})
 }
 
 // TestGlobalKeyCaptureIsBound drives the capture tview actually installed,

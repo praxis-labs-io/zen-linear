@@ -18,6 +18,7 @@ type AgentOutputModal struct {
 	modal         *tview.Flex
 	modalContent  *tview.Flex
 	streamView    *tview.TextView
+	focused       tview.Primitive
 	finalView     *tview.TextView
 	statusView    *tview.TextView
 	sessionView   *tview.TextView
@@ -201,7 +202,7 @@ func (om *AgentOutputModal) Show(title string, onCancel func()) {
 
 	om.app.pages.AddPage("agent_output", om.modal, true, true)
 	om.app.pages.SendToFront("agent_output")
-	om.app.app.SetFocus(om.streamView)
+	om.focus(om.streamView)
 }
 
 // AppendEvent appends a structured event to the stream view.
@@ -268,8 +269,22 @@ func (om *AgentOutputModal) Hide() {
 	om.app.restoreModalFocus()
 }
 
-// Focus returns keyboard focus to the stream view, for when an overlay closes.
-func (om *AgentOutputModal) Focus() { om.app.app.SetFocus(om.streamView) }
+// focus records the target so Focus can put the user back where they were.
+// UI thread only.
+func (om *AgentOutputModal) focus(p tview.Primitive) {
+	om.focused = p
+	om.app.app.SetFocus(p)
+}
+
+// Focus returns keyboard focus for when an overlay above this modal closes.
+// Tab picks between the stream and final views, so restoring the stream would
+// scroll the pane the user stopped reading.
+func (om *AgentOutputModal) Focus() {
+	if om.focused == nil {
+		om.focused = om.streamView
+	}
+	om.app.app.SetFocus(om.focused)
+}
 
 // HandleKey handles keyboard input for the output modal.
 func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
@@ -310,9 +325,9 @@ func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyTab:
 		// Switch focus between stream and final views
 		if focused == om.streamView {
-			om.app.app.SetFocus(om.finalView)
+			om.focus(om.finalView)
 		} else {
-			om.app.app.SetFocus(om.streamView)
+			om.focus(om.streamView)
 		}
 		return nil
 	case tcell.KeyRune:
