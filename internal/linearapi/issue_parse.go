@@ -27,8 +27,8 @@ func (n *cycleRefNode) toRef() *CycleRef {
 }
 
 // toRef converts the milestone selection into a ProjectMilestoneRef, treating a
-// missing id as no milestone. SortOrder and Progress stay zero: no issue
-// selection asks for them.
+// missing id as no milestone. SortOrder and Progress stay zero because no issue
+// selection requests them, so anything ranking milestones by SortOrder ties.
 func (n *projectMilestoneRefNode) toRef() *ProjectMilestoneRef {
 	if n == nil || n.ID == "" {
 		return nil
@@ -142,8 +142,7 @@ func (n issueQueryNode) toIssue() Issue {
 }
 
 // toIssue converts the detail selection, adding the connections the shared
-// selection leaves out. Comments are parsed by the caller, which needs the
-// issue id on each one.
+// selection leaves out.
 func (n issueDetailNode) toIssue() Issue {
 	issue := n.issueQueryNode.toIssue()
 
@@ -183,6 +182,24 @@ func (n issueDetailNode) toIssue() Issue {
 			SourceType: sourceType,
 			CreatedAt:  parseTime(string(node.CreatedAt)),
 			UpdatedAt:  parseTime(string(node.UpdatedAt)),
+		})
+	}
+
+	issue.Comments = make([]Comment, 0, len(n.Comments.Nodes))
+	for _, node := range n.Comments.Nodes {
+		issue.Comments = append(issue.Comments, Comment{
+			ID:        string(node.ID),
+			Body:      string(node.Body),
+			CreatedAt: parseTime(string(node.CreatedAt)),
+			UpdatedAt: parseTime(string(node.UpdatedAt)),
+			Author: User{
+				ID:          string(node.User.ID),
+				Name:        string(node.User.Name),
+				DisplayName: string(node.User.DisplayName),
+				Email:       string(node.User.Email),
+				IsMe:        bool(node.User.IsMe),
+			},
+			IssueID: string(n.ID),
 		})
 	}
 

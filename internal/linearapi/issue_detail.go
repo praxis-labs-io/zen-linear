@@ -99,29 +99,5 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 		return Issue{}, fmt.Errorf("fetch issue %s: %w", id, err)
 	}
 
-	issue := query.Issue.toIssue()
-
-	// Parse comments
-	comments := make([]Comment, 0, len(query.Issue.Comments.Nodes))
-	for _, node := range query.Issue.Comments.Nodes {
-		commentCreatedAt := parseTime(string(node.CreatedAt))
-		commentUpdatedAt := parseTime(string(node.UpdatedAt))
-		comments = append(comments, Comment{
-			ID:        string(node.ID),
-			Body:      string(node.Body),
-			CreatedAt: commentCreatedAt,
-			UpdatedAt: commentUpdatedAt,
-			Author: User{
-				ID:          string(node.User.ID),
-				Name:        string(node.User.Name),
-				DisplayName: string(node.User.DisplayName),
-				Email:       string(node.User.Email),
-				IsMe:        bool(node.User.IsMe),
-			},
-			IssueID: string(query.Issue.ID),
-		})
-	}
-
-	issue.Comments = comments
-	return issue, nil
+	return query.Issue.toIssue(), nil
 }
