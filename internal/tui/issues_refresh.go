@@ -389,8 +389,8 @@ func (a *App) updateIssuesData(issues []linearapi.Issue, issueID ...string) {
 }
 
 // rebuildIssuesTables rebuilds issue rows and renders tables, returning the
-// selected issue. The returned issue is a copy: the id maps point into the
-// a.issues backing array, which later edits re-sort and splice in place.
+// selected issue. The returned issue is a copy: the id maps point into a
+// snapshot of the list that the next rebuild replaces.
 func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 	a.rebuildIssueRowModels()
 

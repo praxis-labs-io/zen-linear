@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
@@ -597,5 +598,69 @@ func TestRenderIssueSections_DefersOffScreenTabsUntilShown(t *testing.T) {
 	}
 	if got := app.tableForSection(IssuesSectionMy).GetCell(1, titleColumn).Text; got != "Alpha" {
 		t.Fatalf("My Issues row 1 title = %q, want Alpha", got)
+	}
+}
+
+// Pagination sorts a.issues in place between paints, and the id maps used to
+// point into it. Skimming inside that window resolved a row to whichever issue
+// had sorted into the slot, so the details pane and every command reading the
+// selection landed on the wrong issue.
+func TestSkimmingDuringPagination_SelectsTheIssueTheRowNames(t *testing.T) {
+	app := newUXTestApp(t)
+	holdDetailFetches(t, app)
+	app.sortFields = []SortField{SortByPriority}
+
+	// Spare capacity so the merged page cannot reallocate. The sort then
+	// permutes the same array the maps index, which is the failing case.
+	firstPage := make([]linearapi.Issue, 0, 8)
+	firstPage = append(firstPage,
+		linearapi.Issue{ID: "issue-c", Identifier: "ZNL-3", Title: "Gamma", Priority: 3},
+		linearapi.Issue{ID: "issue-d", Identifier: "ZNL-4", Title: "Delta", Priority: 4},
+	)
+	app.updateIssuesData(firstPage)
+
+	merge := &pageMerge{seen: make(map[string]bool)}
+	app.issuesMu.RLock()
+	merge.reset(app.issues)
+	app.issuesMu.RUnlock()
+
+	// A page that sorts ahead of everything on screen, inside the repaint
+	// budget: accumulated, not yet painted.
+	app.accumulateIssues([]linearapi.Issue{
+		{ID: "issue-a", Identifier: "ZNL-1", Title: "Alpha", Priority: 1},
+		{ID: "issue-b", Identifier: "ZNL-2", Title: "Beta", Priority: 2},
+	}, merge)
+
+	pressInIssuesTable(app, tcell.KeyRune, 'j')
+
+	row, _ := app.tableForSection(IssuesSectionAll).GetSelection()
+	want := app.allIssueRows[row-1].IssueID
+	selected := app.GetSelectedIssue()
+	if selected == nil || selected.ID != want {
+		t.Fatalf("selected issue = %#v, want the %s the cursor is on", selected, want)
+	}
+}
+
+// The maps hold pointers, so indexing the live list lets a later in-place sort
+// repoint every entry. They index a snapshot instead.
+func TestRebuildIssueRowModels_IndexesASnapshotNotTheLiveList(t *testing.T) {
+	app := newUXTestApp(t)
+	app.issuesMu.Lock()
+	app.issues = []linearapi.Issue{
+		{ID: "issue-1", Identifier: "ZNL-1", Title: "Alpha"},
+		{ID: "issue-2", Identifier: "ZNL-2", Title: "Beta"},
+	}
+	app.issuesMu.Unlock()
+
+	app.rebuildIssueRowModels()
+
+	app.issuesMu.RLock()
+	defer app.issuesMu.RUnlock()
+	for id, issue := range app.allIDToIssue {
+		for i := range app.issues {
+			if issue == &app.issues[i] {
+				t.Fatalf("allIDToIssue[%q] aliases the live issues array", id)
+			}
+		}
 	}
 }
