@@ -62,7 +62,7 @@ func defaultNavTeams() []linearapi.Team {
 func newDefaultNavTestApp(cfg config.Config) *App {
 	cfg.CacheTTL = time.Minute
 	cfg.PageSize = 10
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.preloadTeamMetadataFunc = func(string) {}
 	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {

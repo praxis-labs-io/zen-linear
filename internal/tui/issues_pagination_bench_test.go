@@ -35,7 +35,7 @@ const benchUserID = "user-1"
 
 func newPaginationBenchApp(b *testing.B) *App {
 	b.Helper()
-	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 50, CacheTTL: time.Minute}, nil)
+	app := NewApp(linearapi.ClientConfig{}, config.Config{PageSize: 50, CacheTTL: time.Minute}, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.currentUser = &linearapi.User{ID: benchUserID, Name: "Bench User"}
 	// Selecting a row kicks off a detail fetch; this benchmark measures the

@@ -66,7 +66,7 @@ func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 		PageSize: 2,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
@@ -133,7 +133,7 @@ func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 		PageSize: 2,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
@@ -209,7 +209,7 @@ func TestRefreshIssues_PreservesNavigationFocus(t *testing.T) {
 		PageSize: 1,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
@@ -245,7 +245,7 @@ func TestRefreshIssues_IncludesStateID(t *testing.T) {
 		PageSize: 1,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
@@ -289,7 +289,7 @@ func TestRefreshIssues_IncludesCycleID(t *testing.T) {
 		PageSize: 1,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
@@ -352,7 +352,7 @@ func TestSearchTabTypingDebouncesLatestQuery(t *testing.T) {
 		CacheTTL:       time.Minute,
 		SearchDebounce: 80 * time.Millisecond,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	// A selected team must not scope the search: it is workspace-wide.
@@ -424,7 +424,7 @@ func TestSearchTabEnterMovesFocusToResults(t *testing.T) {
 		CacheTTL:       time.Minute,
 		SearchDebounce: 20 * time.Millisecond,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -464,7 +464,7 @@ func TestSearchStaleResultsDropped(t *testing.T) {
 		CacheTTL:       time.Minute,
 		SearchDebounce: 10 * time.Millisecond,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -503,7 +503,7 @@ func TestSearchEmptyQueryClearsWithoutFetch(t *testing.T) {
 		CacheTTL:       time.Minute,
 		SearchDebounce: 10 * time.Millisecond,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -532,7 +532,7 @@ func TestSearchTabTypedLettersReachInput(t *testing.T) {
 		CacheTTL:       time.Minute,
 		SearchDebounce: time.Hour, // keep the debounce from firing mid-test
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -555,7 +555,7 @@ func TestSearchTabRemappedTabKeysCycleOutOfInput(t *testing.T) {
 		CacheTTL:    time.Minute,
 		Keybindings: map[string]string{"tab_next": "]", "tab_prev": "["},
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -588,7 +588,7 @@ func TestSearchEscOnEmptyInputReturnsToPreviousTab(t *testing.T) {
 		CacheTTL:       time.Minute,
 		SearchDebounce: 10 * time.Millisecond,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.activeIssuesSection = IssuesSectionAll
@@ -612,7 +612,7 @@ func TestCycleIssuesSectionReachesEmptySearchTab(t *testing.T) {
 		PageSize: 1,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -639,7 +639,7 @@ func TestResetCachedStateClearsSearch(t *testing.T) {
 		CacheTTL:       time.Minute,
 		SearchDebounce: 10 * time.Millisecond,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -695,7 +695,7 @@ func TestResetCachedStateClearsOffScreenSectionTables(t *testing.T) {
 // handler while the current-user fetch is still in flight, on both sides of the
 // queued write that installs the user.
 func TestAssignMe_DuringCurrentUserFetch(t *testing.T) {
-	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
+	app := NewApp(linearapi.ClientConfig{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -781,7 +781,7 @@ func TestUpdateDetailsView_IncludesCycle(t *testing.T) {
 		PageSize: 1,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -841,7 +841,7 @@ func renderedTitles(app *App, section IssuesSection) []string {
 // re-renders the whole table for an end state only the last page settles.
 func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
 	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
@@ -896,7 +896,7 @@ func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
 // the list under it.
 func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
 	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
@@ -1056,7 +1056,7 @@ func TestRenderAccumulatedIssues_LeavesTheSearchTabAlone(t *testing.T) {
 // early in a slow load must become reachable without waiting for the last one.
 func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
 		return linearapi.Issue{ID: id}, nil
@@ -1125,7 +1125,7 @@ func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 // against header text once grouping is on.
 func TestRenderedTitles_SkipsGroupHeaders(t *testing.T) {
 	cfg := config.Config{PageSize: 10, CacheTTL: time.Minute, GroupBy: GroupByStatus}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {

@@ -162,8 +162,7 @@ func TestApplySettingsRebindsDefaultNavigationFetchersToNewCache(t *testing.T) {
 		CacheTTL:    time.Minute,
 		PageSize:    10,
 	}
-	client := linearapi.NewClient(linearapi.ClientConfig{Endpoint: oldServer.URL})
-	app := NewApp(client, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{Endpoint: oldServer.URL}, cfg, nil)
 	startReviewTestApplication(t, app)
 	refreshDone := installRefreshCompletionHook(app)
 
@@ -194,8 +193,7 @@ func TestLoadInitialDataRefreshesOnlyTheConfiguredDefaultView(t *testing.T) {
 		DefaultTeam:    "NEX",
 		DefaultProject: "Website",
 	}
-	client := linearapi.NewClient(linearapi.ClientConfig{Endpoint: server.URL})
-	app := NewApp(client, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{Endpoint: server.URL}, cfg, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.preloadTeamMetadataFunc = func(string) {}
 	refreshDone := installRefreshCompletionHook(app)

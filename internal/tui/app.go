@@ -9,7 +9,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/agents"
-	"github.com/zen-linear/zen-linear/internal/cache"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 	"github.com/zen-linear/zen-linear/internal/logger"
@@ -17,9 +16,10 @@ import (
 
 // App is the main application controller that manages all UI components.
 type App struct {
-	app       *tview.Application
-	api       *linearapi.Client
-	cache     *cache.TeamCache
+	app *tview.Application
+	// linearDeps holds the API client, its cache, and every func derived from
+	// them; newLinearDeps builds it for NewApp and applySettings alike.
+	linearDeps
 	config    config.Config
 	theme     Theme
 	themeTags ThemeTags
@@ -150,32 +150,21 @@ type App struct {
 	// left. refreshGeneration is unusable for that: every refresh bumps it.
 	resetGeneration atomic.Int64
 
-	// Lazy loading helpers (overridable in tests)
-	fetchIssuesPage         func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error)
-	fetchIssueByID          func(context.Context, string) (linearapi.Issue, error)
+	// apiUseBearer and apiOnUnauthorized are the auth mode fixed at startup.
+	// applySettings carries them into the rebuilt client so an in-app settings
+	// save keeps an OAuth session's bearer scheme and 401 refresh hook.
+	apiUseBearer      bool
+	apiOnUnauthorized func(context.Context) (string, error)
+
+	// UI/self callbacks and test seams that are not derived from the API client.
 	issueMatchesScopeFunc   func(context.Context, linearapi.FetchIssuesParams, string) (bool, error)
-	fetchViewPrefsFunc      func(context.Context, string) (*linearapi.ViewPreferencesValues, error)
 	queueUpdateDraw         func(func())
-	updateIssueFunc         func(context.Context, linearapi.UpdateIssueInput) (linearapi.Issue, error)
-	createIssueRelationFunc func(context.Context, linearapi.CreateIssueRelationInput) (linearapi.IssueRelation, error)
-	deleteIssueRelationFunc func(context.Context, string) error
-	subscribeIssueFunc      func(context.Context, string) (linearapi.Issue, error)
-	unsubscribeIssueFunc    func(context.Context, string) (linearapi.Issue, error)
 	openURLFunc             func(string) error
 	copyToClipboardFunc     func(string) error
 	refreshCompleted        func()
-	fetchProjectsFunc       func(context.Context, string) ([]linearapi.Project, error)
-	fetchWorkflowStatesFunc func(context.Context, string) ([]linearapi.WorkflowState, error)
-	fetchCyclesFunc         func(context.Context, string) ([]linearapi.Cycle, error)
-	fetchCurrentUserFunc    func(context.Context) (linearapi.User, error)
 	preloadTeamMetadataFunc func(string)
 	detailDebounce          time.Duration
-
-	createFavoriteFunc     func(context.Context, linearapi.FavoriteTarget) (linearapi.Favorite, error)
-	deleteFavoriteFunc     func(context.Context, string) error
-	updateFavoriteSortFunc func(context.Context, string, float64) error
-	moveFavoriteFunc       func(context.Context, string, string, float64) error
-	favoritesChanged       func()
+	favoritesChanged        func()
 
 	// UI update mutex (for test safety when queueUpdateDraw executes immediately)
 	uiUpdateMu sync.Mutex
@@ -196,7 +185,7 @@ const (
 )
 
 // NewApp creates a new application instance.
-func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPromptTemplate) *App {
+func NewApp(clientCfg linearapi.ClientConfig, cfg config.Config, templates []config.AgentPromptTemplate) *App {
 	if len(templates) == 0 {
 		templates = config.DefaultAgentPromptTemplates()
 	}
@@ -206,8 +195,6 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 
 	app := &App{
 		app:                  tview.NewApplication(),
-		api:                  api,
-		cache:                cache.NewTeamCache(api, cfg.CacheTTL),
 		config:               cfg,
 		theme:                theme,
 		themeTags:            NewThemeTags(theme),
@@ -228,26 +215,13 @@ func NewApp(api *linearapi.Client, cfg config.Config, templates []config.AgentPr
 		detailsHidden: true,
 	}
 
+	app.linearDeps = newLinearDeps(clientCfg, cfg.CacheTTL)
+	app.apiUseBearer = clientCfg.UseBearer
+	app.apiOnUnauthorized = clientCfg.OnUnauthorized
 	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
-	app.fetchIssuesPage = api.FetchIssuesPage
-	app.fetchIssueByID = api.FetchIssueByID
-	app.fetchViewPrefsFunc = api.FetchCustomViewPreferences
-	app.updateIssueFunc = api.UpdateIssue
-	app.createIssueRelationFunc = api.CreateIssueRelation
-	app.deleteIssueRelationFunc = api.DeleteIssueRelation
-	app.subscribeIssueFunc = api.SubscribeToIssue
-	app.unsubscribeIssueFunc = api.UnsubscribeFromIssue
 	app.openURLFunc = openURL
 	app.copyToClipboardFunc = copyToClipboard
-	app.fetchProjectsFunc = app.cache.GetProjects
-	app.fetchWorkflowStatesFunc = app.cache.GetWorkflowStates
-	app.fetchCyclesFunc = app.cache.GetCycles
-	app.fetchCurrentUserFunc = app.cache.GetCurrentUser
 	app.preloadTeamMetadataFunc = app.preloadTeamMetadata
-	app.createFavoriteFunc = app.api.CreateFavorite
-	app.deleteFavoriteFunc = app.api.DeleteFavorite
-	app.updateFavoriteSortFunc = app.api.UpdateFavoriteSortOrder
-	app.moveFavoriteFunc = app.api.MoveFavorite
 	app.queueUpdateDraw = func(f func()) {
 		app.app.QueueUpdateDraw(f)
 	}
@@ -364,28 +338,13 @@ func (a *App) applySettings(newCfg config.Config) {
 	}
 	logger.Debug("tui.app: settings applied log_file=%s log_level=%s", newCfg.LogFile, newCfg.LogLevel)
 
-	a.api = linearapi.NewClient(linearapi.ClientConfig{
-		Token:    newCfg.LinearAPIKey,
-		Endpoint: newCfg.APIEndpoint,
-		Timeout:  newCfg.Timeout,
-	})
-	a.cache = cache.NewTeamCache(a.api, newCfg.CacheTTL)
-	a.fetchIssuesPage = a.api.FetchIssuesPage
-	a.fetchIssueByID = a.api.FetchIssueByID
-	a.fetchViewPrefsFunc = a.api.FetchCustomViewPreferences
-	a.updateIssueFunc = a.api.UpdateIssue
-	a.createIssueRelationFunc = a.api.CreateIssueRelation
-	a.deleteIssueRelationFunc = a.api.DeleteIssueRelation
-	a.subscribeIssueFunc = a.api.SubscribeToIssue
-	a.unsubscribeIssueFunc = a.api.UnsubscribeFromIssue
-	a.fetchProjectsFunc = a.cache.GetProjects
-	a.fetchWorkflowStatesFunc = a.cache.GetWorkflowStates
-	a.fetchCyclesFunc = a.cache.GetCycles
-	a.fetchCurrentUserFunc = a.cache.GetCurrentUser
-	a.createFavoriteFunc = a.api.CreateFavorite
-	a.deleteFavoriteFunc = a.api.DeleteFavorite
-	a.updateFavoriteSortFunc = a.api.UpdateFavoriteSortOrder
-	a.moveFavoriteFunc = a.api.MoveFavorite
+	a.linearDeps = newLinearDeps(linearapi.ClientConfig{
+		Token:          newCfg.LinearAPIKey,
+		Endpoint:       newCfg.APIEndpoint,
+		Timeout:        newCfg.Timeout,
+		UseBearer:      a.apiUseBearer,
+		OnUnauthorized: a.apiOnUnauthorized,
+	}, newCfg.CacheTTL)
 
 	logger.Debug("tui.app: resetting cached state after settings change")
 	a.resetCachedState()
