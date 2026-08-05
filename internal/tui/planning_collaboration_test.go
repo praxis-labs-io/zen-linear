@@ -51,7 +51,7 @@ func TestUpdateDetailsView_IncludesPlanningAndCollaboration(t *testing.T) {
 		PageSize: 1,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
@@ -110,7 +110,7 @@ func TestRefreshIssues_AppliesRichFiltersWithNavigation(t *testing.T) {
 		PageSize: 1,
 		CacheTTL: time.Minute,
 	}
-	app := NewApp(&linearapi.Client{}, cfg, nil)
+	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	refreshDone := installRefreshCompletionHook(app)
@@ -349,7 +349,7 @@ func TestShowProjectFilterReportsMissingTeamContext(t *testing.T) {
 }
 
 func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {
-	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
+	app := NewApp(linearapi.ClientConfig{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	// A relation changes nothing the list renders, so it must refetch the one
@@ -398,7 +398,7 @@ func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {
 }
 
 func TestAttachmentActionsUseInjectedOpenAndCopyFunctions(t *testing.T) {
-	app := NewApp(&linearapi.Client{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
+	app := NewApp(linearapi.ClientConfig{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
 	stopDetailTimersOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.issuesMu.Lock()

@@ -76,6 +76,10 @@ func (a *App) switchWorkspace(name string) {
 
 	logger.Info("tui.workspace: switching workspace name=%s", workspace.Name)
 	a.activeWorkspaceName = workspace.Name
+	// A workspace key is a personal API key, not an OAuth token, so drop any
+	// bearer scheme and 401 refresh carried from an OAuth session first.
+	a.apiUseBearer = false
+	a.apiOnUnauthorized = nil
 	newCfg := a.config
 	newCfg.LinearAPIKey = key
 	a.applySettings(newCfg)

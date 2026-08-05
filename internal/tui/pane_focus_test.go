@@ -95,7 +95,7 @@ func TestShiftTabLeavesTheDetailsPaneWithoutWalkingItsTabs(t *testing.T) {
 // was dead there. { and } are how it showed up: the pane toggles did nothing.
 // Both toggles take their rune from config, so the binding is part of the setup.
 func TestPaneTogglesFireFromTheDetailsPane(t *testing.T) {
-	app := NewApp(&linearapi.Client{}, config.Config{
+	app := NewApp(linearapi.ClientConfig{}, config.Config{
 		PageSize: 1,
 		CacheTTL: time.Minute,
 		Keybindings: map[string]string{

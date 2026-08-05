@@ -157,8 +157,6 @@ func runTUI() int {
 		clientCfg.OnUnauthorized = auth.NewRefreshFunc(storePath, oauthClient)
 	}
 
-	apiClient := linearapi.NewClient(clientCfg)
-
 	promptTemplates := config.DefaultAgentPromptTemplates()
 	promptsPath, err := config.PromptTemplatesFilePath()
 	if err != nil {
@@ -172,7 +170,7 @@ func runTUI() int {
 		}
 	}
 
-	app := tui.NewApp(apiClient, cfg, promptTemplates)
+	app := tui.NewApp(clientCfg, cfg, promptTemplates)
 
 	if err := app.Run(); err != nil {
 		logger.ErrorWithErr(err, "app.main: application error")

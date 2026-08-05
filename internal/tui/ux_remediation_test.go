@@ -16,7 +16,7 @@ import (
 
 func newUXTestApp(t testing.TB) *App {
 	t.Helper()
-	app := NewApp(&linearapi.Client{}, config.Config{
+	app := NewApp(linearapi.ClientConfig{}, config.Config{
 		PageSize: 1,
 		CacheTTL: time.Minute,
 	}, nil)
