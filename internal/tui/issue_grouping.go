@@ -44,11 +44,7 @@ func (a *App) toggleGroupCollapse(section IssuesSection, header IssueRow) {
 		targetIssueID = a.selectedIssue.ID
 	}
 	a.issuesMu.RUnlock()
-	selectedIssue := a.rebuildIssuesTables(targetIssueID)
-	a.issuesMu.Lock()
-	a.selectedIssue = selectedIssue
-	a.issuesMu.Unlock()
-	a.updateDetailsView()
+	a.applyRebuiltSelection(targetIssueID, a.rebuildIssuesTables(targetIssueID))
 
 	// Re-select the toggled header so repeated presses toggle in place.
 	table := a.tableForSection(section)
@@ -73,12 +69,23 @@ func (a *App) regroupIssues(message string) {
 	}
 	a.issuesMu.RUnlock()
 
-	selectedIssue := a.rebuildIssuesTables(targetIssueID)
-	a.issuesMu.Lock()
-	a.selectedIssue = selectedIssue
-	a.issuesMu.Unlock()
-	a.updateDetailsView()
+	a.applyRebuiltSelection(targetIssueID, a.rebuildIssuesTables(targetIssueID))
 	a.flashStatus(message)
+}
+
+// applyRebuiltSelection installs the selection rebuildIssuesTables resolved.
+// The list model carries no comments, relations, or attachments, so the same
+// issue keeps the hydrated copy and a different one fetches its own.
+func (a *App) applyRebuiltSelection(previousID string, selected *linearapi.Issue) {
+	switch {
+	case selected == nil:
+		a.clearSelectedIssue()
+	case selected.ID == previousID:
+		a.setSelectedIssue(*selected)
+		a.updateDetailsView()
+	default:
+		a.selectIssueNow(*selected)
+	}
 }
 
 // showSortByPicker selects the list ordering. Every row is a whole ordering,
