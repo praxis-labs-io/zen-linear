@@ -24,7 +24,7 @@ Implement full cursor pagination for issue fetching to avoid missing issues in l
 
 ## Architecture
 - `internal/linearapi/issues_query.go` owns pagination and aggregation of issue pages.
-- `internal/tui/app.go` initiates issue fetching and surfaces progress via the status bar.
+- `internal/tui/issues_refresh.go` initiates issue fetching, and `internal/tui/status_bar.go` surfaces progress.
 - Data flow: TUI triggers fetch → Linear API client paginates → progress callback updates UI → final aggregated issues update UI.
 
 ## Mermaid Diagrams
@@ -51,4 +51,5 @@ flowchart TD
 ## Relevant Files
 - `internal/linearapi/issues_query.go`
 - `internal/linearapi/client_test.go`
-- `internal/tui/app.go`
+- `internal/tui/issues_refresh.go`
+- `internal/tui/status_bar.go`
