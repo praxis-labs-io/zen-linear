@@ -8,6 +8,18 @@ import (
 	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
+// maxPriority is Linear's highest priority value (0=None, 1=Urgent, 2=High, 3=Medium, 4=Low).
+const maxPriority = 4
+
+// priorityValue bounds-checks a priority before narrowing it to graphql.Int (an int32),
+// so the API boundary rejects out-of-range values instead of trusting the caller.
+func priorityValue(p int) (graphql.Int, error) {
+	if p < 0 || p > maxPriority {
+		return 0, fmt.Errorf("priority %d out of range [0,%d]", p, maxPriority)
+	}
+	return graphql.Int(p), nil
+}
+
 // CreateIssue creates a new issue.
 func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue, error) {
 	var mutation struct {
@@ -37,7 +49,11 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 		issueInput["assigneeId"] = graphql.ID(input.AssigneeID)
 	}
 	if input.Priority > 0 {
-		issueInput["priority"] = graphql.Int(input.Priority)
+		priority, err := priorityValue(input.Priority)
+		if err != nil {
+			return Issue{}, fmt.Errorf("create issue: %w", err)
+		}
+		issueInput["priority"] = priority
 	}
 	if input.ParentID != "" {
 		issueInput["parentId"] = graphql.ID(input.ParentID)
@@ -97,7 +113,11 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 		}
 	}
 	if input.Priority != nil {
-		issueInput["priority"] = graphql.Int(*input.Priority)
+		priority, err := priorityValue(*input.Priority)
+		if err != nil {
+			return Issue{}, fmt.Errorf("update issue %s: %w", input.ID, err)
+		}
+		issueInput["priority"] = priority
 	}
 	if input.LabelIDs != nil {
 		// Convert string slice to []graphql.ID for the GraphQL mutation
