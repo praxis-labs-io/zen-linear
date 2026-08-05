@@ -137,21 +137,57 @@ func TestModalDispatchRoutesToTheOpenModal(t *testing.T) {
 	}
 }
 
+// modalFocusTargets names where keyboard focus belongs once an overlay above a
+// modal closes. Form-backed modals answer with their own current field, which
+// still fails if the registry hands the overlay's Focus call to the wrong
+// modal: the field belongs to a different form.
+var modalFocusTargets = []struct {
+	page string
+	want func(*App) tview.Primitive
+}{
+	{"picker", func(a *App) tview.Primitive { return a.pickerModal.list }},
+	{"create_issue", func(a *App) tview.Primitive { return a.createIssueModal.fm.focusedPrimitive() }},
+	{"create_comment", func(a *App) tview.Primitive { return a.createCommentModal.fm.focusedPrimitive() }},
+	{"edit_title", func(a *App) tview.Primitive { return a.editTitleModal.fm.focusedPrimitive() }},
+	{"edit_description", func(a *App) tview.Primitive { return a.editDescriptionModal.fm.focusedPrimitive() }},
+	{"edit_labels", func(a *App) tview.Primitive { return a.editLabelsModal.list }},
+	{"text_input", func(a *App) tview.Primitive { return a.textInputModal.input }},
+	{"multi_select", func(a *App) tview.Primitive { return a.multiSelectModal.list }},
+	{"settings", func(a *App) tview.Primitive { return a.settingsModal.fm.focusedPrimitive() }},
+	{"prompt_templates", func(a *App) tview.Primitive { return a.promptTemplatesModal.list }},
+	{"agent_prompt", func(a *App) tview.Primitive { return a.agentPromptModal.fm.focusedPrimitive() }},
+	{"agent_output", func(a *App) tview.Primitive { return a.agentOutputModal.streamView }},
+}
+
 // TestOverlayRestoresFocusToTheModalBeneath covers what the picker's own
 // focus-restore missed: it named create_issue and edit_title, so closing a
 // picker over any other modal handed focus to a pane instead.
+//
+// The overlay is a picker, which is how this happens for real: one opened
+// behind a fetch lands on whatever the user opened while it waited. The picker
+// itself needs an overlay that outranks it, and confirmation is the only one.
+// Confirmation has no such overlay and so has no row here.
 func TestOverlayRestoresFocusToTheModalBeneath(t *testing.T) {
-	app := newUXTestApp(t)
-	openModal(t, app, "text_input")
-	openModal(t, app, "picker")
+	for _, target := range modalFocusTargets {
+		t.Run(target.page, func(t *testing.T) {
+			app := newUXTestApp(t)
+			openModal(t, app, target.page)
+			want := target.want(app)
 
-	escape(app)
+			overlay := "picker"
+			if target.page == "picker" {
+				overlay = "confirmation"
+			}
+			openModal(t, app, overlay)
+			escape(app)
 
-	if app.pages.HasPage("picker") {
-		t.Fatal("Escape did not close the picker")
-	}
-	if got := app.app.GetFocus(); got != tview.Primitive(app.textInputModal.input) {
-		t.Fatalf("focus after closing the picker = %T, want the text input field", got)
+			if app.pages.HasPage(overlay) {
+				t.Fatalf("Escape did not close the %s overlay", overlay)
+			}
+			if got := app.app.GetFocus(); got != want {
+				t.Fatalf("focus after closing the overlay = %T, want %T from %s", got, want, target.page)
+			}
+		})
 	}
 }
 
