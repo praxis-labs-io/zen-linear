@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -59,7 +60,6 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 
 	workspaceDir := t.TempDir()
 	var capturedArgs []string
-	var capturedCmdDir string
 	var cmdReady bool
 	var captureMu sync.Mutex
 
@@ -77,12 +77,8 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 				"AGENT_TUI_HELPER=1",
 				"AGENT_TUI_MODE=success",
 			)
-			// Set the Dir here since the runner will set it after this returns
-			// but we need to capture it for the test
-			cmd.Dir = workspaceDir
 
 			captureMu.Lock()
-			capturedCmdDir = cmd.Dir
 			cmdReady = true
 			captureMu.Unlock()
 			return cmd
@@ -117,30 +113,25 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 	waitForCondition(t, time.Second, func() bool {
 		captureMu.Lock()
 		defer captureMu.Unlock()
-		return cmdReady && capturedCmdDir == workspaceDir
+		return cmdReady
 	})
 
 	captureMu.Lock()
 	gotArgs := append([]string(nil), capturedArgs...)
-	gotCmdDir := capturedCmdDir
 	captureMu.Unlock()
 
-	if gotCmdDir != workspaceDir {
-		t.Fatalf("agent cmd dir = %q, want %q", gotCmdDir, workspaceDir)
+	// Every flag the app sends, pinned. The default sandbox is enabled, so
+	// --force stays off. The workspace reaches the agent as the working
+	// directory, covered by TestRunner_RunUsesWorkspaceAsWorkingDir.
+	wantFlags := []string{"--print", "--output-format", "stream-json", "--model", "gpt-5.2", "-p"}
+	if len(gotArgs) != len(wantFlags)+1 {
+		t.Fatalf("agent args = %q, want %q plus one prompt", gotArgs, wantFlags)
 	}
-
-	joined := strings.Join(gotArgs, " ")
-	if !strings.Contains(joined, "--force") {
-		t.Fatalf("expected --force in args: %s", joined)
+	if !slices.Equal(gotArgs[:len(wantFlags)], wantFlags) {
+		t.Fatalf("agent flags = %q, want %q", gotArgs[:len(wantFlags)], wantFlags)
 	}
-	if !strings.Contains(joined, "--sandbox") || !strings.Contains(joined, config.DefaultAgentSandbox) {
-		t.Fatalf("expected sandbox option in args: %s", joined)
-	}
-	if !strings.Contains(joined, "--model") || !strings.Contains(joined, "gpt-5.2") {
-		t.Fatalf("expected model option in args: %s", joined)
-	}
-	if !strings.Contains(joined, "--workspace") || !strings.Contains(joined, workspaceDir) {
-		t.Fatalf("expected workspace option in args: %s", joined)
+	if !strings.Contains(gotArgs[len(wantFlags)], "Summarize") {
+		t.Fatalf("agent prompt = %q, want it to carry the typed prompt", gotArgs[len(wantFlags)])
 	}
 }
 

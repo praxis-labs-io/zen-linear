@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -60,6 +61,41 @@ func TestRunner_RunCancel(t *testing.T) {
 	}
 }
 
+// TestRunner_RunUsesWorkspaceAsWorkingDir pins the only thing carrying the
+// workspace to the agent. No provider sends it as a flag, so if this stops
+// working the agent silently runs against the wrong repo. The child reports its
+// own cwd rather than the test reading cmd.Dir, which the runner writes and
+// nothing would notice going unread.
+func TestRunner_RunUsesWorkspaceAsWorkingDir(t *testing.T) {
+	workspace, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks() error: %v", err)
+	}
+
+	runner := NewRunner()
+	runner.ExecCmd = helperExecCmd("cwd")
+
+	var lines []string
+	var linesMu sync.Mutex
+	err = runner.Run(context.Background(), testProvider{binary: "helper"}, "prompt", "context",
+		AgentRunOptions{Workspace: workspace}, func(AgentEvent) {}, func(line string) {
+			linesMu.Lock()
+			lines = append(lines, line)
+			linesMu.Unlock()
+		}, func(error) {})
+	if err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+
+	linesMu.Lock()
+	linesCopy := append([]string(nil), lines...)
+	linesMu.Unlock()
+
+	if !containsLine(linesCopy, workspace) {
+		t.Fatalf("agent ran in the wrong directory, want %q, got: %#v", workspace, linesCopy)
+	}
+}
+
 // TestRunner_RunNonZero verifies non-zero exit propagates error.
 func TestRunner_RunNonZero(t *testing.T) {
 	runner := NewRunner()
@@ -87,6 +123,14 @@ func TestRunnerHelperProcess(t *testing.T) {
 	case "fail":
 		_, _ = fmt.Fprintln(os.Stderr, "boom")
 		os.Exit(2)
+	case "cwd":
+		cwd, err := os.Getwd()
+		if err != nil {
+			_, _ = fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		_, _ = fmt.Fprintf(os.Stdout, "{\"text\":%q}\n", cwd)
+		os.Exit(0)
 	case "sleep":
 		time.Sleep(5 * time.Second)
 		os.Exit(0)
