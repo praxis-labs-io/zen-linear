@@ -77,6 +77,23 @@ func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage st
 	}(input.ID)
 }
 
+// runIssueDetailAction runs a background issue mutation whose only UI effect is a
+// success flash and a details-pane refresh — the async twin of runIssueUpdate for
+// calls that return no issue to splice into the list.
+func (a *App) runIssueDetailAction(issueID string, action func(context.Context) error, successMessage string) {
+	go func() {
+		err := action(context.Background())
+		a.QueueUpdateDraw(func() {
+			if err != nil {
+				a.updateStatusBarWithError(err)
+				return
+			}
+			a.flashStatus(successMessage)
+			a.loadIssueDetailsByID(issueID)
+		})
+	}()
+}
+
 func (a *App) showSetDueDateModal() {
 	issue := a.GetSelectedIssue()
 	if issue == nil {
@@ -514,17 +531,10 @@ func (a *App) createIssueRelationForSelectedIssue(label, targetIssueID string) {
 	if createRelation == nil {
 		createRelation = a.api.CreateIssueRelation
 	}
-	go func(issueID string) {
-		_, err := createRelation(context.Background(), input)
-		a.QueueUpdateDraw(func() {
-			if err != nil {
-				a.updateStatusBarWithError(err)
-				return
-			}
-			a.flashStatus("Added issue relation")
-			a.loadIssueDetailsByID(issueID)
-		})
-	}(issue.ID)
+	a.runIssueDetailAction(issue.ID, func(ctx context.Context) error {
+		_, err := createRelation(ctx, input)
+		return err
+	}, "Added issue relation")
 }
 
 func (a *App) showRemoveIssueRelationPicker() {
@@ -563,17 +573,9 @@ func (a *App) deleteIssueRelationForSelectedIssue(relationID string) {
 	if deleteRelation == nil {
 		deleteRelation = a.api.DeleteIssueRelation
 	}
-	go func(issueID string) {
-		err := deleteRelation(context.Background(), relationID)
-		a.QueueUpdateDraw(func() {
-			if err != nil {
-				a.updateStatusBarWithError(err)
-				return
-			}
-			a.flashStatus("Removed issue relation")
-			a.loadIssueDetailsByID(issueID)
-		})
-	}(issue.ID)
+	a.runIssueDetailAction(issue.ID, func(ctx context.Context) error {
+		return deleteRelation(ctx, relationID)
+	}, "Removed issue relation")
 }
 
 func (a *App) subscribeSelectedIssue() {
@@ -586,17 +588,10 @@ func (a *App) subscribeSelectedIssue() {
 	if subscribe == nil {
 		subscribe = a.api.SubscribeToIssue
 	}
-	go func(issueID string) {
-		_, err := subscribe(context.Background(), issueID)
-		a.QueueUpdateDraw(func() {
-			if err != nil {
-				a.updateStatusBarWithError(err)
-				return
-			}
-			a.flashStatus("Subscribed to issue")
-			a.loadIssueDetailsByID(issueID)
-		})
-	}(issue.ID)
+	a.runIssueDetailAction(issue.ID, func(ctx context.Context) error {
+		_, err := subscribe(ctx, issue.ID)
+		return err
+	}, "Subscribed to issue")
 }
 
 func (a *App) unsubscribeSelectedIssue() {
@@ -609,17 +604,10 @@ func (a *App) unsubscribeSelectedIssue() {
 	if unsubscribe == nil {
 		unsubscribe = a.api.UnsubscribeFromIssue
 	}
-	go func(issueID string) {
-		_, err := unsubscribe(context.Background(), issueID)
-		a.QueueUpdateDraw(func() {
-			if err != nil {
-				a.updateStatusBarWithError(err)
-				return
-			}
-			a.flashStatus("Unsubscribed from issue")
-			a.loadIssueDetailsByID(issueID)
-		})
-	}(issue.ID)
+	a.runIssueDetailAction(issue.ID, func(ctx context.Context) error {
+		_, err := unsubscribe(ctx, issue.ID)
+		return err
+	}, "Unsubscribed from issue")
 }
 
 func (a *App) openSelectedAttachment() {
