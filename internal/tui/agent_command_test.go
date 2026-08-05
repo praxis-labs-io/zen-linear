@@ -60,7 +60,6 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 
 	workspaceDir := t.TempDir()
 	var capturedArgs []string
-	var capturedCmdDir string
 	var cmdReady bool
 	var captureMu sync.Mutex
 
@@ -78,12 +77,8 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 				"AGENT_TUI_HELPER=1",
 				"AGENT_TUI_MODE=success",
 			)
-			// Set the Dir here since the runner will set it after this returns
-			// but we need to capture it for the test
-			cmd.Dir = workspaceDir
 
 			captureMu.Lock()
-			capturedCmdDir = cmd.Dir
 			cmdReady = true
 			captureMu.Unlock()
 			return cmd
@@ -118,21 +113,16 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 	waitForCondition(t, time.Second, func() bool {
 		captureMu.Lock()
 		defer captureMu.Unlock()
-		return cmdReady && capturedCmdDir == workspaceDir
+		return cmdReady
 	})
 
 	captureMu.Lock()
 	gotArgs := append([]string(nil), capturedArgs...)
-	gotCmdDir := capturedCmdDir
 	captureMu.Unlock()
 
-	if gotCmdDir != workspaceDir {
-		t.Fatalf("agent cmd dir = %q, want %q", gotCmdDir, workspaceDir)
-	}
-
 	// Every flag the app sends, pinned. The default sandbox is enabled, so
-	// --force stays off, and the workspace rides on cmd.Dir above rather than a
-	// flag cursor-agent does not have.
+	// --force stays off. The workspace reaches the agent as the working
+	// directory, covered by TestRunner_RunUsesWorkspaceAsWorkingDir.
 	wantFlags := []string{"--print", "--output-format", "stream-json", "--model", "gpt-5.2", "-p"}
 	if len(gotArgs) != len(wantFlags)+1 {
 		t.Fatalf("agent args = %q, want %q plus one prompt", gotArgs, wantFlags)
