@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -129,18 +130,18 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 		t.Fatalf("agent cmd dir = %q, want %q", gotCmdDir, workspaceDir)
 	}
 
-	joined := strings.Join(gotArgs, " ")
-	if !strings.Contains(joined, "--force") {
-		t.Fatalf("expected --force in args: %s", joined)
+	// Every flag the app sends, pinned. The default sandbox is enabled, so
+	// --force stays off, and the workspace rides on cmd.Dir above rather than a
+	// flag cursor-agent does not have.
+	wantFlags := []string{"--print", "--output-format", "stream-json", "--model", "gpt-5.2", "-p"}
+	if len(gotArgs) != len(wantFlags)+1 {
+		t.Fatalf("agent args = %q, want %q plus one prompt", gotArgs, wantFlags)
 	}
-	if !strings.Contains(joined, "--sandbox") || !strings.Contains(joined, config.DefaultAgentSandbox) {
-		t.Fatalf("expected sandbox option in args: %s", joined)
+	if !slices.Equal(gotArgs[:len(wantFlags)], wantFlags) {
+		t.Fatalf("agent flags = %q, want %q", gotArgs[:len(wantFlags)], wantFlags)
 	}
-	if !strings.Contains(joined, "--model") || !strings.Contains(joined, "gpt-5.2") {
-		t.Fatalf("expected model option in args: %s", joined)
-	}
-	if !strings.Contains(joined, "--workspace") || !strings.Contains(joined, workspaceDir) {
-		t.Fatalf("expected workspace option in args: %s", joined)
+	if !strings.Contains(gotArgs[len(wantFlags)], "Summarize") {
+		t.Fatalf("agent prompt = %q, want it to carry the typed prompt", gotArgs[len(wantFlags)])
 	}
 }
 

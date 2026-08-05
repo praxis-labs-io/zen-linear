@@ -39,21 +39,27 @@ func (p *CursorProvider) ResolveBinary() (string, bool) {
 	return "", false
 }
 
-// BuildArgs builds argv for a non-interactive Cursor run.
+// BuildArgs builds argv for a non-interactive Cursor run. The working directory
+// carries the workspace; cursor-agent has no flag for it.
 func (p *CursorProvider) BuildArgs(prompt string, issueContext string, options AgentRunOptions) []string {
 	fullPrompt := buildAgentPrompt(prompt, issueContext)
-	args := []string{"--force", "--print", "--output-format", "stream-json"}
-	if options.Sandbox != "" {
-		args = append(args, "--sandbox", options.Sandbox)
+	var args []string
+	if cursorAllowsCommands(options.Sandbox) {
+		args = append(args, "--force")
 	}
+	args = append(args, "--print", "--output-format", "stream-json")
 	if options.Model != "" {
 		args = append(args, "--model", options.Model)
 	}
-	if options.Workspace != "" {
-		args = append(args, "--workspace", options.Workspace)
-	}
 	args = append(args, "-p", fullPrompt)
 	return args
+}
+
+// cursorAllowsCommands reports whether the run may execute commands without
+// asking. cursor-agent has no sandbox flag, so the setting maps onto --force,
+// the nearest thing it does have. Anything but an explicit "disabled" asks.
+func cursorAllowsCommands(sandbox string) bool {
+	return strings.EqualFold(strings.TrimSpace(sandbox), "disabled")
 }
 
 // ParseStreamLine attempts to extract display text from Cursor stream-json.

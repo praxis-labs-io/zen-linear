@@ -1,45 +1,53 @@
 package agents
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
 
-// TestCursorProvider_BuildArgs verifies CLI args include print + stream-json.
+// TestCursorProvider_BuildArgs pins the whole argv rather than grepping it. A
+// substring check is what let --sandbox and --workspace ship for months against
+// a cursor-agent that has neither, failing every run. Adding a flag has to
+// break this test.
 func TestCursorProvider_BuildArgs(t *testing.T) {
+	prompt := buildAgentPrompt("Summarize", "Issue context")
+
+	tests := []struct {
+		name    string
+		options AgentRunOptions
+		want    []string
+	}{
+		{
+			name:    "sandbox disabled forces commands through",
+			options: AgentRunOptions{Sandbox: "disabled", Model: "gpt-5.2", Workspace: "/tmp/workspace"},
+			want:    []string{"--force", "--print", "--output-format", "stream-json", "--model", "gpt-5.2", "-p", prompt},
+		},
+		{
+			name:    "sandbox enabled leaves the agent asking",
+			options: AgentRunOptions{Sandbox: "enabled", Model: "gpt-5.2", Workspace: "/tmp/workspace"},
+			want:    []string{"--print", "--output-format", "stream-json", "--model", "gpt-5.2", "-p", prompt},
+		},
+		{
+			name:    "unset sandbox asks",
+			options: AgentRunOptions{Model: "gpt-5.2"},
+			want:    []string{"--print", "--output-format", "stream-json", "--model", "gpt-5.2", "-p", prompt},
+		},
+		{
+			name:    "no model drops the flag",
+			options: AgentRunOptions{Sandbox: "disabled"},
+			want:    []string{"--force", "--print", "--output-format", "stream-json", "-p", prompt},
+		},
+	}
+
 	provider := NewCursorProvider(nil)
-	options := AgentRunOptions{
-		Sandbox:   "enabled",
-		Model:     "gpt-5.2",
-		Workspace: "/tmp/workspace",
-	}
-	args := provider.BuildArgs("Summarize", "Issue context", options)
-
-	if len(args) == 0 {
-		t.Fatal("expected args, got none")
-	}
-
-	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "--force") {
-		t.Fatalf("expected --force in args: %s", joined)
-	}
-	if !strings.Contains(joined, "-p") && !strings.Contains(joined, "--print") {
-		t.Fatalf("expected print mode in args: %s", joined)
-	}
-	if !strings.Contains(joined, "--output-format") || !strings.Contains(joined, "stream-json") {
-		t.Fatalf("expected stream-json output in args: %s", joined)
-	}
-	if !strings.Contains(joined, "--sandbox") || !strings.Contains(joined, "enabled") {
-		t.Fatalf("expected sandbox option in args: %s", joined)
-	}
-	if !strings.Contains(joined, "--model") || !strings.Contains(joined, "gpt-5.2") {
-		t.Fatalf("expected model option in args: %s", joined)
-	}
-	if !strings.Contains(joined, "--workspace") || !strings.Contains(joined, "/tmp/workspace") {
-		t.Fatalf("expected workspace option in args: %s", joined)
-	}
-	if !strings.Contains(joined, "Summarize") || !strings.Contains(joined, "Issue context") {
-		t.Fatalf("expected prompt and context in args: %s", joined)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := provider.BuildArgs("Summarize", "Issue context", tt.options)
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("BuildArgs() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
