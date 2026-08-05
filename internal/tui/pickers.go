@@ -39,21 +39,44 @@ func loadPickerData[T any](
 	}()
 }
 
+// showCachedPicker renders cached picker data immediately, or loads it for the
+// selected team first — caching it via store — then renders. A method cannot
+// take a type parameter, hence the free function.
+func showCachedPicker[T any](
+	a *App,
+	resourceName string,
+	cached []T,
+	store func(values []T),
+	load func(ctx context.Context, teamID string) ([]T, error),
+	render func(values []T),
+) {
+	if len(cached) == 0 {
+		loadPickerData(a, resourceName, load, func(loaded []T) {
+			store(loaded)
+			render(loaded)
+		})
+		return
+	}
+	render(cached)
+}
+
+// presentPicker opens the shared picker modal over items, forwarding the chosen
+// item's ID to onSelect.
+func (a *App) presentPicker(title, contextLine string, items []PickerItem, onSelect func(id string)) {
+	a.pickerModal.ShowWithContext(title, contextLine, items, func(item PickerItem) {
+		onSelect(item.ID)
+	})
+}
+
 // ShowStatusPicker shows a picker for workflow states. contextLine names the
 // issue being modified; empty for non-issue uses like filters.
 func (a *App) ShowStatusPicker(contextLine string, onSelect func(stateID string)) {
 	logger.Debug("tui.app: showing status picker")
-	states := a.workflowStates
-	if len(states) == 0 {
-		loadPickerData(a, "workflow states", a.cache.GetWorkflowStates,
-			func(loaded []linearapi.WorkflowState) {
-				a.workflowStates = loaded
-				a.showStatusPickerWithStates(loaded, contextLine, onSelect)
-			},
-		)
-		return
-	}
-	a.showStatusPickerWithStates(states, contextLine, onSelect)
+	showCachedPicker(a, "workflow states", a.workflowStates,
+		func(loaded []linearapi.WorkflowState) { a.workflowStates = loaded },
+		a.cache.GetWorkflowStates,
+		func(states []linearapi.WorkflowState) { a.showStatusPickerWithStates(states, contextLine, onSelect) },
+	)
 }
 
 func (a *App) showStatusPickerWithStates(states []linearapi.WorkflowState, contextLine string, onSelect func(stateID string)) {
@@ -65,26 +88,18 @@ func (a *App) showStatusPickerWithStates(states []linearapi.WorkflowState, conte
 		})
 	}
 
-	a.pickerModal.ShowWithContext("Select Status", contextLine, items, func(item PickerItem) {
-		onSelect(item.ID)
-	})
+	a.presentPicker("Select Status", contextLine, items, onSelect)
 }
 
 // ShowUserPicker shows a picker for team users. contextLine names the issue
 // being modified; empty for non-issue uses like filters.
 func (a *App) ShowUserPicker(contextLine string, onSelect func(userID string)) {
 	logger.Debug("tui.app: showing user picker")
-	users := a.teamUsers
-	if len(users) == 0 {
-		loadPickerData(a, "users for picker", a.cache.GetUsers,
-			func(loaded []linearapi.User) {
-				a.teamUsers = loaded
-				a.showUserPickerWithUsers(loaded, contextLine, onSelect)
-			},
-		)
-		return
-	}
-	a.showUserPickerWithUsers(users, contextLine, onSelect)
+	showCachedPicker(a, "users for picker", a.teamUsers,
+		func(loaded []linearapi.User) { a.teamUsers = loaded },
+		a.cache.GetUsers,
+		func(users []linearapi.User) { a.showUserPickerWithUsers(users, contextLine, onSelect) },
+	)
 }
 
 func (a *App) showUserPickerWithUsers(users []linearapi.User, contextLine string, onSelect func(userID string)) {
@@ -100,34 +115,25 @@ func (a *App) showUserPickerWithUsers(users []linearapi.User, contextLine string
 		})
 	}
 
-	a.pickerModal.ShowWithContext("Select Assignee", contextLine, items, func(item PickerItem) {
-		onSelect(item.ID)
-	})
+	a.presentPicker("Select Assignee", contextLine, items, onSelect)
 }
 
 // ShowCyclePicker shows a picker for team cycles. contextLine names the
 // issue being modified; empty for non-issue uses like filters.
 func (a *App) ShowCyclePicker(contextLine string, onSelect func(cycleID string)) {
 	logger.Debug("tui.app: showing cycle picker")
-	cycles := a.teamCycles
-	if len(cycles) == 0 {
-		loadPickerData(a, "cycles for picker",
-			func(ctx context.Context, teamID string) ([]linearapi.Cycle, error) {
-				loaded, err := a.cache.GetCycles(ctx, teamID)
-				if err != nil {
-					return nil, err
-				}
-				sortCyclesForNavigation(loaded)
-				return loaded, nil
-			},
-			func(loaded []linearapi.Cycle) {
-				a.teamCycles = loaded
-				a.showCyclePickerWithCycles(loaded, contextLine, onSelect)
-			},
-		)
-		return
-	}
-	a.showCyclePickerWithCycles(cycles, contextLine, onSelect)
+	showCachedPicker(a, "cycles for picker", a.teamCycles,
+		func(loaded []linearapi.Cycle) { a.teamCycles = loaded },
+		func(ctx context.Context, teamID string) ([]linearapi.Cycle, error) {
+			loaded, err := a.cache.GetCycles(ctx, teamID)
+			if err != nil {
+				return nil, err
+			}
+			sortCyclesForNavigation(loaded)
+			return loaded, nil
+		},
+		func(cycles []linearapi.Cycle) { a.showCyclePickerWithCycles(cycles, contextLine, onSelect) },
+	)
 }
 
 func (a *App) showCyclePickerWithCycles(cycles []linearapi.Cycle, contextLine string, onSelect func(cycleID string)) {
@@ -148,26 +154,18 @@ func (a *App) showCyclePickerWithCycles(cycles []linearapi.Cycle, contextLine st
 		})
 	}
 
-	a.pickerModal.ShowWithContext("Select Cycle", contextLine, items, func(item PickerItem) {
-		onSelect(item.ID)
-	})
+	a.presentPicker("Select Cycle", contextLine, items, onSelect)
 }
 
 // ShowProjectPicker shows a picker for team projects. contextLine names the
 // issue being modified; empty for non-issue uses like filters.
 func (a *App) ShowProjectPicker(contextLine string, onSelect func(projectID string)) {
 	logger.Debug("tui.app: showing project picker")
-	projects := a.teamProjects
-	if len(projects) == 0 {
-		loadPickerData(a, "projects for picker", a.cache.GetProjects,
-			func(loaded []linearapi.Project) {
-				a.teamProjects = loaded
-				a.showProjectPickerWithProjects(loaded, contextLine, onSelect)
-			},
-		)
-		return
-	}
-	a.showProjectPickerWithProjects(projects, contextLine, onSelect)
+	showCachedPicker(a, "projects for picker", a.teamProjects,
+		func(loaded []linearapi.Project) { a.teamProjects = loaded },
+		a.cache.GetProjects,
+		func(projects []linearapi.Project) { a.showProjectPickerWithProjects(projects, contextLine, onSelect) },
+	)
 }
 
 func (a *App) showProjectPickerWithProjects(projects []linearapi.Project, contextLine string, onSelect func(projectID string)) {
@@ -179,9 +177,7 @@ func (a *App) showProjectPickerWithProjects(projects []linearapi.Project, contex
 		})
 	}
 
-	a.pickerModal.ShowWithContext("Select Project", contextLine, items, func(item PickerItem) {
-		onSelect(item.ID)
-	})
+	a.presentPicker("Select Project", contextLine, items, onSelect)
 }
 
 // ShowParentIssuePicker shows a picker for selecting a parent issue.
@@ -211,9 +207,7 @@ func (a *App) ShowParentIssuePicker(contextLine string, onSelect func(parentID s
 	}
 	logger.Debug("tui.app: parent issue picker items count=%d", len(items))
 
-	a.pickerModal.ShowWithContext("Select Parent Issue", contextLine, items, func(item PickerItem) {
-		onSelect(item.ID)
-	})
+	a.presentPicker("Select Parent Issue", contextLine, items, onSelect)
 }
 
 func excludedParentCandidateIDs(selected *linearapi.Issue, issues []linearapi.Issue) map[string]bool {
