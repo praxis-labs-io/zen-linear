@@ -1453,6 +1453,127 @@ func TestCreateIssue_SendsCycleID(t *testing.T) {
 	}
 }
 
+func TestCreateIssue_SendsPriority(t *testing.T) {
+	var input map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		variables, ok := reqBody["variables"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Request body missing variables")
+		}
+		input, ok = variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("variables.input = %#v, want object", variables["input"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mutationIssueResponse("issueCreate")))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	_, err := client.CreateIssue(context.Background(), CreateIssueInput{
+		TeamID:   "team-1",
+		Title:    "Prioritized",
+		Priority: 2,
+	})
+	if err != nil {
+		t.Fatalf("CreateIssue() error: %v", err)
+	}
+	// JSON decodes numbers as float64.
+	if input["priority"] != float64(2) {
+		t.Fatalf("priority = %#v, want 2", input["priority"])
+	}
+}
+
+func TestCreateIssue_RejectsOutOfRangePriority(t *testing.T) {
+	cases := []struct {
+		name     string
+		priority int
+	}{
+		{"above max", maxPriority + 1},
+		{"negative", -1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hit := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hit = true
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(mutationIssueResponse("issueCreate")))
+			}))
+			defer server.Close()
+
+			client := NewClient(ClientConfig{
+				Token:    "test-token",
+				Endpoint: server.URL,
+			})
+
+			_, err := client.CreateIssue(context.Background(), CreateIssueInput{
+				TeamID:   "team-1",
+				Title:    "Bad priority",
+				Priority: tc.priority,
+			})
+			if err == nil {
+				t.Fatalf("CreateIssue() priority=%d: want error, got nil", tc.priority)
+			}
+			if !strings.Contains(err.Error(), "out of range") {
+				t.Errorf("error = %v, want it to mention out of range", err)
+			}
+			if hit {
+				t.Error("server was called; priority validation should short-circuit before the request")
+			}
+		})
+	}
+}
+
+func TestUpdateIssue_RejectsOutOfRangePriority(t *testing.T) {
+	cases := []struct {
+		name     string
+		priority int
+	}{
+		{"above max", maxPriority + 1},
+		{"negative", -1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hit := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hit = true
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(mutationIssueResponse("issueUpdate")))
+			}))
+			defer server.Close()
+
+			client := NewClient(ClientConfig{
+				Token:    "test-token",
+				Endpoint: server.URL,
+			})
+
+			priority := tc.priority
+			_, err := client.UpdateIssue(context.Background(), UpdateIssueInput{
+				ID:       "issue-123",
+				Priority: &priority,
+			})
+			if err == nil {
+				t.Fatalf("UpdateIssue() priority=%d: want error, got nil", tc.priority)
+			}
+			if !strings.Contains(err.Error(), "out of range") {
+				t.Errorf("error = %v, want it to mention out of range", err)
+			}
+			if hit {
+				t.Error("server was called; priority validation should short-circuit before the request")
+			}
+		})
+	}
+}
+
 func TestUpdateIssueInput_ParentID(t *testing.T) {
 	t.Run("nil ParentID means no change", func(t *testing.T) {
 		input := UpdateIssueInput{
