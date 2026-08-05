@@ -1,0 +1,181 @@
+package tui
+
+// visiblePanes lists the panes Tab can reach, in screen order. A hidden pane
+// is not one of them: cycling onto it would land focus somewhere updateFocus
+// has to bounce back, which reads as Tab getting stuck.
+func (a *App) visiblePanes() []FocusTarget {
+	panes := make([]FocusTarget, 0, 3)
+	if !a.navigationHidden {
+		panes = append(panes, FocusNavigation)
+	}
+	panes = append(panes, FocusIssues)
+	if !a.detailsHidden {
+		panes = append(panes, FocusDetails)
+	}
+	return panes
+}
+
+// cyclePanes moves focus one pane in the given direction (+1 forward, -1
+// backward), wrapping. The issues tab and the details tab on screen are their
+// own panes' business, so both stay put.
+func (a *App) cyclePanes(direction int) {
+	panes := a.visiblePanes()
+	current := 0
+	for i, pane := range panes {
+		if pane == a.focusedPane {
+			current = i
+			break
+		}
+	}
+	a.focusedPane = panes[((current+direction)%len(panes)+len(panes))%len(panes)]
+	if a.focusedPane == FocusDetails {
+		// Enter on the description, the same way Right and l enter it.
+		a.focusedDetailsView = false
+	}
+	a.updateFocus()
+}
+
+// cyclePanesForward cycles focus forward: Navigation, Issues, Details, wrap.
+func (a *App) cyclePanesForward() { a.cyclePanes(1) }
+
+// cyclePanesBackward cycles focus backward: Details, Issues, Navigation, wrap.
+func (a *App) cyclePanesBackward() { a.cyclePanes(-1) }
+
+// updateFocus updates the focus state of all panes.
+func (a *App) updateFocus() {
+	// Hidden panes cannot take focus; fall back to the issues column.
+	if (a.focusedPane == FocusNavigation && a.navigationHidden) ||
+		(a.focusedPane == FocusDetails && a.detailsHidden) {
+		a.focusedPane = FocusIssues
+	}
+	// In responsive modes the focused pane decides what is visible.
+	if a.layoutMode != layoutWide {
+		a.rebuildContentLayout()
+	}
+	switch a.focusedPane {
+	case FocusNavigation:
+		a.app.SetFocus(a.navigationTree)
+		a.navigationTree.SetBorderColor(a.theme.BorderFocus)
+		a.myIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchPanel.SetBorderColor(a.theme.Border)
+		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
+		a.detailsCommentsView.SetBorderColor(a.theme.Border)
+		// Update all pane titles
+		a.updateAllPaneTitles()
+	case FocusIssues:
+		// Focus the visible issues section
+		a.myIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchPanel.SetBorderColor(a.theme.Border)
+		if a.activeIssuesSection == IssuesSectionSearch {
+			a.searchPanel.SetBorderColor(a.theme.BorderFocus)
+			if a.searchInputFocused {
+				a.app.SetFocus(a.searchInput)
+			} else {
+				a.app.SetFocus(a.searchResultsTable)
+			}
+		} else if table := a.tableForSection(a.activeIssuesSection); table != nil {
+			a.app.SetFocus(table)
+			table.SetBorderColor(a.theme.BorderFocus)
+		}
+		// Update all pane titles
+		a.updateAllPaneTitles()
+		a.navigationTree.SetBorderColor(a.theme.Border)
+		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
+		a.detailsCommentsView.SetBorderColor(a.theme.Border)
+	case FocusDetails:
+		// Focus the appropriate sub-view based on state
+		if !a.detailsCommentsVisible {
+			a.focusedDetailsView = false
+		}
+		a.updateDetailsLayout()
+		if a.focusedDetailsView && a.detailsCommentsVisible {
+			a.app.SetFocus(a.detailsCommentsView)
+			a.detailsDescriptionView.SetBorderColor(a.theme.Border)
+			a.detailsCommentsView.SetBorderColor(a.theme.BorderFocus)
+		} else {
+			a.app.SetFocus(a.detailsDescriptionView)
+			a.detailsDescriptionView.SetBorderColor(a.theme.BorderFocus)
+			a.detailsCommentsView.SetBorderColor(a.theme.Border)
+		}
+		a.navigationTree.SetBorderColor(a.theme.Border)
+		a.myIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchPanel.SetBorderColor(a.theme.Border)
+		// Update all pane titles
+		a.updateAllPaneTitles()
+	case FocusPalette:
+		a.app.SetFocus(a.paletteInput)
+		a.navigationTree.SetBorderColor(a.theme.Border)
+		a.myIssuesTable.SetBorderColor(a.theme.Border)
+		a.allIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchPanel.SetBorderColor(a.theme.Border)
+		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
+		a.detailsCommentsView.SetBorderColor(a.theme.Border)
+		// Update all pane titles
+		a.updateAllPaneTitles()
+	}
+	a.updateStatusBar()
+}
+
+// updateAllPaneTitles updates all pane titles with visual indicators for the active pane.
+func (a *App) updateAllPaneTitles() {
+	// Update Navigation pane title
+	if a.focusedPane == FocusNavigation {
+		a.navigationTree.SetTitle(" ▶ Navigation ")
+		a.navigationTree.SetTitleColor(a.theme.Accent)
+	} else {
+		a.navigationTree.SetTitle(" Navigation ")
+		a.navigationTree.SetTitleColor(a.theme.Foreground)
+	}
+
+	// Update Issues pane tab strip
+	isIssuesFocused := a.focusedPane == FocusIssues
+	issuesTitle := a.issuesTabsTitle(isIssuesFocused)
+	a.myIssuesTable.SetTitle(issuesTitle)
+	a.myIssuesTable.SetTitleColor(a.theme.Foreground)
+	a.allIssuesTable.SetTitle(issuesTitle)
+	a.allIssuesTable.SetTitleColor(a.theme.Foreground)
+	if a.searchPanel != nil {
+		a.searchPanel.SetTitle(issuesTitle)
+		a.searchPanel.SetTitleColor(a.theme.Foreground)
+	}
+
+	// Update Details pane tab strip
+	isDetailsFocused := a.focusedPane == FocusDetails
+	if a.detailsDescriptionView != nil {
+		detailsTitle := a.detailsTabsTitle(isDetailsFocused)
+		a.detailsDescriptionView.SetTitle(detailsTitle)
+		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
+		if a.detailsCommentsView != nil {
+			a.detailsCommentsView.SetTitle(detailsTitle)
+			a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
+		}
+	}
+}
+
+// openPalette opens the command palette overlay.
+func (a *App) openPalette() {
+	a.paletteCtrl.SetIssueContext(a.focusedPane == FocusIssues || a.focusedPane == FocusDetails)
+	a.paletteCtrl.Reset()
+	a.paletteInput.SetText("")
+	a.paletteInput.SetLabel("> ")
+	a.paletteInput.SetPlaceholder("Type to filter commands...")
+	a.updatePaletteList()
+	a.pages.ShowPage("palette")
+	a.pages.SendToFront("palette")
+	if a.focusedPane != FocusPalette {
+		a.palettePreviousPane = a.focusedPane
+	}
+	a.focusedPane = FocusPalette
+	a.updateFocus()
+}
+
+// closePalette closes the command palette overlay.
+func (a *App) closePalette() {
+	a.pages.HidePage("palette")
+	// Restore focus to the pane the palette was opened from.
+	a.focusedPane = a.palettePreviousPane
+	a.updateFocus()
+}

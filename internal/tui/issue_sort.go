@@ -7,6 +7,16 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
+// SortField represents a field to sort issues by.
+type SortField string
+
+const (
+	SortByUpdatedAt SortField = "updatedAt"
+	SortByCreatedAt SortField = "createdAt"
+	SortByPriority  SortField = "priority"
+	SortByStatus    SortField = "status"
+)
+
 // Config names for the sort fields. The field values themselves double as the
 // API's orderBy argument, so they stay camelCase while the config spells the
 // timestamps "updated" and "created".
