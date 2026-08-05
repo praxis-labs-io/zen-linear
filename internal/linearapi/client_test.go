@@ -734,7 +734,19 @@ func TestFetchIssueByID_ParsesRelationsSubscribersAndAttachments(t *testing.T) {
 					"createdAt": "2025-01-02T00:00:00Z",
 					"updatedAt": "2025-01-03T00:00:00Z"
 				}]},
-				"comments": {"nodes": []}
+				"comments": {"nodes": [{
+					"id": "comment-1",
+					"body": "First pass looks right.",
+					"createdAt": "2025-01-04T00:00:00Z",
+					"updatedAt": "2025-01-05T00:00:00Z",
+					"user": {
+						"id": "user-2",
+						"name": "Grace",
+						"displayName": "Grace Hopper",
+						"email": "grace@example.com",
+						"isMe": false
+					}
+				}]}
 			}
 		}
 	}`
@@ -790,6 +802,19 @@ func TestFetchIssueByID_ParsesRelationsSubscribersAndAttachments(t *testing.T) {
 	}
 	if len(issue.Attachments) != 1 || issue.Attachments[0].SourceType != "github" || issue.Attachments[0].URL == "" {
 		t.Fatalf("Attachments = %+v, want one GitHub attachment", issue.Attachments)
+	}
+	if len(issue.Comments) != 1 {
+		t.Fatalf("Comments length = %d, want 1", len(issue.Comments))
+	}
+	comment := issue.Comments[0]
+	if comment.Body != "First pass looks right." || comment.Author.DisplayName != "Grace Hopper" {
+		t.Fatalf("comment = %+v, want Grace Hopper's body", comment)
+	}
+	if comment.IssueID != "issue-1" {
+		t.Fatalf("comment.IssueID = %q, want issue-1", comment.IssueID)
+	}
+	if comment.CreatedAt.IsZero() || comment.UpdatedAt.Equal(comment.CreatedAt) {
+		t.Fatalf("comment timestamps = %v/%v, want distinct non-zero times", comment.CreatedAt, comment.UpdatedAt)
 	}
 }
 
