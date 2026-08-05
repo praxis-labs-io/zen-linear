@@ -140,8 +140,11 @@ func (mm *MultiSelectModal) selectedIDs() []string {
 // Hide hides the multi-select modal.
 func (mm *MultiSelectModal) Hide() {
 	mm.app.pages.RemovePage("multi_select")
-	mm.app.updateFocus()
+	mm.app.restoreModalFocus()
 }
+
+// Focus returns keyboard focus to the list, for when an overlay closes.
+func (mm *MultiSelectModal) Focus() { mm.app.app.SetFocus(mm.list) }
 
 // HandleKey handles keyboard input for the multi-select modal.
 func (mm *MultiSelectModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {

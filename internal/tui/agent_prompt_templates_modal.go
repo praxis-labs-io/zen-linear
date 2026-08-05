@@ -16,6 +16,7 @@ type AgentPromptTemplatesModal struct {
 	list          *tview.List
 	fm            *FormModal
 	nameField     *tview.InputField
+	focused       tview.Primitive
 	promptField   *tview.TextArea
 	helpView      *tview.TextView
 	templates     []config.AgentPromptTemplate
@@ -137,13 +138,30 @@ func (pm *AgentPromptTemplatesModal) Show(templates []config.AgentPromptTemplate
 
 	pm.app.pages.AddPage("prompt_templates", pm.modal, true, true)
 	pm.app.pages.SendToFront("prompt_templates")
-	pm.app.app.SetFocus(pm.list)
+	pm.focus(pm.list)
 }
 
 // Hide hides the prompt templates modal.
 func (pm *AgentPromptTemplatesModal) Hide() {
 	pm.app.pages.RemovePage("prompt_templates")
-	pm.app.updateFocus()
+	pm.app.restoreModalFocus()
+}
+
+// focus records the target so Focus can put the user back where they were.
+// UI thread only.
+func (pm *AgentPromptTemplatesModal) focus(p tview.Primitive) {
+	pm.focused = p
+	pm.app.app.SetFocus(p)
+}
+
+// Focus returns keyboard focus for when an overlay above this modal closes.
+// It restores the field the user was in: the list arms 'a' and 'd' as add and
+// delete, so landing there mid-edit turns typing into a deletion.
+func (pm *AgentPromptTemplatesModal) Focus() {
+	if pm.focused == nil {
+		pm.focused = pm.list
+	}
+	pm.app.app.SetFocus(pm.focused)
 }
 
 // HandleKey handles keyboard input for the prompt templates modal.
@@ -160,17 +178,17 @@ func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.Eve
 	case tcell.KeyEnter, tcell.KeyRight:
 		// Enter (or right) on a template is edit mode: jump to its fields.
 		if listFocused {
-			pm.app.app.SetFocus(pm.nameField)
+			pm.focus(pm.nameField)
 			return nil
 		}
 	case tcell.KeyTab:
 		if listFocused {
-			pm.app.app.SetFocus(pm.nameField)
+			pm.focus(pm.nameField)
 			return nil
 		}
 	case tcell.KeyBacktab:
 		if pm.app.app.GetFocus() == pm.nameField {
-			pm.app.app.SetFocus(pm.list)
+			pm.focus(pm.list)
 			return nil
 		}
 	}
@@ -253,7 +271,7 @@ func (pm *AgentPromptTemplatesModal) addTemplate() {
 	newIndex := len(pm.templates) - 1
 	pm.list.SetCurrentItem(newIndex)
 	pm.selectTemplate(newIndex)
-	pm.app.app.SetFocus(pm.nameField)
+	pm.focus(pm.nameField)
 }
 
 func (pm *AgentPromptTemplatesModal) deleteSelected() {

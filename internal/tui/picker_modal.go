@@ -122,29 +122,12 @@ func (pm *PickerModal) ShowWithContext(title, contextLine string, items []Picker
 
 // Hide hides the picker modal.
 func (pm *PickerModal) Hide() {
-	pm.app.pickerActive = false
 	pm.app.pages.RemovePage("picker")
-
-	// Check if create issue modal is visible and restore focus to it
-	if pm.app.pages.HasPage("create_issue") {
-		pm.app.pages.SendToFront("create_issue")
-		if pm.app.createIssueModal != nil {
-			pm.app.createIssueModal.fm.Focus()
-		}
-		return
-	}
-
-	// Check if edit title modal is visible and restore focus to it
-	if pm.app.pages.HasPage("edit_title") {
-		pm.app.pages.SendToFront("edit_title")
-		if pm.app.editTitleModal != nil {
-			pm.app.editTitleModal.fm.Focus()
-		}
-		return
-	}
-
-	pm.app.updateFocus()
+	pm.app.restoreModalFocus()
 }
+
+// Focus returns keyboard focus to the list, for when an overlay closes.
+func (pm *PickerModal) Focus() { pm.app.app.SetFocus(pm.list) }
 
 // HandleKey handles keyboard input for the picker.
 func (pm *PickerModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {

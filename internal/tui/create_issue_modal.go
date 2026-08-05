@@ -255,6 +255,9 @@ func (cm *CreateIssueModal) Hide() {
 	cm.fm.Hide("create_issue")
 }
 
+// Focus returns keyboard focus to the form, for when an overlay closes.
+func (cm *CreateIssueModal) Focus() { cm.fm.Focus() }
+
 // HandleKey handles keyboard input for the create issue modal.
 func (cm *CreateIssueModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return cm.fm.HandleKey(event)

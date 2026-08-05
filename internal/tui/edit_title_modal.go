@@ -51,6 +51,9 @@ func (etm *EditTitleModal) Hide() {
 	etm.fm.Hide("edit_title")
 }
 
+// Focus returns keyboard focus to the form, for when an overlay closes.
+func (etm *EditTitleModal) Focus() { etm.fm.Focus() }
+
 // HandleKey handles keyboard input for the edit title modal.
 func (etm *EditTitleModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return etm.fm.HandleKey(event)

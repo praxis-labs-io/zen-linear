@@ -90,6 +90,10 @@ Drew's live config is a symlink chain: `~/.zen-linear/config.json` → dotfiles 
 
 Commands carry a single-rune shortcut; the `keybindings` config map (command id → rune) remaps them with steal semantics: an explicit mapping clears the colliding default (`applyCommandKeybindings` in `internal/tui/keybindings.go`). UI actions that aren't palette commands (tab_next/tab_prev, columns_left/right, quit, open_palette, search) resolve through `actionKey(action, fallback)`. **Never compare against a hardcoded rune in a key handler** — that's how the details pane's tab keys broke when tabs were rebound.
 
+### Modal dispatch
+
+`modalBindings` in `internal/tui/modal_dispatch.go` is an ordered list of page name → modal. Order is dispatch priority, not stack order: `handleGlobalKey` gives the key to the first open page in that list, whichever modal opened last. A new modal needs one entry plus `HandleKey` and `Focus`; the dispatcher never grows a branch. Every `Hide` ends in `restoreModalFocus`, which raises the next modal still open and falls back to the panes. `modal_dispatch_test.go` pins the order against its own literal copy, so reordering the registry fails there rather than agreeing with itself.
+
 ### Theme system
 
 Themes are structs in `internal/tui/theme.go` registered in `ThemeRegistry`. Optional fields (`InverseText`, `StatusReview`) have fallback methods so legacy themes need no changes. `RosePineMoonTheme` sets `Background: tcell.ColorDefault` (terminal transparency), which breaks tview defaults that assume an opaque `PrimitiveBackgroundColor` — selection styles, InputField inner fill, modal backgrounds all have explicit workarounds (`selectionStyle`, `newThemedInputField`, `ModalBackground`). When adding UI, style from the theme, not tview defaults.

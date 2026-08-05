@@ -52,6 +52,9 @@ func (edm *EditDescriptionModal) Hide() {
 	edm.fm.Hide("edit_description")
 }
 
+// Focus returns keyboard focus to the form, for when an overlay closes.
+func (edm *EditDescriptionModal) Focus() { edm.fm.Focus() }
+
 // HandleKey handles keyboard input for the edit description modal.
 func (edm *EditDescriptionModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return edm.fm.HandleKey(event)

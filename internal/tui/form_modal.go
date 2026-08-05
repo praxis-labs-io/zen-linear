@@ -654,7 +654,7 @@ func (fm *FormModal) Show(pageName string) {
 // Hide removes the page and restores pane focus.
 func (fm *FormModal) Hide(pageName string) {
 	fm.app.pages.RemovePage(pageName)
-	fm.app.updateFocus()
+	fm.app.restoreModalFocus()
 }
 
 // Root returns the fullscreen wrapper for pages.
