@@ -186,9 +186,18 @@ func (fm *FormModal) drawOpenMenu(screen tcell.Screen) {
 	}
 
 	fieldX, fieldY, fieldWidth, fieldHeight := frame.GetRect()
-	_, screenH := screen.Size()
-	x, y, width, height, fits := pickerMenuRect(fieldX, fieldY, fieldWidth, fieldHeight, len(picker.options), screenH)
+	screenW, screenH := screen.Size()
+	longest := 0
+	for _, option := range picker.options {
+		if width := len(option); width > longest {
+			longest = width
+		}
+	}
+	x, y, width, height, fits := pickerMenuRect(fieldX, fieldY, fieldWidth, fieldHeight, len(picker.options), longest, screenW, screenH)
 	if !fits {
+		// Nowhere to draw it, so it cannot stay open: keys would keep routing
+		// into a menu the user cannot see.
+		picker.closeMenu()
 		return
 	}
 
@@ -196,28 +205,55 @@ func (fm *FormModal) drawOpenMenu(screen tcell.Screen) {
 	fm.menu.Draw(screen)
 }
 
-// pickerMenuRect places the menu against its field: same left edge and width,
-// and its top border laid over the field's bottom one so the two read as one
-// unit. A grid has no half-step, so the row after the field would leave two
-// border lines with a cell of air between them. It drops up when the screen
-// ends first. The returned rect includes the border.
-func pickerMenuRect(fieldX, fieldY, fieldWidth, fieldHeight, optionCount, screenH int) (x, y, width, height int, fits bool) {
+// pickerMenuRect places the menu against its field: same left edge, its top
+// border laid over the field's bottom one so the two read as one unit. A grid
+// has no half-step, so the row after the field would leave two border lines
+// with a cell of air between them.
+//
+// It widens past the field to fit the longest option, because a menu clipped
+// to a packed column cannot tell two long project names apart, and it takes
+// whichever side of the field has more room. The returned rect includes the
+// border.
+func pickerMenuRect(fieldX, fieldY, fieldWidth, fieldHeight, optionCount, longestOption, screenW, screenH int) (x, y, width, height int, fits bool) {
 	rows := optionCount
 	if rows > formPickerMenuRows {
 		rows = formPickerMenuRows
 	}
-	height = rows + 2 // border
 	if fieldWidth < 3 || rows < 1 {
 		return 0, 0, 0, 0, false
 	}
 
-	y = fieldY + fieldHeight - 1
-	if y+height > screenH {
-		if above := fieldY - height + 1; above >= 0 {
-			y = above
-		} else if height = screenH - y; height < 3 {
+	width = fieldWidth
+	if wanted := longestOption + 2; wanted > width {
+		width = wanted
+	}
+	x = fieldX
+	if x+width > screenW {
+		if x = screenW - width; x < 0 {
+			x, width = 0, screenW
+		}
+	}
+
+	height = rows + 2 // border
+	below := fieldY + fieldHeight - 1
+	above := fieldY - height + 1
+	switch {
+	case below+height <= screenH:
+		y = below
+	case above >= 0:
+		y = above
+	default:
+		// Neither side fits the full menu: take the roomier one and clip it.
+		roomBelow := screenH - below
+		roomAbove := fieldY + 1
+		if roomBelow >= roomAbove {
+			y, height = below, roomBelow
+		} else {
+			y, height = 0, roomAbove
+		}
+		if height < 3 {
 			return 0, 0, 0, 0, false
 		}
 	}
-	return fieldX, y, fieldWidth, height, true
+	return x, y, width, height, true
 }

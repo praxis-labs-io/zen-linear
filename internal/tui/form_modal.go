@@ -527,6 +527,11 @@ func (fm *FormModal) registerFocusable(p tview.Primitive, rowIdx int) {
 // onFocused tracks focus for tab cycling, recolors field frames, and keeps
 // the focused row visible when the form scrolls.
 func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
+	// Focus can move without a key: a mouse click lands on the field under the
+	// menu. Leaving the menu open would keep every key routed into it.
+	if picker := fm.openPicker; picker != nil && picker.view != p {
+		picker.closeMenu()
+	}
 	for i, candidate := range fm.order {
 		if candidate == p {
 			fm.focusIdx = i

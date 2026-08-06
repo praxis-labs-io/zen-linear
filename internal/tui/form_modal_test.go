@@ -316,36 +316,56 @@ func TestFormModalHeightFitsContentAndClampsToScreen(t *testing.T) {
 }
 
 // TestPickerMenuRectPlacesTheMenuAgainstItsField pins the geometry the draw
-// path can't be asserted on: same edges as the field, capped height with a
-// border, dropping up when the screen ends first.
+// path cannot be asserted on: the field's left edge, a width that fits the
+// longest option, a capped height, and the roomier side when the screen is
+// short.
 func TestPickerMenuRectPlacesTheMenuAgainstItsField(t *testing.T) {
+	const fieldX, fieldWidth, fieldHeight = 6, 20, 3
 	cases := []struct {
 		name                     string
-		fieldY, options, screenH int
+		fieldY, options, longest int
+		screenH                  int
 		wantY, wantHeight        int
+		wantWidth                int
 		wantFits                 bool
 	}{
-		{name: "over the field's bottom border", fieldY: 4, options: 3, screenH: 40, wantY: 6, wantHeight: 5, wantFits: true},
-		{name: "capped at eight rows", fieldY: 4, options: 40, screenH: 40, wantY: 6, wantHeight: 10, wantFits: true},
-		{name: "drops up with no room below", fieldY: 25, options: 40, screenH: 30, wantY: 16, wantHeight: 10, wantFits: true},
-		{name: "no options", fieldY: 4, options: 0, screenH: 40, wantFits: false},
+		{name: "over the field's bottom border", fieldY: 4, options: 3, longest: 8, screenH: 40, wantY: 6, wantHeight: 5, wantWidth: 20, wantFits: true},
+		{name: "capped at eight rows", fieldY: 4, options: 40, longest: 8, screenH: 40, wantY: 6, wantHeight: 10, wantWidth: 20, wantFits: true},
+		{name: "widens for a long option", fieldY: 4, options: 2, longest: 30, screenH: 40, wantY: 6, wantHeight: 4, wantWidth: 32, wantFits: true},
+		{name: "drops up with no room below", fieldY: 25, options: 40, longest: 8, screenH: 30, wantY: 16, wantHeight: 10, wantWidth: 20, wantFits: true},
+		{name: "clips to the roomier side", fieldY: 3, options: 40, longest: 8, screenH: 12, wantY: 5, wantHeight: 7, wantWidth: 20, wantFits: true},
+		{name: "no options", fieldY: 4, options: 0, longest: 0, screenH: 40, wantFits: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			x, y, width, height, fits := pickerMenuRect(6, tc.fieldY, 20, 3, tc.options, tc.screenH)
+			x, y, width, height, fits := pickerMenuRect(fieldX, tc.fieldY, fieldWidth, fieldHeight, tc.options, tc.longest, 100, tc.screenH)
 			if fits != tc.wantFits {
 				t.Fatalf("fits = %v, want %v", fits, tc.wantFits)
 			}
 			if !fits {
 				return
 			}
-			if x != 6 || width != 20 {
-				t.Fatalf("menu x/width = %d/%d, want the field's 6/20", x, width)
+			if x != fieldX || width != tc.wantWidth {
+				t.Fatalf("menu x/width = %d/%d, want %d/%d", x, width, fieldX, tc.wantWidth)
 			}
 			if y != tc.wantY || height != tc.wantHeight {
 				t.Fatalf("menu y/height = %d/%d, want %d/%d", y, height, tc.wantY, tc.wantHeight)
 			}
 		})
+	}
+}
+
+// TestPickerMenuRectShiftsLeftAtTheScreenEdge keeps a widened menu on screen.
+func TestPickerMenuRectShiftsLeftAtTheScreenEdge(t *testing.T) {
+	x, _, width, _, fits := pickerMenuRect(70, 4, 20, 3, 3, 28, 80, 40)
+	if !fits {
+		t.Fatal("menu did not fit")
+	}
+	if width != 30 {
+		t.Fatalf("width = %d, want 30 for the longest option", width)
+	}
+	if x != 50 || x+width > 80 {
+		t.Fatalf("x = %d with width %d, want it shifted back onto an 80-column screen", x, width)
 	}
 }
 
@@ -364,14 +384,39 @@ func TestFormModalSplitRowColumnsTheFields(t *testing.T) {
 	if len(inputs) != 2 {
 		t.Fatalf("side fields = %d, want 2", len(inputs))
 	}
-	row := fm.rows[1]
-	if row.height != 8 {
-		t.Fatalf("split row height = %d, want 8 (two stacked fields)", row.height)
+	if fm.rows[1].height != 8 {
+		t.Fatalf("split row height = %d, want 8 (two stacked fields)", fm.rows[1].height)
 	}
 	want := []tview.Primitive{fm.order[0], multi.list, inputs[0], inputs[1]}
 	for i, primitive := range want {
 		if fm.order[i] != primitive {
 			t.Fatalf("tab stop %d is not the expected field", i)
 		}
+	}
+}
+
+// TestFormModalMenuClosesWhenFocusLeavesIt covers a mouse click landing on the
+// field under an open menu: the menu has to let go of the keyboard.
+func TestFormModalMenuClosesWhenFocusLeavesIt(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	picker := fm.AddPicker("Status", []string{"Todo", "Doing"}, 0, nil)
+	other := fm.AddInput("Title", "")
+	fm.Show("form_test")
+
+	capture := fm.frame.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	if !picker.IsOpen() {
+		t.Fatal("Enter did not open the menu")
+	}
+
+	app.app.SetFocus(other)
+
+	if picker.IsOpen() {
+		t.Fatal("the menu stayed open after focus moved to another field")
+	}
+	capture(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
+	if fm.openPicker != nil {
+		t.Fatal("keys are still routed into the menu")
 	}
 }

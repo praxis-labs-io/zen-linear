@@ -138,6 +138,10 @@ type App struct {
 	workflowStates []linearapi.WorkflowState
 	teamCycles     []linearapi.Cycle
 	teamLabels     []linearapi.IssueLabel
+	// metadataTeamID names the team the five caches above were filled for.
+	// They follow the navigation tree, which is not always the team of the
+	// issue a modal is working on.
+	metadataTeamID string
 
 	// Loading state
 	isLoading                      bool
@@ -390,6 +394,7 @@ func (a *App) resetCachedState() {
 	a.workflowStates = nil
 	a.teamCycles = nil
 	a.teamLabels = nil
+	a.metadataTeamID = ""
 	a.richFilters = IssueFilters{}
 	a.collapsedGroups = make(map[string]bool)
 	a.viewPrefs = nil

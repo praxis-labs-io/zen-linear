@@ -355,11 +355,14 @@ func (f *IssueFormModal) submit() {
 		f.fail(fmt.Errorf("title is required"))
 		return
 	}
+	var estimate *float64
 	if values.estimate != "" {
-		if _, err := parseEstimateInput(values.estimate); err != nil {
+		parsed, err := parseEstimateInput(values.estimate)
+		if err != nil {
 			f.fail(err)
 			return
 		}
+		estimate = &parsed
 	}
 	if values.dueDate != "" {
 		if err := validateLinearDate(values.dueDate); err != nil {
@@ -370,25 +373,21 @@ func (f *IssueFormModal) submit() {
 	f.fm.SetStatus("", false)
 
 	if f.mode == IssueFormEdit {
-		f.submitEdit(values)
+		f.submitEdit(values, estimate)
 		return
 	}
-	f.submitCreate(values)
+	f.submitCreate(values, estimate)
 }
 
-func (f *IssueFormModal) submitEdit(values issueFormValues) {
-	input, changed, err := buildIssueUpdate(f.issueID, f.original, values)
-	if err != nil {
-		f.fail(err)
-		return
-	}
+func (f *IssueFormModal) submitEdit(values issueFormValues, estimate *float64) {
+	input, changed := buildIssueUpdate(f.issueID, f.original, values, estimate)
 	if !changed {
 		f.Hide()
 		f.app.flashStatus("No changes")
 		return
 	}
 	f.begin("Saving...")
-	f.app.runIssueUpdateWithResult(input, fmt.Sprintf("Updated %s", f.identifier), f.finish)
+	f.app.runIssueUpdateWithResult(input, fmt.Sprintf("Updated %s", f.identifier), f.completion())
 }
 
 // begin marks a write in flight: the form stays up, says so, and takes no
@@ -396,6 +395,19 @@ func (f *IssueFormModal) submitEdit(values issueFormValues) {
 func (f *IssueFormModal) begin(message string) {
 	f.saving = true
 	f.fm.SetStatus(message, false)
+}
+
+// completion binds a result handler to this opening of the form. A write the
+// user escaped out of, or one from a form since reopened on another issue,
+// must not close or repaint what is on screen now.
+func (f *IssueFormModal) completion() func(error) {
+	generation := f.openGen
+	return func(err error) {
+		if generation != f.openGen {
+			return
+		}
+		f.finish(err)
+	}
 }
 
 // finish closes the form on a successful write, or hands the reason back to
@@ -415,7 +427,7 @@ func (f *IssueFormModal) fail(err error) {
 	f.fm.SetStatus(err.Error(), true)
 }
 
-func (f *IssueFormModal) submitCreate(values issueFormValues) {
+func (f *IssueFormModal) submitCreate(values issueFormValues, estimate *float64) {
 	if f.teamID == "" {
 		f.fail(fmt.Errorf("please select a team first"))
 		return
@@ -433,24 +445,18 @@ func (f *IssueFormModal) submitCreate(values issueFormValues) {
 		ParentID:           f.parentID,
 		LabelIDs:           values.labelIDs,
 		DueDate:            values.dueDate,
-	}
-	if values.estimate != "" {
-		estimate, err := parseEstimateInput(values.estimate)
-		if err != nil {
-			f.fail(err)
-			return
-		}
-		input.Estimate = &estimate
+		Estimate:           estimate,
 	}
 
 	f.begin("Creating...")
-	f.app.createIssueFromForm(input, f.finish)
+	f.app.createIssueFromForm(input, f.completion())
 }
 
 // buildIssueUpdate turns the difference between the form as opened and the
 // form as submitted into one update. A nil field means no change, an empty
-// string clears.
-func buildIssueUpdate(issueID string, original, current issueFormValues) (linearapi.UpdateIssueInput, bool, error) {
+// string clears. estimate is the submitted text already parsed, nil when the
+// field is empty.
+func buildIssueUpdate(issueID string, original, current issueFormValues, estimate *float64) (linearapi.UpdateIssueInput, bool) {
 	input := linearapi.UpdateIssueInput{ID: issueID}
 	changed := false
 
@@ -491,15 +497,8 @@ func buildIssueUpdate(issueID string, original, current issueFormValues) (linear
 		changed = true
 	}
 	if current.estimate != original.estimate {
-		if current.estimate == "" {
-			input.ClearEstimate = true
-		} else {
-			estimate, err := parseEstimateInput(current.estimate)
-			if err != nil {
-				return linearapi.UpdateIssueInput{}, false, err
-			}
-			input.Estimate = &estimate
-		}
+		input.ClearEstimate = estimate == nil
+		input.Estimate = estimate
 		changed = true
 	}
 	if !reflect.DeepEqual(current.labelIDs, original.labelIDs) {
@@ -508,7 +507,18 @@ func buildIssueUpdate(issueID string, original, current issueFormValues) (linear
 		changed = true
 	}
 
-	return input, changed, nil
+	return input, changed
+}
+
+// warmFor returns the App's cached metadata only when it belongs to the team
+// this form is working on. The caches follow the navigation tree, and editing
+// an issue from another team must not offer that team's ids: Linear rejects a
+// foreign state or label, and accepts a foreign project.
+func warmFor[T any](f *IssueFormModal, cached []T) []T {
+	if f.app.metadataTeamID != f.teamID {
+		return nil
+	}
+	return cached
 }
 
 // loadIssueFormOptions fills a field from cached team data, or fetches it in
@@ -552,19 +562,22 @@ func (f *IssueFormModal) loadStatuses() {
 	fetch := func(teamID string) ([]linearapi.WorkflowState, error) {
 		return f.app.fetchWorkflowStatesFunc(context.Background(), teamID)
 	}
-	loadIssueFormOptions(f, f.app.workflowStates, f.teamID, fetch, func(states []linearapi.WorkflowState) {
+	loadIssueFormOptions(f, warmFor(f, f.app.workflowStates), f.teamID, fetch, func(states []linearapi.WorkflowState) {
 		options := make([]pickerOption, 0, len(states))
 		for _, state := range states {
 			options = append(options, pickerOption{id: state.ID, label: state.Name})
 		}
 		f.setPicker(f.statusField, f.statusSentinel(), options, f.state, f.assignState)
 	}, func() {
-		f.setPicker(f.statusField, "(Failed to load statuses)", nil, f.state, f.assignState)
+		// Reporting the failure as an option would make it selectable, and its
+		// empty id would then be saved as the issue's status.
+		f.setPicker(f.statusField, f.statusSentinel(), nil, f.state, f.assignState)
+		f.fm.SetStatus("Could not load statuses", true)
 	})
 }
 
 func (f *IssueFormModal) loadAssignees() {
-	loadIssueFormOptions(f, f.app.GetTeamUsers(), f.teamID, f.app.FetchTeamUsers, func(users []linearapi.User) {
+	loadIssueFormOptions(f, warmFor(f, f.app.GetTeamUsers()), f.teamID, f.app.FetchTeamUsers, func(users []linearapi.User) {
 		options := make([]pickerOption, 0, len(users))
 		for _, user := range users {
 			label := user.Name
@@ -583,7 +596,7 @@ func (f *IssueFormModal) loadProjects() {
 	fetch := func(teamID string) ([]linearapi.Project, error) {
 		return f.app.fetchProjectsFunc(context.Background(), teamID)
 	}
-	loadIssueFormOptions(f, f.app.teamProjects, f.teamID, fetch, func(projects []linearapi.Project) {
+	loadIssueFormOptions(f, warmFor(f, f.app.teamProjects), f.teamID, fetch, func(projects []linearapi.Project) {
 		options := make([]pickerOption, 0, len(projects))
 		for _, project := range projects {
 			options = append(options, pickerOption{id: project.ID, label: project.Name})
@@ -595,7 +608,7 @@ func (f *IssueFormModal) loadProjects() {
 }
 
 func (f *IssueFormModal) loadCycles() {
-	loadIssueFormOptions(f, f.app.GetTeamCycles(), f.teamID, f.app.FetchTeamCycles, func(cycles []linearapi.Cycle) {
+	loadIssueFormOptions(f, warmFor(f, f.app.GetTeamCycles()), f.teamID, f.app.FetchTeamCycles, func(cycles []linearapi.Cycle) {
 		options := make([]pickerOption, 0, len(cycles))
 		for _, cycle := range cycles {
 			label := cycle.DisplayName()
@@ -622,7 +635,7 @@ func (f *IssueFormModal) loadLabels() {
 	fetch := func(teamID string) ([]linearapi.IssueLabel, error) {
 		return f.app.fetchIssueLabelsFunc(context.Background(), teamID)
 	}
-	loadIssueFormOptions(f, f.app.teamLabels, f.teamID, fetch, func(labels []linearapi.IssueLabel) {
+	loadIssueFormOptions(f, warmFor(f, f.app.teamLabels), f.teamID, fetch, func(labels []linearapi.IssueLabel) {
 		items := make([]MultiSelectItem, 0, len(labels))
 		for _, label := range labels {
 			items = append(items, MultiSelectItem{ID: label.ID, Label: label.Name})
@@ -647,7 +660,9 @@ func (f *IssueFormModal) loadMilestones(projectID string) {
 		return
 	}
 
-	f.fm.SetPickerOptions(f.milestoneField, []string{"Loading..."}, nil)
+	// Keep the current value on screen while the fetch runs. A "Loading..."
+	// row would be selectable and would save as no milestone.
+	f.setPicker(f.milestoneField, "No milestone", nil, f.milestone, f.assignMilestone)
 	go func() {
 		milestones, err := f.app.fetchMilestonesFunc(context.Background(), projectID)
 		f.app.QueueUpdateDraw(func() {
@@ -688,8 +703,12 @@ func labelIDs(labels []linearapi.IssueLabel) []string {
 	return ids
 }
 
-// Hide closes the form.
-func (f *IssueFormModal) Hide() { f.fm.Hide("issue_form") }
+// Hide closes the form, and retires this opening so a write or a fetch still
+// in flight cannot write into the next one.
+func (f *IssueFormModal) Hide() {
+	f.openGen++
+	f.fm.Hide("issue_form")
+}
 
 // Focus returns keyboard focus to the form, for when an overlay closes.
 func (f *IssueFormModal) Focus() { f.fm.Focus() }

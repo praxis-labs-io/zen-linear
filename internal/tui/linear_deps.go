@@ -31,6 +31,7 @@ type linearDeps struct {
 	fetchIssueLabelsFunc    func(context.Context, string) ([]linearapi.IssueLabel, error)
 	fetchMilestonesFunc     func(context.Context, string) ([]linearapi.ProjectMilestone, error)
 	fetchCyclesFunc         func(context.Context, string) ([]linearapi.Cycle, error)
+	fetchUsersFunc          func(context.Context, string) ([]linearapi.User, error)
 	fetchCurrentUserFunc    func(context.Context) (linearapi.User, error)
 	createFavoriteFunc      func(context.Context, linearapi.FavoriteTarget) (linearapi.Favorite, error)
 	deleteFavoriteFunc      func(context.Context, string) error
@@ -60,6 +61,7 @@ func newLinearDeps(cfg linearapi.ClientConfig, cacheTTL time.Duration) linearDep
 		fetchIssueLabelsFunc:    teamCache.GetIssueLabels,
 		fetchMilestonesFunc:     teamCache.GetProjectMilestones,
 		fetchCyclesFunc:         teamCache.GetCycles,
+		fetchUsersFunc:          teamCache.GetUsers,
 		fetchCurrentUserFunc:    teamCache.GetCurrentUser,
 		createFavoriteFunc:      api.CreateFavorite,
 		deleteFavoriteFunc:      api.DeleteFavorite,

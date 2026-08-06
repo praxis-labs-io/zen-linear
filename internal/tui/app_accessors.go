@@ -53,7 +53,7 @@ func (a *App) GetTeamUsers() []linearapi.User {
 // returns them: the caller runs off the UI thread, and a.teamUsers belongs to
 // the event loop.
 func (a *App) FetchTeamUsers(teamID string) ([]linearapi.User, error) {
-	return a.cache.GetUsers(context.Background(), teamID)
+	return a.fetchUsersFunc(context.Background(), teamID)
 }
 
 // GetTeamCycles returns the cycles for the currently selected team.
@@ -64,7 +64,7 @@ func (a *App) GetTeamCycles() []linearapi.Cycle {
 // FetchTeamCycles fetches cycles for a specific team from the API, in
 // navigation order. Like FetchTeamUsers it only returns them.
 func (a *App) FetchTeamCycles(teamID string) ([]linearapi.Cycle, error) {
-	cycles, err := a.cache.GetCycles(context.Background(), teamID)
+	cycles, err := a.fetchCyclesFunc(context.Background(), teamID)
 	if err != nil {
 		return nil, err
 	}

@@ -31,8 +31,28 @@ func newIssueFormTestApp(t *testing.T) (*App, chan func()) {
 		{ID: "label-bug", Name: "Bug"},
 		{ID: "label-chore", Name: "Chore"},
 	}
+	app.metadataTeamID = "team-1"
+
 	app.fetchMilestonesFunc = func(_ context.Context, projectID string) ([]linearapi.ProjectMilestone, error) {
 		return []linearapi.ProjectMilestone{{ID: "milestone-" + projectID, Name: "Milestone " + projectID}}, nil
+	}
+	// Every fetch is stubbed, including the ones the seeded caches usually
+	// answer: a form opened for another team goes to these, and a test must
+	// never reach the network.
+	app.fetchWorkflowStatesFunc = func(_ context.Context, teamID string) ([]linearapi.WorkflowState, error) {
+		return []linearapi.WorkflowState{{ID: "state-" + teamID, Name: "Todo " + teamID}}, nil
+	}
+	app.fetchProjectsFunc = func(_ context.Context, teamID string) ([]linearapi.Project, error) {
+		return []linearapi.Project{{ID: "project-" + teamID, Name: "Project " + teamID}}, nil
+	}
+	app.fetchUsersFunc = func(_ context.Context, teamID string) ([]linearapi.User, error) {
+		return []linearapi.User{{ID: "user-" + teamID, Name: "User " + teamID}}, nil
+	}
+	app.fetchCyclesFunc = func(_ context.Context, teamID string) ([]linearapi.Cycle, error) {
+		return []linearapi.Cycle{{ID: "cycle-" + teamID, Name: "Cycle " + teamID, Number: 1}}, nil
+	}
+	app.fetchIssueLabelsFunc = func(_ context.Context, teamID string) ([]linearapi.IssueLabel, error) {
+		return []linearapi.IssueLabel{{ID: "label-" + teamID, Name: "Label " + teamID}}, nil
 	}
 
 	pending := make(chan func(), 32)
@@ -605,5 +625,73 @@ func TestIssueFormIgnoresASecondSubmitWhileSaving(t *testing.T) {
 	case extra := <-updates:
 		t.Fatalf("a second submit went out while saving: %+v", extra)
 	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+// TestIssueFormEditFetchesForTheIssuesOwnTeam guards a cross-team edit: the
+// App's warm metadata belongs to whatever the navigation tree has selected,
+// and offering it for another team's issue writes ids Linear refuses.
+func TestIssueFormEditFetchesForTheIssuesOwnTeam(t *testing.T) {
+	app, pending := newIssueFormTestApp(t)
+	states := make(chan string, 4)
+	app.fetchWorkflowStatesFunc = func(_ context.Context, teamID string) ([]linearapi.WorkflowState, error) {
+		states <- teamID
+		return []linearapi.WorkflowState{{ID: "state-other", Name: "Other Todo"}}, nil
+	}
+	labels := make(chan string, 4)
+	app.fetchIssueLabelsFunc = func(_ context.Context, teamID string) ([]linearapi.IssueLabel, error) {
+		labels <- teamID
+		return []linearapi.IssueLabel{{ID: "label-other", Name: "Other"}}, nil
+	}
+
+	issue := editableIssue()
+	issue.TeamID = "team-2" // the nav tree warmed team-1
+	issue.StateID = "state-other"
+	issue.State = "Other Todo"
+	issue.Labels = nil
+	form := showEditForm(t, app, issue)
+
+	if got := <-states; got != "team-2" {
+		t.Fatalf("statuses fetched for %q, want the issue's own team", got)
+	}
+	if got := <-labels; got != "team-2" {
+		t.Fatalf("labels fetched for %q, want the issue's own team", got)
+	}
+	runUpdatesUntil(t, pending, func() bool { return len(form.statusField.options) > 0 })
+
+	for _, option := range form.statusField.options {
+		if option == "Todo" || option == "In Progress" {
+			t.Fatalf("status options = %v, want team-2's, not the cached team-1 ones", form.statusField.options)
+		}
+	}
+}
+
+// TestIssueFormStaleSaveDoesNotCloseAReopenedForm covers escaping out of a
+// slow save and reopening: the first write must not tear down the second form.
+func TestIssueFormStaleSaveDoesNotCloseAReopenedForm(t *testing.T) {
+	app, _ := newIssueFormTestApp(t)
+	form := showEditForm(t, app, editableIssue())
+
+	// The result handler the first save would carry.
+	stale := form.completion()
+
+	form.Hide()
+	second := editableIssue()
+	second.ID = "issue-2"
+	second.Identifier = "ZNL-8"
+	form.Show(IssueFormOptions{Mode: IssueFormEdit, TeamID: second.TeamID, Issue: &second})
+	form.titleField.SetText("Half typed")
+
+	stale(nil)
+	if !app.pages.HasPage("issue_form") {
+		t.Fatal("the earlier save closed the form that replaced it")
+	}
+	if got := form.titleField.GetText(); got != "Half typed" {
+		t.Fatalf("title = %q, want the second form's typing untouched", got)
+	}
+
+	stale(errors.New("rejected"))
+	if got := form.fm.hintView.GetText(true); strings.Contains(got, "rejected") {
+		t.Fatalf("modal status line = %q, want no error from the earlier save", got)
 	}
 }

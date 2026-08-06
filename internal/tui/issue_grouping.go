@@ -228,6 +228,7 @@ func (a *App) preloadTeamMetadata(teamID string) {
 		a.workflowStates = states
 		a.teamCycles = cycles
 		a.teamLabels = labels
+		a.metadataTeamID = teamID
 	})
 }
 
