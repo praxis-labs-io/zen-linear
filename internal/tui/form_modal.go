@@ -47,6 +47,7 @@ type FormModal struct {
 	hintView       *tview.TextView
 	contextView    *tview.TextView
 	contextText    string
+	hintText       string
 	rows           []formRow
 	order          []tview.Primitive
 	buttons        []*tview.Button
@@ -169,7 +170,27 @@ func (fm *FormModal) SetTitle(title string) {
 }
 
 // SetHint sets the dim hint line inside the bottom border.
-func (fm *FormModal) SetHint(hint string) { fm.hintView.SetText(hint) }
+func (fm *FormModal) SetHint(hint string) {
+	fm.hintText = hint
+	fm.hintView.SetTextColor(fm.app.theme.SecondaryText)
+	fm.hintView.SetText(hint)
+}
+
+// SetStatus replaces the hint line with a message about the form itself, so a
+// refused save is answered where the user is looking rather than behind the
+// modal. An empty message puts the hint back.
+func (fm *FormModal) SetStatus(message string, isError bool) {
+	if message == "" {
+		fm.SetHint(fm.hintText)
+		return
+	}
+	color := fm.app.theme.SecondaryText
+	if isError {
+		color = fm.app.theme.StatusCanceled
+	}
+	fm.hintView.SetTextColor(color)
+	fm.hintView.SetText(message)
+}
 
 // SetContext sets the issue line pinned above the fields, so the form names
 // the issue it modifies. An empty string hides the line.
@@ -660,6 +681,7 @@ func (fm *FormModal) Show(pageName string) {
 	fm.scrollTop = 0
 	fm.focusIdx = 0
 	fm.openPicker = nil
+	fm.SetStatus("", false)
 	fm.layout()
 	fm.app.pages.AddPage(pageName, fm.page, true, true)
 	fm.app.pages.SendToFront(pageName)

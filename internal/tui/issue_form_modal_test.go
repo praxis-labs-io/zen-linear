@@ -325,8 +325,8 @@ func TestIssueFormRejectsInvalidInput(t *testing.T) {
 			if !app.pages.HasPage("issue_form") {
 				t.Fatal("form closed on a rejected submit")
 			}
-			if got := app.statusBar.GetText(true); !strings.Contains(got, tc.wantText) {
-				t.Fatalf("status bar = %q, want it to mention %q", got, tc.wantText)
+			if got := form.fm.hintView.GetText(true); !strings.Contains(got, tc.wantText) {
+				t.Fatalf("modal status line = %q, want it to mention %q", got, tc.wantText)
 			}
 		})
 	}
@@ -492,9 +492,9 @@ func TestIssueFormEscapeClosesTheOpenMenuBeforeModal(t *testing.T) {
 	}
 }
 
-// TestIssueFormCreateFailureReopensWithEverythingTyped is the data-loss guard:
-// a rejected create used to take the description with it.
-func TestIssueFormCreateFailureReopensWithEverythingTyped(t *testing.T) {
+// TestIssueFormCreateFailureKeepsTheFormAndTheTyping is the data-loss guard:
+// a refused create used to close the form and take the description with it.
+func TestIssueFormCreateFailureKeepsTheFormAndTheTyping(t *testing.T) {
 	app, pending := newIssueFormTestApp(t)
 	attempted := make(chan linearapi.CreateIssueInput, 2)
 	app.createIssueFunc = func(_ context.Context, input linearapi.CreateIssueInput) (linearapi.Issue, error) {
@@ -518,39 +518,43 @@ func TestIssueFormCreateFailureReopensWithEverythingTyped(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for the create")
 	}
-	runNextUpdate(t, pending) // the failure lands on the UI thread
+	runUpdatesUntil(t, pending, func() bool { return !form.saving })
 
 	if !app.pages.HasPage("issue_form") {
-		t.Fatal("the form did not come back after the create was refused")
+		t.Fatal("the form closed on a refused create")
+	}
+	if got := form.fm.hintView.GetText(true); !strings.Contains(got, "labelIds for incorrect team") {
+		t.Fatalf("modal status line = %q, want the refusal", got)
 	}
 	if got := form.titleField.GetText(); got != "Audit modals" {
-		t.Fatalf("title = %q, want it restored", got)
+		t.Fatalf("title = %q, want it kept", got)
 	}
 	if got := form.descField.GetText(); got != "A long body worth keeping" {
-		t.Fatalf("description = %q, want it restored", got)
+		t.Fatalf("description = %q, want it kept", got)
 	}
 	if form.estimateField.GetText() != "5" || form.dueDateField.GetText() != "2026-12-24" {
-		t.Fatalf("estimate/due date = %q/%q, want them restored", form.estimateField.GetText(), form.dueDateField.GetText())
+		t.Fatalf("estimate/due date = %q/%q, want them kept", form.estimateField.GetText(), form.dueDateField.GetText())
 	}
 	if form.assignee.id != "user-1" {
-		t.Fatalf("assignee = %+v, want it restored", form.assignee)
+		t.Fatalf("assignee = %+v, want it kept", form.assignee)
 	}
 	if got := form.labelsField.SelectedIDs(); len(got) != 1 || got[0] != "label-bug" {
-		t.Fatalf("labels = %v, want them restored", got)
+		t.Fatalf("labels = %v, want them kept", got)
 	}
 }
 
-// TestIssueFormEditFailureKeepsTheDiffAgainstTheIssue checks the retry after a
-// refused update still measures against the server's version, not against the
-// values the user just resubmitted.
-func TestIssueFormEditFailureKeepsTheDiffAgainstTheIssue(t *testing.T) {
+// TestIssueFormEditRetryAfterAFailureStillDiffsAgainstTheIssue: the retry has
+// to measure against the server's version, not against what was resubmitted.
+func TestIssueFormEditRetryAfterAFailureStillDiffsAgainstTheIssue(t *testing.T) {
 	app, pending := newIssueFormTestApp(t)
 	updates := make(chan linearapi.UpdateIssueInput, 4)
-	fail := true
+	results := make(chan error, 4)
+	results <- errors.New("rejected")
+	results <- nil
 	app.updateIssueFunc = func(_ context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
 		updates <- input
-		if fail {
-			return linearapi.Issue{}, errors.New("rejected")
+		if err := <-results; err != nil {
+			return linearapi.Issue{}, err
 		}
 		return linearapi.Issue{ID: input.ID, Identifier: "ZNL-7"}, nil
 	}
@@ -562,15 +566,17 @@ func TestIssueFormEditFailureKeepsTheDiffAgainstTheIssue(t *testing.T) {
 	if first := recvUpdate(t, updates); first.Title == nil || *first.Title != "Renamed" {
 		t.Fatalf("first attempt title = %v, want Renamed", first.Title)
 	}
-	runUpdatesUntil(t, pending, func() bool { return app.pages.HasPage("issue_form") })
+	runUpdatesUntil(t, pending, func() bool { return !form.saving })
 	if !app.pages.HasPage("issue_form") {
-		t.Fatal("the form did not come back after the update was refused")
+		t.Fatal("the form closed on a refused update")
+	}
+	if got := form.fm.hintView.GetText(true); !strings.Contains(got, "rejected") {
+		t.Fatalf("modal status line = %q, want the refusal", got)
 	}
 	if got := form.titleField.GetText(); got != "Renamed" {
-		t.Fatalf("title = %q, want the edit restored", got)
+		t.Fatalf("title = %q, want the edit kept", got)
 	}
 
-	fail = false
 	form.submit()
 
 	retry := recvUpdate(t, updates)
@@ -579,5 +585,25 @@ func TestIssueFormEditFailureKeepsTheDiffAgainstTheIssue(t *testing.T) {
 	}
 	if retry.Description != nil || retry.LabelIDs != nil {
 		t.Fatalf("retry sent untouched fields: description=%v labels=%v", retry.Description, retry.LabelIDs)
+	}
+	runUpdatesUntil(t, pending, func() bool { return !app.pages.HasPage("issue_form") })
+}
+
+// TestIssueFormIgnoresASecondSubmitWhileSaving keeps a slow write from being
+// fired twice.
+func TestIssueFormIgnoresASecondSubmitWhileSaving(t *testing.T) {
+	app, _ := newIssueFormTestApp(t)
+	updates := captureUpdates(app)
+	form := showEditForm(t, app, editableIssue())
+
+	form.titleField.SetText("Renamed")
+	form.submit()
+	form.submit()
+
+	recvUpdate(t, updates)
+	select {
+	case extra := <-updates:
+		t.Fatalf("a second submit went out while saving: %+v", extra)
+	case <-time.After(200 * time.Millisecond):
 	}
 }

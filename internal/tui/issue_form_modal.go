@@ -60,17 +60,6 @@ type pickerOption struct {
 	label string
 }
 
-// issueFormSnapshot is the whole form, enough to put it back on screen exactly
-// as it was submitted.
-type issueFormSnapshot struct {
-	values    issueFormValues
-	state     pickerOption
-	assignee  pickerOption
-	project   pickerOption
-	milestone pickerOption
-	cycle     pickerOption
-}
-
 // IssueFormModal is the full issue form. New Issue opens it blank, Edit Issue
 // opens it prefilled and saves every changed field in one update.
 type IssueFormModal struct {
@@ -105,10 +94,9 @@ type IssueFormModal struct {
 	priority  int
 
 	original issueFormValues
-	// lastOptions and rejected reopen the form as the user left it when a save
-	// comes back refused, so the typing does not go down with the request.
-	lastOptions IssueFormOptions
-	rejected    *issueFormSnapshot
+	// saving is true from submit until the write answers. The form stays up
+	// for that, so a refusal keeps the typing and the caret where they were.
+	saving bool
 	// openGen discards an option fetch from an earlier opening of the form.
 	openGen int
 	// milestoneGen discards a milestone fetch whose project has since changed.
@@ -163,7 +151,6 @@ func (f *IssueFormModal) Show(options IssueFormOptions) {
 	f.mode = options.Mode
 	f.teamID = options.TeamID
 	f.parentID = options.ParentID
-	f.lastOptions = options
 	f.issueID = ""
 	f.identifier = ""
 
@@ -178,15 +165,9 @@ func (f *IssueFormModal) Show(options IssueFormOptions) {
 		}
 	}
 
+	f.saving = false
 	f.reset(options)
-	// The baseline is what the issue holds, taken before a rejected save is
-	// put back, so the diff still measures against the server and not against
-	// the user's own retry.
 	f.original = f.values()
-	if f.rejected != nil {
-		f.restore(*f.rejected)
-		f.rejected = nil
-	}
 
 	logger.Debug("tui.issue_form: showing form mode=%d team_id=%s issue_id=%s", f.mode, f.teamID, f.issueID)
 	f.fm.Show("issue_form")
@@ -197,42 +178,6 @@ func (f *IssueFormModal) Show(options IssueFormOptions) {
 	f.loadCycles()
 	f.loadLabels()
 	f.loadMilestones(f.project.id)
-}
-
-// snapshot captures the form for a retry.
-func (f *IssueFormModal) snapshot() issueFormSnapshot {
-	return issueFormSnapshot{
-		values:    f.values(),
-		state:     f.state,
-		assignee:  f.assignee,
-		project:   f.project,
-		milestone: f.milestone,
-		cycle:     f.cycle,
-	}
-}
-
-// restore puts a snapshot back into the fields.
-func (f *IssueFormModal) restore(snap issueFormSnapshot) {
-	f.titleField.SetText(snap.values.title)
-	f.descField.SetText(snap.values.description, true)
-	f.estimateField.SetText(snap.values.estimate)
-	f.dueDateField.SetText(snap.values.dueDate)
-	f.priority = snap.values.priority
-	f.priorityField.SetCurrentOption(snap.values.priority)
-	f.labelsField.SetItems(nil, snap.values.labelIDs)
-
-	f.setPicker(f.statusField, f.statusSentinel(), nil, snap.state, f.assignState)
-	f.setPicker(f.assigneeField, "Unassigned", nil, snap.assignee, f.assignAssignee)
-	f.setPicker(f.projectField, "No project", nil, snap.project, f.assignProject)
-	f.setPicker(f.milestoneField, "No milestone", nil, snap.milestone, f.assignMilestone)
-	f.setPicker(f.cycleField, "No cycle", nil, snap.cycle, f.assignCycle)
-}
-
-// reopenRejected puts a refused save back on screen with everything the user
-// typed, so the only thing lost is the round trip.
-func (f *IssueFormModal) reopenRejected(snap issueFormSnapshot) {
-	f.rejected = &snap
-	f.Show(f.lastOptions)
 }
 
 // reset points every field and every tracked id at this opening's issue, or
@@ -402,23 +347,27 @@ func (f *IssueFormModal) values() issueFormValues {
 // submit validates the form and routes to the create or the update path. A
 // rejected form stays open with the reason on the status bar.
 func (f *IssueFormModal) submit() {
+	if f.saving {
+		return
+	}
 	values := f.values()
 	if values.title == "" {
-		f.app.updateStatusBarWithError(fmt.Errorf("title is required"))
+		f.fail(fmt.Errorf("title is required"))
 		return
 	}
 	if values.estimate != "" {
 		if _, err := parseEstimateInput(values.estimate); err != nil {
-			f.app.updateStatusBarWithError(err)
+			f.fail(err)
 			return
 		}
 	}
 	if values.dueDate != "" {
 		if err := validateLinearDate(values.dueDate); err != nil {
-			f.app.updateStatusBarWithError(err)
+			f.fail(err)
 			return
 		}
 	}
+	f.fm.SetStatus("", false)
 
 	if f.mode == IssueFormEdit {
 		f.submitEdit(values)
@@ -430,23 +379,45 @@ func (f *IssueFormModal) submit() {
 func (f *IssueFormModal) submitEdit(values issueFormValues) {
 	input, changed, err := buildIssueUpdate(f.issueID, f.original, values)
 	if err != nil {
-		f.app.updateStatusBarWithError(err)
+		f.fail(err)
 		return
 	}
-	snap := f.snapshot()
-	f.Hide()
 	if !changed {
+		f.Hide()
 		f.app.flashStatus("No changes")
 		return
 	}
-	f.app.runIssueUpdateWithFallback(input, fmt.Sprintf("Updated %s", f.identifier), func() {
-		f.reopenRejected(snap)
-	})
+	f.begin("Saving...")
+	f.app.runIssueUpdateWithResult(input, fmt.Sprintf("Updated %s", f.identifier), f.finish)
+}
+
+// begin marks a write in flight: the form stays up, says so, and takes no
+// second submit until the first one answers.
+func (f *IssueFormModal) begin(message string) {
+	f.saving = true
+	f.fm.SetStatus(message, false)
+}
+
+// finish closes the form on a successful write, or hands the reason back to
+// the user with every field still as they left it.
+func (f *IssueFormModal) finish(err error) {
+	f.saving = false
+	if err != nil {
+		f.fail(err)
+		return
+	}
+	f.fm.SetStatus("", false)
+	f.Hide()
+}
+
+// fail reports inside the modal, where the user is looking.
+func (f *IssueFormModal) fail(err error) {
+	f.fm.SetStatus(err.Error(), true)
 }
 
 func (f *IssueFormModal) submitCreate(values issueFormValues) {
 	if f.teamID == "" {
-		f.app.updateStatusBarWithError(fmt.Errorf("please select a team first"))
+		f.fail(fmt.Errorf("please select a team first"))
 		return
 	}
 	input := linearapi.CreateIssueInput{
@@ -466,17 +437,14 @@ func (f *IssueFormModal) submitCreate(values issueFormValues) {
 	if values.estimate != "" {
 		estimate, err := parseEstimateInput(values.estimate)
 		if err != nil {
-			f.app.updateStatusBarWithError(err)
+			f.fail(err)
 			return
 		}
 		input.Estimate = &estimate
 	}
 
-	snap := f.snapshot()
-	f.Hide()
-	f.app.createIssueFromForm(input, func() {
-		f.reopenRejected(snap)
-	})
+	f.begin("Creating...")
+	f.app.createIssueFromForm(input, f.finish)
 }
 
 // buildIssueUpdate turns the difference between the form as opened and the
