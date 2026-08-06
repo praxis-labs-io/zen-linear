@@ -410,21 +410,22 @@ func TestStartupWorkspace(t *testing.T) {
 	}
 }
 
-// TestStartupWorkspaceName verifies the last session's workspace outranks the
-// configured default, and only while restore is on.
-func TestStartupWorkspaceName(t *testing.T) {
+// TestStartupWorkspaceNames verifies the last session's workspace is tried
+// first and only while restore is on, with the configured default kept behind
+// it as the fallback.
+func TestStartupWorkspaceNames(t *testing.T) {
 	tests := []struct {
 		name        string
 		restore     bool
 		configured  string
 		lastSession string
-		want        string
+		want        []string
 	}{
-		{name: "session wins", restore: true, configured: "Acme", lastSession: "Side", want: "Side"},
-		{name: "no session falls back", restore: true, configured: "Acme", lastSession: "", want: "Acme"},
-		{name: "blank session falls back", restore: true, configured: "Acme", lastSession: "   ", want: "Acme"},
-		{name: "restore off ignores session", restore: false, configured: "Acme", lastSession: "Side", want: "Acme"},
-		{name: "nothing configured", restore: true, configured: "", lastSession: "", want: ""},
+		{name: "session first, default behind it", restore: true, configured: "Acme", lastSession: "Side", want: []string{"Side", "Acme"}},
+		{name: "no session leaves the default", restore: true, configured: "Acme", lastSession: "", want: []string{"Acme"}},
+		{name: "blank session leaves the default", restore: true, configured: "Acme", lastSession: "   ", want: []string{"Acme"}},
+		{name: "restore off ignores session", restore: false, configured: "Acme", lastSession: "Side", want: []string{"Acme"}},
+		{name: "nothing configured", restore: true, configured: "", lastSession: "", want: []string{""}},
 	}
 
 	for _, tt := range tests {
@@ -433,10 +434,34 @@ func TestStartupWorkspaceName(t *testing.T) {
 			settings.SessionRestore = tt.restore
 			settings.DefaultWorkspace = tt.configured
 
-			if got := StartupWorkspaceName(settings, tt.lastSession); got != tt.want {
-				t.Errorf("StartupWorkspaceName() = %q, want %q", got, tt.want)
+			got := StartupWorkspaceNames(settings, tt.lastSession)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("StartupWorkspaceNames() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestStartupWorkspaceFallsBackToDefault verifies a saved workspace whose key
+// env var is gone costs the user their configured default, not an unrelated
+// workspace that happens to come first.
+func TestStartupWorkspaceFallsBackToDefault(t *testing.T) {
+	t.Setenv("LINEAR_KEY_FIRST", "k-first")
+	t.Setenv("LINEAR_KEY_DEFAULT", "k-default")
+	workspaces := []Workspace{
+		{Name: "Gamma", APIKeyEnv: "LINEAR_KEY_FIRST"},
+		{Name: "Alpha", APIKeyEnv: "LINEAR_KEY_DEFAULT"},
+		{Name: "Beta", APIKeyEnv: "LINEAR_KEY_UNSET"},
+	}
+
+	settings := DefaultSettings()
+	settings.SessionRestore = true
+	settings.DefaultWorkspace = "Alpha"
+
+	names := StartupWorkspaceNames(settings, "Beta")
+	workspace, ok := StartupWorkspace(workspaces, names...)
+	if !ok || workspace.Name != "Alpha" {
+		t.Fatalf("StartupWorkspace(%v) = %+v, %v; want Alpha, not the first workspace with a key", names, workspace, ok)
 	}
 }
 

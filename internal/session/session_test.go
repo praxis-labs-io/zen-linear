@@ -254,3 +254,69 @@ func TestPathUnderConfigDir(t *testing.T) {
 		t.Fatalf("Path() = %q, want %q", got, want)
 	}
 }
+
+// TestSaveUsesPrivatePermissions verifies the session file is not readable by
+// other local users. It holds the search text and the issues the user was
+// reading, so it follows the credentials store rather than the config file.
+func TestSaveUsesPrivatePermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "session.json")
+
+	if err := Save(path, File{LastWorkspace: "Alpha"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("permissions = %o, want 0600", info.Mode().Perm())
+	}
+}
+
+// TestSaveTightensExistingPermissions verifies a session file left at 0644 by
+// an earlier build is narrowed on the next write. os.WriteFile would have left
+// it wide open forever.
+func TestSaveTightensExistingPermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.json")
+	if err := os.WriteFile(path, []byte(`{"version":1}`), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if err := Save(path, File{LastWorkspace: "Alpha"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("permissions = %o, want 0600", info.Mode().Perm())
+	}
+}
+
+// TestSaveLeavesNoTempFiles verifies the atomic write cleans up after itself,
+// so the config directory does not fill with .session-*.json on every quit.
+func TestSaveLeavesNoTempFiles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.json")
+
+	for range 3 {
+		if err := Save(path, File{LastWorkspace: "Alpha"}); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "session.json" {
+		names := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		t.Fatalf("directory holds %v, want only session.json", names)
+	}
+}

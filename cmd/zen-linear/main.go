@@ -129,8 +129,8 @@ func runTUI() int {
 		// With no explicit key, reopen the last session's workspace, else the
 		// configured default (or the first whose key env var is set); OAuth
 		// credentials remain the fallback.
-		name := config.StartupWorkspaceName(settings, sessionFile.LastWorkspace)
-		if workspace, ok := config.StartupWorkspace(settings.Workspaces, name); ok {
+		names := config.StartupWorkspaceNames(settings, sessionFile.LastWorkspace)
+		if workspace, ok := config.StartupWorkspace(settings.Workspaces, names...); ok {
 			apiKey = workspace.APIKey()
 		}
 	}

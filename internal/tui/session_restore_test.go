@@ -51,6 +51,12 @@ func sessionFavorites() []linearapi.Favorite {
 	}
 }
 
+// startSessionRestore mirrors loadInitialData: the pending session and the
+// fetch seams are snapshotted first, then the resolve runs against them.
+func (a *App) startSessionRestore(ctx context.Context, teams []linearapi.Team, favorites []linearapi.Favorite) bool {
+	return a.applySessionNavigation(ctx, a.consumePendingSession(), teams, favorites, a.teamChildFetchers())
+}
+
 // restoreSession runs a full startup restore against the fixtures and returns
 // whether the restore claimed the startup refresh.
 func restoreSession(t *testing.T, app *App, favorites []linearapi.Favorite) bool {
@@ -59,7 +65,7 @@ func restoreSession(t *testing.T, app *App, favorites []linearapi.Favorite) bool
 	teams := defaultNavTeams()
 	app.rebuildNavigationTree(teams, favorites)
 
-	claimed := app.applySessionNavigation(context.Background(), teams, favorites)
+	claimed := app.startSessionRestore(context.Background(), teams, favorites)
 	if claimed {
 		waitForRefreshCompletion(t, refreshDone)
 	}
@@ -258,6 +264,54 @@ func TestApplySessionNavigationRestoresSearch(t *testing.T) {
 	waitForSearchRows(t, app, 2)
 }
 
+// TestApplySessionNavigationSelectsSavedSearchIssue verifies the Search tab
+// reopens on the issue it was left on. updateIssuesData returns early for this
+// tab, so the selection can only happen once the results land.
+func TestApplySessionNavigationSelectsSavedSearchIssue(t *testing.T) {
+	app, _ := newSessionRestoreTestApp(t, session.State{
+		Nav:     session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
+		Section: sessionSectionSearch,
+		Search:  "login",
+		IssueID: "issue-2",
+	})
+
+	if !restoreSession(t, app, nil) {
+		t.Fatal("applySessionNavigation() = false, want true")
+	}
+	waitForSearchRows(t, app, 2)
+
+	if got := app.selectedIssueID(IssuesSectionSearch); got != "issue-2" {
+		t.Fatalf("selected search issue = %q, want issue-2 (the row the user left on, not the first result)", got)
+	}
+}
+
+// TestApplySessionNavigationSkipsSearchOffTheSearchTab verifies a saved query
+// does not fire a workspace-wide search on launch when the user left on
+// another tab. The query outlives a Tab away from the Search tab, so restoring
+// it unconditionally spends an API call nobody asked for.
+func TestApplySessionNavigationSkipsSearchOffTheSearchTab(t *testing.T) {
+	for _, section := range []string{sessionSectionAll, sessionSectionMy} {
+		t.Run(section, func(t *testing.T) {
+			app, _ := newSessionRestoreTestApp(t, session.State{
+				Nav:     session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
+				Section: section,
+				Search:  "login",
+			})
+
+			if !restoreSession(t, app, nil) {
+				t.Fatal("applySessionNavigation() = false, want true")
+			}
+
+			if got := app.searchInput.GetText(); got != "" {
+				t.Fatalf("search input = %q, want empty: a saved query must not search from the %s tab", got, section)
+			}
+			if app.searchQuery != "" {
+				t.Fatalf("searchQuery = %q, want empty", app.searchQuery)
+			}
+		})
+	}
+}
+
 // TestApplySessionNavigationKeepsNavigationFocus verifies the restore never
 // pulls focus out of the navigation pane, on any tab.
 func TestApplySessionNavigationKeepsNavigationFocus(t *testing.T) {
@@ -320,7 +374,7 @@ func TestApplySessionNavigationIsOneShot(t *testing.T) {
 	if !restoreSession(t, app, nil) {
 		t.Fatal("first applySessionNavigation() = false, want true")
 	}
-	if app.applySessionNavigation(context.Background(), defaultNavTeams(), nil) {
+	if app.startSessionRestore(context.Background(), defaultNavTeams(), nil) {
 		t.Fatal("second applySessionNavigation() = true, want false")
 	}
 }
@@ -330,7 +384,7 @@ func TestApplySessionNavigationIsOneShot(t *testing.T) {
 func TestApplySessionNavigationWithoutPendingState(t *testing.T) {
 	app := newDefaultNavTestApp(config.Config{SessionRestore: true})
 
-	if app.applySessionNavigation(context.Background(), defaultNavTeams(), nil) {
+	if app.startSessionRestore(context.Background(), defaultNavTeams(), nil) {
 		t.Fatal("applySessionNavigation() = true, want false")
 	}
 }

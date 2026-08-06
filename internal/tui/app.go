@@ -124,6 +124,9 @@ type App struct {
 	searchLoading       bool
 	searchErr           error
 	searchReturnSection IssuesSection // tab to return to on Esc from an empty input
+	// pendingSearchIssueID is the restored session's issue, selected once when
+	// the first search results land.
+	pendingSearchIssueID string
 
 	searchDebounceTimer      *time.Timer
 	searchDebounceMu         sync.Mutex
@@ -262,11 +265,15 @@ func (a *App) Run() error {
 
 // loadInitialData fetches user, navigation, and issues in a background goroutine.
 func (a *App) loadInitialData() {
-	// Snapshot the seam and the generation here: applySettings reassigns the
-	// one and resetCachedState bumps the other, both on the UI thread, while
-	// the goroutines below run.
+	// Snapshot the seams and the generation here: applySettings reassigns the
+	// funcs and resetCachedState bumps the generation, both on the UI thread,
+	// while the goroutines below run. consumePendingSession is snapshotted for
+	// the same reason and because a second loadInitialData must not re-apply a
+	// session the first one already claimed.
 	fetchUser := a.fetchCurrentUserFunc
 	generation := a.resetGeneration.Load()
+	pendingSession := a.consumePendingSession()
+	childFetchers := a.teamChildFetchers()
 	go func() {
 		started := time.Now()
 		ctx := context.Background()
@@ -307,7 +314,7 @@ func (a *App) loadInitialData() {
 		// The session restore and the configured default each trigger their
 		// own refresh after applying a selection, and Go short-circuits, so
 		// the default only runs when there was no session to reopen.
-		if !a.applySessionNavigation(ctx, teams, favorites) && !a.applyDefaultNavigation(ctx, teams) {
+		if !a.applySessionNavigation(ctx, pendingSession, teams, favorites, childFetchers) && !a.applyDefaultNavigation(ctx, teams) {
 			// Startup refresh must not steal focus from the navigation pane.
 			a.app.QueueUpdateDraw(func() {
 				a.refreshIssuesWithFocusChange(false)
@@ -421,6 +428,7 @@ func (a *App) resetCachedState() {
 	a.cancelSearchDebounce()
 	a.searchInputFocused = false
 	a.searchReturnSection = IssuesSectionAll
+	a.pendingSearchIssueID = ""
 	a.activeIssuesSection = IssuesSectionAll
 	a.expandedState = make(map[string]bool)
 	// Clearing the models is not enough: an off-screen tab keeps its painted

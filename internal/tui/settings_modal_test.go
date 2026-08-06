@@ -69,3 +69,22 @@ func TestSettingsFormRoundTripsFlags(t *testing.T) {
 		}
 	}
 }
+
+// TestSettingsPickersSpanMultipleRows guards the row breaks between the
+// settings pickers. Consecutive AddPicker calls pack into one row, so dropping
+// an EndRow silently squeezes every picker into a single row and clips the
+// labels and values rather than failing.
+func TestSettingsPickersSpanMultipleRows(t *testing.T) {
+	app := newUXTestApp(t)
+	sm := app.settingsModal
+
+	widest := 0
+	for _, row := range sm.fm.rows {
+		if row.columns > widest {
+			widest = row.columns
+		}
+	}
+	if widest > 3 {
+		t.Fatalf("widest picker row = %d columns, want at most 3: the settings pickers lost a row break and will clip", widest)
+	}
+}

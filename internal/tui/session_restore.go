@@ -19,6 +19,24 @@ type teamChildren struct {
 	loaded   bool
 }
 
+// teamChildFetchers is the trio of fetches a restore needs, taken off the App
+// so the background goroutines never read fields applySettings reassigns on
+// the UI thread.
+type teamChildFetchers struct {
+	projects func(context.Context, string) ([]linearapi.Project, error)
+	states   func(context.Context, string) ([]linearapi.WorkflowState, error)
+	cycles   func(context.Context, string) ([]linearapi.Cycle, error)
+}
+
+// teamChildFetchers snapshots the fetch seams. UI thread only.
+func (a *App) teamChildFetchers() teamChildFetchers {
+	return teamChildFetchers{
+		projects: a.fetchProjectsFunc,
+		states:   a.fetchWorkflowStatesFunc,
+		cycles:   a.fetchCyclesFunc,
+	}
+}
+
 // applySessionNavigation reopens the saved place: filters, tab, navigation
 // selection, focused issue, and search query. It must run off the UI
 // goroutine; UI mutations are queued and the lazy child fetches would block
@@ -27,8 +45,7 @@ type teamChildren struct {
 // Anything it cannot resolve returns false without a status flash, unlike
 // applyDefaultNavigation: a session record is machine state, and warning on
 // every launch after a project is deleted is noise the user cannot act on.
-func (a *App) applySessionNavigation(ctx context.Context, teams []linearapi.Team, favorites []linearapi.Favorite) bool {
-	state := a.consumePendingSession()
+func (a *App) applySessionNavigation(ctx context.Context, state *session.State, teams []linearapi.Team, favorites []linearapi.Favorite, fetchers teamChildFetchers) bool {
 	if state == nil {
 		return false
 	}
@@ -72,7 +89,7 @@ func (a *App) applySessionNavigation(ctx context.Context, teams []linearapi.Team
 
 	children := teamChildren{loaded: true}
 	if navKindNeedsTeamChildren(nav.Kind) {
-		children = a.fetchTeamChildren(ctx, nav.TeamID)
+		children = fetchTeamChildren(ctx, fetchers, nav.TeamID)
 		if !children.loaded || !children.contain(nav) {
 			logger.Debug("tui.session: saved navigation is gone kind=%s team_id=%s", nav.Kind, nav.TeamID)
 			return false
@@ -146,13 +163,21 @@ func (a *App) restoreSessionTeamNode(state session.State, children teamChildren)
 func (a *App) beginSessionRestore(state session.State) {
 	a.richFilters = filtersFromSession(state.Filters)
 	a.activeIssuesSection = sectionFromSession(state.Section)
-	if a.activeIssuesSection == IssuesSectionSearch {
-		// Focus stays on the navigation pane; this only decides where a Tab
-		// into the issues pane lands.
-		a.searchInputFocused = true
-	}
 	a.updateIssuesColumnLayout()
+
+	// Only the Search tab restores its query. The query outlives a Tab away
+	// from the tab, so restoring it unconditionally would fire a workspace-wide
+	// search on every launch for a tab the user is not even on.
+	if a.activeIssuesSection != IssuesSectionSearch {
+		return
+	}
+	// Focus stays on the navigation pane; this only decides where a Tab into
+	// the issues pane lands.
+	a.searchInputFocused = true
 	if state.Search != "" && a.searchInput != nil {
+		// updateIssuesData returns early for this tab, so the saved issue can
+		// only be reselected once the search results themselves land.
+		a.pendingSearchIssueID = state.IssueID
 		// The input's change handler schedules the debounced search, so the
 		// results load without a fetch call here.
 		a.searchInput.SetText(state.Search)
@@ -175,7 +200,7 @@ func (a *App) selectSessionNode(target *tview.TreeNode, state session.State) {
 // before one of its descendants can be selected. The three run together: they
 // are independent, and serially they put three round trips in front of the
 // first issue list on every restore.
-func (a *App) fetchTeamChildren(ctx context.Context, teamID string) teamChildren {
+func fetchTeamChildren(ctx context.Context, fetchers teamChildFetchers, teamID string) teamChildren {
 	var (
 		projects    []linearapi.Project
 		states      []linearapi.WorkflowState
@@ -189,15 +214,15 @@ func (a *App) fetchTeamChildren(ctx context.Context, teamID string) teamChildren
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
-		projects, projectsErr = a.fetchProjectsFunc(ctx, teamID)
+		projects, projectsErr = fetchers.projects(ctx, teamID)
 	}()
 	go func() {
 		defer wg.Done()
-		states, statesErr = a.fetchWorkflowStatesFunc(ctx, teamID)
+		states, statesErr = fetchers.states(ctx, teamID)
 	}()
 	go func() {
 		defer wg.Done()
-		cycles, cyclesErr = a.fetchCyclesFunc(ctx, teamID)
+		cycles, cyclesErr = fetchers.cycles(ctx, teamID)
 	}()
 	wg.Wait()
 

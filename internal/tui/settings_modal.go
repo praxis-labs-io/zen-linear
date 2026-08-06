@@ -274,9 +274,13 @@ func NewSettingsModal(app *App) *SettingsModal {
 	sm.logLevelField = sm.fm.AddPicker("Log level", sm.logLevelOptions, 0, nil)
 	sm.themeField = sm.fm.AddPicker("Theme", sm.themeOptions, 0, nil)
 	sm.densityField = sm.fm.AddPicker("Density", sm.densityOptions, 0, nil)
+	// Consecutive pickers share one row, so each group needs its own break or
+	// all eight pack into a single row and clip their labels and values.
+	sm.fm.EndRow()
 
 	sm.roundedBordersField = sm.fm.AddPicker("Rounded borders", sm.booleanOptions, booleanOptionIndex(false), nil)
 	sm.sessionRestoreField = sm.fm.AddPicker("Restore last session", sm.booleanOptions, booleanOptionIndex(true), nil)
+	sm.fm.EndRow()
 
 	sm.agentProviderField = sm.fm.AddPicker("Agent provider", sm.agentProviderOptions, 0, func(text string, index int) {
 		_ = index
