@@ -17,7 +17,6 @@ var modalDispatchGolden = []string{
 	"picker",
 	"create_issue",
 	"create_comment",
-	"edit_title",
 	"edit_description",
 	"edit_labels",
 	"text_input",
@@ -58,8 +57,6 @@ func openModal(t *testing.T, app *App, page string) {
 		})
 	case "create_comment":
 		app.createCommentModal.Show("issue-1", "ZNL-1", func(issueID, body string) {})
-	case "edit_title":
-		app.editTitleModal.Show("issue-1", "Title", "ZNL-1", func(issueID, title string) {})
 	case "edit_description":
 		app.editDescriptionModal.Show("issue-1", "Body", "ZNL-1", func(issueID, description string) {})
 	case "edit_labels":
@@ -167,7 +164,6 @@ var modalFocusTargets = []struct {
 	{"picker", func(a *App) tview.Primitive { return a.pickerModal.list }},
 	{"create_issue", func(a *App) tview.Primitive { return a.createIssueModal.fm.focusedPrimitive() }},
 	{"create_comment", func(a *App) tview.Primitive { return a.createCommentModal.fm.focusedPrimitive() }},
-	{"edit_title", func(a *App) tview.Primitive { return a.editTitleModal.fm.focusedPrimitive() }},
 	{"edit_description", func(a *App) tview.Primitive { return a.editDescriptionModal.fm.focusedPrimitive() }},
 	{"edit_labels", func(a *App) tview.Primitive { return a.editLabelsModal.list }},
 	{"text_input", func(a *App) tview.Primitive { return a.textInputModal.input }},
@@ -179,7 +175,7 @@ var modalFocusTargets = []struct {
 }
 
 // TestOverlayRestoresFocusToTheModalBeneath covers what the picker's own
-// focus-restore missed: it named create_issue and edit_title, so closing a
+// focus-restore missed: it named only a subset of modals, so closing a
 // picker over any other modal handed focus to a pane instead.
 //
 // The overlay is a picker, which is how this happens for real: one opened

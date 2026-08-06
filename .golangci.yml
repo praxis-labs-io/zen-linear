@@ -34,6 +34,7 @@ linters:
     - revive
     - rowserrcheck
     - unconvert
+    - unparam
     - whitespace
 
   settings:
@@ -47,10 +48,10 @@ linters:
         - fieldalignment  # Too pedantic for this project
 
     gocyclo:
-      min-complexity: 55
+      min-complexity: 40
 
     dupl:
-      threshold: 150
+      threshold: 100
 
     misspell:
       locale: US
@@ -91,11 +92,25 @@ linters:
           - goconst
           - errcheck
           - govet
+          - unparam
 
       # Exclude shadow checking on err
       - text: 'shadow: declaration of "err"'
         linters:
           - govet
+
+      # theme.go's parallel per-theme tables should stay parallel, not be
+      # collapsed to satisfy dupl.
+      - path: internal/tui/theme\.go
+        linters:
+          - dupl
+
+      # Parallel GraphQL wrappers: shurcooL needs a distinct struct and tag per
+      # mutation/query, so these single-field delete/archive/list methods read as
+      # duplicates but cannot share one selection.
+      - path: internal/linearapi/(favorites|teams|metadata|issue_mutations)\.go
+        linters:
+          - dupl
 
 formatters:
   enable:

@@ -121,36 +121,36 @@ func handleToggleFavorite(a *App) {
 
 // addFavorite creates a favorite and folds it into the rendered section.
 func (a *App) addFavorite(label string, target linearapi.FavoriteTarget) {
-	go func() {
-		created, err := a.createFavoriteFunc(context.Background(), target)
-		if err != nil {
-			a.reportFavoriteError(err, "create failed label=%s", label)
-			return
-		}
-		a.QueueUpdateDraw(func() {
+	var created linearapi.Favorite
+	a.runFavoriteAction(
+		func(ctx context.Context) error {
+			var err error
+			created, err = a.createFavoriteFunc(ctx, target)
+			return err
+		},
+		func() {
 			a.favorites = upsertFavorite(a.favorites, created)
 			a.refreshFavoritesSection("")
 			a.flashStatus("Favorited " + label)
-			a.favoritesSettled()
-		})
-	}()
+		},
+		"create failed label=%s", label,
+	)
 }
 
 // removeFavorite deletes a favorite and drops it from the rendered section.
 func (a *App) removeFavorite(favorite linearapi.Favorite) {
 	label := favoriteLabel(favorite)
-	go func() {
-		if err := a.deleteFavoriteFunc(context.Background(), favorite.ID); err != nil {
-			a.reportFavoriteError(err, "delete failed favorite_id=%s", favorite.ID)
-			return
-		}
-		a.QueueUpdateDraw(func() {
+	a.runFavoriteAction(
+		func(ctx context.Context) error {
+			return a.deleteFavoriteFunc(ctx, favorite.ID)
+		},
+		func() {
 			a.favorites = removeFavoriteByID(a.favorites, favorite.ID)
 			a.refreshFavoritesSection("")
 			a.flashStatus("Unfavorited " + label)
-			a.favoritesSettled()
-		})
-	}()
+		},
+		"delete failed favorite_id=%s", favorite.ID,
+	)
 }
 
 // favoriteReorder is the pair of sort-order writes that moves a favorite one
@@ -259,18 +259,16 @@ func (a *App) nestFavorite(node *NavigationNode, out bool) bool {
 		return false
 	}
 
-	go func() {
-		err := a.moveFavoriteFunc(context.Background(), plan.FavoriteID, plan.ParentID, plan.SortOrder)
-		if err != nil {
-			a.reportFavoriteError(err, "move failed favorite_id=%s", plan.FavoriteID)
-			return
-		}
-		a.QueueUpdateDraw(func() {
+	a.runFavoriteAction(
+		func(ctx context.Context) error {
+			return a.moveFavoriteFunc(ctx, plan.FavoriteID, plan.ParentID, plan.SortOrder)
+		},
+		func() {
 			a.favorites = applyFavoriteMove(a.favorites, plan)
 			a.refreshFavoritesSection(plan.FavoriteID)
-			a.favoritesSettled()
-		})
-	}()
+		},
+		"move failed favorite_id=%s", plan.FavoriteID,
+	)
 	return true
 }
 
@@ -343,6 +341,22 @@ func (a *App) moveFavorite(node *NavigationNode, delta int) bool {
 		})
 	}()
 	return true
+}
+
+// runFavoriteAction runs a background favorites write, reporting a failure
+// through reportFavoriteError and otherwise applying onSuccess on the UI thread.
+// favoritesSettled always fires so tests can wait on the goroutine either way.
+func (a *App) runFavoriteAction(write func(context.Context) error, onSuccess func(), errFmt string, errArgs ...interface{}) {
+	go func() {
+		if err := write(context.Background()); err != nil {
+			a.reportFavoriteError(err, errFmt, errArgs...)
+			return
+		}
+		a.QueueUpdateDraw(func() {
+			onSuccess()
+			a.favoritesSettled()
+		})
+	}()
 }
 
 // reportFavoriteError logs a failed favorites mutation and surfaces it.

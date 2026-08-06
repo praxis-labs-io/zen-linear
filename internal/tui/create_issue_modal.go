@@ -141,26 +141,36 @@ func (cm *CreateIssueModal) ShowWithOptions(options CreateIssueModalOptions, onC
 }
 
 // loadUsers fetches team users and populates the assignee dropdown.
-func (cm *CreateIssueModal) loadUsers() {
-	users := cm.app.GetTeamUsers()
-	if len(users) > 0 {
-		cm.populateAssigneeDropdown(users)
+// loadDropdown fills a create-issue dropdown from cached team data, or fetches it
+// in the background — running onFailure on error — when the cache is cold. A
+// method cannot take a type parameter, hence the free function.
+func loadDropdown[T any](
+	cm *CreateIssueModal,
+	cached []T,
+	fetch func(teamID string) ([]T, error),
+	populate func(values []T),
+	onFailure func(),
+) {
+	if len(cached) > 0 {
+		populate(cached)
 		return
 	}
-
-	// Users not loaded yet, fetch them
 	go func() {
-		loadedUsers, err := cm.app.FetchTeamUsers(cm.teamID)
+		loaded, err := fetch(cm.teamID)
 		if err != nil {
-			cm.app.app.QueueUpdateDraw(func() {
-				cm.fm.SetPickerOptions(cm.assigneeField, []string{"Unassigned", "(Failed to load users)"}, nil)
-			})
+			cm.app.app.QueueUpdateDraw(onFailure)
 			return
 		}
 		cm.app.app.QueueUpdateDraw(func() {
-			cm.populateAssigneeDropdown(loadedUsers)
+			populate(loaded)
 		})
 	}()
+}
+
+func (cm *CreateIssueModal) loadUsers() {
+	loadDropdown(cm, cm.app.GetTeamUsers(), cm.app.FetchTeamUsers, cm.populateAssigneeDropdown, func() {
+		cm.fm.SetPickerOptions(cm.assigneeField, []string{"Unassigned", "(Failed to load users)"}, nil)
+	})
 }
 
 // populateAssigneeDropdown fills the assignee dropdown with users.
@@ -189,24 +199,9 @@ func (cm *CreateIssueModal) populateAssigneeDropdown(users []linearapi.User) {
 }
 
 func (cm *CreateIssueModal) loadCycles() {
-	cycles := cm.app.GetTeamCycles()
-	if len(cycles) > 0 {
-		cm.populateCycleDropdown(cycles)
-		return
-	}
-
-	go func() {
-		loadedCycles, err := cm.app.FetchTeamCycles(cm.teamID)
-		if err != nil {
-			cm.app.app.QueueUpdateDraw(func() {
-				cm.fm.SetPickerOptions(cm.cycleField, []string{"No cycle", "(Failed to load cycles)"}, nil)
-			})
-			return
-		}
-		cm.app.app.QueueUpdateDraw(func() {
-			cm.populateCycleDropdown(loadedCycles)
-		})
-	}()
+	loadDropdown(cm, cm.app.GetTeamCycles(), cm.app.FetchTeamCycles, cm.populateCycleDropdown, func() {
+		cm.fm.SetPickerOptions(cm.cycleField, []string{"No cycle", "(Failed to load cycles)"}, nil)
+	})
 }
 
 func (cm *CreateIssueModal) populateCycleDropdown(cycles []linearapi.Cycle) {

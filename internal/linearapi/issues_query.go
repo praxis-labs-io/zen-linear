@@ -26,23 +26,11 @@ func (c *Client) FetchIssuesPage(ctx context.Context, params FetchIssuesParams, 
 	return c.fetchIssuesWithFilterPage(ctx, params, after)
 }
 
-// FetchIssues fetches issues with optional filtering and sorting.
-// When a search term is provided, it uses Linear's searchIssues query which
-// supports searching by identifier, title, description, and comments.
+// FetchIssues fetches every page of issues for params, sorting by priority
+// client-side when requested (the Linear API paginates only by created/updated
+// time). FetchIssuesPage routes each page to the standard issues query, the
+// searchIssues query, or a custom view, depending on params.
 func (c *Client) FetchIssues(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
-	// If search term is provided, use searchIssues query for better identifier matching.
-	searchTerm := strings.TrimSpace(params.Search)
-	if searchTerm != "" {
-		params.Search = searchTerm
-		return c.searchIssues(ctx, params)
-	}
-
-	return c.fetchIssuesWithFilter(ctx, params)
-}
-
-// searchIssues uses Linear's searchIssues query which supports full-text search
-// including identifier, title, description, and comments.
-func (c *Client) searchIssues(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
 	sortByPriority := params.OrderBy == "priority"
 
 	var after *string
@@ -69,7 +57,6 @@ func (c *Client) searchIssues(ctx context.Context, params FetchIssuesParams) ([]
 		after = pageResult.EndCursor
 	}
 
-	// Sort by priority client-side if requested.
 	if sortByPriority {
 		c.sortByPriority(issues)
 	}
@@ -210,45 +197,6 @@ func (c *Client) FetchCustomViewPreferences(ctx context.Context, viewID string) 
 		ViewOrdering:          firstSet(func(l viewPreferencesSelection) graphql.String { return l.ViewOrdering }),
 		ViewOrderingDirection: firstSet(func(l viewPreferencesSelection) graphql.String { return l.ViewOrderingDirection }),
 	}, nil
-}
-
-// fetchIssuesWithFilter fetches issues using the standard issues query with filters.
-func (c *Client) fetchIssuesWithFilter(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
-	// Determine if client-side sorting is needed.
-	// Linear API only supports "createdAt" and "updatedAt" for PaginationOrderBy.
-	// For "priority" sorting, we fetch by updatedAt and sort client-side.
-	sortByPriority := params.OrderBy == "priority"
-
-	var after *string
-	page := 0
-	issues := make([]Issue, 0)
-	for {
-		pageResult, err := c.FetchIssuesPage(ctx, params, after)
-		if err != nil {
-			return nil, err
-		}
-
-		issues = append(issues, pageResult.Issues...)
-		page++
-		if params.OnProgress != nil {
-			params.OnProgress(IssueFetchProgress{
-				Page:    page,
-				Fetched: len(issues),
-			})
-		}
-
-		if !pageResult.HasNext {
-			break
-		}
-		after = pageResult.EndCursor
-	}
-
-	// Sort by priority client-side if requested.
-	if sortByPriority {
-		c.sortByPriority(issues)
-	}
-
-	return issues, nil
 }
 
 // IssueMatchesScope reports whether an issue is inside the scope the params

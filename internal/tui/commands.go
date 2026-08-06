@@ -133,25 +133,33 @@ func handleAskAgent(a *App) {
 	})
 }
 
+// runIssueValueAction runs a synchronous copy/open action on a value drawn from
+// the selected issue. When emptyMsg is set and value is empty it flashes that
+// instead of acting; otherwise it runs action and flashes successMsg or the error.
+func (a *App) runIssueValueAction(value, emptyMsg string, action func(string) error, successMsg string) {
+	if emptyMsg != "" && value == "" {
+		a.flashStatus(emptyMsg)
+		return
+	}
+	if err := action(value); err != nil {
+		a.updateStatusBarWithError(err)
+		return
+	}
+	a.flashStatus(successMsg)
+}
+
 func handleOpenBrowserCommand(a *App) {
 	issue := a.GetSelectedIssue()
 	if issue == nil {
 		a.flashStatus("No issue selected")
 		return
 	}
-	if issue.URL == "" {
-		a.flashStatus(fmt.Sprintf("No URL for %s", issue.Identifier))
-		return
-	}
 	openFn := a.openURLFunc
 	if openFn == nil {
 		openFn = openURL
 	}
-	if err := openFn(issue.URL); err != nil {
-		a.updateStatusBarWithError(err)
-		return
-	}
-	a.flashStatus(fmt.Sprintf("Opened %s: %s", issue.Identifier, issue.URL))
+	a.runIssueValueAction(issue.URL, fmt.Sprintf("No URL for %s", issue.Identifier),
+		openFn, fmt.Sprintf("Opened %s: %s", issue.Identifier, issue.URL))
 }
 
 func handleCopyIssueIDCommand(a *App) {
@@ -164,11 +172,8 @@ func handleCopyIssueIDCommand(a *App) {
 	if copyFn == nil {
 		copyFn = copyToClipboard
 	}
-	if err := copyFn(issue.Identifier); err != nil {
-		a.updateStatusBarWithError(err)
-		return
-	}
-	a.flashStatus(fmt.Sprintf("Copied issue ID: %s", issue.Identifier))
+	a.runIssueValueAction(issue.Identifier, "",
+		copyFn, fmt.Sprintf("Copied issue ID: %s", issue.Identifier))
 }
 
 func handleCopyIssueURLCommand(a *App) {
@@ -177,19 +182,12 @@ func handleCopyIssueURLCommand(a *App) {
 		a.flashStatus("No issue selected")
 		return
 	}
-	if issue.URL == "" {
-		a.flashStatus(fmt.Sprintf("No URL for %s", issue.Identifier))
-		return
-	}
 	copyFn := a.copyToClipboardFunc
 	if copyFn == nil {
 		copyFn = copyToClipboard
 	}
-	if err := copyFn(issue.URL); err != nil {
-		a.updateStatusBarWithError(err)
-		return
-	}
-	a.flashStatus(fmt.Sprintf("Copied issue URL: %s", issue.Identifier))
+	a.runIssueValueAction(issue.URL, fmt.Sprintf("No URL for %s", issue.Identifier),
+		copyFn, fmt.Sprintf("Copied issue URL: %s", issue.Identifier))
 }
 
 func handleOpenGitHubCommand(a *App) {
@@ -223,19 +221,12 @@ func handleCopyBranchCommand(a *App) {
 		a.flashStatus("No issue selected")
 		return
 	}
-	if issue.BranchName == "" {
-		a.flashStatus(fmt.Sprintf("No branch name for %s", issue.Identifier))
-		return
-	}
 	copyFn := a.copyToClipboardFunc
 	if copyFn == nil {
 		copyFn = copyToClipboard
 	}
-	if err := copyFn(issue.BranchName); err != nil {
-		a.updateStatusBarWithError(err)
-		return
-	}
-	a.flashStatus(fmt.Sprintf("Copied branch name: %s", issue.BranchName))
+	a.runIssueValueAction(issue.BranchName, fmt.Sprintf("No branch name for %s", issue.Identifier),
+		copyFn, fmt.Sprintf("Copied branch name: %s", issue.BranchName))
 }
 
 // DefaultCommands returns the default set of commands for the palette.
