@@ -196,10 +196,11 @@ func (fm *FormModal) drawOpenMenu(screen tcell.Screen) {
 	fm.menu.Draw(screen)
 }
 
-// pickerMenuRect places the menu against its field: same left edge and width
-// so the borders line up, on the row right after the field, which is as close
-// as a character grid gets without the two borders merging into one line. It
-// drops up when the screen ends first. The returned rect includes the border.
+// pickerMenuRect places the menu against its field: same left edge and width,
+// and its top border laid over the field's bottom one so the two read as one
+// unit. A grid has no half-step, so the row after the field would leave two
+// border lines with a cell of air between them. It drops up when the screen
+// ends first. The returned rect includes the border.
 func pickerMenuRect(fieldX, fieldY, fieldWidth, fieldHeight, optionCount, screenH int) (x, y, width, height int, fits bool) {
 	rows := optionCount
 	if rows > formPickerMenuRows {
@@ -210,9 +211,9 @@ func pickerMenuRect(fieldX, fieldY, fieldWidth, fieldHeight, optionCount, screen
 		return 0, 0, 0, 0, false
 	}
 
-	y = fieldY + fieldHeight
+	y = fieldY + fieldHeight - 1
 	if y+height > screenH {
-		if above := fieldY - height; above >= 0 {
+		if above := fieldY - height + 1; above >= 0 {
 			y = above
 		} else if height = screenH - y; height < 3 {
 			return 0, 0, 0, 0, false

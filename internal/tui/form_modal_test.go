@@ -324,9 +324,9 @@ func TestPickerMenuRectPlacesTheMenuAgainstItsField(t *testing.T) {
 		wantY, wantHeight        int
 		wantFits                 bool
 	}{
-		{name: "below the field", fieldY: 4, options: 3, screenH: 40, wantY: 7, wantHeight: 5, wantFits: true},
-		{name: "capped at eight rows", fieldY: 4, options: 40, screenH: 40, wantY: 7, wantHeight: 10, wantFits: true},
-		{name: "drops up with no room below", fieldY: 25, options: 40, screenH: 30, wantY: 15, wantHeight: 10, wantFits: true},
+		{name: "over the field's bottom border", fieldY: 4, options: 3, screenH: 40, wantY: 6, wantHeight: 5, wantFits: true},
+		{name: "capped at eight rows", fieldY: 4, options: 40, screenH: 40, wantY: 6, wantHeight: 10, wantFits: true},
+		{name: "drops up with no room below", fieldY: 25, options: 40, screenH: 30, wantY: 16, wantHeight: 10, wantFits: true},
 		{name: "no options", fieldY: 4, options: 0, screenH: 40, wantFits: false},
 	}
 	for _, tc := range cases {
