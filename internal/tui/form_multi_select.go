@@ -17,9 +17,9 @@ type FormMultiSelect struct {
 	placeholder string
 }
 
-// AddMultiSelect appends a multi-select field under a caps label. rows is the
-// preferred height; the row shrinks first when the screen is short.
-func (fm *FormModal) AddMultiSelect(label string, rows int) *FormMultiSelect {
+// newMultiSelect builds a themed toggle list. Placing it is the caller's job:
+// the only one in the form shares its row with other fields.
+func (fm *FormModal) newMultiSelect() *FormMultiSelect {
 	theme := fm.app.theme
 
 	ms := &FormMultiSelect{
@@ -37,7 +37,6 @@ func (fm *FormModal) AddMultiSelect(label string, rows int) *FormMultiSelect {
 	ms.list.SetBackgroundColor(theme.ModalBackground())
 	ms.refresh()
 
-	fm.addFramedRow(label, ms.list, rows, true)
 	fm.multiSelects[ms.list] = ms
 	return ms
 }

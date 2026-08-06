@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // TestFormModalShowResetsFocusToFirstField guards the whole bug class where
@@ -200,7 +201,7 @@ func TestFormModalEndRowBreaksThePack(t *testing.T) {
 func TestFormModalMultiSelectTogglesAndReadsBackSorted(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
-	ms := fm.AddMultiSelect("Labels", 4)
+	ms, _ := fm.AddSplitRow("Labels", 4, []string{"Due date"})
 	fm.AddInput("Title", "")
 	ms.SetItems([]MultiSelectItem{
 		{ID: "label-chore", Label: "Chore"},
@@ -234,7 +235,7 @@ func TestFormModalMultiSelectTogglesAndReadsBackSorted(t *testing.T) {
 func TestFormModalMultiSelectKeepsSelectionAcrossSetItems(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
-	ms := fm.AddMultiSelect("Labels", 4)
+	ms, _ := fm.AddSplitRow("Labels", 4, []string{"Due date"})
 	ms.SetPlaceholder("Loading...")
 	ms.SetItems(nil, []string{"label-bug"})
 
@@ -345,5 +346,32 @@ func TestPickerMenuRectPlacesTheMenuAgainstItsField(t *testing.T) {
 				t.Fatalf("menu y/height = %d/%d, want %d/%d", y, height, tc.wantY, tc.wantHeight)
 			}
 		})
+	}
+}
+
+// TestFormModalSplitRowColumnsTheFields pins the shape the issue form's last
+// row relies on: one row, the list beside the stack, tab running left to
+// right, and a height that clears the taller column.
+func TestFormModalSplitRowColumnsTheFields(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	fm.AddInput("Title", "")
+	multi, inputs := fm.AddSplitRow("Labels", 5, []string{"Due date", "Estimate"})
+
+	if len(fm.rows) != 2 {
+		t.Fatalf("rows = %d, want the input row and one split row", len(fm.rows))
+	}
+	if len(inputs) != 2 {
+		t.Fatalf("side fields = %d, want 2", len(inputs))
+	}
+	row := fm.rows[1]
+	if row.height != 8 {
+		t.Fatalf("split row height = %d, want 8 (two stacked fields)", row.height)
+	}
+	want := []tview.Primitive{fm.order[0], multi.list, inputs[0], inputs[1]}
+	for i, primitive := range want {
+		if fm.order[i] != primitive {
+			t.Fatalf("tab stop %d is not the expected field", i)
+		}
 	}
 }

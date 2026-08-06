@@ -12,6 +12,9 @@ const (
 	formModalScreenHMargin   = 4
 	formModalScreenWMargin   = 8
 	formTextAreaMinRows      = 3
+	// formFieldRows is what one single-line field costs: its caps label plus
+	// the framed input.
+	formFieldRows = 4
 )
 
 // FormButton is one action in a FormModal's button row.
@@ -240,14 +243,20 @@ func (fm *FormModal) SetOnCancel(fn func()) { fm.onCancel = fn }
 // SetOnSubmit sets the Ctrl+Enter / Cmd+Enter handler.
 func (fm *FormModal) SetOnSubmit(fn func()) { fm.onSubmit = fn }
 
-// AddInput appends a single-line text field under a caps label.
-func (fm *FormModal) AddInput(label, initial string) *tview.InputField {
+// newInput builds a themed single-line field.
+func (fm *FormModal) newInput(initial string) *tview.InputField {
 	input := tview.NewInputField().
 		SetFieldBackgroundColor(fm.app.theme.ModalBackground()).
 		SetFieldTextColor(fm.app.theme.Foreground).
 		SetFieldWidth(0).
 		SetText(initial)
 	input.SetBackgroundColor(fm.app.theme.ModalBackground())
+	return input
+}
+
+// AddInput appends a single-line text field under a caps label.
+func (fm *FormModal) AddInput(label, initial string) *tview.InputField {
+	input := fm.newInput(initial)
 	fm.addFramedRow(label, input, 1, false)
 	return input
 }
@@ -268,13 +277,7 @@ func (fm *FormModal) AddTextArea(label, initial string, rows int) *tview.TextAre
 // AddPackedInput appends a single-line text field to the packed row instead of
 // giving it a row of its own, so two short fields cost four lines, not eight.
 func (fm *FormModal) AddPackedInput(label, initial string) *tview.InputField {
-	input := tview.NewInputField().
-		SetFieldBackgroundColor(fm.app.theme.ModalBackground()).
-		SetFieldTextColor(fm.app.theme.Foreground).
-		SetFieldWidth(0).
-		SetText(initial)
-	input.SetBackgroundColor(fm.app.theme.ModalBackground())
-
+	input := fm.newInput(initial)
 	rowIdx := fm.packField(label, input)
 	fm.registerFocusable(input, rowIdx)
 	return input
@@ -396,28 +399,37 @@ func staticRowContainer(view *tview.TextView, theme Theme) *tview.Flex {
 	return container
 }
 
-// addFramedRow builds the caps-label-plus-framed-editor unit shared by text
-// fields and registers the editor in the tab order.
-func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRows int, flexible bool) {
-	fm.pickerRow = nil
+// fieldUnit builds the caps-label-plus-framed-editor pair every field is made
+// of, and returns the container so a caller can stack or column it.
+func (fm *FormModal) fieldUnit(label string, editor tview.Primitive) (container *tview.Flex, labelView *tview.TextView) {
 	theme := fm.app.theme
 
-	labelView := tview.NewTextView()
+	labelView = tview.NewTextView()
 	labelView.SetText(strings.ToUpper(label))
 	labelView.SetTextColor(theme.SecondaryText)
 	labelView.SetBackgroundColor(theme.ModalBackground())
 
-	editorFrame := tview.NewFlex().SetDirection(tview.FlexRow)
-	editorFrame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
-	editorFrame.AddItem(editor, 0, 1, true)
-	editorFrame.SetBackgroundColor(theme.ModalBackground()).
+	frame := tview.NewFlex().SetDirection(tview.FlexRow)
+	frame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
+	frame.AddItem(editor, 0, 1, true)
+	frame.SetBackgroundColor(theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(theme.Border)
 
-	container := tview.NewFlex().SetDirection(tview.FlexRow)
+	container = tview.NewFlex().SetDirection(tview.FlexRow)
 	container.SetBackgroundColor(theme.ModalBackground())
 	container.AddItem(labelView, 1, 0, false)
-	container.AddItem(editorFrame, 0, 1, true)
+	container.AddItem(frame, 0, 1, true)
+
+	fm.frameOf[editor] = frame
+	return container, labelView
+}
+
+// addFramedRow gives one field a row of its own and registers it in the tab
+// order.
+func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRows int, flexible bool) {
+	fm.pickerRow = nil
+	container, labelView := fm.fieldUnit(label, editor)
 
 	row := formRow{
 		container:  container,
@@ -431,8 +443,71 @@ func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRo
 		row.minHeight = row.height
 	}
 	fm.appendRow(row)
-	fm.frameOf[editor] = editorFrame
 	fm.registerFocusable(editor, len(fm.rows)-1)
+}
+
+// AddSplitRow puts a multi-select beside a stack of single-line fields, so
+// three fields cost one row instead of three. Tab runs left to right: the
+// list, then the stack top down.
+func (fm *FormModal) AddSplitRow(label string, rows int, sideLabels []string) (*FormMultiSelect, []*tview.InputField) {
+	fm.pickerRow = nil
+	theme := fm.app.theme
+
+	multi := fm.newMultiSelect()
+	listContainer, labelView := fm.fieldUnit(label, multi.list)
+
+	side := tview.NewFlex().SetDirection(tview.FlexRow)
+	side.SetBackgroundColor(theme.ModalBackground())
+	inputs := make([]*tview.InputField, 0, len(sideLabels))
+	for _, sideLabel := range sideLabels {
+		input := fm.newInput("")
+		container, _ := fm.fieldUnit(sideLabel, input)
+		side.AddItem(container, formFieldRows, 0, true)
+		inputs = append(inputs, input)
+	}
+
+	columns := tview.NewFlex()
+	columns.SetBackgroundColor(theme.ModalBackground())
+	columns.AddItem(listContainer, 0, 1, true)
+	columns.AddItem(nil, 2, 0, false)
+	columns.AddItem(side, 0, 1, false)
+
+	container := tview.NewFlex().SetDirection(tview.FlexRow)
+	container.SetBackgroundColor(theme.ModalBackground())
+	container.AddItem(columns, 0, 1, true)
+
+	// The row is as tall as the taller column, and shrinks only as far as the
+	// stack, which is fixed.
+	height := 1 + rows + 2
+	stack := formFieldRows * len(sideLabels)
+	if stack > height {
+		height = stack
+	}
+	focusables := []tview.Primitive{multi.list}
+	for _, input := range inputs {
+		focusables = append(focusables, input)
+	}
+	fm.appendRow(formRow{
+		container:  container,
+		height:     height,
+		minHeight:  stack,
+		flexible:   height > stack,
+		focusables: focusables,
+		labelView:  labelView,
+	})
+	for _, focusable := range focusables {
+		fm.registerFocusable(focusable, len(fm.rows)-1)
+	}
+	return multi, inputs
+}
+
+// SetPlaceholder dims an example inside an empty field, so the format it wants
+// sits where the value goes instead of crowding the label.
+func (fm *FormModal) SetPlaceholder(input *tview.InputField, text string) {
+	input.SetPlaceholder(text)
+	input.SetPlaceholderStyle(tcell.StyleDefault.
+		Background(fm.app.theme.ModalBackground()).
+		Foreground(fm.app.theme.SecondaryText))
 }
 
 // appendRow adds a row to the rows container at its full height.

@@ -129,11 +129,11 @@ func NewIssueFormModal(app *App) *IssueFormModal {
 	f.cycleField = f.fm.AddPicker("Cycle", []string{"No cycle"}, 0, nil)
 	f.fm.EndRow()
 
-	f.estimateField = f.fm.AddPackedInput("Estimate", "")
-	f.dueDateField = f.fm.AddPackedInput("Due date (YYYY-MM-DD)", "")
-	f.fm.EndRow()
-
-	f.labelsField = f.fm.AddMultiSelect("Labels", 4)
+	var sideFields []*tview.InputField
+	f.labelsField, sideFields = f.fm.AddSplitRow("Labels", 5, []string{"Due date", "Estimate"})
+	f.dueDateField, f.estimateField = sideFields[0], sideFields[1]
+	f.fm.SetPlaceholder(f.dueDateField, "YYYY-MM-DD")
+	f.fm.SetPlaceholder(f.estimateField, "points, e.g. 3")
 
 	f.fm.AddButtons(
 		FormButton{Label: "Create", OnPress: f.submit},
