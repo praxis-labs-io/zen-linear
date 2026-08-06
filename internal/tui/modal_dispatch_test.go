@@ -15,7 +15,7 @@ import (
 var modalDispatchGolden = []string{
 	"confirmation",
 	"picker",
-	"create_issue",
+	"issue_form",
 	"create_comment",
 	"edit_description",
 	"edit_labels",
@@ -52,9 +52,8 @@ func openModal(t *testing.T, app *App, page string) {
 		app.confirmationModal.Show("Delete", "Sure?", "Delete", func() {})
 	case "picker":
 		app.showSortByPicker()
-	case "create_issue":
-		app.createIssueModal.Show("team-1", "", func(title, description, teamID, projectID, assigneeID, cycleID string, priority int) {
-		})
+	case "issue_form":
+		app.issueFormModal.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-1"})
 	case "create_comment":
 		app.createCommentModal.Show("issue-1", "ZNL-1", func(issueID, body string) {})
 	case "edit_description":
@@ -162,7 +161,7 @@ var modalFocusTargets = []struct {
 	want func(*App) tview.Primitive
 }{
 	{"picker", func(a *App) tview.Primitive { return a.pickerModal.list }},
-	{"create_issue", func(a *App) tview.Primitive { return a.createIssueModal.fm.focusedPrimitive() }},
+	{"issue_form", func(a *App) tview.Primitive { return a.issueFormModal.fm.focusedPrimitive() }},
 	{"create_comment", func(a *App) tview.Primitive { return a.createCommentModal.fm.focusedPrimitive() }},
 	{"edit_description", func(a *App) tview.Primitive { return a.editDescriptionModal.fm.focusedPrimitive() }},
 	{"edit_labels", func(a *App) tview.Primitive { return a.editLabelsModal.list }},

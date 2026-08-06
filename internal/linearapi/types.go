@@ -511,15 +511,19 @@ func (f NumberFilter) Empty() bool {
 
 // CreateIssueInput contains input for creating a new issue.
 type CreateIssueInput struct {
-	TeamID      string
-	Title       string
-	Description string
-	ProjectID   string
-	StateID     string
-	CycleID     string
-	AssigneeID  string
-	Priority    int
-	ParentID    string // Parent issue ID (empty for top-level issues)
+	TeamID             string
+	Title              string
+	Description        string
+	ProjectID          string
+	ProjectMilestoneID string
+	StateID            string
+	CycleID            string
+	AssigneeID         string
+	Priority           int
+	ParentID           string   // Parent issue ID (empty for top-level issues)
+	LabelIDs           []string // empty means no labels; create has no "no change" state
+	DueDate            string   // YYYY-MM-DD, empty for unset
+	Estimate           *float64 // pointer because 0 is a legal estimate
 }
 
 // UpdateIssueInput contains input for updating an issue.

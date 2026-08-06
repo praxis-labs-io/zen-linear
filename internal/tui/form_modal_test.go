@@ -116,6 +116,172 @@ func TestFormModalEscClosesOpenDropdownBeforeCanceling(t *testing.T) {
 	}
 }
 
+// TestFormModalArrowsStayWithTheFocusedField keeps navigation on Tab alone.
+// Arrows moving focus is a footgun: it steals the keys a text cursor, an open
+// dropdown, and a list each need.
+func TestFormModalArrowsStayWithTheFocusedField(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	first := fm.AddInput("Title", "")
+	fm.AddTextArea("Body", "", 5)
+	fm.AddPicker("Priority", []string{"Normal", "High"}, 0, nil)
+	fm.AddButtons(FormButton{Label: "OK"})
+	fm.Show("form_test")
+
+	capture := fm.frame.GetInputCapture()
+	for _, key := range []tcell.Key{tcell.KeyDown, tcell.KeyUp, tcell.KeyLeft, tcell.KeyRight} {
+		event := tcell.NewEventKey(key, 0, tcell.ModNone)
+		if got := capture(event); got != event {
+			t.Fatalf("key %v was swallowed by the form, want it passed to the field", key)
+		}
+		if app.app.GetFocus() != first {
+			t.Fatalf("key %v moved focus off the first field", key)
+		}
+	}
+}
+
+// TestFormModalEndRowBreaksThePack guards the layout of a form with more
+// packed fields than fit one row: without EndRow they all pack into one.
+func TestFormModalEndRowBreaksThePack(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	fm.AddPicker("Status", []string{"Todo"}, 0, nil)
+	fm.AddPicker("Assignee", []string{"Unassigned"}, 0, nil)
+	fm.AddPicker("Priority", []string{"Normal"}, 0, nil)
+	fm.EndRow()
+	fm.AddPicker("Project", []string{"No project"}, 0, nil)
+	fm.AddPackedInput("Estimate", "")
+
+	if len(fm.rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(fm.rows))
+	}
+	if fm.rows[0].columns != 3 || fm.rows[1].columns != 2 {
+		t.Fatalf("columns = %d and %d, want 3 and 2", fm.rows[0].columns, fm.rows[1].columns)
+	}
+	if len(fm.order) != 5 {
+		t.Fatalf("tab stops = %d, want 5", len(fm.order))
+	}
+}
+
+// TestFormModalPickerWidthDividesByColumnsNotDropdowns pins the width math for
+// a row that mixes a picker with a packed input.
+func TestFormModalPickerWidthDividesByColumnsNotDropdowns(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	solo := fm.AddPicker("Status", []string{"Todo"}, 0, nil)
+	fm.EndRow()
+	shared := fm.AddPicker("Project", []string{"No project"}, 0, nil)
+	fm.AddPackedInput("Estimate", "")
+
+	fm.layoutPickers(60)
+
+	soloWidth := fm.pickerMeta[solo].fieldWidth
+	sharedWidth := fm.pickerMeta[shared].fieldWidth
+	if sharedWidth >= soloWidth {
+		t.Fatalf("shared picker width = %d, solo = %d; want the shared row split in two", sharedWidth, soloWidth)
+	}
+}
+
+// TestFormModalMultiSelectTogglesAndReadsBackSorted covers the inline
+// multi-select: Space ticks the highlighted row, Tab still leaves the field.
+func TestFormModalMultiSelectTogglesAndReadsBackSorted(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	ms := fm.AddMultiSelect("Labels", 4)
+	fm.AddInput("Title", "")
+	ms.SetItems([]MultiSelectItem{
+		{ID: "label-chore", Label: "Chore"},
+		{ID: "label-bug", Label: "Bug"},
+	}, nil)
+	fm.Show("form_test")
+
+	capture := fm.frame.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if first, _ := ms.list.GetItemText(0); first != "(x) Chore" {
+		t.Fatalf("first row = %q, want it ticked", first)
+	}
+	ms.list.SetCurrentItem(1)
+	capture(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if got := ms.SelectedIDs(); len(got) != 2 || got[0] != "label-bug" || got[1] != "label-chore" {
+		t.Fatalf("SelectedIDs() = %v, want both ids sorted", got)
+	}
+
+	capture(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
+	if got := ms.SelectedIDs(); len(got) != 1 || got[0] != "label-chore" {
+		t.Fatalf("SelectedIDs() = %v, want the second row untoggled", got)
+	}
+	capture(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+	if app.app.GetFocus() == ms.list {
+		t.Fatal("Tab did not leave the multi-select")
+	}
+}
+
+// TestFormModalMultiSelectKeepsSelectionAcrossSetItems covers the async fill:
+// the options arrive after the form has already been told what is ticked.
+func TestFormModalMultiSelectKeepsSelectionAcrossSetItems(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	ms := fm.AddMultiSelect("Labels", 4)
+	ms.SetPlaceholder("Loading...")
+	ms.SetItems(nil, []string{"label-bug"})
+
+	if first, _ := ms.list.GetItemText(0); first != "Loading..." {
+		t.Fatalf("empty list row = %q, want the placeholder", first)
+	}
+	ms.SetItems([]MultiSelectItem{{ID: "label-bug", Label: "Bug"}, {ID: "label-chore", Label: "Chore"}}, []string{"label-bug"})
+
+	if first, _ := ms.list.GetItemText(0); first != "(x) Bug" {
+		t.Fatalf("first row = %q, want the prior selection ticked", first)
+	}
+}
+
+// TestFormModalHiddenRowTakesNoHeight covers the parent line the issue form
+// hides outside sub-issue create.
+func TestFormModalHiddenRowTakesNoHeight(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	fm.AddStatic("Parent: ZNL-1")
+	fm.AddInput("Title", "")
+
+	full := fm.contentHeight(100)
+	fm.SetRowHidden(0, true)
+	if got := fm.contentHeight(100); got != full-1 {
+		t.Fatalf("height with the static row hidden = %d, want %d", got, full-1)
+	}
+	if heights := fm.rowHeights(100); heights[0] != 0 {
+		t.Fatalf("hidden row height = %d, want 0", heights[0])
+	}
+}
+
+// TestFormModalWindowClipsRatherThanDropsTheFocusedRow guards the scroll
+// behavior on a short screen: a field taller than the window used to get zero
+// height and vanish while it held focus.
+func TestFormModalWindowClipsRatherThanDropsTheFocusedRow(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	fm.AddInput("Title", "")
+	fm.AddTextArea("Body", "", 10)
+	fm.AddInput("Footer", "")
+
+	// A window smaller than the textarea row it starts on.
+	heights := fm.rowHeights(100)
+	fm.scrollTop = 1
+	shown := fm.applyRowWindow(heights, 4)
+
+	if shown[1] != 4 {
+		t.Fatalf("focused row height = %d, want the window's 4 lines rather than 0", shown[1])
+	}
+	if shown[0] != 0 || shown[2] != 0 {
+		t.Fatalf("off-window rows = %d and %d, want 0", shown[0], shown[2])
+	}
+	if !fm.scrollBelow {
+		t.Fatal("scrollBelow is false with a clipped row, so no marker would be drawn")
+	}
+	if !fm.scrollAbove {
+		t.Fatal("scrollAbove is false with rows scrolled off the top")
+	}
+}
+
 // TestFormModalHeightFitsContentAndClampsToScreen pins the sizing math: the
 // modal fits its content, and when the screen is short the flexible textarea
 // row shrinks instead of clipping fields off the bottom.

@@ -126,7 +126,7 @@ func (a *App) rebuildModals() {
 	}
 
 	a.pickerModal = NewPickerModal(a)
-	a.createIssueModal = NewCreateIssueModal(a)
+	a.issueFormModal = NewIssueFormModal(a)
 	a.createCommentModal = NewCreateCommentModal(a)
 	a.editDescriptionModal = NewEditDescriptionModal(a)
 	a.editLabelsModal = NewEditLabelsModal(a)

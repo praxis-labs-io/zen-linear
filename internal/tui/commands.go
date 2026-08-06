@@ -752,10 +752,23 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "edit_title",
-			Title:        "Edit issue title",
-			Keywords:     []string{"edit", "title", "rename"},
+			ID:           "edit_issue",
+			Title:        "Edit issue",
+			Keywords:     []string{"edit", "issue", "form", "properties", "update"},
 			ShortcutRune: 'e',
+			Run: func(a *App) {
+				issue := a.GetSelectedIssue()
+				if issue == nil {
+					a.flashStatus("No issue selected")
+					return
+				}
+				a.ShowEditIssueModal()
+			},
+		},
+		{
+			ID:       "edit_title",
+			Title:    "Edit issue title",
+			Keywords: []string{"edit", "title", "rename"},
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
