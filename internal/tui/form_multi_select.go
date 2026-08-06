@@ -31,6 +31,9 @@ func (fm *FormModal) AddMultiSelect(label string, rows int) *FormMultiSelect {
 		SetMainTextStyle(tcell.StyleDefault.Foreground(theme.Foreground).Background(theme.ModalBackground())).
 		SetSelectedStyle(fm.app.listSelectionStyle()).
 		SetHighlightFullLine(true)
+	// The cursor bar is a focus cue, not a selection: unfocused it reads as a
+	// ticked row and competes with the field that does have focus.
+	ms.list.SetSelectedFocusOnly(true)
 	ms.list.SetBackgroundColor(theme.ModalBackground())
 	ms.refresh()
 

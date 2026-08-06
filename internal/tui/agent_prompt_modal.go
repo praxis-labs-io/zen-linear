@@ -12,7 +12,7 @@ import (
 type AgentPromptModal struct {
 	app             *App
 	fm              *FormModal
-	templateField   *tview.DropDown
+	templateField   *FormPicker
 	templateLabels  []string
 	templatePrompts []string
 	promptField     *tview.TextArea

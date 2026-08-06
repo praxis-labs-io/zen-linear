@@ -70,12 +70,12 @@ type IssueFormModal struct {
 	parentRowIdx   int
 	titleField     *tview.InputField
 	descField      *tview.TextArea
-	statusField    *tview.DropDown
-	assigneeField  *tview.DropDown
-	priorityField  *tview.DropDown
-	projectField   *tview.DropDown
-	milestoneField *tview.DropDown
-	cycleField     *tview.DropDown
+	statusField    *FormPicker
+	assigneeField  *FormPicker
+	priorityField  *FormPicker
+	projectField   *FormPicker
+	milestoneField *FormPicker
+	cycleField     *FormPicker
 	estimateField  *tview.InputField
 	dueDateField   *tview.InputField
 	labelsField    *FormMultiSelect
@@ -269,7 +269,7 @@ func (f *IssueFormModal) statusSentinel() string {
 // row and the tracked value and the visible row cannot drift apart. A current
 // value the options can't show is kept as its own row: a slow or failed fetch
 // must not quietly clear a field the issue has.
-func (f *IssueFormModal) setPicker(dd *tview.DropDown, sentinel string, options []pickerOption, current pickerOption, assign func(pickerOption)) {
+func (f *IssueFormModal) setPicker(dd *FormPicker, sentinel string, options []pickerOption, current pickerOption, assign func(pickerOption)) {
 	rows := make([]pickerOption, 0, len(options)+2)
 	if sentinel != "" {
 		rows = append(rows, pickerOption{label: sentinel})

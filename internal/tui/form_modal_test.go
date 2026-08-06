@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 )
 
 // TestFormModalShowResetsFocusToFirstField guards the whole bug class where
@@ -84,35 +83,68 @@ func TestFormModalConsecutivePickersShareARow(t *testing.T) {
 	if h := fm.rows[1].height; h != 4 {
 		t.Fatalf("picker row height = %d, want 4 (label + framed value)", h)
 	}
-	for i, dd := range []tview.Primitive{a, c, p} {
-		if fm.order[1+i] != dd {
+	for i, picker := range []*FormPicker{a, c, p} {
+		if fm.order[1+i] != picker.view {
 			t.Fatalf("tab order position %d is not picker %d", 1+i, i)
 		}
 	}
 }
 
-// TestFormModalEscClosesOpenDropdownBeforeCanceling preserves the old
-// closeOpenDropdown behavior: Esc with an open dropdown closes the dropdown,
-// not the modal.
-func TestFormModalEscClosesOpenDropdownBeforeCanceling(t *testing.T) {
+// TestFormModalEscClosesTheOpenMenuBeforeCanceling: Esc with a menu open
+// closes the menu, not the modal.
+func TestFormModalEscClosesTheOpenMenuBeforeCanceling(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
-	dd := fm.AddPicker("Priority", []string{"Normal", "High"}, 0, nil)
+	picker := fm.AddPicker("Priority", []string{"Normal", "High"}, 0, nil)
 	var canceled bool
 	fm.SetOnCancel(func() { canceled = true })
 	fm.Show("form_test")
 
-	handler := dd.InputHandler()
-	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(p tview.Primitive) { app.app.SetFocus(p) })
-	if !dd.IsOpen() {
-		t.Fatal("dropdown did not open")
+	capture := fm.frame.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	if !picker.IsOpen() {
+		t.Fatal("Enter did not open the menu")
 	}
-	fm.frame.GetInputCapture()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	capture(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 	if canceled {
-		t.Fatal("Esc canceled the modal while a dropdown was open")
+		t.Fatal("Esc canceled the modal while the menu was open")
 	}
-	if dd.IsOpen() {
-		t.Fatal("Esc did not close the open dropdown")
+	if picker.IsOpen() {
+		t.Fatal("Esc did not close the menu")
+	}
+	capture(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	if !canceled {
+		t.Fatal("Esc with no menu open did not cancel the modal")
+	}
+}
+
+// TestFormModalMenuScrollsWithinItsCap covers the reason the form owns the
+// menu: tview's DropDown grows its menu to the option count.
+func TestFormModalMenuScrollsWithinItsCap(t *testing.T) {
+	app := newUXTestApp(t)
+	fm := NewFormModal(app, "Test")
+	options := make([]string, 20)
+	for i := range options {
+		options[i] = string(rune('a' + i))
+	}
+	picker := fm.AddPicker("Project", options, 0, nil)
+	fm.Show("form_test")
+
+	capture := fm.frame.GetInputCapture()
+	capture(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	for i := 0; i < len(options)+5; i++ {
+		capture(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
+	}
+	if got := fm.menu.GetCurrentItem(); got != len(options)-1 {
+		t.Fatalf("menu cursor = %d, want it stopped at the last option %d", got, len(options)-1)
+	}
+	capture(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+
+	if picker.IsOpen() {
+		t.Fatal("Enter did not close the menu")
+	}
+	if index, text := picker.GetCurrentOption(); index != len(options)-1 || text != options[len(options)-1] {
+		t.Fatalf("selection = %d/%q, want the last option", index, text)
 	}
 }
 
@@ -160,25 +192,6 @@ func TestFormModalEndRowBreaksThePack(t *testing.T) {
 	}
 	if len(fm.order) != 5 {
 		t.Fatalf("tab stops = %d, want 5", len(fm.order))
-	}
-}
-
-// TestFormModalPickerWidthDividesByColumnsNotDropdowns pins the width math for
-// a row that mixes a picker with a packed input.
-func TestFormModalPickerWidthDividesByColumnsNotDropdowns(t *testing.T) {
-	app := newUXTestApp(t)
-	fm := NewFormModal(app, "Test")
-	solo := fm.AddPicker("Status", []string{"Todo"}, 0, nil)
-	fm.EndRow()
-	shared := fm.AddPicker("Project", []string{"No project"}, 0, nil)
-	fm.AddPackedInput("Estimate", "")
-
-	fm.layoutPickers(60)
-
-	soloWidth := fm.pickerMeta[solo].fieldWidth
-	sharedWidth := fm.pickerMeta[shared].fieldWidth
-	if sharedWidth >= soloWidth {
-		t.Fatalf("shared picker width = %d, solo = %d; want the shared row split in two", sharedWidth, soloWidth)
 	}
 }
 

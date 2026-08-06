@@ -273,7 +273,7 @@ func TestIssueFormStaleMilestoneLoadIsIgnored(t *testing.T) {
 	runNextUpdate(t, pending)
 	runNextUpdate(t, pending)
 
-	options := form.fm.pickerMeta[form.milestoneField].options
+	options := form.milestoneField.options
 	for _, option := range options {
 		if strings.Contains(option, "project-1") || strings.Contains(option, "project-2") {
 			t.Fatalf("milestone options = %v, want only project-3 milestones", options)
@@ -456,19 +456,22 @@ func TestIssueFormKeepsAStatusTheOptionsCannotShow(t *testing.T) {
 	}
 }
 
-func TestIssueFormEscapeClosesOpenDropdownBeforeModal(t *testing.T) {
+func TestIssueFormEscapeClosesTheOpenMenuBeforeModal(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	form := app.issueFormModal
 	form.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-1"})
-	app.app.SetFocus(form.assigneeField)
-	openDropdownForTest(t, form.assigneeField)
+	app.app.SetFocus(form.assigneeField.view)
+	form.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	if !form.assigneeField.IsOpen() {
+		t.Fatal("Enter did not open the assignee menu")
+	}
 
 	form.HandleKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 
 	if form.assigneeField.IsOpen() {
-		t.Fatal("assignee dropdown is still open after Escape")
+		t.Fatal("assignee menu is still open after Escape")
 	}
 	if !app.pages.HasPage("issue_form") {
-		t.Fatal("issue form closed; Escape should close only the open dropdown")
+		t.Fatal("issue form closed; Escape should close only the open menu")
 	}
 }

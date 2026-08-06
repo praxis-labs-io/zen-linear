@@ -218,20 +218,20 @@ type SettingsModal struct {
 	cacheTTLField        *tview.InputField
 	searchDebounceField  *tview.InputField
 	logFileField         *tview.InputField
-	logLevelField        *tview.DropDown
+	logLevelField        *FormPicker
 	logLevelOptions      []string
-	themeField           *tview.DropDown
+	themeField           *FormPicker
 	themeOptions         []string
 	themeValues          []string
-	densityField         *tview.DropDown
+	densityField         *FormPicker
 	roundedBordersField  *tview.Checkbox
 	densityOptions       []string
 	densityValues        []string
-	agentProviderField   *tview.DropDown
+	agentProviderField   *FormPicker
 	agentProviderOptions []string
-	agentSandboxField    *tview.DropDown
+	agentSandboxField    *FormPicker
 	agentSandboxOptions  []string
-	agentModelField      *tview.DropDown
+	agentModelField      *FormPicker
 	agentModelOptions    []string
 	agentModelValues     []string
 	agentWorkspaceField  *tview.InputField

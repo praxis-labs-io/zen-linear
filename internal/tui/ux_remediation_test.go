@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -337,20 +336,5 @@ func TestAgentOutputModalFailureSetsErrorStatusAndFinalSummary(t *testing.T) {
 	}
 	if !strings.Contains(final, "Check agent provider/model settings") {
 		t.Fatalf("final output = %q, want model/provider guidance", final)
-	}
-}
-
-func openDropdownForTest(t *testing.T, dropdown interface {
-	InputHandler() func(*tcell.EventKey, func(tview.Primitive))
-	IsOpen() bool
-}) {
-	t.Helper()
-	handler := dropdown.InputHandler()
-	if handler == nil {
-		t.Fatal("dropdown input handler is nil")
-	}
-	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
-	if !dropdown.IsOpen() {
-		t.Fatal("dropdown did not open")
 	}
 }
