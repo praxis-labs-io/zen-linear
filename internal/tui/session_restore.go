@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"sync"
 
 	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
@@ -171,11 +172,35 @@ func (a *App) selectSessionNode(target *tview.TreeNode, state session.State) {
 }
 
 // fetchTeamChildren loads the projects, states, and cycles a team node needs
-// before one of its descendants can be selected.
+// before one of its descendants can be selected. The three run together: they
+// are independent, and serially they put three round trips in front of the
+// first issue list on every restore.
 func (a *App) fetchTeamChildren(ctx context.Context, teamID string) teamChildren {
-	projects, projectsErr := a.fetchProjectsFunc(ctx, teamID)
-	states, statesErr := a.fetchWorkflowStatesFunc(ctx, teamID)
-	cycles, cyclesErr := a.fetchCyclesFunc(ctx, teamID)
+	var (
+		projects    []linearapi.Project
+		states      []linearapi.WorkflowState
+		cycles      []linearapi.Cycle
+		projectsErr error
+		statesErr   error
+		cyclesErr   error
+		wg          sync.WaitGroup
+	)
+
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		projects, projectsErr = a.fetchProjectsFunc(ctx, teamID)
+	}()
+	go func() {
+		defer wg.Done()
+		states, statesErr = a.fetchWorkflowStatesFunc(ctx, teamID)
+	}()
+	go func() {
+		defer wg.Done()
+		cycles, cyclesErr = a.fetchCyclesFunc(ctx, teamID)
+	}()
+	wg.Wait()
+
 	if projectsErr != nil || statesErr != nil || cyclesErr != nil {
 		logger.Warning("tui.session: failed to load team children team_id=%s projects_err=%v states_err=%v cycles_err=%v", teamID, projectsErr, statesErr, cyclesErr)
 		return teamChildren{}
