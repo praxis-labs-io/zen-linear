@@ -26,20 +26,11 @@ func (c *Client) FetchIssuesPage(ctx context.Context, params FetchIssuesParams, 
 	return c.fetchIssuesWithFilterPage(ctx, params, after)
 }
 
-// FetchIssues fetches issues with optional filtering and sorting. When a search
-// term is provided, FetchIssuesPage routes to Linear's searchIssues query, which
-// supports searching by identifier, title, description, and comments.
+// FetchIssues fetches every page of issues for params, sorting by priority
+// client-side when requested (the Linear API paginates only by created/updated
+// time). FetchIssuesPage routes each page to the standard issues query, the
+// searchIssues query, or a custom view, depending on params.
 func (c *Client) FetchIssues(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
-	if searchTerm := strings.TrimSpace(params.Search); searchTerm != "" {
-		params.Search = searchTerm
-	}
-	return c.paginateIssues(ctx, params)
-}
-
-// paginateIssues walks every page of the issues query for params, reporting
-// progress as it goes and sorting by priority client-side when requested — the
-// Linear API paginates only by created/updated time.
-func (c *Client) paginateIssues(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
 	sortByPriority := params.OrderBy == "priority"
 
 	var after *string
