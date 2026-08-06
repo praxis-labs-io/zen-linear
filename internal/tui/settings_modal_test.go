@@ -45,3 +45,22 @@ func TestSettingsFormRoundTripPreservesConfig(t *testing.T) {
 		t.Fatalf("keybindings stripped on save: %v", settings.Keybindings)
 	}
 }
+
+// TestSettingsFormRoundTripsSessionRestore verifies the toggle survives a save
+// in both directions rather than reverting to the default.
+func TestSettingsFormRoundTripsSessionRestore(t *testing.T) {
+	for _, want := range []bool{true, false} {
+		app := newUXTestApp(t)
+		app.config.SessionRestore = want
+
+		sm := app.settingsModal
+		sm.Show()
+		settings, err := sm.settingsFromForm()
+		if err != nil {
+			t.Fatalf("settingsFromForm: %v", err)
+		}
+		if settings.SessionRestore != want {
+			t.Errorf("SessionRestore = %v, want %v", settings.SessionRestore, want)
+		}
+	}
+}

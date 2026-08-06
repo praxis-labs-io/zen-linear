@@ -131,6 +131,11 @@ type Config struct {
 	// DefaultWorkspace selects the startup workspace by name. Empty falls
 	// back to the first workspace whose key env var is set.
 	DefaultWorkspace string
+
+	// SessionRestore reopens the last workspace, navigation selection, and
+	// focused issue on startup. When off, DefaultWorkspace, DefaultTeam, and
+	// DefaultProject decide where the app opens.
+	SessionRestore bool
 }
 
 // Workspace describes a switchable Linear workspace. The API key is read from
@@ -167,6 +172,17 @@ func StartupWorkspace(workspaces []Workspace, defaultName string) (Workspace, bo
 		}
 	}
 	return FirstAvailableWorkspace(workspaces)
+}
+
+// StartupWorkspaceName picks the workspace name to open: the last session's
+// when session restore is on, else the configured default. A name whose key
+// env var is gone needs no special case here, since StartupWorkspace falls
+// through to the first workspace with a key.
+func StartupWorkspaceName(settings Settings, lastSession string) string {
+	if settings.SessionRestore && strings.TrimSpace(lastSession) != "" {
+		return lastSession
+	}
+	return settings.DefaultWorkspace
 }
 
 // LoadFromEnv loads configuration from environment variables.

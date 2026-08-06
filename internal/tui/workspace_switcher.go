@@ -75,7 +75,11 @@ func (a *App) switchWorkspace(name string) {
 	}
 
 	logger.Info("tui.workspace: switching workspace name=%s", workspace.Name)
+	// The switch clears every field the snapshot reads, so the outgoing
+	// workspace's place has to go to disk before applySettings runs.
+	a.persistSession()
 	a.activeWorkspaceName = workspace.Name
+	a.markSessionWorkspace()
 	// A workspace key is a personal API key, not an OAuth token, so drop any
 	// bearer scheme and 401 refresh carried from an OAuth session first.
 	a.apiUseBearer = false

@@ -12,6 +12,7 @@ import (
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 	"github.com/zen-linear/zen-linear/internal/logger"
+	"github.com/zen-linear/zen-linear/internal/session"
 )
 
 // App is the main application controller that manages all UI components.
@@ -28,6 +29,11 @@ type App struct {
 	// activeWorkspaceName is the configured workspace the current API key
 	// belongs to; empty for explicit keys and OAuth sessions.
 	activeWorkspaceName string
+
+	// sessionPath is the file the quit flush writes; empty disables the write.
+	sessionPath string
+	// pendingSession is the place to reopen, applied once by loadInitialData.
+	pendingSession *session.State
 
 	// UI components
 	pages                  *tview.Pages
@@ -246,7 +252,12 @@ func (a *App) Run() error {
 	a.loadInitialData()
 
 	// Start the application event loop
-	return a.app.Run()
+	err := a.app.Run()
+	// Every quit path ends here with the event loop stopped, so the snapshot
+	// is settled and no queued update can move it. Recorded on a loop error
+	// too: the user's place is worth keeping whichever way the app came down.
+	a.persistSession()
+	return err
 }
 
 // loadInitialData fetches user, navigation, and issues in a background goroutine.
@@ -293,9 +304,10 @@ func (a *App) loadInitialData() {
 			a.rebuildNavigationTree(teams, favorites)
 		})
 
-		// Default navigation triggers its own refresh after applying the
-		// configured selection.
-		if !a.applyDefaultNavigation(ctx, teams) {
+		// The session restore and the configured default each trigger their
+		// own refresh after applying a selection, and Go short-circuits, so
+		// the default only runs when there was no session to reopen.
+		if !a.applySessionNavigation(ctx, teams, favorites) && !a.applyDefaultNavigation(ctx, teams) {
 			// Startup refresh must not steal focus from the navigation pane.
 			a.app.QueueUpdateDraw(func() {
 				a.refreshIssuesWithFocusChange(false)

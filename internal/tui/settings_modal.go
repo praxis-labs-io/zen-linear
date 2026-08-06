@@ -225,6 +225,7 @@ type SettingsModal struct {
 	themeValues          []string
 	densityField         *FormPicker
 	roundedBordersField  *tview.Checkbox
+	sessionRestoreField  *tview.Checkbox
 	densityOptions       []string
 	densityValues        []string
 	agentProviderField   *FormPicker
@@ -272,6 +273,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 	sm.densityField = sm.fm.AddPicker("Density", sm.densityOptions, 0, nil)
 
 	sm.roundedBordersField = sm.fm.AddCheckbox("Rounded borders", false)
+	sm.sessionRestoreField = sm.fm.AddCheckbox("Restore last session", true)
 
 	sm.agentProviderField = sm.fm.AddPicker("Agent provider", sm.agentProviderOptions, 0, func(text string, index int) {
 		_ = index
@@ -313,6 +315,7 @@ func (sm *SettingsModal) Show() {
 	sm.setThemeSelection(settings.Theme)
 	sm.setDensitySelection(settings.Density)
 	sm.roundedBordersField.SetChecked(settings.RoundedBorders)
+	sm.sessionRestoreField.SetChecked(settings.SessionRestore)
 	sm.setAgentProviderSelection(selectedProvider)
 	sm.setAgentSandboxSelection(settings.AgentSandbox)
 	sm.setAgentModelOptionsForProvider(selectedProvider)
@@ -471,6 +474,7 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		SortBy:         sm.app.config.SortBy,
 		Columns:        sm.app.config.Columns,
 		RoundedBorders: sm.roundedBordersField.IsChecked(),
+		SessionRestore: sm.sessionRestoreField.IsChecked(),
 		AgentProvider:  agentProvider,
 		AgentSandbox:   agentSandbox,
 		AgentModel:     agentModel,
