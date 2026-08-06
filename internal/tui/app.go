@@ -323,6 +323,12 @@ func (a *App) loadCurrentUser(ctx context.Context, fetchUser func(context.Contex
 
 // applySettings updates runtime dependencies to match a new configuration.
 func (a *App) applySettings(newCfg config.Config) {
+	// Rebuilding the modals re-adds their pages, and tview hands focus from an
+	// added page down to whichever pane the layout was built focused on. The
+	// restore has to be last on every exit: resetCachedState moves the active
+	// tab out from under an earlier one.
+	defer a.restoreModalFocus()
+
 	a.config = newCfg
 	a.applyThemeAndDensity()
 
@@ -369,7 +375,6 @@ func (a *App) selectedIssueID(section IssuesSection) string {
 // resetCachedState clears cached user and issue data after config changes.
 func (a *App) resetCachedState() {
 	a.issuesMu.Lock()
-	a.selectedIssue = nil
 	a.issues = nil
 	a.allIssueRows = nil
 	a.allIDToIssue = make(map[string]*linearapi.Issue)
@@ -408,6 +413,9 @@ func (a *App) resetCachedState() {
 			table.Clear()
 		}
 	}
+	// The reset moved the active tab back to All, and the column is still
+	// mounting whichever tab the user was on.
+	a.updateIssuesColumnLayout()
 
 	a.isLoading = false
 	a.pendingRefresh = false
@@ -416,7 +424,9 @@ func (a *App) resetCachedState() {
 	// Bump generation to prevent in-flight refreshes from updating UI.
 	a.refreshGeneration.Add(1)
 	a.resetGeneration.Add(1)
-	a.abandonDetailFetch()
+	// The pane would otherwise keep painting an issue nothing can act on, since
+	// GetSelectedIssue is already nil.
+	a.clearSelectedIssue()
 }
 
 // parseLogLevel converts a string log level to a logger.LogLevel.

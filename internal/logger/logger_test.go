@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -172,6 +173,77 @@ func TestReinitLogger(t *testing.T) {
 	}
 }
 
+// A log path the user cannot write used to take the rest of the session down
+// with it: the old file was already closed, so nothing landed anywhere, not
+// even the report of the failure.
+func TestReinitToAnUnwritablePathKeepsLogging(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	firstPath := filepath.Join(tmpDir, "first.log")
+	if err := Init(firstPath, LevelInfo); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+
+	// A regular file where the new path wants a directory.
+	blocker := filepath.Join(tmpDir, "blocker")
+	if err := os.WriteFile(blocker, nil, 0644); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+
+	if err := Reinit(filepath.Join(blocker, "nested", "app.log"), LevelInfo); err == nil {
+		t.Fatal("Reinit() to an unwritable path returned no error")
+	}
+
+	Info("Still logging")
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	content, err := os.ReadFile(firstPath)
+	if err != nil {
+		t.Fatalf("read first log file: %v", err)
+	}
+	if !strings.Contains(string(content), "INFO: Still logging") {
+		t.Errorf("entries after a failed reinit went nowhere: %q", string(content))
+	}
+}
+
+// A settings save or a workspace switch reinitializes the logger from the UI
+// thread while background fetches are still logging. The race detector is the
+// assertion here.
+func TestReinitWhileOtherGoroutinesLog(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	if err := Init(filepath.Join(tmpDir, "first.log"), LevelDebug); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for writer := 0; writer < 8; writer++ {
+		wg.Add(1)
+		go func(writer int) {
+			defer wg.Done()
+			for entry := 0; entry < 50; entry++ {
+				Debug("writer %d entry %d", writer, entry)
+			}
+		}(writer)
+	}
+
+	for reinit := 0; reinit < 5; reinit++ {
+		path := filepath.Join(tmpDir, fmt.Sprintf("reinit-%d.log", reinit))
+		if err := Reinit(path, LevelDebug); err != nil {
+			t.Errorf("Reinit() error: %v", err)
+		}
+	}
+	wg.Wait()
+
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+}
+
 func TestLoggerDisabled(t *testing.T) {
 	// Reset global state
 	resetLogger()
@@ -263,9 +335,11 @@ func TestLogLevelString(t *testing.T) {
 
 // resetLogger resets the global logger state for testing.
 func resetLogger() {
-	if defaultLogger != nil && defaultLogger.file != nil && !defaultLogger.closed {
-		_ = defaultLogger.file.Close()
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	if defaultLogger != nil {
+		_ = defaultLogger.close()
 	}
 	defaultLogger = nil
-	once = sync.Once{}
 }
