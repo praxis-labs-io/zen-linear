@@ -46,12 +46,14 @@ func TestSettingsFormRoundTripPreservesConfig(t *testing.T) {
 	}
 }
 
-// TestSettingsFormRoundTripsSessionRestore verifies the toggle survives a save
-// in both directions rather than reverting to the default.
-func TestSettingsFormRoundTripsSessionRestore(t *testing.T) {
+// TestSettingsFormRoundTripsFlags verifies both on/off pickers survive a save
+// in both directions rather than reverting to a default. They read their value
+// off a selected index, so an off-by-one reads as the opposite setting.
+func TestSettingsFormRoundTripsFlags(t *testing.T) {
 	for _, want := range []bool{true, false} {
 		app := newUXTestApp(t)
 		app.config.SessionRestore = want
+		app.config.RoundedBorders = want
 
 		sm := app.settingsModal
 		sm.Show()
@@ -61,6 +63,9 @@ func TestSettingsFormRoundTripsSessionRestore(t *testing.T) {
 		}
 		if settings.SessionRestore != want {
 			t.Errorf("SessionRestore = %v, want %v", settings.SessionRestore, want)
+		}
+		if settings.RoundedBorders != want {
+			t.Errorf("RoundedBorders = %v, want %v", settings.RoundedBorders, want)
 		}
 	}
 }
