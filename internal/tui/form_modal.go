@@ -140,14 +140,15 @@ func NewFormModal(app *App, title string) *FormModal {
 		return fm.frame.GetInnerRect()
 	})
 
-	// One menu serves every picker: only one can be open at a time. The
-	// border and the contrasting fill set it apart from the panel it covers.
+	// One menu serves every picker: only one can be open at a time. The border
+	// is what sets it apart; the fill matches the panel, and still has to be
+	// painted or the rows it covers show through.
 	fm.menu = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextStyle(tcell.StyleDefault.Background(app.theme.InputBg).Foreground(app.theme.Foreground)).
+		SetMainTextStyle(tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground)).
 		SetSelectedStyle(tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.InverseTextColor())).
 		SetHighlightFullLine(true)
-	fm.menu.SetBackgroundColor(app.theme.InputBg).
+	fm.menu.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.BorderFocus)
 
