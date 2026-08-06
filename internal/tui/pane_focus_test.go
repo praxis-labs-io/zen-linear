@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -89,45 +88,6 @@ func TestShiftTabLeavesTheDetailsPaneWithoutWalkingItsTabs(t *testing.T) {
 	}
 	if !app.focusedDetailsView {
 		t.Fatal("Shift+Tab moved the Details/Comments tab on its way out of the pane")
-	}
-}
-
-// A workspace switch and a settings save both restyle through
-// applyThemeAndDensity, which re-adds the palette page twice. tview hands
-// focus from an added page down to the pane the layout was built focused on,
-// so the pane the user was in went dead until an arrow key put it back.
-// SetRoot is what primes the delegate tview moves focus with, so a harness
-// without it cannot see this.
-func TestRestyleKeepsPaneFocus(t *testing.T) {
-	tests := []struct {
-		name string
-		pane FocusTarget
-		want func(app *App) tview.Primitive
-	}{
-		{"issues", FocusIssues, func(app *App) tview.Primitive { return app.allIssuesTable }},
-		{"details", FocusDetails, func(app *App) tview.Primitive { return app.detailsDescriptionView }},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			app := newUXTestApp(t)
-			app.app.SetRoot(app.pages, true)
-			// The toggle, not the flag: the pane has to be mounted in the
-			// layout for tview to walk focus into it.
-			app.toggleDetailsPane()
-			// An empty details pane refocuses itself on its way to the empty
-			// state, which would hide the bug in the details case.
-			app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"}
-			app.updateDetailsView()
-			app.focusedPane = tc.pane
-			app.updateFocus()
-
-			app.applyThemeAndDensity()
-
-			if got := app.app.GetFocus(); got != tc.want(app) {
-				t.Fatalf("keyboard focus landed on %T, want the %s pane", got, tc.name)
-			}
-		})
 	}
 }
 

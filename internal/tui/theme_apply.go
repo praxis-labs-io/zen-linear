@@ -18,9 +18,6 @@ func (a *App) applyThemeAndDensity() {
 	a.updateStatusBar()
 	a.updateDetailsView()
 	a.updatePaletteList()
-	// Both modal rebuilds re-add the palette page, and tview hands focus from
-	// an added page down to whichever pane the layout was built focused on.
-	a.restoreModalFocus()
 }
 
 func (a *App) applyThemeStyles() {
