@@ -24,7 +24,7 @@ type modalBinding struct {
 var modalBindings = []modalBinding{
 	{"confirmation", func(a *App) modalController { return a.confirmationModal }},
 	{"picker", func(a *App) modalController { return a.pickerModal }},
-	{"create_issue", func(a *App) modalController { return a.createIssueModal }},
+	{"issue_form", func(a *App) modalController { return a.issueFormModal }},
 	{"create_comment", func(a *App) modalController { return a.createCommentModal }},
 	{"edit_description", func(a *App) modalController { return a.editDescriptionModal }},
 	{"edit_labels", func(a *App) modalController { return a.editLabelsModal }},

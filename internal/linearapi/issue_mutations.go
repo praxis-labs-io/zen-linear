@@ -20,16 +20,9 @@ func priorityValue(p int) (graphql.Int, error) {
 	return graphql.Int(p), nil
 }
 
-// CreateIssue creates a new issue.
-func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue, error) {
-	var mutation struct {
-		IssueCreate struct {
-			Success graphql.Boolean
-			Issue   issueQueryNode
-		} `graphql:"issueCreate(input: $input)"`
-	}
-
-	// Build input object
+// buildIssueCreateInput encodes a create into Linear's input map. The map is a
+// scalar, so nothing type-checks these key names: they are the contract.
+func buildIssueCreateInput(input CreateIssueInput) (IssueCreateInput, error) {
 	issueInput := make(IssueCreateInput)
 	issueInput["teamId"] = graphql.ID(input.TeamID)
 	issueInput["title"] = graphql.String(input.Title)
@@ -38,6 +31,9 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 	}
 	if input.ProjectID != "" {
 		issueInput["projectId"] = graphql.ID(input.ProjectID)
+	}
+	if input.ProjectMilestoneID != "" {
+		issueInput["projectMilestoneId"] = graphql.ID(input.ProjectMilestoneID)
 	}
 	if input.StateID != "" {
 		issueInput["stateId"] = graphql.ID(input.StateID)
@@ -52,20 +48,48 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 	if input.Priority != 0 {
 		priority, err := priorityValue(input.Priority)
 		if err != nil {
-			return Issue{}, fmt.Errorf("create issue: %w", err)
+			return nil, fmt.Errorf("create issue: %w", err)
 		}
 		issueInput["priority"] = priority
 	}
 	if input.ParentID != "" {
 		issueInput["parentId"] = graphql.ID(input.ParentID)
 	}
+	if len(input.LabelIDs) > 0 {
+		ids := make([]graphql.ID, len(input.LabelIDs))
+		for i, id := range input.LabelIDs {
+			ids[i] = graphql.ID(id)
+		}
+		issueInput["labelIds"] = ids
+	}
+	if input.DueDate != "" {
+		issueInput["dueDate"] = graphql.String(input.DueDate)
+	}
+	if input.Estimate != nil {
+		issueInput["estimate"] = graphql.Float(*input.Estimate)
+	}
+	return issueInput, nil
+}
+
+// CreateIssue creates a new issue.
+func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue, error) {
+	var mutation struct {
+		IssueCreate struct {
+			Success graphql.Boolean
+			Issue   issueQueryNode
+		} `graphql:"issueCreate(input: $input)"`
+	}
+
+	issueInput, err := buildIssueCreateInput(input)
+	if err != nil {
+		return Issue{}, err
+	}
 
 	variables := map[string]interface{}{
 		"input": issueInput,
 	}
 
-	err := c.client.mutate(ctx, &mutation, variables)
-	if err != nil {
+	if err := c.client.mutate(ctx, &mutation, variables); err != nil {
 		logger.ErrorWithErr(err, "linearapi.client: CreateIssue failed")
 		return Issue{}, fmt.Errorf("create issue: %w", err)
 	}

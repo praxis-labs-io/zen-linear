@@ -130,3 +130,56 @@ func TestEditDescriptionModalShowResetsFocusToTextArea(t *testing.T) {
 		t.Fatal("Show did not focus the description field")
 	}
 }
+
+// TestEditIssueOwnsEAndShortcutsAreUnique pins the rune reassignment. e opens
+// the full form, edit_title survives in the palette without one, and no two
+// commands share a rune: runCommandShortcut silently takes the first match.
+func TestEditIssueOwnsEAndShortcutsAreUnique(t *testing.T) {
+	app := newUXTestApp(t)
+
+	byRune := make(map[rune]string)
+	for _, cmd := range app.paletteCtrl.commands {
+		if cmd.ShortcutRune == 0 {
+			continue
+		}
+		if other, taken := byRune[cmd.ShortcutRune]; taken {
+			t.Fatalf("commands %q and %q both bind %q", other, cmd.ID, string(cmd.ShortcutRune))
+		}
+		byRune[cmd.ShortcutRune] = cmd.ID
+	}
+
+	if got := byRune['e']; got != "edit_issue" {
+		t.Fatalf("e runs %q, want edit_issue", got)
+	}
+	for _, cmd := range app.paletteCtrl.commands {
+		if cmd.ID == "edit_title" && cmd.ShortcutRune != 0 {
+			t.Fatalf("edit_title still binds %q, want palette only", string(cmd.ShortcutRune))
+		}
+	}
+}
+
+// TestEditIssueCommandOpensThePrefilledForm drives the shortcut the way the
+// key dispatcher does.
+func TestEditIssueCommandOpensThePrefilledForm(t *testing.T) {
+	app := newUXTestApp(t)
+	app.selectedIssue = &linearapi.Issue{
+		ID:         "issue-1",
+		Identifier: "LTUI-1",
+		Title:      "Needs an edit",
+		TeamID:     "team-1",
+	}
+
+	if !app.runCommandShortcut('e') {
+		t.Fatal("e did not run a command")
+	}
+
+	if !app.pages.HasPage("issue_form") {
+		t.Fatal("issue form did not open")
+	}
+	if got := app.issueFormModal.titleField.GetText(); got != "Needs an edit" {
+		t.Fatalf("title field = %q, want the selected issue's title", got)
+	}
+	if app.issueFormModal.fm.title != "Edit Issue" {
+		t.Fatalf("modal title = %q, want Edit Issue", app.issueFormModal.fm.title)
+	}
+}

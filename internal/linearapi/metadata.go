@@ -313,7 +313,10 @@ func (c *Client) ListWorkflowStates(ctx context.Context, teamID string) ([]Workf
 	return states, nil
 }
 
-// ListWorkspaceLabels fetches all workspace-level labels (not scoped to a team).
+// ListWorkspaceLabels fetches every label in the workspace. The connection is
+// not scoped to a team, so each label carries the team it belongs to and the
+// caller has to drop the ones another team owns: Linear rejects a whole
+// mutation with "labelIds for incorrect team" over a single foreign id.
 func (c *Client) ListWorkspaceLabels(ctx context.Context) ([]IssueLabel, error) {
 	var query struct {
 		IssueLabels struct {
@@ -321,6 +324,9 @@ func (c *Client) ListWorkspaceLabels(ctx context.Context) ([]IssueLabel, error) 
 				ID    graphql.String
 				Name  graphql.String
 				Color graphql.String
+				Team  struct {
+					ID graphql.String
+				}
 			}
 		} `graphql:"issueLabels(first: 250)"`
 	}
@@ -334,9 +340,10 @@ func (c *Client) ListWorkspaceLabels(ctx context.Context) ([]IssueLabel, error) 
 	labels := make([]IssueLabel, 0, len(query.IssueLabels.Nodes))
 	for _, node := range query.IssueLabels.Nodes {
 		labels = append(labels, IssueLabel{
-			ID:    string(node.ID),
-			Name:  string(node.Name),
-			Color: string(node.Color),
+			ID:     string(node.ID),
+			Name:   string(node.Name),
+			Color:  string(node.Color),
+			TeamID: string(node.Team.ID),
 		})
 	}
 
@@ -379,8 +386,10 @@ func (c *Client) ListTeamLabels(ctx context.Context, teamID string) ([]IssueLabe
 	return labels, nil
 }
 
-// ListIssueLabels fetches both workspace and team labels, merges them, and returns a sorted list.
-// Labels are de-duplicated by ID, with team labels taking precedence.
+// ListIssueLabels returns the labels an issue on this team can actually carry:
+// the workspace-wide ones plus the team's own, de-duplicated by ID and sorted
+// by name. Another team's labels are dropped, because offering one only ends
+// in Linear rejecting the write.
 func (c *Client) ListIssueLabels(ctx context.Context, teamID string) ([]IssueLabel, error) {
 	// Fetch workspace labels
 	workspaceLabels, err := c.ListWorkspaceLabels(ctx)
@@ -397,6 +406,9 @@ func (c *Client) ListIssueLabels(ctx context.Context, teamID string) ([]IssueLab
 	// Merge and de-duplicate by ID (team labels override workspace labels if same ID)
 	labelMap := make(map[string]IssueLabel)
 	for _, lbl := range workspaceLabels {
+		if lbl.TeamID != "" && lbl.TeamID != teamID {
+			continue
+		}
 		labelMap[lbl.ID] = lbl
 	}
 	for _, lbl := range teamLabels {

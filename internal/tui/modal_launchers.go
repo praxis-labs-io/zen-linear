@@ -9,19 +9,19 @@ import (
 	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
-// ShowCreateIssueModal shows the create issue modal.
+// ShowCreateIssueModal shows the issue form for a new issue.
 func (a *App) ShowCreateIssueModal() {
 	a.showCreateIssueModalWithParent("", nil)
 }
 
-// ShowCreateSubIssueModal shows the create issue modal with a parent issue pre-set.
+// ShowCreateSubIssueModal shows the issue form with a parent issue pre-set.
 func (a *App) ShowCreateSubIssueModal(parentID string) {
 	a.showCreateIssueModalWithParent(parentID, a.issueRefForID(parentID))
 }
 
-// showCreateIssueModalWithParent shows the create issue modal, optionally with a parent.
+// showCreateIssueModalWithParent shows the issue form seeded from whatever the
+// navigation tree has selected, optionally with a parent.
 func (a *App) showCreateIssueModalWithParent(parentID string, parentRef *linearapi.IssueRef) {
-	teamID := a.GetSelectedTeamID()
 	projectID := ""
 	if a.selectedNavigation != nil && a.selectedNavigation.IsProject {
 		projectID = a.selectedNavigation.ID
@@ -31,55 +31,69 @@ func (a *App) showCreateIssueModalWithParent(parentID string, parentRef *lineara
 		cycleID = a.selectedNavigation.CycleID
 	}
 
-	a.createIssueModal.ShowWithOptions(CreateIssueModalOptions{
-		TeamID:    teamID,
-		ProjectID: projectID,
+	a.issueFormModal.Show(IssueFormOptions{
+		Mode:      IssueFormCreate,
+		TeamID:    a.GetSelectedTeamID(),
 		Parent:    parentRef,
+		ParentID:  parentID,
+		ProjectID: projectID,
 		CycleID:   cycleID,
-	}, func(title, description, tID, pID, assigneeID, cID string, priority int) {
-		if title == "" {
-			return
-		}
-		go func() {
-			ctx := context.Background()
-			input := linearapi.CreateIssueInput{
-				TeamID:      tID,
-				Title:       title,
-				Description: description,
-			}
-			if pID != "" {
-				input.ProjectID = pID
-			}
-			if assigneeID != "" {
-				input.AssigneeID = assigneeID
-			}
-			if cID != "" {
-				input.CycleID = cID
-			}
-			if priority > 0 {
-				input.Priority = priority
-			}
-			if parentID != "" {
-				input.ParentID = parentID
-			}
-			issue, err := a.api.CreateIssue(ctx, input)
-			a.QueueUpdateDraw(func() {
-				if err != nil {
-					logger.ErrorWithErr(err, "tui.app: failed to create issue title=%s", title)
-					a.updateStatusBarWithError(err)
-					return
-				}
-				if parentID != "" {
-					logger.Info("tui.app: created sub-issue issue=%s title=%s", issue.Identifier, title)
-					a.flashStatus(fmt.Sprintf("Created sub-issue %s", issue.Identifier))
-				} else {
-					logger.Info("tui.app: created issue issue=%s title=%s", issue.Identifier, title)
-					a.flashStatus(fmt.Sprintf("Created issue %s", issue.Identifier))
-				}
-				a.applyIssueInsert(issue)
-			})
-		}()
 	})
+}
+
+// ShowEditIssueModal shows the issue form prefilled from the selected issue.
+func (a *App) ShowEditIssueModal() {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	parentRef := issue.Parent
+	parentID := ""
+	if parentRef != nil {
+		parentID = parentRef.ID
+	}
+
+	a.issueFormModal.Show(IssueFormOptions{
+		Mode:     IssueFormEdit,
+		TeamID:   issue.TeamID,
+		Issue:    issue,
+		Parent:   parentRef,
+		ParentID: parentID,
+	})
+}
+
+// createIssueFromForm runs the create the issue form assembled and splices the
+// new issue into the list. onDone reports the outcome to the form, which stays
+// up until the write lands so a refusal keeps what was typed.
+func (a *App) createIssueFromForm(input linearapi.CreateIssueInput, onDone func(error)) {
+	createIssue := a.createIssueFunc
+	if createIssue == nil {
+		createIssue = a.api.CreateIssue
+	}
+	go func() {
+		issue, err := createIssue(context.Background(), input)
+		a.QueueUpdateDraw(func() {
+			if err != nil {
+				logger.ErrorWithErr(err, "tui.app: failed to create issue title=%s", input.Title)
+				a.updateStatusBarWithError(err)
+				if onDone != nil {
+					onDone(err)
+				}
+				return
+			}
+			noun := "issue"
+			if input.ParentID != "" {
+				noun = "sub-issue"
+			}
+			logger.Info("tui.app: created %s issue=%s title=%s", noun, issue.Identifier, input.Title)
+			a.flashStatus(fmt.Sprintf("Created %s %s", noun, issue.Identifier))
+			a.applyIssueInsert(issue)
+			if onDone != nil {
+				onDone(nil)
+			}
+		})
+	}()
 }
 
 func (a *App) issueRefForID(issueID string) *linearapi.IssueRef {

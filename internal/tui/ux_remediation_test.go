@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -196,49 +195,6 @@ func TestSettingsModalShowsAndBuildsDefaultNavigationSettings(t *testing.T) {
 	}
 }
 
-func TestCreateIssueModalShowWithOptionsResetsFocusAndShowsParentContext(t *testing.T) {
-	app := newUXTestApp(t)
-	modal := app.createIssueModal
-	app.app.SetFocus(modal.fm.order[len(modal.fm.order)-1])
-
-	parent := &linearapi.IssueRef{
-		ID:         "parent-1",
-		Identifier: "LTUI-1",
-		Title:      "Parent issue",
-	}
-	modal.ShowWithOptions(CreateIssueModalOptions{
-		TeamID: "team-1",
-		Parent: parent,
-	}, func(title, description, teamID, projectID, assigneeID, cycleID string, priority int) {})
-
-	if app.app.GetFocus() != modal.titleField {
-		t.Fatal("Show did not focus the title field")
-	}
-	if modal.fm.title != "New Sub-Issue" {
-		t.Fatalf("modal title = %q, want New Sub-Issue", modal.fm.title)
-	}
-	if got := modal.parentView.GetText(true); !strings.Contains(got, "Parent: LTUI-1 - Parent issue") {
-		t.Fatalf("parent context = %q, want parent identifier and title", got)
-	}
-}
-
-func TestCreateIssueModalEscapeClosesOpenDropdownBeforeModal(t *testing.T) {
-	app := newUXTestApp(t)
-	modal := app.createIssueModal
-	modal.Show("team-1", "", func(title, description, teamID, projectID, assigneeID, cycleID string, priority int) {})
-	app.app.SetFocus(modal.assigneeField)
-	openDropdownForTest(t, modal.assigneeField)
-
-	modal.HandleKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
-
-	if modal.assigneeField.IsOpen() {
-		t.Fatal("assignee dropdown is still open after Escape")
-	}
-	if !app.pages.HasPage("create_issue") {
-		t.Fatal("create issue modal closed; expected Escape to close only the open dropdown")
-	}
-}
-
 func TestEditLabelsModalShowsFocusAndTogglesWithSpaceAndT(t *testing.T) {
 	app := newUXTestApp(t)
 	modal := app.editLabelsModal
@@ -380,20 +336,5 @@ func TestAgentOutputModalFailureSetsErrorStatusAndFinalSummary(t *testing.T) {
 	}
 	if !strings.Contains(final, "Check agent provider/model settings") {
 		t.Fatalf("final output = %q, want model/provider guidance", final)
-	}
-}
-
-func openDropdownForTest(t *testing.T, dropdown interface {
-	InputHandler() func(*tcell.EventKey, func(tview.Primitive))
-	IsOpen() bool
-}) {
-	t.Helper()
-	handler := dropdown.InputHandler()
-	if handler == nil {
-		t.Fatal("dropdown input handler is nil")
-	}
-	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
-	if !dropdown.IsOpen() {
-		t.Fatal("dropdown did not open")
 	}
 }

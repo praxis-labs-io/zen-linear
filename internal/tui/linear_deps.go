@@ -21,13 +21,17 @@ type linearDeps struct {
 	fetchIssueByID          func(context.Context, string) (linearapi.Issue, error)
 	fetchViewPrefsFunc      func(context.Context, string) (*linearapi.ViewPreferencesValues, error)
 	updateIssueFunc         func(context.Context, linearapi.UpdateIssueInput) (linearapi.Issue, error)
+	createIssueFunc         func(context.Context, linearapi.CreateIssueInput) (linearapi.Issue, error)
 	createIssueRelationFunc func(context.Context, linearapi.CreateIssueRelationInput) (linearapi.IssueRelation, error)
 	deleteIssueRelationFunc func(context.Context, string) error
 	subscribeIssueFunc      func(context.Context, string) (linearapi.Issue, error)
 	unsubscribeIssueFunc    func(context.Context, string) (linearapi.Issue, error)
 	fetchProjectsFunc       func(context.Context, string) ([]linearapi.Project, error)
 	fetchWorkflowStatesFunc func(context.Context, string) ([]linearapi.WorkflowState, error)
+	fetchIssueLabelsFunc    func(context.Context, string) ([]linearapi.IssueLabel, error)
+	fetchMilestonesFunc     func(context.Context, string) ([]linearapi.ProjectMilestone, error)
 	fetchCyclesFunc         func(context.Context, string) ([]linearapi.Cycle, error)
+	fetchUsersFunc          func(context.Context, string) ([]linearapi.User, error)
 	fetchCurrentUserFunc    func(context.Context) (linearapi.User, error)
 	createFavoriteFunc      func(context.Context, linearapi.FavoriteTarget) (linearapi.Favorite, error)
 	deleteFavoriteFunc      func(context.Context, string) error
@@ -47,13 +51,17 @@ func newLinearDeps(cfg linearapi.ClientConfig, cacheTTL time.Duration) linearDep
 		fetchIssueByID:          api.FetchIssueByID,
 		fetchViewPrefsFunc:      api.FetchCustomViewPreferences,
 		updateIssueFunc:         api.UpdateIssue,
+		createIssueFunc:         api.CreateIssue,
 		createIssueRelationFunc: api.CreateIssueRelation,
 		deleteIssueRelationFunc: api.DeleteIssueRelation,
 		subscribeIssueFunc:      api.SubscribeToIssue,
 		unsubscribeIssueFunc:    api.UnsubscribeFromIssue,
 		fetchProjectsFunc:       teamCache.GetProjects,
 		fetchWorkflowStatesFunc: teamCache.GetWorkflowStates,
+		fetchIssueLabelsFunc:    teamCache.GetIssueLabels,
+		fetchMilestonesFunc:     teamCache.GetProjectMilestones,
 		fetchCyclesFunc:         teamCache.GetCycles,
+		fetchUsersFunc:          teamCache.GetUsers,
 		fetchCurrentUserFunc:    teamCache.GetCurrentUser,
 		createFavoriteFunc:      api.CreateFavorite,
 		deleteFavoriteFunc:      api.DeleteFavorite,

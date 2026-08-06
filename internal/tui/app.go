@@ -59,7 +59,7 @@ type App struct {
 	paletteModalContent    *tview.Flex
 	paletteCtrl            *PaletteController
 	pickerModal            *PickerModal
-	createIssueModal       *CreateIssueModal
+	issueFormModal         *IssueFormModal
 	createCommentModal     *CreateCommentModal
 	editDescriptionModal   *EditDescriptionModal
 	editLabelsModal        *EditLabelsModal
@@ -137,6 +137,11 @@ type App struct {
 	teamProjects   []linearapi.Project
 	workflowStates []linearapi.WorkflowState
 	teamCycles     []linearapi.Cycle
+	teamLabels     []linearapi.IssueLabel
+	// metadataTeamID names the team the five caches above were filled for.
+	// They follow the navigation tree, which is not always the team of the
+	// issue a modal is working on.
+	metadataTeamID string
 
 	// Loading state
 	isLoading                      bool
@@ -388,6 +393,8 @@ func (a *App) resetCachedState() {
 	a.teamProjects = nil
 	a.workflowStates = nil
 	a.teamCycles = nil
+	a.teamLabels = nil
+	a.metadataTeamID = ""
 	a.richFilters = IssueFilters{}
 	a.collapsedGroups = make(map[string]bool)
 	a.viewPrefs = nil
@@ -479,7 +486,7 @@ func (a *App) buildLayout() {
 
 	// Build picker and create issue modals
 	a.pickerModal = NewPickerModal(a)
-	a.createIssueModal = NewCreateIssueModal(a)
+	a.issueFormModal = NewIssueFormModal(a)
 	a.createCommentModal = NewCreateCommentModal(a)
 	a.editDescriptionModal = NewEditDescriptionModal(a)
 	a.editLabelsModal = NewEditLabelsModal(a)

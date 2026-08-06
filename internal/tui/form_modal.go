@@ -12,6 +12,9 @@ const (
 	formModalScreenHMargin   = 4
 	formModalScreenWMargin   = 8
 	formTextAreaMinRows      = 3
+	// formFieldRows is what one single-line field costs: its caps label plus
+	// the framed input.
+	formFieldRows = 4
 )
 
 // FormButton is one action in a FormModal's button row.
@@ -25,7 +28,9 @@ type formRow struct {
 	container  *tview.Flex
 	height     int
 	minHeight  int
+	columns    int
 	flexible   bool
+	hidden     bool
 	focusables []tview.Primitive
 	labelView  *tview.TextView
 }
@@ -45,33 +50,43 @@ type FormModal struct {
 	hintView       *tview.TextView
 	contextView    *tview.TextView
 	contextText    string
+	hintText       string
 	rows           []formRow
 	order          []tview.Primitive
 	buttons        []*tview.Button
 	frameOf        map[tview.Primitive]*tview.Flex
-	pickerMeta     map[*tview.DropDown]*pickerState
 	checkboxLabels map[*tview.Checkbox]*tview.TextView
+	multiSelects   map[*tview.List]*FormMultiSelect
+	pickers        map[*tview.TextView]*FormPicker
+	openPicker     *FormPicker
+	menu           *tview.List
+	page           *formPage
 	pickerRow      *pickerRowState
 	focusIdx       int
 	scrollTop      int
+	scrollAbove    bool
+	scrollBelow    bool
 	onCancel       func()
 	onSubmit       func()
 }
 
-// pickerRowState tracks the open shared row consecutive pickers pack into.
+// formPage is what the modal adds to Pages: the form, then any open picker
+// menu on top of it. A Flex has no z-order, so the menu cannot be a row.
+type formPage struct {
+	*tview.Flex
+	fm *FormModal
+}
+
+func (p *formPage) Draw(screen tcell.Screen) {
+	p.Flex.Draw(screen)
+	p.fm.drawOpenMenu(screen)
+}
+
+// pickerRowState tracks the open shared row consecutive fields pack into.
 type pickerRowState struct {
 	labels *tview.Flex
 	values *tview.Flex
 	rowIdx int
-	dds    []*tview.DropDown
-}
-
-// pickerState remembers a dropdown's options and layout width so the field
-// and its menu can be sized to the frame (tview sizes both to the longest
-// option by default).
-type pickerState struct {
-	options    []string
-	fieldWidth int
 }
 
 // NewFormModal creates an empty form modal shell with the given border title.
@@ -80,8 +95,9 @@ func NewFormModal(app *App, title string) *FormModal {
 		app:            app,
 		title:          title,
 		frameOf:        make(map[tview.Primitive]*tview.Flex),
-		pickerMeta:     make(map[*tview.DropDown]*pickerState),
 		checkboxLabels: make(map[*tview.Checkbox]*tview.TextView),
+		multiSelects:   make(map[*tview.List]*FormMultiSelect),
+		pickers:        make(map[*tview.TextView]*FormPicker),
 	}
 
 	fm.rowsBox = tview.NewFlex().SetDirection(tview.FlexRow)
@@ -113,9 +129,36 @@ func NewFormModal(app *App, title string) *FormModal {
 	fm.frame.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		return fm.HandleKey(event)
 	})
+	// Rows scroll when the form is taller than the screen, so the border
+	// carries the only cue that there is more form off either end.
+	fm.frame.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		marker := tcell.StyleDefault.
+			Background(app.theme.ModalBackground()).
+			Foreground(app.theme.SecondaryText)
+		if fm.scrollAbove {
+			screen.SetContent(x+width-3, y, '↑', nil, marker)
+		}
+		if fm.scrollBelow {
+			screen.SetContent(x+width-3, y+height-1, '↓', nil, marker)
+		}
+		return fm.frame.GetInnerRect()
+	})
+
+	// One menu serves every picker: only one can be open at a time. The border
+	// is what sets it apart; the fill matches the panel, and still has to be
+	// painted or the rows it covers show through.
+	fm.menu = tview.NewList().
+		ShowSecondaryText(false).
+		SetMainTextStyle(tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground)).
+		SetSelectedStyle(tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.InverseTextColor())).
+		SetHighlightFullLine(true)
+	fm.menu.SetBackgroundColor(app.theme.ModalBackground()).
+		SetBorder(true).
+		SetBorderColor(app.theme.BorderFocus)
 
 	fm.root = tview.NewFlex()
 	fm.root.SetBackgroundColor(app.theme.Background)
+	fm.page = &formPage{Flex: fm.root, fm: fm}
 
 	return fm
 }
@@ -130,7 +173,27 @@ func (fm *FormModal) SetTitle(title string) {
 }
 
 // SetHint sets the dim hint line inside the bottom border.
-func (fm *FormModal) SetHint(hint string) { fm.hintView.SetText(hint) }
+func (fm *FormModal) SetHint(hint string) {
+	fm.hintText = hint
+	fm.hintView.SetTextColor(fm.app.theme.SecondaryText)
+	fm.hintView.SetText(hint)
+}
+
+// SetStatus replaces the hint line with a message about the form itself, so a
+// refused save is answered where the user is looking rather than behind the
+// modal. An empty message puts the hint back.
+func (fm *FormModal) SetStatus(message string, isError bool) {
+	if message == "" {
+		fm.SetHint(fm.hintText)
+		return
+	}
+	color := fm.app.theme.SecondaryText
+	if isError {
+		color = fm.app.theme.StatusCanceled
+	}
+	fm.hintView.SetTextColor(color)
+	fm.hintView.SetText(message)
+}
 
 // SetContext sets the issue line pinned above the fields, so the form names
 // the issue it modifies. An empty string hides the line.
@@ -146,20 +209,54 @@ func (fm *FormModal) SetRowLabel(rowIdx int, label string) {
 	}
 }
 
+// RowCount returns how many rows the form holds, so a modal can record the
+// index of a row it just added.
+func (fm *FormModal) RowCount() int { return len(fm.rows) }
+
+// SetRowHidden drops a row from the layout entirely, for fields that only
+// apply in one of a modal's modes.
+func (fm *FormModal) SetRowHidden(rowIdx int, hidden bool) {
+	if rowIdx >= 0 && rowIdx < len(fm.rows) {
+		fm.rows[rowIdx].hidden = hidden
+	}
+}
+
+// SetButtonLabel relabels an action button, for modals whose verb changes
+// with the mode.
+func (fm *FormModal) SetButtonLabel(idx int, label string) {
+	if idx < 0 || idx >= len(fm.buttons) {
+		return
+	}
+	btn := fm.buttons[idx]
+	btn.SetLabel(label)
+	fm.buttonsRow.ResizeItem(btn, len(label)+4, 0)
+}
+
+// EndRow closes the row consecutive AddPicker and AddPackedInput calls are
+// filling, so the next one starts a new row. Every other Add* closes it as a
+// side effect; a form with more packed fields than fit one row needs this.
+func (fm *FormModal) EndRow() { fm.pickerRow = nil }
+
 // SetOnCancel sets the Esc handler.
 func (fm *FormModal) SetOnCancel(fn func()) { fm.onCancel = fn }
 
 // SetOnSubmit sets the Ctrl+Enter / Cmd+Enter handler.
 func (fm *FormModal) SetOnSubmit(fn func()) { fm.onSubmit = fn }
 
-// AddInput appends a single-line text field under a caps label.
-func (fm *FormModal) AddInput(label, initial string) *tview.InputField {
+// newInput builds a themed single-line field.
+func (fm *FormModal) newInput(initial string) *tview.InputField {
 	input := tview.NewInputField().
 		SetFieldBackgroundColor(fm.app.theme.ModalBackground()).
 		SetFieldTextColor(fm.app.theme.Foreground).
 		SetFieldWidth(0).
 		SetText(initial)
 	input.SetBackgroundColor(fm.app.theme.ModalBackground())
+	return input
+}
+
+// AddInput appends a single-line text field under a caps label.
+func (fm *FormModal) AddInput(label, initial string) *tview.InputField {
+	input := fm.newInput(initial)
 	fm.addFramedRow(label, input, 1, false)
 	return input
 }
@@ -177,33 +274,19 @@ func (fm *FormModal) AddTextArea(label, initial string, rows int) *tview.TextAre
 	return area
 }
 
-// AddPicker appends a dropdown. Consecutive AddPicker calls share one
-// two-row unit: caps labels on the first row, the dropdowns beneath, equal
-// widths — the New Issue assignee/cycle/priority row.
-func (fm *FormModal) AddPicker(label string, options []string, selected int, onChange func(text string, index int)) *tview.DropDown {
-	theme := fm.app.theme
+// AddPackedInput appends a single-line text field to the packed row instead of
+// giving it a row of its own, so two short fields cost four lines, not eight.
+func (fm *FormModal) AddPackedInput(label, initial string) *tview.InputField {
+	input := fm.newInput(initial)
+	rowIdx := fm.packField(label, input)
+	fm.registerFocusable(input, rowIdx)
+	return input
+}
 
-	dd := tview.NewDropDown().
-		SetOptions(options, onChange).
-		SetFieldBackgroundColor(theme.ModalBackground()).
-		SetFieldTextColor(theme.Foreground)
-	// The closed-but-focused field has its own style, defaulting to the
-	// bright tview palette that swallows the text on themed backgrounds.
-	// The frame border carries the focus cue, like the text fields.
-	dd.SetFocusedStyle(tcell.StyleDefault.
-		Background(theme.ModalBackground()).
-		Foreground(theme.Foreground))
-	dd.SetFieldWidth(0)
-	// The open menu has no border access, so a contrasting fill sets it
-	// apart from the panel instead.
-	dd.SetListStyles(
-		tcell.StyleDefault.Background(theme.InputBg).Foreground(theme.Foreground),
-		tcell.StyleDefault.Background(theme.Accent).Foreground(theme.InverseTextColor()),
-	)
-	dd.SetBackgroundColor(theme.ModalBackground())
-	if selected >= 0 && selected < len(options) {
-		dd.SetCurrentOption(selected)
-	}
+// packField frames a widget, appends it as another column of the open packed
+// row (opening one when there is none), and returns that row's index.
+func (fm *FormModal) packField(label string, field tview.Primitive) int {
+	theme := fm.app.theme
 
 	labelView := tview.NewTextView()
 	labelView.SetText(strings.ToUpper(label))
@@ -212,7 +295,7 @@ func (fm *FormModal) AddPicker(label string, options []string, selected int, onC
 
 	frame := tview.NewFlex().SetDirection(tview.FlexRow)
 	frame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
-	frame.AddItem(dd, 0, 1, true)
+	frame.AddItem(field, 0, 1, true)
 	frame.SetBackgroundColor(theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(theme.Border)
@@ -241,73 +324,11 @@ func (fm *FormModal) AddPicker(label string, options []string, selected int, onC
 
 	fm.pickerRow.labels.AddItem(labelView, 0, 1, false)
 	fm.pickerRow.values.AddItem(frame, 0, 1, true)
-	fm.pickerRow.dds = append(fm.pickerRow.dds, dd)
 	rowIdx := fm.pickerRow.rowIdx
-	fm.rows[rowIdx].focusables = append(fm.rows[rowIdx].focusables, dd)
-	fm.frameOf[dd] = frame
-	fm.pickerMeta[dd] = &pickerState{options: append([]string(nil), options...)}
-	fm.registerFocusable(dd, rowIdx)
-	return dd
-}
-
-// SetPickerOptions replaces a picker's options. Modals must use this instead
-// of DropDown.SetOptions so the field and menu keep filling the frame.
-func (fm *FormModal) SetPickerOptions(dd *tview.DropDown, options []string, onChange func(text string, index int)) {
-	dd.SetOptions(options, onChange)
-	if meta, ok := fm.pickerMeta[dd]; ok {
-		meta.options = append([]string(nil), options...)
-		fm.applyPickerWidth(dd, meta)
-	}
-}
-
-// applyPickerWidth sizes the closed field to the frame and pads the menu
-// rows out to the same width (tview offers no direct menu-width control).
-func (fm *FormModal) applyPickerWidth(dd *tview.DropDown, meta *pickerState) {
-	if meta.fieldWidth <= 0 {
-		return
-	}
-	dd.SetFieldWidth(meta.fieldWidth)
-	longest := 0
-	for _, option := range meta.options {
-		if w := len(option); w > longest {
-			longest = w
-		}
-	}
-	pad := meta.fieldWidth - longest
-	if pad < 0 {
-		pad = 0
-	}
-	dd.SetTextOptions("", strings.Repeat(" ", pad), "", "", "")
-}
-
-// layoutPickers computes each picker's frame-interior width for the current
-// modal width and applies it. Called from layout().
-func (fm *FormModal) layoutPickers(modalWidth int) {
-	padding := fm.app.density.ModalPadding
-	rowInner := modalWidth - 2 - padding.Left - padding.Right
-	for _, row := range fm.rows {
-		var dds []*tview.DropDown
-		for _, focusable := range row.focusables {
-			if dd, ok := focusable.(*tview.DropDown); ok {
-				dds = append(dds, dd)
-			}
-		}
-		if len(dds) == 0 {
-			continue
-		}
-		// Columns split the row evenly with 2-cell gaps; each frame spends
-		// 2 more cells on its border.
-		colWidth := (rowInner-2*(len(dds)-1))/len(dds) - 2
-		if colWidth < 1 {
-			colWidth = 1
-		}
-		for _, dd := range dds {
-			if meta, ok := fm.pickerMeta[dd]; ok {
-				meta.fieldWidth = colWidth
-				fm.applyPickerWidth(dd, meta)
-			}
-		}
-	}
+	fm.rows[rowIdx].focusables = append(fm.rows[rowIdx].focusables, field)
+	fm.rows[rowIdx].columns++
+	fm.frameOf[field] = frame
+	return rowIdx
 }
 
 // AddCheckbox appends an inline toggle: one row with the box beside its caps
@@ -378,28 +399,37 @@ func staticRowContainer(view *tview.TextView, theme Theme) *tview.Flex {
 	return container
 }
 
-// addFramedRow builds the caps-label-plus-framed-editor unit shared by text
-// fields and registers the editor in the tab order.
-func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRows int, flexible bool) {
-	fm.pickerRow = nil
+// fieldUnit builds the caps-label-plus-framed-editor pair every field is made
+// of, and returns the container so a caller can stack or column it.
+func (fm *FormModal) fieldUnit(label string, editor tview.Primitive) (container *tview.Flex, labelView *tview.TextView) {
 	theme := fm.app.theme
 
-	labelView := tview.NewTextView()
+	labelView = tview.NewTextView()
 	labelView.SetText(strings.ToUpper(label))
 	labelView.SetTextColor(theme.SecondaryText)
 	labelView.SetBackgroundColor(theme.ModalBackground())
 
-	editorFrame := tview.NewFlex().SetDirection(tview.FlexRow)
-	editorFrame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
-	editorFrame.AddItem(editor, 0, 1, true)
-	editorFrame.SetBackgroundColor(theme.ModalBackground()).
+	frame := tview.NewFlex().SetDirection(tview.FlexRow)
+	frame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
+	frame.AddItem(editor, 0, 1, true)
+	frame.SetBackgroundColor(theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(theme.Border)
 
-	container := tview.NewFlex().SetDirection(tview.FlexRow)
+	container = tview.NewFlex().SetDirection(tview.FlexRow)
 	container.SetBackgroundColor(theme.ModalBackground())
 	container.AddItem(labelView, 1, 0, false)
-	container.AddItem(editorFrame, 0, 1, true)
+	container.AddItem(frame, 0, 1, true)
+
+	fm.frameOf[editor] = frame
+	return container, labelView
+}
+
+// addFramedRow gives one field a row of its own and registers it in the tab
+// order.
+func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRows int, flexible bool) {
+	fm.pickerRow = nil
+	container, labelView := fm.fieldUnit(label, editor)
 
 	row := formRow{
 		container:  container,
@@ -413,8 +443,71 @@ func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRo
 		row.minHeight = row.height
 	}
 	fm.appendRow(row)
-	fm.frameOf[editor] = editorFrame
 	fm.registerFocusable(editor, len(fm.rows)-1)
+}
+
+// AddSplitRow puts a multi-select beside a stack of single-line fields, so
+// three fields cost one row instead of three. Tab runs left to right: the
+// list, then the stack top down.
+func (fm *FormModal) AddSplitRow(label string, rows int, sideLabels []string) (*FormMultiSelect, []*tview.InputField) {
+	fm.pickerRow = nil
+	theme := fm.app.theme
+
+	multi := fm.newMultiSelect()
+	listContainer, labelView := fm.fieldUnit(label, multi.list)
+
+	side := tview.NewFlex().SetDirection(tview.FlexRow)
+	side.SetBackgroundColor(theme.ModalBackground())
+	inputs := make([]*tview.InputField, 0, len(sideLabels))
+	for _, sideLabel := range sideLabels {
+		input := fm.newInput("")
+		container, _ := fm.fieldUnit(sideLabel, input)
+		side.AddItem(container, formFieldRows, 0, true)
+		inputs = append(inputs, input)
+	}
+
+	columns := tview.NewFlex()
+	columns.SetBackgroundColor(theme.ModalBackground())
+	columns.AddItem(listContainer, 0, 1, true)
+	columns.AddItem(nil, 2, 0, false)
+	columns.AddItem(side, 0, 1, false)
+
+	container := tview.NewFlex().SetDirection(tview.FlexRow)
+	container.SetBackgroundColor(theme.ModalBackground())
+	container.AddItem(columns, 0, 1, true)
+
+	// The row is as tall as the taller column, and shrinks only as far as the
+	// stack, which is fixed.
+	height := 1 + rows + 2
+	stack := formFieldRows * len(sideLabels)
+	if stack > height {
+		height = stack
+	}
+	focusables := []tview.Primitive{multi.list}
+	for _, input := range inputs {
+		focusables = append(focusables, input)
+	}
+	fm.appendRow(formRow{
+		container:  container,
+		height:     height,
+		minHeight:  stack,
+		flexible:   height > stack,
+		focusables: focusables,
+		labelView:  labelView,
+	})
+	for _, focusable := range focusables {
+		fm.registerFocusable(focusable, len(fm.rows)-1)
+	}
+	return multi, inputs
+}
+
+// SetPlaceholder dims an example inside an empty field, so the format it wants
+// sits where the value goes instead of crowding the label.
+func (fm *FormModal) SetPlaceholder(input *tview.InputField, text string) {
+	input.SetPlaceholder(text)
+	input.SetPlaceholderStyle(tcell.StyleDefault.
+		Background(fm.app.theme.ModalBackground()).
+		Foreground(fm.app.theme.SecondaryText))
 }
 
 // appendRow adds a row to the rows container at its full height.
@@ -434,6 +527,11 @@ func (fm *FormModal) registerFocusable(p tview.Primitive, rowIdx int) {
 // onFocused tracks focus for tab cycling, recolors field frames, and keeps
 // the focused row visible when the form scrolls.
 func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
+	// Focus can move without a key: a mouse click lands on the field under the
+	// menu. Leaving the menu open would keep every key routed into it.
+	if picker := fm.openPicker; picker != nil && picker.view != p {
+		picker.closeMenu()
+	}
 	for i, candidate := range fm.order {
 		if candidate == p {
 			fm.focusIdx = i
@@ -516,6 +614,9 @@ func (fm *FormModal) rowHeights(screenH int) []int {
 	heights := make([]int, len(fm.rows))
 	total := fm.chromeHeight()
 	for i, row := range fm.rows {
+		if row.hidden {
+			continue
+		}
 		heights[i] = row.height
 		total += row.height
 	}
@@ -581,17 +682,34 @@ func (fm *FormModal) ensureVisible(rowIdx int) {
 	fm.applyRowWindow(heights, avail)
 }
 
-// applyRowWindow resizes rows so only the scroll window occupies space.
-func (fm *FormModal) applyRowWindow(heights []int, avail int) {
+// applyRowWindow resizes rows so only the scroll window occupies space, and
+// returns what each row got. The row that runs off the bottom is clipped
+// rather than dropped: a field taller than the window would otherwise vanish
+// while it holds focus.
+func (fm *FormModal) applyRowWindow(heights []int, avail int) []int {
+	shown := make([]int, len(fm.rows))
 	used := 0
+	clipped := false
 	for i, row := range fm.rows {
 		h := 0
-		if i >= fm.scrollTop && used+heights[i] <= avail {
-			h = heights[i]
-			used += h
+		if i >= fm.scrollTop {
+			if remaining := avail - used; remaining > 0 {
+				h = heights[i]
+				if h > remaining {
+					h = remaining
+				}
+				used += h
+			}
+			if h < heights[i] {
+				clipped = true
+			}
 		}
+		shown[i] = h
 		fm.rowsBox.ResizeItem(row.container, h, 0)
 	}
+	fm.scrollAbove = fm.scrollTop > 0
+	fm.scrollBelow = clipped
+	return shown
 }
 
 // layout sizes the modal for the current screen and rebuilds the centering
@@ -604,7 +722,6 @@ func (fm *FormModal) layout() {
 		width = limit
 	}
 	height := fm.contentHeight(screenH)
-	fm.layoutPickers(width)
 
 	heights := fm.rowHeights(screenH)
 	rowsTotal := 0
@@ -643,8 +760,10 @@ func (fm *FormModal) layout() {
 func (fm *FormModal) Show(pageName string) {
 	fm.scrollTop = 0
 	fm.focusIdx = 0
+	fm.openPicker = nil
+	fm.SetStatus("", false)
 	fm.layout()
-	fm.app.pages.AddPage(pageName, fm.root, true, true)
+	fm.app.pages.AddPage(pageName, fm.page, true, true)
 	fm.app.pages.SendToFront(pageName)
 	if len(fm.order) > 0 {
 		fm.app.app.SetFocus(fm.order[0])
@@ -653,6 +772,9 @@ func (fm *FormModal) Show(pageName string) {
 
 // Hide removes the page and restores pane focus.
 func (fm *FormModal) Hide(pageName string) {
+	if fm.openPicker != nil {
+		fm.openPicker.closeMenu()
+	}
 	fm.app.pages.RemovePage(pageName)
 	fm.app.restoreModalFocus()
 }
@@ -690,16 +812,6 @@ func (fm *FormModal) BlurFrames() {
 	}
 }
 
-// openDropdown returns the open dropdown in the tab order, if any.
-func (fm *FormModal) openDropdown() *tview.DropDown {
-	for _, p := range fm.order {
-		if dd, ok := p.(*tview.DropDown); ok && dd.IsOpen() {
-			return dd
-		}
-	}
-	return nil
-}
-
 // focusStep moves keyboard focus through the tab order, wrapping.
 func (fm *FormModal) focusStep(delta int) {
 	if len(fm.order) == 0 {
@@ -709,57 +821,14 @@ func (fm *FormModal) focusStep(delta int) {
 	fm.app.app.SetFocus(fm.order[fm.focusIdx])
 }
 
-// focusRowStep moves keyboard focus vertically: to the first widget of the
-// next or previous row, with the button row as the last stop. Widgets that
-// share a row (pickers, buttons) are one stop, not several.
-func (fm *FormModal) focusRowStep(delta int) {
-	var stops []tview.Primitive
-	for _, row := range fm.rows {
-		if len(row.focusables) > 0 {
-			stops = append(stops, row.focusables[0])
-		}
-	}
-	if len(fm.buttons) > 0 {
-		stops = append(stops, fm.buttons[0])
-	}
-	if len(stops) == 0 {
-		return
-	}
-
-	current := 0
-	focused := fm.focusedPrimitive()
-	if _, isButton := focused.(*tview.Button); isButton {
-		current = len(stops) - 1
-	} else {
-	rows:
-		for _, row := range fm.rows {
-			for _, f := range row.focusables {
-				if f == focused {
-					break rows
-				}
-			}
-			if len(row.focusables) > 0 {
-				current++
-			}
-		}
-	}
-
-	next := (current + delta + len(stops)) % len(stops)
-	fm.app.app.SetFocus(stops[next])
-}
-
 // HandleKey implements the shared form keys. It is called from the app-level
 // modal dispatcher (a parent's InputCapture never sees keys sent to a focused
-// child, so routing lives here).
+// child, so routing lives here). Tab and Backtab are the only way to move
+// between fields: arrows stay with the focused widget, which is what a text
+// cursor, an open dropdown, and a list each need them for.
 func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
-	if dd := fm.openDropdown(); dd != nil {
-		if event.Key() == tcell.KeyEscape {
-			if handler := dd.InputHandler(); handler != nil {
-				handler(event, func(p tview.Primitive) { fm.app.app.SetFocus(p) })
-			}
-			return nil
-		}
-		return event
+	if fm.openPicker != nil {
+		return fm.handleMenuKey(event)
 	}
 
 	switch event.Key() {
@@ -774,40 +843,11 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyBacktab:
 		fm.focusStep(-1)
 		return nil
-	case tcell.KeyDown:
-		// Textareas keep vertical arrows for cursor movement until the
-		// cursor sits on the boundary line; then the arrow leaves the field.
-		if ta, ok := fm.focusedPrimitive().(*tview.TextArea); ok {
-			if textAreaCursorOnLastLine(ta) {
-				fm.focusRowStep(1)
-				return nil
-			}
-			return event
-		}
-		fm.focusRowStep(1)
-		return nil
-	case tcell.KeyUp:
-		if ta, ok := fm.focusedPrimitive().(*tview.TextArea); ok {
-			if textAreaCursorOnFirstLine(ta) {
-				fm.focusRowStep(-1)
-				return nil
-			}
-			return event
-		}
-		fm.focusRowStep(-1)
-		return nil
-	case tcell.KeyLeft:
-		// Buttons and closed pickers navigate sideways; text fields keep
-		// horizontal arrows for the cursor.
-		switch fm.focusedPrimitive().(type) {
-		case *tview.Button, *tview.DropDown:
-			fm.focusStep(-1)
-			return nil
-		}
-	case tcell.KeyRight:
-		switch fm.focusedPrimitive().(type) {
-		case *tview.Button, *tview.DropDown:
-			fm.focusStep(1)
+	case tcell.KeyRune:
+		// A list eats no printable keys of its own, so the toggle keys are
+		// only claimed while one holds focus; every other field keeps them.
+		if ms := fm.focusedMultiSelect(); ms != nil && (event.Rune() == ' ' || event.Rune() == 't') {
+			ms.toggle()
 			return nil
 		}
 	case tcell.KeyEnter:
@@ -815,6 +855,14 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 			if fm.onSubmit != nil {
 				fm.onSubmit()
 			}
+			return nil
+		}
+		if ms := fm.focusedMultiSelect(); ms != nil {
+			ms.toggle()
+			return nil
+		}
+		if picker := fm.focusedPicker(); picker != nil {
+			picker.openMenu()
 			return nil
 		}
 		if _, ok := fm.focusedPrimitive().(*tview.InputField); ok {
@@ -825,23 +873,13 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// textAreaCursorRow returns the line the cursor selection starts on.
-func textAreaCursorRow(ta *tview.TextArea) int {
-	fromRow, fromColumn, toRow, toColumn := ta.GetCursor()
-	_ = fromColumn
-	_ = toRow
-	_ = toColumn
-	return fromRow
-}
-
-// textAreaCursorOnFirstLine reports whether the cursor sits on line one.
-func textAreaCursorOnFirstLine(ta *tview.TextArea) bool {
-	return textAreaCursorRow(ta) == 0
-}
-
-// textAreaCursorOnLastLine reports whether the cursor sits on the last line.
-func textAreaCursorOnLastLine(ta *tview.TextArea) bool {
-	return textAreaCursorRow(ta) >= strings.Count(ta.GetText(), "\n")
+// focusedMultiSelect returns the multi-select field holding focus, if any.
+func (fm *FormModal) focusedMultiSelect() *FormMultiSelect {
+	list, ok := fm.focusedPrimitive().(*tview.List)
+	if !ok {
+		return nil
+	}
+	return fm.multiSelects[list]
 }
 
 // focusedPrimitive returns the widget the tab order considers focused.

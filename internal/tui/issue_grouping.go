@@ -219,6 +219,7 @@ func (a *App) preloadTeamMetadata(teamID string) {
 	projects, _ := a.cache.GetProjects(ctx, teamID)
 	states, _ := a.cache.GetWorkflowStates(ctx, teamID)
 	cycles, _ := a.cache.GetCycles(ctx, teamID)
+	labels, _ := a.cache.GetIssueLabels(ctx, teamID)
 
 	logger.Debug("tui.app: loaded team metadata team_id=%s users_count=%d projects_count=%d states_count=%d cycles_count=%d", teamID, len(users), len(projects), len(states), len(cycles))
 	a.app.QueueUpdateDraw(func() {
@@ -226,6 +227,8 @@ func (a *App) preloadTeamMetadata(teamID string) {
 		a.teamProjects = projects
 		a.workflowStates = states
 		a.teamCycles = cycles
+		a.teamLabels = labels
+		a.metadataTeamID = teamID
 	})
 }
 
