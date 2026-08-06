@@ -313,3 +313,37 @@ func TestFormModalHeightFitsContentAndClampsToScreen(t *testing.T) {
 		t.Fatalf("clamped height = %d, want 16", got)
 	}
 }
+
+// TestPickerMenuRectPlacesTheMenuAgainstItsField pins the geometry the draw
+// path can't be asserted on: same edges as the field, capped height with a
+// border, dropping up when the screen ends first.
+func TestPickerMenuRectPlacesTheMenuAgainstItsField(t *testing.T) {
+	cases := []struct {
+		name                     string
+		fieldY, options, screenH int
+		wantY, wantHeight        int
+		wantFits                 bool
+	}{
+		{name: "below the field", fieldY: 4, options: 3, screenH: 40, wantY: 7, wantHeight: 5, wantFits: true},
+		{name: "capped at eight rows", fieldY: 4, options: 40, screenH: 40, wantY: 7, wantHeight: 10, wantFits: true},
+		{name: "drops up with no room below", fieldY: 25, options: 40, screenH: 30, wantY: 15, wantHeight: 10, wantFits: true},
+		{name: "no options", fieldY: 4, options: 0, screenH: 40, wantFits: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			x, y, width, height, fits := pickerMenuRect(6, tc.fieldY, 20, 3, tc.options, tc.screenH)
+			if fits != tc.wantFits {
+				t.Fatalf("fits = %v, want %v", fits, tc.wantFits)
+			}
+			if !fits {
+				return
+			}
+			if x != 6 || width != 20 {
+				t.Fatalf("menu x/width = %d/%d, want the field's 6/20", x, width)
+			}
+			if y != tc.wantY || height != tc.wantHeight {
+				t.Fatalf("menu y/height = %d/%d, want %d/%d", y, height, tc.wantY, tc.wantHeight)
+			}
+		})
+	}
+}

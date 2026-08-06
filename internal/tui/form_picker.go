@@ -185,29 +185,37 @@ func (fm *FormModal) drawOpenMenu(screen tcell.Screen) {
 		return
 	}
 
-	// Align the menu with the field's text, inside the frame border.
-	x, y, width, height := frame.GetRect()
-	x++
-	width -= 2
-	rows := len(picker.options)
-	if rows > formPickerMenuRows {
-		rows = formPickerMenuRows
-	}
-	if width < 1 || rows < 1 {
+	fieldX, fieldY, fieldWidth, fieldHeight := frame.GetRect()
+	_, screenH := screen.Size()
+	x, y, width, height, fits := pickerMenuRect(fieldX, fieldY, fieldWidth, fieldHeight, len(picker.options), screenH)
+	if !fits {
 		return
 	}
 
-	_, screenH := screen.Size()
-	top := y + height
-	if top+rows > screenH {
-		// No room below: drop up, and fall back to whatever is left below.
-		if above := y - rows; above >= 0 {
-			top = above
-		} else if rows = screenH - top; rows < 1 {
-			return
-		}
+	fm.menu.SetRect(x, y, width, height)
+	fm.menu.Draw(screen)
+}
+
+// pickerMenuRect places the menu against its field: same left edge and width
+// so the two borders line up, directly below unless the screen ends first, in
+// which case it drops up. The returned rect includes the border.
+func pickerMenuRect(fieldX, fieldY, fieldWidth, fieldHeight, optionCount, screenH int) (x, y, width, height int, fits bool) {
+	rows := optionCount
+	if rows > formPickerMenuRows {
+		rows = formPickerMenuRows
+	}
+	height = rows + 2 // border
+	if fieldWidth < 3 || rows < 1 {
+		return 0, 0, 0, 0, false
 	}
 
-	fm.menu.SetRect(x, top, width, rows)
-	fm.menu.Draw(screen)
+	y = fieldY + fieldHeight
+	if y+height > screenH {
+		if above := fieldY - height; above >= 0 {
+			y = above
+		} else if height = screenH - y; height < 3 {
+			return 0, 0, 0, 0, false
+		}
+	}
+	return fieldX, y, fieldWidth, height, true
 }

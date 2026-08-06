@@ -141,13 +141,15 @@ func NewFormModal(app *App, title string) *FormModal {
 	})
 
 	// One menu serves every picker: only one can be open at a time. The
-	// contrasting fill sets it apart from the panel it covers.
+	// border and the contrasting fill set it apart from the panel it covers.
 	fm.menu = tview.NewList().
 		ShowSecondaryText(false).
 		SetMainTextStyle(tcell.StyleDefault.Background(app.theme.InputBg).Foreground(app.theme.Foreground)).
 		SetSelectedStyle(tcell.StyleDefault.Background(app.theme.Accent).Foreground(app.theme.InverseTextColor())).
 		SetHighlightFullLine(true)
-	fm.menu.SetBackgroundColor(app.theme.InputBg)
+	fm.menu.SetBackgroundColor(app.theme.InputBg).
+		SetBorder(true).
+		SetBorderColor(app.theme.BorderFocus)
 
 	fm.root = tview.NewFlex()
 	fm.root.SetBackgroundColor(app.theme.Background)
