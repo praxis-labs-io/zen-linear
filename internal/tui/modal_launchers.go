@@ -64,8 +64,9 @@ func (a *App) ShowEditIssueModal() {
 }
 
 // createIssueFromForm runs the create the issue form assembled and splices the
-// new issue into the list.
-func (a *App) createIssueFromForm(input linearapi.CreateIssueInput) {
+// new issue into the list. onFailure hands the form back what it submitted, so
+// a refused create does not take the description with it.
+func (a *App) createIssueFromForm(input linearapi.CreateIssueInput, onFailure func()) {
 	createIssue := a.createIssueFunc
 	if createIssue == nil {
 		createIssue = a.api.CreateIssue
@@ -76,6 +77,9 @@ func (a *App) createIssueFromForm(input linearapi.CreateIssueInput) {
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.app: failed to create issue title=%s", input.Title)
 				a.updateStatusBarWithError(err)
+				if onFailure != nil {
+					onFailure()
+				}
 				return
 			}
 			noun := "issue"

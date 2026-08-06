@@ -60,6 +60,17 @@ type pickerOption struct {
 	label string
 }
 
+// issueFormSnapshot is the whole form, enough to put it back on screen exactly
+// as it was submitted.
+type issueFormSnapshot struct {
+	values    issueFormValues
+	state     pickerOption
+	assignee  pickerOption
+	project   pickerOption
+	milestone pickerOption
+	cycle     pickerOption
+}
+
 // IssueFormModal is the full issue form. New Issue opens it blank, Edit Issue
 // opens it prefilled and saves every changed field in one update.
 type IssueFormModal struct {
@@ -94,6 +105,10 @@ type IssueFormModal struct {
 	priority  int
 
 	original issueFormValues
+	// lastOptions and rejected reopen the form as the user left it when a save
+	// comes back refused, so the typing does not go down with the request.
+	lastOptions IssueFormOptions
+	rejected    *issueFormSnapshot
 	// openGen discards an option fetch from an earlier opening of the form.
 	openGen int
 	// milestoneGen discards a milestone fetch whose project has since changed.
@@ -148,6 +163,7 @@ func (f *IssueFormModal) Show(options IssueFormOptions) {
 	f.mode = options.Mode
 	f.teamID = options.TeamID
 	f.parentID = options.ParentID
+	f.lastOptions = options
 	f.issueID = ""
 	f.identifier = ""
 
@@ -163,7 +179,14 @@ func (f *IssueFormModal) Show(options IssueFormOptions) {
 	}
 
 	f.reset(options)
+	// The baseline is what the issue holds, taken before a rejected save is
+	// put back, so the diff still measures against the server and not against
+	// the user's own retry.
 	f.original = f.values()
+	if f.rejected != nil {
+		f.restore(*f.rejected)
+		f.rejected = nil
+	}
 
 	logger.Debug("tui.issue_form: showing form mode=%d team_id=%s issue_id=%s", f.mode, f.teamID, f.issueID)
 	f.fm.Show("issue_form")
@@ -172,8 +195,44 @@ func (f *IssueFormModal) Show(options IssueFormOptions) {
 	f.loadAssignees()
 	f.loadProjects()
 	f.loadCycles()
-	f.loadLabels(issue)
+	f.loadLabels()
 	f.loadMilestones(f.project.id)
+}
+
+// snapshot captures the form for a retry.
+func (f *IssueFormModal) snapshot() issueFormSnapshot {
+	return issueFormSnapshot{
+		values:    f.values(),
+		state:     f.state,
+		assignee:  f.assignee,
+		project:   f.project,
+		milestone: f.milestone,
+		cycle:     f.cycle,
+	}
+}
+
+// restore puts a snapshot back into the fields.
+func (f *IssueFormModal) restore(snap issueFormSnapshot) {
+	f.titleField.SetText(snap.values.title)
+	f.descField.SetText(snap.values.description, true)
+	f.estimateField.SetText(snap.values.estimate)
+	f.dueDateField.SetText(snap.values.dueDate)
+	f.priority = snap.values.priority
+	f.priorityField.SetCurrentOption(snap.values.priority)
+	f.labelsField.SetItems(nil, snap.values.labelIDs)
+
+	f.setPicker(f.statusField, f.statusSentinel(), nil, snap.state, f.assignState)
+	f.setPicker(f.assigneeField, "Unassigned", nil, snap.assignee, f.assignAssignee)
+	f.setPicker(f.projectField, "No project", nil, snap.project, f.assignProject)
+	f.setPicker(f.milestoneField, "No milestone", nil, snap.milestone, f.assignMilestone)
+	f.setPicker(f.cycleField, "No cycle", nil, snap.cycle, f.assignCycle)
+}
+
+// reopenRejected puts a refused save back on screen with everything the user
+// typed, so the only thing lost is the round trip.
+func (f *IssueFormModal) reopenRejected(snap issueFormSnapshot) {
+	f.rejected = &snap
+	f.Show(f.lastOptions)
 }
 
 // reset points every field and every tracked id at this opening's issue, or
@@ -374,12 +433,15 @@ func (f *IssueFormModal) submitEdit(values issueFormValues) {
 		f.app.updateStatusBarWithError(err)
 		return
 	}
+	snap := f.snapshot()
 	f.Hide()
 	if !changed {
 		f.app.flashStatus("No changes")
 		return
 	}
-	f.app.runIssueUpdate(input, fmt.Sprintf("Updated %s", f.identifier))
+	f.app.runIssueUpdateWithFallback(input, fmt.Sprintf("Updated %s", f.identifier), func() {
+		f.reopenRejected(snap)
+	})
 }
 
 func (f *IssueFormModal) submitCreate(values issueFormValues) {
@@ -410,8 +472,11 @@ func (f *IssueFormModal) submitCreate(values issueFormValues) {
 		input.Estimate = &estimate
 	}
 
+	snap := f.snapshot()
 	f.Hide()
-	f.app.createIssueFromForm(input)
+	f.app.createIssueFromForm(input, func() {
+		f.reopenRejected(snap)
+	})
 }
 
 // buildIssueUpdate turns the difference between the form as opened and the
@@ -582,11 +647,10 @@ func (f *IssueFormModal) loadCycles() {
 	})
 }
 
-func (f *IssueFormModal) loadLabels(issue *linearapi.Issue) {
-	var selected []string
-	if issue != nil {
-		selected = labelIDs(issue.Labels)
-	}
+// loadLabels fills the label list, keeping whatever is already ticked: the
+// options arrive after the form has been told what the issue carries.
+func (f *IssueFormModal) loadLabels() {
+	selected := f.labelsField.SelectedIDs()
 	fetch := func(teamID string) ([]linearapi.IssueLabel, error) {
 		return f.app.fetchIssueLabelsFunc(context.Background(), teamID)
 	}

@@ -51,6 +51,12 @@ func parseEstimateInput(value string) (float64, error) {
 // the ID when they open it: a background refresh can move the selection while
 // the modal is up, and the write must land on the issue the modal named.
 func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage string) {
+	a.runIssueUpdateWithFallback(input, successMessage, nil)
+}
+
+// runIssueUpdateWithFallback is runIssueUpdate plus a hook for a caller that
+// has something to put back on screen when Linear refuses the write.
+func (a *App) runIssueUpdateWithFallback(input linearapi.UpdateIssueInput, successMessage string, onFailure func()) {
 	if input.ID == "" {
 		issue := a.GetSelectedIssue()
 		if issue == nil {
@@ -69,6 +75,9 @@ func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage st
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.planning: issue update failed issue_id=%s", issueID)
 				a.updateStatusBarWithError(err)
+				if onFailure != nil {
+					onFailure()
+				}
 				return
 			}
 			a.flashStatus(successMessage)

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -47,6 +48,21 @@ func runNextUpdate(t *testing.T, pending chan func()) {
 		fn()
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for a queued UI update")
+	}
+}
+
+// runUpdatesUntil drains queued UI callbacks until the condition holds. A
+// background option fetch can queue ahead of the callback under test.
+func runUpdatesUntil(t *testing.T, pending chan func(), cond func() bool) {
+	t.Helper()
+	for i := 0; i < 16; i++ {
+		if cond() {
+			return
+		}
+		runNextUpdate(t, pending)
+	}
+	if !cond() {
+		t.Fatal("condition never held after draining queued UI updates")
 	}
 }
 
@@ -473,5 +489,95 @@ func TestIssueFormEscapeClosesTheOpenMenuBeforeModal(t *testing.T) {
 	}
 	if !app.pages.HasPage("issue_form") {
 		t.Fatal("issue form closed; Escape should close only the open menu")
+	}
+}
+
+// TestIssueFormCreateFailureReopensWithEverythingTyped is the data-loss guard:
+// a rejected create used to take the description with it.
+func TestIssueFormCreateFailureReopensWithEverythingTyped(t *testing.T) {
+	app, pending := newIssueFormTestApp(t)
+	attempted := make(chan linearapi.CreateIssueInput, 2)
+	app.createIssueFunc = func(_ context.Context, input linearapi.CreateIssueInput) (linearapi.Issue, error) {
+		attempted <- input
+		return linearapi.Issue{}, errors.New("labelIds for incorrect team")
+	}
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-1"})
+
+	form.titleField.SetText("Audit modals")
+	form.descField.SetText("A long body worth keeping", true)
+	form.estimateField.SetText("5")
+	form.dueDateField.SetText("2026-12-24")
+	form.assigneeField.SetCurrentOption(1)
+	toggleLabel(app, form, 0)
+
+	form.submit()
+
+	select {
+	case <-attempted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the create")
+	}
+	runNextUpdate(t, pending) // the failure lands on the UI thread
+
+	if !app.pages.HasPage("issue_form") {
+		t.Fatal("the form did not come back after the create was refused")
+	}
+	if got := form.titleField.GetText(); got != "Audit modals" {
+		t.Fatalf("title = %q, want it restored", got)
+	}
+	if got := form.descField.GetText(); got != "A long body worth keeping" {
+		t.Fatalf("description = %q, want it restored", got)
+	}
+	if form.estimateField.GetText() != "5" || form.dueDateField.GetText() != "2026-12-24" {
+		t.Fatalf("estimate/due date = %q/%q, want them restored", form.estimateField.GetText(), form.dueDateField.GetText())
+	}
+	if form.assignee.id != "user-1" {
+		t.Fatalf("assignee = %+v, want it restored", form.assignee)
+	}
+	if got := form.labelsField.SelectedIDs(); len(got) != 1 || got[0] != "label-bug" {
+		t.Fatalf("labels = %v, want them restored", got)
+	}
+}
+
+// TestIssueFormEditFailureKeepsTheDiffAgainstTheIssue checks the retry after a
+// refused update still measures against the server's version, not against the
+// values the user just resubmitted.
+func TestIssueFormEditFailureKeepsTheDiffAgainstTheIssue(t *testing.T) {
+	app, pending := newIssueFormTestApp(t)
+	updates := make(chan linearapi.UpdateIssueInput, 4)
+	fail := true
+	app.updateIssueFunc = func(_ context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
+		updates <- input
+		if fail {
+			return linearapi.Issue{}, errors.New("rejected")
+		}
+		return linearapi.Issue{ID: input.ID, Identifier: "ZNL-7"}, nil
+	}
+	form := showEditForm(t, app, editableIssue())
+
+	form.titleField.SetText("Renamed")
+	form.submit()
+
+	if first := recvUpdate(t, updates); first.Title == nil || *first.Title != "Renamed" {
+		t.Fatalf("first attempt title = %v, want Renamed", first.Title)
+	}
+	runUpdatesUntil(t, pending, func() bool { return app.pages.HasPage("issue_form") })
+	if !app.pages.HasPage("issue_form") {
+		t.Fatal("the form did not come back after the update was refused")
+	}
+	if got := form.titleField.GetText(); got != "Renamed" {
+		t.Fatalf("title = %q, want the edit restored", got)
+	}
+
+	fail = false
+	form.submit()
+
+	retry := recvUpdate(t, updates)
+	if retry.Title == nil || *retry.Title != "Renamed" {
+		t.Fatalf("retry title = %v, want it still sent as a change", retry.Title)
+	}
+	if retry.Description != nil || retry.LabelIDs != nil {
+		t.Fatalf("retry sent untouched fields: description=%v labels=%v", retry.Description, retry.LabelIDs)
 	}
 }

@@ -331,6 +331,9 @@ type IssueLabel struct {
 	ID    string
 	Name  string
 	Color string // Hex color code (e.g., "#ff0000")
+	// TeamID is set for a team-scoped label and empty for a workspace one.
+	// Only the owning team may put a scoped label on an issue.
+	TeamID string
 }
 
 // IssueRef represents a lightweight reference to an issue (for parent relationships).
