@@ -66,53 +66,64 @@ func Init(logPath string, minLevel LogLevel) error {
 	if defaultLogger != nil {
 		return nil
 	}
-	return install(logPath, minLevel)
-}
 
-// install replaces defaultLogger. Callers hold globalMu.
-func install(logPath string, minLevel LogLevel) error {
-	if logPath == "" {
-		// Logging disabled
-		defaultLogger = &Logger{enabled: false}
-		return nil
-	}
-
-	// Create log directory if it doesn't exist
-	logDir := filepath.Dir(logPath)
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return fmt.Errorf("create log directory: %w", err)
-	}
-
-	// Open log file for appending
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	replacement, err := newLogger(logPath, minLevel)
 	if err != nil {
-		return fmt.Errorf("open log file: %w", err)
+		return err
 	}
-
-	defaultLogger = &Logger{
-		file:     file,
-		minLevel: minLevel,
-		enabled:  true,
-	}
-
+	defaultLogger = replacement
 	// Write session start marker
 	defaultLogger.log(LevelInfo, "=== Session started ===")
 	return nil
 }
 
+// newLogger opens the log file. An empty path disables logging.
+func newLogger(logPath string, minLevel LogLevel) (*Logger, error) {
+	if logPath == "" {
+		// Logging disabled
+		return &Logger{enabled: false}, nil
+	}
+
+	// Create log directory if it doesn't exist
+	logDir := filepath.Dir(logPath)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, fmt.Errorf("create log directory: %w", err)
+	}
+
+	// Open log file for appending
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("open log file: %w", err)
+	}
+
+	return &Logger{
+		file:     file,
+		minLevel: minLevel,
+		enabled:  true,
+	}, nil
+}
+
 // Reinit closes the current logger and reinitializes it with new settings.
+// The new file opens before the old one closes: a path the user cannot write
+// would otherwise leave the session with nowhere to log, including the report
+// of this failure.
 func Reinit(logPath string, minLevel LogLevel) error {
 	globalMu.Lock()
 	defer globalMu.Unlock()
 
-	if defaultLogger != nil {
-		if err := defaultLogger.close(); err != nil {
-			return err
-		}
+	replacement, err := newLogger(logPath, minLevel)
+	if err != nil {
+		return err
 	}
-	defaultLogger = nil
 
-	return install(logPath, minLevel)
+	var closeErr error
+	if defaultLogger != nil {
+		closeErr = defaultLogger.close()
+	}
+	defaultLogger = replacement
+	// Write session start marker
+	defaultLogger.log(LevelInfo, "=== Session started ===")
+	return closeErr
 }
 
 // Close closes the log file. Should be called when the application exits.

@@ -417,7 +417,6 @@ func (a *App) selectedIssueID(section IssuesSection) string {
 // resetCachedState clears cached user and issue data after config changes.
 func (a *App) resetCachedState() {
 	a.issuesMu.Lock()
-	a.selectedIssue = nil
 	a.issues = nil
 	a.allIssueRows = nil
 	a.allIDToIssue = make(map[string]*linearapi.Issue)
@@ -467,10 +466,9 @@ func (a *App) resetCachedState() {
 	// Bump generation to prevent in-flight refreshes from updating UI.
 	a.refreshGeneration.Add(1)
 	a.resetGeneration.Add(1)
-	a.abandonDetailFetch()
-	// Clearing selectedIssue leaves the pane painted with an issue nothing can
-	// act on: GetSelectedIssue is already nil.
-	a.updateDetailsView()
+	// The pane would otherwise keep painting an issue nothing can act on, since
+	// GetSelectedIssue is already nil.
+	a.clearSelectedIssue()
 }
 
 // parseLogLevel converts a string log level to a logger.LogLevel.

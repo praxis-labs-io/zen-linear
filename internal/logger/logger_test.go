@@ -173,6 +173,42 @@ func TestReinitLogger(t *testing.T) {
 	}
 }
 
+// A log path the user cannot write used to take the rest of the session down
+// with it: the old file was already closed, so nothing landed anywhere, not
+// even the report of the failure.
+func TestReinitToAnUnwritablePathKeepsLogging(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	firstPath := filepath.Join(tmpDir, "first.log")
+	if err := Init(firstPath, LevelInfo); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+
+	// A regular file where the new path wants a directory.
+	blocker := filepath.Join(tmpDir, "blocker")
+	if err := os.WriteFile(blocker, nil, 0644); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+
+	if err := Reinit(filepath.Join(blocker, "nested", "app.log"), LevelInfo); err == nil {
+		t.Fatal("Reinit() to an unwritable path returned no error")
+	}
+
+	Info("Still logging")
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	content, err := os.ReadFile(firstPath)
+	if err != nil {
+		t.Fatalf("read first log file: %v", err)
+	}
+	if !strings.Contains(string(content), "INFO: Still logging") {
+		t.Errorf("entries after a failed reinit went nowhere: %q", string(content))
+	}
+}
+
 // A settings save or a workspace switch reinitializes the logger from the UI
 // thread while background fetches are still logging. The race detector is the
 // assertion here.
