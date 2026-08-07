@@ -73,6 +73,66 @@ func TestIssuesPaneNamesWhatItIsWaitingOn(t *testing.T) {
 	}
 }
 
+// TestIssuesPaneFocusFollowsTheSwap covers the pane going dead when the
+// placeholder and the table trade places under it: focus rides on the
+// primitive, so the one that leaves the layout takes the keys with it.
+func TestIssuesPaneFocusFollowsTheSwap(t *testing.T) {
+	withIssues := linearapi.IssuePage{Issues: []linearapi.Issue{
+		{ID: "issue-1", Identifier: "ENG-1", Title: "First"},
+	}}
+
+	tests := []struct {
+		name  string
+		first linearapi.IssuePage
+		then  linearapi.IssuePage
+		want  func(app *App) tview.Primitive
+	}{
+		{
+			name: "rows arrive",
+			then: withIssues,
+			want: func(app *App) tview.Primitive { return app.allIssuesTable },
+		},
+		{
+			name:  "rows go away",
+			first: withIssues,
+			want:  func(app *App) tview.Primitive { return app.issuesPlaceholder },
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			page := tc.first
+			app, release := newLoadingPaneTestApp(t, linearapi.IssuePage{}, nil)
+			app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
+				return page, nil
+			}
+			// SetRoot primes the delegate tview moves focus with, so a harness
+			// without it cannot see focus leave a pane.
+			app.app.SetRoot(app.pages, true)
+			close(release)
+			refreshDone := installRefreshCompletionHook(app)
+
+			app.refreshIssuesWithFocusChange(false)
+			waitForRefreshCompletion(t, refreshDone)
+			app.focusedPane = FocusIssues
+			app.updateFocus()
+
+			page = tc.then
+			// A workspace switch, a session restore, and a navigation change all
+			// refresh without a focus change of their own.
+			app.refreshIssuesWithFocusChange(false)
+			waitForRefreshCompletion(t, refreshDone)
+
+			if got := app.app.GetFocus(); got != tc.want(app) {
+				t.Fatalf("keyboard focus landed on %T, want what the pane is mounting", got)
+			}
+			if got := mountedIssuesPane(t, app); got != app.app.GetFocus() {
+				t.Fatalf("mounted %T while focus is on %T", got, app.app.GetFocus())
+			}
+		})
+	}
+}
+
 // TestIssuesPaneStartsAsLoading covers the window between the layout being
 // built and the first fetch starting, which flashed "No issues" at every
 // launch.
