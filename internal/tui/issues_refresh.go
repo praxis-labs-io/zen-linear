@@ -337,6 +337,9 @@ func (a *App) applyRichFiltersToParams(params *linearapi.FetchIssuesParams) {
 
 // updateIssuesColumnLayout shows the active issues tab at full height.
 func (a *App) updateIssuesColumnLayout() {
+	// Focus lives on the primitive, not the pane, so swapping the table for the
+	// placeholder under a focused pane sends keys to something off screen.
+	refocus := a.issuesPaneHasFocus()
 	a.issuesColumn.Clear()
 
 	// A tab about to come on screen may still be holding cells from before the
@@ -358,6 +361,10 @@ func (a *App) updateIssuesColumnLayout() {
 
 	// Update all pane titles to reflect current state
 	a.updateAllPaneTitles()
+
+	if refocus {
+		a.updateFocus()
+	}
 }
 
 // updateIssuesData updates the UI with new issues data.

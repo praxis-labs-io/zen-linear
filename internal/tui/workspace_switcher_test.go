@@ -170,6 +170,56 @@ func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 	}
 }
 
+// newSwitcherReloadTestApp builds an app whose switch runs all the way through
+// to the new workspace's issues. The reload has to go over HTTP: applySettings
+// rebuilds the client, which drops any stubbed fetcher with it, so a canned
+// response is the only seam that survives the switch. Every query gets the same
+// body; the ones that are not the issue list read it as empty.
+func newSwitcherReloadTestApp(t *testing.T) *App {
+	t.Helper()
+	t.Setenv("TEST_LINEAR_KEY_ACME", "k-acme")
+	t.Setenv("TEST_LINEAR_KEY_SIDE", "k-side")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"issues":{"nodes":[{"id":"issue-9","identifier":"SIDE-9","title":"Ninth"}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	cfg := config.Config{Workspaces: switcherTestWorkspaces(), APIEndpoint: server.URL}
+	cfg.LinearAPIKey = "k-acme"
+	app := newDefaultNavTestApp(cfg)
+	app.fetchIssuesPage = nil
+	app.app.SetRoot(app.pages, true)
+	app.activeWorkspaceName = "Acme"
+	stopBackgroundWorkOnCleanup(t, app)
+	return app
+}
+
+// TestSwitchWorkspaceKeepsIssuesFocusWhenTheNewListLands covers the second half
+// of the switch. The reset empties the pane, so focus lands on the placeholder,
+// and the arriving rows put the table back underneath it.
+func TestSwitchWorkspaceKeepsIssuesFocusWhenTheNewListLands(t *testing.T) {
+	app := newSwitcherReloadTestApp(t)
+	navSettled := installNavSettledHook(app)
+	refreshDone := installRefreshCompletionHook(app)
+	app.focusedPane = FocusIssues
+	app.updateFocus()
+
+	// The picker callback runs on the event loop, and so does the reload it
+	// starts. Driving the switch bare would put the two on different goroutines.
+	app.QueueUpdateDraw(func() { app.switchWorkspace("Side") })
+	waitForNavSettled(t, navSettled)
+	waitForRefreshCompletion(t, refreshDone)
+
+	if len(app.allIssueRows) == 0 {
+		t.Fatal("the new workspace's issues never landed")
+	}
+	if got := app.app.GetFocus(); got != tview.Primitive(app.allIssuesTable) {
+		t.Fatalf("keyboard focus landed on %T once the new list arrived, want the issues table", got)
+	}
+}
+
 // TestSwitchWorkspaceEmptiesTheDetailsPane covers the pane still painting an
 // issue from the workspace being left, which no command could act on.
 func TestSwitchWorkspaceEmptiesTheDetailsPane(t *testing.T) {

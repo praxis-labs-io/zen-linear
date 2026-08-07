@@ -1,5 +1,29 @@
 package tui
 
+import "github.com/rivo/tview"
+
+// issuesPaneHasFocus reports whether the keyboard is on something the issues
+// column mounts. It reads live focus rather than focusedPane: a modal takes the
+// keys without moving the pane the user goes back to.
+func (a *App) issuesPaneHasFocus() bool {
+	focus := a.app.GetFocus()
+	if focus == nil {
+		return false
+	}
+	for _, candidate := range []tview.Primitive{
+		a.allIssuesTable,
+		a.myIssuesTable,
+		a.issuesPlaceholder,
+		a.searchInput,
+		a.searchResultsTable,
+	} {
+		if focus == candidate {
+			return true
+		}
+	}
+	return false
+}
+
 // visiblePanes lists the panes Tab can reach, in screen order. A hidden pane
 // is not one of them: cycling onto it would land focus somewhere updateFocus
 // has to bounce back, which reads as Tab getting stuck.
