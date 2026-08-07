@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ func newNavCacheTestApp(t *testing.T, cfg config.Config, teams []linearapi.Team,
 	t.Helper()
 
 	app := newDefaultNavTestApp(cfg)
-	stopDetailTimersOnCleanup(t, app)
+	stopBackgroundWorkOnCleanup(t, app)
 	release := make(chan struct{})
 	app.fetchTeamsFunc = func(context.Context) ([]linearapi.Team, error) {
 		<-release
@@ -248,5 +249,143 @@ func TestNavDataUnchanged(t *testing.T) {
 				t.Fatalf("navDataUnchanged() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestLoadInitialDataKeepsTheCacheWhenFavoritesFail covers the half-failure the
+// tree tolerates: favorites are not fatal to rendering, but a copy missing them
+// must not reach disk or the next launch paints a Favorites-less sidebar.
+func TestLoadInitialDataKeepsTheCacheWhenFavoritesFail(t *testing.T) {
+	favorites := []linearapi.Favorite{{ID: "fav-1", Type: "project", ProjectID: "proj-1", ProjectName: "Website"}}
+	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), nil)
+	app.fetchFavoritesFunc = func(context.Context) ([]linearapi.Favorite, error) {
+		<-release
+		return nil, context.DeadlineExceeded
+	}
+	installNavCache(t, app, path, "", cache.NavData{Teams: defaultNavTeams(), Favorites: favorites})
+	refreshDone := installRefreshCompletionHook(app)
+	settled := installNavSettledHook(app)
+
+	app.loadInitialData()
+	waitForRefreshCompletion(t, refreshDone)
+	close(release)
+	waitForNavSettled(t, settled)
+
+	file, err := cache.LoadNav(path)
+	if err != nil {
+		t.Fatalf("LoadNav: %v", err)
+	}
+	data, _ := file.DataFor("")
+	if len(data.Favorites) != 1 {
+		t.Fatalf("cached favorites = %d, want the previous copy left alone", len(data.Favorites))
+	}
+	if app.favoritesGroup == nil {
+		t.Fatal("the Favorites section was dropped from the tree")
+	}
+}
+
+// TestLoadInitialDataUpdatesTheCacheItHolds covers the second launch inside one
+// session: a settings save must not repaint the tree as it was at startup.
+func TestLoadInitialDataUpdatesTheCacheItHolds(t *testing.T) {
+	cached := []linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}
+	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), nil)
+	installNavCache(t, app, path, "", cache.NavData{Teams: cached})
+	refreshDone := installRefreshCompletionHook(app)
+
+	app.loadInitialData()
+	waitForRefreshCompletion(t, refreshDone)
+	close(release)
+	waitForRefreshCompletion(t, refreshDone)
+
+	data, ok := app.cachedNavData()
+	if !ok || len(data.Teams) != 2 {
+		t.Fatalf("in-memory cache = %+v (ok=%v), want the two fetched teams", data, ok)
+	}
+}
+
+// TestRebuildKeepsTheUserPutWhenTheirListIsGone covers the place that vanished
+// server-side: the rebuild must not also throw the user at the default team.
+func TestRebuildKeepsTheUserPutWhenTheirListIsGone(t *testing.T) {
+	cached := []linearapi.Team{{ID: "team-9", Key: "OLD", Name: "Retired"}}
+	app, release, path := newNavCacheTestApp(t, config.Config{DefaultTeam: "NEX"}, defaultNavTeams(), nil)
+	installNavCache(t, app, path, "", cache.NavData{Teams: cached})
+	refreshDone := installRefreshCompletionHook(app)
+
+	app.loadInitialData()
+	waitForRefreshCompletion(t, refreshDone)
+	if node := findTreeTeamNode(app, "team-9"); node != nil {
+		app.navigationTree.SetCurrentNode(node)
+		app.onNavigationSelected(node.GetReference().(*NavigationNode), "")
+		waitForRefreshCompletion(t, refreshDone)
+	}
+
+	close(release)
+	waitForRefreshCompletion(t, refreshDone)
+
+	if nav := currentNavigationNode(t, app); nav.IsTeam && nav.TeamID == "team-2" {
+		t.Fatal("the rebuild jumped to the configured default team")
+	}
+}
+
+// TestNavCacheKeyDistinguishesUnnamedSessions covers two Linear workspaces
+// reached by a bare API key: sharing one entry paints the wrong teams.
+func TestNavCacheKeyDistinguishesUnnamedSessions(t *testing.T) {
+	first := newDefaultNavTestApp(config.Config{LinearAPIKey: "lin_api_first"})
+	stopBackgroundWorkOnCleanup(t, first)
+	second := newDefaultNavTestApp(config.Config{LinearAPIKey: "lin_api_second"})
+	stopBackgroundWorkOnCleanup(t, second)
+
+	if first.navCacheKey() == second.navCacheKey() {
+		t.Fatalf("both unnamed sessions key on %q", first.navCacheKey())
+	}
+	if strings.Contains(first.navCacheKey(), "lin_api_first") {
+		t.Fatalf("cache key %q carries the token", first.navCacheKey())
+	}
+
+	named := newDefaultNavTestApp(config.Config{LinearAPIKey: "lin_api_first"})
+	stopBackgroundWorkOnCleanup(t, named)
+	named.activeWorkspaceName = "Praxis"
+	if named.navCacheKey() != "Praxis" {
+		t.Fatalf("named workspace keys on %q, want its name", named.navCacheKey())
+	}
+}
+
+// TestRecordNavCacheAsyncSkipsATeamlessTree covers the workspace-switch window
+// where the tree on screen has outlived its teams: a favorites action there
+// would file the old favorites under the new workspace with no teams.
+func TestRecordNavCacheAsyncSkipsATeamlessTree(t *testing.T) {
+	app := newDefaultNavTestApp(config.Config{})
+	stopBackgroundWorkOnCleanup(t, app)
+	path := filepath.Join(t.TempDir(), "nav-cache.json")
+	installNavCache(t, app, path, "", cache.NavData{Teams: defaultNavTeams()})
+
+	app.navTeams = nil
+	app.favorites = []linearapi.Favorite{{ID: "fav-1", Type: "project", ProjectID: "proj-1"}}
+	app.recordNavCacheAsync()
+
+	file, err := cache.LoadNav(path)
+	if err != nil {
+		t.Fatalf("LoadNav: %v", err)
+	}
+	data, _ := file.DataFor("")
+	if len(data.Teams) != 2 {
+		t.Fatalf("cached teams = %d, want the recorded tree untouched", len(data.Teams))
+	}
+}
+
+// TestResetNavigationTreeStopsShowingTheOldWorkspace covers the switch window:
+// the sidebar must not keep offering teams the new key cannot resolve.
+func TestResetNavigationTreeStopsShowingTheOldWorkspace(t *testing.T) {
+	app := newDefaultNavTestApp(config.Config{})
+	stopBackgroundWorkOnCleanup(t, app)
+	app.rebuildNavigationTree(defaultNavTeams(), nil)
+
+	app.resetNavigationTree()
+
+	if names := treeTeamNames(app); len(names) != 0 {
+		t.Fatalf("team nodes = %v, want none after a reset", names)
+	}
+	if app.navLoadingNode == nil {
+		t.Fatal("the tree has no waiting node after a reset")
 	}
 }

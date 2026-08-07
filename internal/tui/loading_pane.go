@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -109,6 +110,19 @@ func (a *App) setNavLoading(loading bool) {
 func (a *App) setIssuesLoading(loading bool) {
 	a.isLoading = loading
 	a.syncLoadingIndicator()
+}
+
+// finishIssuesLoad settles the pane when this refresh is the one that claimed
+// it. A superseded refresh reaching a completion path must not clear the flag:
+// the refresh that replaced it is still fetching, and the pane would drop to
+// "No issues" with the spinner stopped while a page is on its way.
+func (a *App) finishIssuesLoad(generation int64, err error) {
+	if a.loadingGeneration != generation {
+		return
+	}
+	a.issuesErr = err
+	a.issuesSettled = true
+	a.setIssuesLoading(false)
 }
 
 // syncLoadingIndicator runs the frame loop while something is in flight and
@@ -234,6 +248,15 @@ func (a *App) buildIssuesPlaceholder() {
 		SetBackgroundColor(a.theme.Background)
 
 	a.updateIssuesPlaceholder()
+}
+
+// setIssuesPlaceholderBorder recolors the placeholder, which wears the pane's
+// focus border whenever it is the thing mounted.
+func (a *App) setIssuesPlaceholderBorder(color tcell.Color) {
+	if a.issuesPlaceholder == nil {
+		return
+	}
+	a.issuesPlaceholder.SetBorderColor(color)
 }
 
 // issuesPaneIsEmpty reports whether the tab on screen has nothing to render, so

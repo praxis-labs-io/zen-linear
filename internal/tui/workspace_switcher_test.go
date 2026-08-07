@@ -108,7 +108,7 @@ func newSwitcherFlowTestApp(t *testing.T) *App {
 	app.app.SetRoot(app.pages, true)
 	app.activeWorkspaceName = "Acme"
 	app.toggleDetailsPane()
-	stopDetailTimersOnCleanup(t, app)
+	stopBackgroundWorkOnCleanup(t, app)
 	return app
 }
 
@@ -123,9 +123,12 @@ func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 		want  func(app *App) tview.Primitive
 	}{
 		{
+			// The switch clears the list, so the placeholder is what the issues
+			// column is showing and what focus has to land on. Focusing the
+			// detached table would leave no pane looking focused at all.
 			name:  "issues",
 			setUp: func(app *App) { app.focusedPane = FocusIssues },
-			want:  func(app *App) tview.Primitive { return app.allIssuesTable },
+			want:  func(app *App) tview.Primitive { return app.issuesPlaceholder },
 		},
 		{
 			name:  "details",
@@ -141,7 +144,7 @@ func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 				app.searchInputFocused = false
 				app.updateFocus()
 			},
-			want: func(app *App) tview.Primitive { return app.allIssuesTable },
+			want: func(app *App) tview.Primitive { return app.issuesPlaceholder },
 		},
 	}
 

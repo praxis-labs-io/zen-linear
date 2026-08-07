@@ -15,7 +15,7 @@ func newSessionRestoreTestApp(t *testing.T, state session.State) (*App, *lineara
 	t.Helper()
 
 	app := newDefaultNavTestApp(config.Config{SessionRestore: true})
-	stopDetailTimersOnCleanup(t, app)
+	stopBackgroundWorkOnCleanup(t, app)
 	app.fetchWorkflowStatesFunc = func(context.Context, string) ([]linearapi.WorkflowState, error) {
 		return []linearapi.WorkflowState{
 			{ID: "state-1", Name: "Todo", Type: "unstarted", Position: 1},

@@ -51,16 +51,25 @@ func NavPath() (string, error) {
 	return filepath.Join(dir, navFileName), nil
 }
 
-// DataFor returns the cached tree for a workspace name. A session opened with a
-// bare API key or OAuth has no workspace name and keys on the empty string,
-// which no configured workspace can collide with: settings validation requires
-// every workspace to be named.
-func (f NavFile) DataFor(workspaceName string) (NavData, bool) {
-	data, ok := f.Workspaces[navWorkspaceKey(workspaceName)]
+// DataFor returns the cached tree for a key. The key is a workspace name where
+// there is one; callers without one pass something else that identifies the
+// Linear workspace, since two sessions sharing a key would paint each other's
+// teams.
+func (f NavFile) DataFor(key string) (NavData, bool) {
+	data, ok := f.Workspaces[navWorkspaceKey(key)]
 	if !ok || data.Empty() {
 		return NavData{}, false
 	}
 	return data, true
+}
+
+// Set installs one entry in a loaded file without touching the others.
+func (f *NavFile) Set(key string, data NavData) {
+	if f.Workspaces == nil {
+		f.Workspaces = make(map[string]NavData)
+	}
+	f.Version = navVersion
+	f.Workspaces[navWorkspaceKey(key)] = data
 }
 
 // LoadNav reads the navigation cache. A missing, unreadable, or stale-schema
@@ -90,20 +99,15 @@ func LoadNav(path string) (NavFile, error) {
 	return file, nil
 }
 
-// RecordNav stores one workspace's tree, keeping the other workspaces' entries.
-// An unreadable file is replaced rather than propagated: a corrupt cache must
-// not block the next write.
-func RecordNav(path, workspaceName string, data NavData) error {
+// RecordNav stores one entry's tree, keeping the others. An unreadable file is
+// replaced rather than propagated: a corrupt cache must not block the next
+// write.
+func RecordNav(path, key string, data NavData) error {
 	file, err := LoadNav(path)
 	if err != nil {
 		file = NavFile{}
 	}
-	if file.Workspaces == nil {
-		file.Workspaces = make(map[string]NavData)
-	}
-
-	file.Version = navVersion
-	file.Workspaces[navWorkspaceKey(workspaceName)] = data
+	file.Set(key, data)
 
 	encoded, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {

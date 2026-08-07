@@ -20,7 +20,7 @@ func newLoadingPaneTestApp(t *testing.T, page linearapi.IssuePage, fetchErr erro
 	t.Helper()
 
 	app := newDefaultNavTestApp(config.Config{})
-	stopDetailTimersOnCleanup(t, app)
+	stopBackgroundWorkOnCleanup(t, app)
 	app.loadingFrameDelay = time.Hour
 	t.Cleanup(func() { app.setIssuesLoading(false) })
 
@@ -81,7 +81,7 @@ func TestIssuesPaneNamesWhatItIsWaitingOn(t *testing.T) {
 // launch.
 func TestIssuesPaneStartsAsLoading(t *testing.T) {
 	app := newDefaultNavTestApp(config.Config{})
-	stopDetailTimersOnCleanup(t, app)
+	stopBackgroundWorkOnCleanup(t, app)
 
 	if text := placeholderText(app); !strings.Contains(text, "Loading issues") {
 		t.Fatalf("placeholder = %q, want it to read as loading before the first fetch", text)
@@ -164,5 +164,74 @@ func TestLoadingIndicatorStopsWithTheLastFetch(t *testing.T) {
 	app.setIssuesLoading(false)
 	if app.loading.running() {
 		t.Fatal("frame loop still running with nothing in flight")
+	}
+}
+
+// TestSupersededRefreshLeavesTheLoadingFlagAlone covers the refresh that lands
+// after a newer one took over: clearing the flag there stops the spinner and
+// drops the pane to "No issues" while a page is still on its way.
+func TestSupersededRefreshLeavesTheLoadingFlagAlone(t *testing.T) {
+	app := newDefaultNavTestApp(config.Config{})
+	stopBackgroundWorkOnCleanup(t, app)
+	app.loadingFrameDelay = time.Hour
+
+	app.loadingGeneration = 7
+	app.setIssuesLoading(true)
+
+	app.finishIssuesLoad(6, errors.New("stale failure"))
+
+	if !app.isLoading {
+		t.Fatal("a superseded refresh cleared the newer refresh's loading flag")
+	}
+	if app.issuesErr != nil {
+		t.Fatalf("issuesErr = %v, want the stale failure discarded", app.issuesErr)
+	}
+
+	app.finishIssuesLoad(7, nil)
+	if app.isLoading {
+		t.Fatal("the owning refresh did not settle the pane")
+	}
+}
+
+// TestFocusLandsOnThePlaceholderWhenMounted covers Tab into an empty issues
+// pane: focusing the detached table leaves no pane looking focused.
+func TestFocusLandsOnThePlaceholderWhenMounted(t *testing.T) {
+	app, release := newLoadingPaneTestApp(t, linearapi.IssuePage{Issues: []linearapi.Issue{
+		{ID: "issue-1", Identifier: "ENG-1", Title: "First"},
+	}}, nil)
+	refreshDone := installRefreshCompletionHook(app)
+
+	app.focusedPane = FocusIssues
+	app.updateFocus()
+
+	if got := app.app.GetFocus(); got != tview.Primitive(app.issuesPlaceholder) {
+		t.Fatalf("focus landed on %T while the pane was empty, want the placeholder", got)
+	}
+
+	app.refreshIssuesWithFocusChange(false)
+	close(release)
+	waitForRefreshCompletion(t, refreshDone)
+	app.focusedPane = FocusIssues
+	app.updateFocus()
+
+	if got := app.app.GetFocus(); got != tview.Primitive(app.allIssuesTable) {
+		t.Fatalf("focus landed on %T once rows arrived, want the table", got)
+	}
+}
+
+// TestNavigationFailureAnswersTheWaitingNode covers an offline cold launch: a
+// spinner frozen over "Loading teams" reads as still working.
+func TestNavigationFailureAnswersTheWaitingNode(t *testing.T) {
+	app := newDefaultNavTestApp(config.Config{})
+	stopBackgroundWorkOnCleanup(t, app)
+	app.loadingFrameDelay = time.Hour
+
+	app.reportNavigationFailure(errors.New("no route to host"))
+
+	if app.navLoadingNode == nil {
+		t.Fatal("the tree has no waiting node")
+	}
+	if text := app.navLoadingNode.GetText(); strings.Contains(text, "Loading") {
+		t.Fatalf("waiting node = %q, want it to report the failure", text)
 	}
 }

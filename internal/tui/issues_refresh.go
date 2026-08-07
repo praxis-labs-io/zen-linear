@@ -152,15 +152,15 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		a.queueIssuesRefresh(allowFocusChange, issueID...)
 		return
 	}
-	a.setIssuesLoading(true)
-	a.issuesErr = nil
-
 	targetIssueID := ""
 	if len(issueID) > 0 {
 		targetIssueID = issueID[0]
 	}
 	logger.Debug("tui.app: starting issues refresh target_issue_id=%s", targetIssueID)
 	generation := a.refreshGeneration.Add(1)
+	a.loadingGeneration = generation
+	a.issuesErr = nil
+	a.setIssuesLoading(true)
 
 	allowFocus := allowFocusChange
 	// Snapshot the chain here: setSortFields reassigns it on the UI thread
@@ -204,9 +204,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		page, err := fetchPage(ctx, params, nil)
 		if err != nil {
 			a.QueueUpdateDraw(func() {
-				a.issuesErr = err
-				a.issuesSettled = true
-				a.setIssuesLoading(false)
+				a.finishIssuesLoad(generation, err)
 				logger.ErrorWithErr(err, "tui.app: failed to fetch issues")
 				a.updateStatusBarWithError(err)
 				a.updateIssuesColumnLayout()
@@ -217,7 +215,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		}
 		if generation != a.refreshGeneration.Load() {
 			a.QueueUpdateDraw(func() {
-				a.isLoading = false
+				a.finishIssuesLoad(generation, nil)
 				a.notifyRefreshCompleted()
 				a.runQueuedIssuesRefresh()
 			})
@@ -300,8 +298,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			if unpainted && generation == a.refreshGeneration.Load() {
 				a.renderAccumulatedIssues()
 			}
-			a.issuesSettled = true
-			a.setIssuesLoading(false)
+			a.finishIssuesLoad(generation, nil)
 			logger.Debug("tui.app: refresh completed pages=%d total_fetched=%d elapsed=%s", pageCount, fetchedCount, time.Since(refreshStarted))
 			a.updateStatusBar()
 			a.notifyRefreshCompleted()

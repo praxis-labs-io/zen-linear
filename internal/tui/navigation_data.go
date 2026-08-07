@@ -28,17 +28,26 @@ func (a *App) navFetchers() navFetchers {
 	}
 }
 
+// fetchedNav is one navigation fetch's result. favoritesOK rides along because
+// a favorites failure is not fatal to rendering but does mean the tree is
+// incomplete, which is the difference between a copy worth caching and one that
+// would drop the user's Favorites section on the next launch.
+type fetchedNav struct {
+	teams       []linearapi.Team
+	favorites   []linearapi.Favorite
+	favoritesOK bool
+	err         error
+}
+
 // fetchNavigationData fetches the teams and favorites the navigation tree is
 // built from. A favorites failure is not fatal: the tree renders without them.
-func fetchNavigationData(ctx context.Context, fetchers navFetchers) ([]linearapi.Team, []linearapi.Favorite, error) {
-	var teams []linearapi.Team
-	var favorites []linearapi.Favorite
-	var teamsErr error
+func fetchNavigationData(ctx context.Context, fetchers navFetchers) fetchedNav {
+	var result fetchedNav
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		teams, teamsErr = fetchers.teams(ctx)
+		result.teams, result.err = fetchers.teams(ctx)
 	}()
 	go func() {
 		defer wg.Done()
@@ -47,16 +56,59 @@ func fetchNavigationData(ctx context.Context, fetchers navFetchers) ([]linearapi
 			logger.ErrorWithErr(err, "tui.app: failed to load favorites")
 			return
 		}
-		favorites = fetched
+		result.favorites = fetched
+		result.favoritesOK = true
 	}()
 	wg.Wait()
 
-	if teamsErr != nil {
-		return nil, nil, teamsErr
+	if result.err != nil {
+		return fetchedNav{err: result.err}
 	}
 
-	logger.Debug("tui.app: loaded teams count=%d favorites_count=%d", len(teams), len(favorites))
-	return teams, favorites, nil
+	logger.Debug("tui.app: loaded teams count=%d favorites_count=%d", len(result.teams), len(result.favorites))
+	return result
+}
+
+// navigationRootLabel names the tree's root for the workspace on screen.
+func (a *App) navigationRootLabel() string {
+	if a.activeWorkspaceName == "" {
+		return "Linear"
+	}
+	return "Linear · " + a.activeWorkspaceName
+}
+
+// buildWaitingNavigationRoot returns a root holding nothing but the waiting
+// node, for a tree that has no data to show yet.
+func (a *App) buildWaitingNavigationRoot() *tview.TreeNode {
+	root := tview.NewTreeNode(a.navigationRootLabel()).
+		SetColor(a.theme.Accent).
+		SetSelectable(false)
+
+	loadingNode := tview.NewTreeNode(a.navLoadingText()).
+		SetColor(a.theme.SecondaryText).
+		SetSelectable(false)
+	a.navLoadingNode = loadingNode
+	root.AddChild(loadingNode)
+	a.applySelectionStyleToTree(root)
+
+	return root
+}
+
+// resetNavigationTree puts the sidebar back to waiting. A workspace switch
+// otherwise keeps painting the teams and favorites of the workspace it left,
+// and selecting one of those scopes a fetch to an id the new key cannot
+// resolve.
+func (a *App) resetNavigationTree() {
+	if a.navigationTree == nil {
+		return
+	}
+	a.navNodeLabels = make(map[*tview.TreeNode]navNodeLabel)
+	a.favorites = nil
+	a.favoritesGroup = nil
+	a.navTeams = nil
+	root := a.buildWaitingNavigationRoot()
+	a.navigationTree.SetRoot(root)
+	a.navigationTree.SetCurrentNode(root)
 }
 
 // rebuildNavigationTree rebuilds the navigation tree with real data.
@@ -67,11 +119,7 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearap
 	// Held for the disk cache, which a favorites change rewrites without a
 	// teams fetch of its own.
 	a.navTeams = teams
-	rootLabel := "Linear"
-	if a.activeWorkspaceName != "" {
-		rootLabel = "Linear · " + a.activeWorkspaceName
-	}
-	root := tview.NewTreeNode(rootLabel).
+	root := tview.NewTreeNode(a.navigationRootLabel()).
 		SetColor(a.theme.Accent).
 		SetSelectable(false)
 

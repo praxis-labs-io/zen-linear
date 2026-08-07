@@ -59,6 +59,7 @@ func (a *App) updateFocus() {
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
+		a.setIssuesPlaceholderBorder(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles
@@ -68,6 +69,7 @@ func (a *App) updateFocus() {
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
+		a.setIssuesPlaceholderBorder(a.theme.Border)
 		if a.activeIssuesSection == IssuesSectionSearch {
 			a.searchPanel.SetBorderColor(a.theme.BorderFocus)
 			if a.searchInputFocused {
@@ -75,6 +77,12 @@ func (a *App) updateFocus() {
 			} else {
 				a.app.SetFocus(a.searchResultsTable)
 			}
+		} else if a.issuesPaneIsEmpty() && a.issuesPlaceholder != nil {
+			// The placeholder is what is mounted, so it is what takes the focus
+			// border. Highlighting the detached table leaves the pane looking
+			// unfocused and sends keys to something off screen.
+			a.app.SetFocus(a.issuesPlaceholder)
+			a.issuesPlaceholder.SetBorderColor(a.theme.BorderFocus)
 		} else if table := a.tableForSection(a.activeIssuesSection); table != nil {
 			a.app.SetFocus(table)
 			table.SetBorderColor(a.theme.BorderFocus)
@@ -103,6 +111,7 @@ func (a *App) updateFocus() {
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
+		a.setIssuesPlaceholderBorder(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusPalette:
@@ -111,6 +120,7 @@ func (a *App) updateFocus() {
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
 		a.allIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchPanel.SetBorderColor(a.theme.Border)
+		a.setIssuesPlaceholderBorder(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles

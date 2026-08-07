@@ -131,9 +131,14 @@ func runTUI() int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not resolve navigation cache path: %v\n", err)
 	}
-	navCacheFile, err := cache.LoadNav(navCachePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: ignoring unreadable navigation cache: %v\n", err)
+	var navCacheFile cache.NavFile
+	if navCachePath != "" {
+		// Skipped on an unresolved path, which LoadNav would only reject with a
+		// second warning about the same failure.
+		navCacheFile, err = cache.LoadNav(navCachePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: ignoring unreadable navigation cache: %v\n", err)
+		}
 	}
 
 	apiKey := os.Getenv(config.LinearAPIKeyEnv)

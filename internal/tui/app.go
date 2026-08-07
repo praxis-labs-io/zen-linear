@@ -172,8 +172,11 @@ type App struct {
 	// list has nothing to show instead. issuesSettled stays false until a fetch
 	// has finished, so a launch that has not started one yet reads as loading
 	// rather than as an empty workspace.
-	issuesErr                      error
-	issuesSettled                  bool
+	issuesErr     error
+	issuesSettled bool
+	// loadingGeneration is the refresh that owns the loading flag, so a
+	// superseded one cannot clear it out from under its replacement.
+	loadingGeneration              int64
 	loading                        *loadingIndicator
 	pendingRefresh                 bool
 	pendingRefreshIssueID          string
@@ -303,7 +306,7 @@ func (a *App) loadInitialData() {
 	pendingSession := a.consumePendingSession()
 	childFetchers := a.teamChildFetchers()
 	navFetchers := a.navFetchers()
-	workspace := a.activeWorkspaceName
+	cacheKey := a.navCacheKey()
 	cached, hasCache := a.cachedNavData()
 	a.setNavLoading(true)
 	go func() {
@@ -315,48 +318,50 @@ func (a *App) loadInitialData() {
 		ctx := context.Background()
 
 		// The nav tree needs teams and favorites; only the My/Other split needs
-		// the current user. Overlapping the user fetch with the tree fetch takes
-		// a full round trip off first paint. The issue refresh still waits on
-		// the user, or it would split the first page wrong.
+		// the current user. The two run together, and the tree can come from
+		// disk, so first paint waits on neither. The issue refresh still waits
+		// on the user, or it would split the first page wrong: loadCurrentUser
+		// queues the assignment, so anything queued after userDone closes lands
+		// behind it.
 		var (
-			teams     []linearapi.Team
-			favorites []linearapi.Favorite
-			navErr    error
-			wg        sync.WaitGroup
+			fetched  fetchedNav
+			userDone = make(chan struct{})
+			navDone  = make(chan struct{})
 		)
-		wg.Add(2)
 		go func() {
-			defer wg.Done()
+			defer close(userDone)
 			a.loadCurrentUser(ctx, fetchUser, generation)
 		}()
 		go func() {
-			defer wg.Done()
-			teams, favorites, navErr = fetchNavigationData(ctx, navFetchers)
+			defer close(navDone)
+			fetched = fetchNavigationData(ctx, navFetchers)
 		}()
 
 		// A cached tree paints now rather than a fetch later, so the issue list
-		// starts loading on the saved place while the fetch above is still out.
+		// starts loading on the saved place while the tree fetch is still out.
 		if hasCache {
 			a.QueueUpdateDraw(func() {
 				a.rebuildNavigationTree(cached.Teams, cached.Favorites)
 			})
+			<-userDone
 			if a.openInitialList(ctx, pendingSession, cached.Teams, cached.Favorites, childFetchers) {
 				pendingSession = nil
 			}
 		}
 
-		wg.Wait()
+		<-navDone
+		<-userDone
 		logger.Debug("tui.app: startup fetches completed elapsed=%s", time.Since(started))
 		a.QueueUpdateDraw(func() {
 			a.setNavLoading(false)
 		})
-		if navErr != nil {
-			logger.ErrorWithErr(navErr, "tui.app: failed to load teams")
+		if fetched.err != nil {
+			logger.ErrorWithErr(fetched.err, "tui.app: failed to load teams")
 			// The error needs its own draw. The refresh sets the status bar to
 			// "Loading..." synchronously, so sharing a closure means tview only
 			// ever paints the second message.
 			a.QueueUpdateDraw(func() {
-				a.updateStatusBarWithError(navErr)
+				a.reportNavigationFailure(fetched.err)
 			})
 			if hasCache {
 				// The cached tree is up and its list is already loading; a
@@ -370,25 +375,46 @@ func (a *App) loadInitialData() {
 			return
 		}
 
-		if hasCache && navDataUnchanged(cached, teams, favorites) {
-			// What is on screen is what the fetch returned, so there is nothing
-			// to rebuild and nothing new to write.
-			logger.Debug("tui.app: cached navigation tree still current teams=%d favorites=%d", len(teams), len(favorites))
+		if hasCache && !fetched.favoritesOK {
+			// Favorites are fetched separately and their failure is not fatal,
+			// but a tree missing them is not the tree: recording it would poison
+			// the cache, and rebuilding from it would drop the Favorites section
+			// out from under whoever is reading one.
+			logger.Warning("tui.app: keeping the cached tree, favorites did not load")
 			return
 		}
 
-		a.recordNavCache(workspace, teams, favorites)
+		if hasCache && navDataUnchanged(cached, fetched.teams, fetched.favorites) {
+			// What is on screen is what the fetch returned, so there is nothing
+			// to rebuild and nothing new to write.
+			logger.Debug("tui.app: cached navigation tree still current teams=%d favorites=%d", len(fetched.teams), len(fetched.favorites))
+			return
+		}
+
+		if fetched.favoritesOK {
+			a.recordNavCache(cacheKey, fetched.teams, fetched.favorites)
+		}
 
 		if hasCache {
-			a.rebuildAroundCurrentPlace(ctx, pendingSession, teams, favorites, childFetchers)
+			a.rebuildAroundCurrentPlace(ctx, pendingSession, fetched.teams, fetched.favorites, childFetchers)
 			return
 		}
 
 		a.QueueUpdateDraw(func() {
-			a.rebuildNavigationTree(teams, favorites)
+			a.rebuildNavigationTree(fetched.teams, fetched.favorites)
 		})
-		a.openInitialList(ctx, pendingSession, teams, favorites, childFetchers)
+		a.openInitialList(ctx, pendingSession, fetched.teams, fetched.favorites, childFetchers)
 	}()
+}
+
+// reportNavigationFailure surfaces a tree fetch that failed. The waiting node
+// has to be answered too: a spinner frozen mid-frame over "Loading teams" reads
+// as still working. UI thread only.
+func (a *App) reportNavigationFailure(err error) {
+	a.updateStatusBarWithError(err)
+	if a.navLoadingNode != nil {
+		a.navLoadingNode.SetText("Could not load teams")
+	}
 }
 
 // openInitialList opens the list the app starts on: the saved place, else the
@@ -425,7 +451,19 @@ func (a *App) rebuildAroundCurrentPlace(ctx context.Context, pending *session.St
 			state = &snapshot
 		}
 		a.rebuildNavigationTree(teams, favorites)
-		go a.openInitialList(ctx, state, teams, favorites, fetchers)
+		go func() {
+			if a.applySessionNavigation(ctx, state, teams, favorites, fetchers) {
+				return
+			}
+			// The list the user was reading is not in the fetched tree. The
+			// rebuild already left the cursor on All Issues; falling through to
+			// the configured default the way a launch does would move them a
+			// second time, for something they did not do.
+			a.QueueUpdateDraw(func() {
+				a.flashStatus("That list is no longer in this workspace")
+				a.refreshIssuesWithFocusChange(false)
+			})
+		}()
 	})
 }
 
@@ -513,7 +551,7 @@ func (a *App) resetCachedState() {
 	a.issuesMu.Unlock()
 
 	a.selectedNavigation = nil
-	a.navTeams = nil
+	a.resetNavigationTree()
 	a.currentUser = nil
 	a.teamUsers = nil
 	a.teamProjects = nil
