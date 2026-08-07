@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/agents"
+	"github.com/zen-linear/zen-linear/internal/cache"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 	"github.com/zen-linear/zen-linear/internal/logger"
@@ -35,6 +36,13 @@ type App struct {
 	// pendingSession is the place to reopen, applied once by loadInitialData.
 	pendingSession *session.State
 
+	// navCachePath is the disk copy of the navigation tree; empty disables it.
+	// navCache is that copy as it was at launch, and navTeams is the team list
+	// the tree on screen was built from.
+	navCachePath string
+	navCache     cache.NavFile
+	navTeams     []linearapi.Team
+
 	// UI components
 	pages                  *tview.Pages
 	mainLayout             *tview.Flex
@@ -44,6 +52,7 @@ type App struct {
 	layoutMode             layoutMode
 	palettePreviousPane    FocusTarget
 	navigationTree         *tview.TreeView
+	navLoadingNode         *tview.TreeNode // "Loading teams" node, until a tree replaces it
 	navNodeLabels          map[*tview.TreeNode]navNodeLabel
 	favorites              []linearapi.Favorite
 	favoritesGroup         *tview.TreeNode
@@ -54,6 +63,8 @@ type App struct {
 	searchPanel            *tview.Flex     // Search tab shell: input row + body
 	searchBody             *tview.Flex     // Swappable slot: results table or placeholder
 	searchPlaceholder      *tview.TextView // Centered empty/loading/error message
+	issuesPlaceholder      *tview.Flex     // Stands in for the All/My table when it has no rows
+	issuesPlaceholderText  *tview.TextView // Centered loading/empty/error message
 	issuesColumn           *tview.Flex     // Vertical flex holding the active issues tab
 	detailsView            *tview.Flex     // Flex container for details (description + comments)
 	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
@@ -153,7 +164,20 @@ type App struct {
 	metadataTeamID string
 
 	// Loading state
-	isLoading                      bool
+	isLoading bool
+	// navLoading is the navigation fetch, which outlives the first paint now
+	// that the tree can come from disk.
+	navLoading bool
+	// issuesErr is the last issue fetch failure, shown in the pane while the
+	// list has nothing to show instead. issuesSettled stays false until a fetch
+	// has finished, so a launch that has not started one yet reads as loading
+	// rather than as an empty workspace.
+	issuesErr     error
+	issuesSettled bool
+	// loadingGeneration is the refresh that owns the loading flag, so a
+	// superseded one cannot clear it out from under its replacement.
+	loadingGeneration              int64
+	loading                        *loadingIndicator
 	pendingRefresh                 bool
 	pendingRefreshIssueID          string
 	pendingRefreshAllowFocusChange bool
@@ -175,8 +199,10 @@ type App struct {
 	openURLFunc             func(string) error
 	copyToClipboardFunc     func(string) error
 	refreshCompleted        func()
+	navigationSettled       func()
 	preloadTeamMetadataFunc func(string)
 	detailDebounce          time.Duration
+	loadingFrameDelay       time.Duration
 	favoritesChanged        func()
 
 	// UI update mutex (for test safety when queueUpdateDraw executes immediately)
@@ -256,6 +282,11 @@ func (a *App) Run() error {
 
 	// Start the application event loop
 	err := a.app.Run()
+	// The frame loop would otherwise outlive the event loop, queueing draws
+	// nothing is left to run.
+	if a.loading != nil {
+		a.loading.stop()
+	}
 	// Every quit path ends here with the event loop stopped, so the snapshot
 	// is settled and no queued update can move it. Recorded on a loop error
 	// too: the user's place is worth keeping whichever way the app came down.
@@ -274,53 +305,166 @@ func (a *App) loadInitialData() {
 	generation := a.resetGeneration.Load()
 	pendingSession := a.consumePendingSession()
 	childFetchers := a.teamChildFetchers()
+	navFetchers := a.navFetchers()
+	workspace := a.activeWorkspaceName
+	cached, hasCache := a.cachedNavData()
+	a.setNavLoading(true)
 	go func() {
+		// Signals that the navigation fetch has been dealt with, whichever way
+		// it went, for tests that have to wait on a launch with no refresh of
+		// its own to watch.
+		defer a.notifyNavigationSettled()
 		started := time.Now()
 		ctx := context.Background()
 
 		// The nav tree needs teams and favorites; only the My/Other split needs
-		// the current user. Overlapping the user fetch with the tree fetch takes
-		// a full round trip off first paint. The issue refresh still waits on
-		// the user, or it would split the first page wrong.
-		var wg sync.WaitGroup
-		wg.Add(1)
+		// the current user. The two run together, and the tree can come from
+		// disk, so first paint waits on neither. The issue refresh still waits
+		// on the user, or it would split the first page wrong: loadCurrentUser
+		// queues the assignment, so anything queued after userDone closes lands
+		// behind it.
+		var (
+			fetched  fetchedNav
+			userDone = make(chan struct{})
+			navDone  = make(chan struct{})
+		)
 		go func() {
-			defer wg.Done()
+			defer close(userDone)
 			a.loadCurrentUser(ctx, fetchUser, generation)
 		}()
+		go func() {
+			defer close(navDone)
+			fetched = fetchNavigationData(ctx, navFetchers)
+		}()
 
-		teams, favorites, err := a.fetchNavigationData(ctx)
-		wg.Wait()
+		// A cached tree paints now rather than a fetch later, so the issue list
+		// starts loading on the saved place while the tree fetch is still out.
+		if hasCache {
+			a.QueueUpdateDraw(func() {
+				a.rebuildNavigationTree(cached.Teams, cached.Favorites)
+			})
+			<-userDone
+			if a.openInitialList(ctx, pendingSession, cached.Teams, cached.Favorites, childFetchers) {
+				pendingSession = nil
+			}
+		}
+
+		<-navDone
+		<-userDone
 		logger.Debug("tui.app: startup fetches completed elapsed=%s", time.Since(started))
-		if err != nil {
-			logger.ErrorWithErr(err, "tui.app: failed to load teams")
+		a.QueueUpdateDraw(func() {
+			a.setNavLoading(false)
+		})
+		if fetched.err != nil {
+			logger.ErrorWithErr(fetched.err, "tui.app: failed to load teams")
 			// The error needs its own draw. The refresh sets the status bar to
 			// "Loading..." synchronously, so sharing a closure means tview only
 			// ever paints the second message.
-			a.app.QueueUpdateDraw(func() {
-				a.updateStatusBarWithError(err)
+			a.QueueUpdateDraw(func() {
+				a.reportNavigationFailure(fetched.err)
 			})
+			if hasCache {
+				// The cached tree is up and its list is already loading; a
+				// second refresh would only repeat the failure.
+				return
+			}
 			// No tree, but All Issues does not need one.
-			a.app.QueueUpdateDraw(func() {
+			a.QueueUpdateDraw(func() {
 				a.refreshIssuesWithFocusChange(false)
 			})
 			return
 		}
 
-		a.app.QueueUpdateDraw(func() {
-			a.rebuildNavigationTree(teams, favorites)
-		})
+		if hasCache && !fetched.favoritesOK {
+			// Favorites are fetched separately and their failure is not fatal,
+			// but a tree missing them is not the tree: recording it would poison
+			// the cache, and rebuilding from it would drop the Favorites section
+			// out from under whoever is reading one.
+			logger.Warning("tui.app: keeping the cached tree, favorites did not load")
+			return
+		}
 
-		// The session restore and the configured default each trigger their
-		// own refresh after applying a selection, and Go short-circuits, so
-		// the default only runs when there was no session to reopen.
-		if !a.applySessionNavigation(ctx, pendingSession, teams, favorites, childFetchers) && !a.applyDefaultNavigation(ctx, teams) {
-			// Startup refresh must not steal focus from the navigation pane.
-			a.app.QueueUpdateDraw(func() {
+		if hasCache && navDataUnchanged(cached, fetched.teams, fetched.favorites) {
+			// What is on screen is what the fetch returned, so there is nothing
+			// to rebuild and nothing new to write.
+			logger.Debug("tui.app: cached navigation tree still current teams=%d favorites=%d", len(fetched.teams), len(fetched.favorites))
+			return
+		}
+
+		if fetched.favoritesOK {
+			a.recordNavCache(workspace, fetched.teams, fetched.favorites)
+		}
+
+		if hasCache {
+			a.rebuildAroundCurrentPlace(ctx, pendingSession, fetched.teams, fetched.favorites, childFetchers)
+			return
+		}
+
+		a.QueueUpdateDraw(func() {
+			a.rebuildNavigationTree(fetched.teams, fetched.favorites)
+		})
+		a.openInitialList(ctx, pendingSession, fetched.teams, fetched.favorites, childFetchers)
+	}()
+}
+
+// reportNavigationFailure surfaces a tree fetch that failed. The waiting node
+// has to be answered too: a spinner frozen mid-frame over "Loading teams" reads
+// as still working. UI thread only.
+func (a *App) reportNavigationFailure(err error) {
+	a.updateStatusBarWithError(err)
+	if a.navLoadingNode != nil {
+		a.navLoadingNode.SetText("Could not load teams")
+	}
+}
+
+// openInitialList opens the list the app starts on: the saved place, else the
+// configured default, else the unscoped list. Reports whether the saved place
+// resolved, so a caller can keep it for a second attempt against fresher data.
+// Call it off the UI thread; the restore fetches a team's children.
+func (a *App) openInitialList(ctx context.Context, state *session.State, teams []linearapi.Team, favorites []linearapi.Favorite, fetchers teamChildFetchers) bool {
+	// The session restore and the configured default each trigger their own
+	// refresh after applying a selection, so only one of the three runs.
+	if a.applySessionNavigation(ctx, state, teams, favorites, fetchers) {
+		return true
+	}
+	if !a.applyDefaultNavigation(ctx, teams) {
+		// Startup refresh must not steal focus from the navigation pane.
+		a.QueueUpdateDraw(func() {
+			a.refreshIssuesWithFocusChange(false)
+		})
+	}
+	return false
+}
+
+// rebuildAroundCurrentPlace repaints the tree from freshly fetched data and
+// puts the user back on the list they were reading. It only runs when the fetch
+// disagrees with the cached copy already on screen, so the usual launch never
+// reaches it and nothing moves.
+func (a *App) rebuildAroundCurrentPlace(ctx context.Context, pending *session.State, teams []linearapi.Team, favorites []linearapi.Favorite, fetchers teamChildFetchers) {
+	logger.Debug("tui.app: cached navigation tree is stale, rebuilding teams=%d favorites=%d", len(teams), len(favorites))
+	a.QueueUpdateDraw(func() {
+		// A saved place the cached tree could not resolve is worth another try
+		// against the fresh one; otherwise the place to keep is the live one.
+		state := pending
+		if state == nil {
+			snapshot := a.sessionSnapshot()
+			state = &snapshot
+		}
+		a.rebuildNavigationTree(teams, favorites)
+		go func() {
+			if a.applySessionNavigation(ctx, state, teams, favorites, fetchers) {
+				return
+			}
+			// The list the user was reading is not in the fetched tree. The
+			// rebuild already left the cursor on All Issues; falling through to
+			// the configured default the way a launch does would move them a
+			// second time, for something they did not do.
+			a.QueueUpdateDraw(func() {
+				a.flashStatus("That list is no longer in this workspace")
 				a.refreshIssuesWithFocusChange(false)
 			})
-		}
-	}()
+		}()
+	})
 }
 
 // loadCurrentUser fetches the authenticated user and installs it on the UI
@@ -407,6 +551,7 @@ func (a *App) resetCachedState() {
 	a.issuesMu.Unlock()
 
 	a.selectedNavigation = nil
+	a.resetNavigationTree()
 	a.currentUser = nil
 	a.teamUsers = nil
 	a.teamProjects = nil
@@ -444,7 +589,10 @@ func (a *App) resetCachedState() {
 	// mounting whichever tab the user was on.
 	a.updateIssuesColumnLayout()
 
-	a.isLoading = false
+	a.issuesErr = nil
+	a.issuesSettled = false
+	a.setIssuesLoading(false)
+	a.setNavLoading(false)
 	a.pendingRefresh = false
 	a.pendingRefreshIssueID = ""
 	a.pendingRefreshAllowFocusChange = true
@@ -479,10 +627,12 @@ func (a *App) buildLayout() {
 	a.allIssuesTable = a.buildIssuesTable(" All Issues ", IssuesSectionAll)
 	a.myIssuesTable = a.buildIssuesTable(" My Issues ", IssuesSectionMy)
 	a.buildSearchPanel()
+	a.buildIssuesPlaceholder()
 	// Create vertical flex for issues column
 	a.issuesColumn = tview.NewFlex().SetDirection(tview.FlexRow)
-	// All is the tab the app opens on; the others mount on a tab switch.
-	a.issuesColumn.AddItem(a.allIssuesTable, 0, 1, false)
+	// All is the tab the app opens on; the others mount on a tab switch. It has
+	// no rows yet, so what actually mounts is the placeholder.
+	a.updateIssuesColumnLayout()
 	a.detailsView = a.buildDetailsView()
 	a.statusBar = a.buildStatusBar()
 

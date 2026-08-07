@@ -22,18 +22,24 @@ func newUXTestApp(t testing.TB) *App {
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.teamUsers = []linearapi.User{{ID: "user-1", Name: "Test User"}}
 	app.teamCycles = []linearapi.Cycle{{ID: "cycle-1", Name: "Test Cycle", Number: 1}}
-	stopDetailTimersOnCleanup(t, app)
+	stopBackgroundWorkOnCleanup(t, app)
 	return app
 }
 
-// stopDetailTimersOnCleanup keeps a debounce timer armed by a selection from
+// stopBackgroundWorkOnCleanup keeps a debounce timer armed by a selection from
 // outliving the test and repainting into the next one's app. Taking uiUpdateMu
 // waits out a callback already inside QueueUpdateDraw; the generation bump stops
 // every later one. Tests that build an App directly need this too.
-func stopDetailTimersOnCleanup(t testing.TB, app *App) {
+func stopBackgroundWorkOnCleanup(t testing.TB, app *App) {
 	t.Helper()
 	t.Cleanup(func() {
 		app.cancelDetailDebounce()
+		// A test App never reaches Run, so the frame loop has no other way to
+		// stop. Left running with queueUpdateDraw stubbed inline, it keeps
+		// writing App fields while the next test reads them.
+		if app.loading != nil {
+			app.loading.stop()
+		}
 		app.uiUpdateMu.Lock()
 		app.detailFetchGeneration.Add(1)
 		app.uiUpdateMu.Unlock()

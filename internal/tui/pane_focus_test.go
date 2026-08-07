@@ -107,7 +107,7 @@ func TestPaneTogglesFireFromTheDetailsPane(t *testing.T) {
 			"toggle_details_pane":    "}",
 		},
 	}, nil)
-	stopDetailTimersOnCleanup(t, app)
+	stopBackgroundWorkOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails

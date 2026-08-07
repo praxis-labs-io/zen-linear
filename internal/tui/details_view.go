@@ -126,7 +126,7 @@ func (a *App) updateDetailsView() {
 	// without comments shows the empty state.
 	a.setDetailsCommentsVisibility(selectedIssue != nil)
 	if selectedIssue == nil {
-		a.detailsDescriptionView.SetText(fmt.Sprintf("%sNo issue selected. Select an issue from the list to view details.[-]", a.themeTags.SecondaryText))
+		a.detailsDescriptionView.SetText(a.emptyDetailsMessage())
 		a.detailsCommentsView.SetText("")
 		a.updateAllPaneTitles()
 		if a.focusedPane == FocusDetails && !a.detailsCommentsVisible {

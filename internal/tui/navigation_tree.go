@@ -39,16 +39,7 @@ type NavigationNode struct {
 func (a *App) buildNavigationTree() *tview.TreeView {
 	tree := tview.NewTreeView()
 
-	// Create initial root with "Loading..." placeholder
-	root := tview.NewTreeNode("Linear").
-		SetColor(a.theme.Accent).
-		SetSelectable(false)
-
-	loadingNode := tview.NewTreeNode("Loading teams...").
-		SetColor(a.theme.SecondaryText).
-		SetSelectable(false)
-	root.AddChild(loadingNode)
-	a.applySelectionStyleToTree(root)
+	root := a.buildWaitingNavigationRoot()
 
 	tree.SetBorder(true).
 		SetTitle(" Navigation ").
