@@ -210,21 +210,24 @@ func agentModelOptionsForProvider(provider string) ([]string, []string) {
 
 // SettingsModal manages the settings form overlay.
 type SettingsModal struct {
-	app                  *App
-	fm                   *FormModal
-	endpointField        *tview.InputField
-	timeoutField         *tview.InputField
-	pageSizeField        *tview.InputField
-	cacheTTLField        *tview.InputField
-	searchDebounceField  *tview.InputField
-	logFileField         *tview.InputField
-	logLevelField        *FormPicker
-	logLevelOptions      []string
-	themeField           *FormPicker
-	themeOptions         []string
-	themeValues          []string
-	densityField         *FormPicker
-	roundedBordersField  *tview.Checkbox
+	app                 *App
+	fm                  *FormModal
+	endpointField       *tview.InputField
+	timeoutField        *tview.InputField
+	pageSizeField       *tview.InputField
+	cacheTTLField       *tview.InputField
+	searchDebounceField *tview.InputField
+	logFileField        *tview.InputField
+	logLevelField       *FormPicker
+	logLevelOptions     []string
+	themeField          *FormPicker
+	themeOptions        []string
+	themeValues         []string
+	densityField        *FormPicker
+	roundedBordersField *FormPicker
+	sessionRestoreField *FormPicker
+	// booleanOptions backs every on/off picker, so they read the same way.
+	booleanOptions       []string
 	densityOptions       []string
 	densityValues        []string
 	agentProviderField   *FormPicker
@@ -253,6 +256,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 		densityValues:        []string{config.DensityComfortable, config.DensityCompact},
 		agentProviderOptions: availableProviders,
 		agentSandboxOptions:  []string{"enabled", "disabled"},
+		booleanOptions:       []string{"enabled", "disabled"},
 		agentModelOptions:    modelLabels,
 		agentModelValues:     modelValues,
 	}
@@ -270,8 +274,13 @@ func NewSettingsModal(app *App) *SettingsModal {
 	sm.logLevelField = sm.fm.AddPicker("Log level", sm.logLevelOptions, 0, nil)
 	sm.themeField = sm.fm.AddPicker("Theme", sm.themeOptions, 0, nil)
 	sm.densityField = sm.fm.AddPicker("Density", sm.densityOptions, 0, nil)
+	// Consecutive pickers share one row, so each group needs its own break or
+	// all eight pack into a single row and clip their labels and values.
+	sm.fm.EndRow()
 
-	sm.roundedBordersField = sm.fm.AddCheckbox("Rounded borders", false)
+	sm.roundedBordersField = sm.fm.AddPicker("Rounded borders", sm.booleanOptions, booleanOptionIndex(false), nil)
+	sm.sessionRestoreField = sm.fm.AddPicker("Restore last session", sm.booleanOptions, booleanOptionIndex(true), nil)
+	sm.fm.EndRow()
 
 	sm.agentProviderField = sm.fm.AddPicker("Agent provider", sm.agentProviderOptions, 0, func(text string, index int) {
 		_ = index
@@ -312,7 +321,8 @@ func (sm *SettingsModal) Show() {
 	sm.setLogLevelSelection(settings.LogLevel)
 	sm.setThemeSelection(settings.Theme)
 	sm.setDensitySelection(settings.Density)
-	sm.roundedBordersField.SetChecked(settings.RoundedBorders)
+	sm.roundedBordersField.SetCurrentOption(booleanOptionIndex(settings.RoundedBorders))
+	sm.sessionRestoreField.SetCurrentOption(booleanOptionIndex(settings.SessionRestore))
 	sm.setAgentProviderSelection(selectedProvider)
 	sm.setAgentSandboxSelection(settings.AgentSandbox)
 	sm.setAgentModelOptionsForProvider(selectedProvider)
@@ -470,7 +480,8 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		SubgroupBy:     sm.app.config.SubgroupBy,
 		SortBy:         sm.app.config.SortBy,
 		Columns:        sm.app.config.Columns,
-		RoundedBorders: sm.roundedBordersField.IsChecked(),
+		RoundedBorders: booleanOptionValue(sm.roundedBordersField),
+		SessionRestore: booleanOptionValue(sm.sessionRestoreField),
 		AgentProvider:  agentProvider,
 		AgentSandbox:   agentSandbox,
 		AgentModel:     agentModel,
@@ -564,6 +575,20 @@ func (sm *SettingsModal) setAgentProviderSelection(provider string) {
 		}
 	}
 	sm.agentProviderField.SetCurrentOption(selected)
+}
+
+// booleanOptionIndex maps a flag onto its index in booleanOptions.
+func booleanOptionIndex(enabled bool) int {
+	if enabled {
+		return 0
+	}
+	return 1
+}
+
+// booleanOptionValue reads a flag back off an on/off picker.
+func booleanOptionValue(picker *FormPicker) bool {
+	index, _ := picker.GetCurrentOption()
+	return index == 0
 }
 
 // setAgentSandboxSelection updates the dropdown selection to match the provided sandbox value.

@@ -76,7 +76,7 @@ Scratch, never committed. `docs/` describes only what is true today. Durable con
 
 ## Architecture
 
-`cmd/zen-linear` is the entrypoint; everything lives in `internal/`: `linearapi` (GraphQL client via shurcooL/graphql), `tui` (tview app — the bulk), `config`, `auth`, `cache`, `agents`, `logger`.
+`cmd/zen-linear` is the entrypoint; everything lives in `internal/`: `linearapi` (GraphQL client via shurcooL/graphql), `tui` (tview app — the bulk), `config`, `session`, `auth`, `cache`, `agents`, `logger`.
 
 ### App wiring
 
@@ -86,7 +86,9 @@ Scratch, never committed. `docs/` describes only what is true today. Durable con
 
 `internal/config` has a triple: `SettingsFile` (pointer fields, what's on disk) → `Settings` → `Config`. The settings modal saves via `settingsFromForm`, which rebuilds the file from form controls — **any config field without a form control (workspaces, default_workspace, group_by, subgroup_by, columns, keybindings) must be explicitly carried through there, or an in-app settings save silently strips it from the user's config**. Every new field needs: the triple, a validator in `settings.go`, and the carry-through.
 
-Config, credentials, prompts, and the log live under `~/.zen-linear`, resolved through `config.Dir()`. `config.MigrateLegacyDir()` renames a leftover `~/.linear-tui` on startup; it uses `os.Rename` so symlinked files keep resolving to their targets.
+Config, credentials, prompts, the session, and the log live under `~/.zen-linear`, resolved through `config.Dir()`.
+
+`internal/session` owns `session.json` (last workspace, and per workspace the nav selection, focused issue, tab, filters, and search). It sits outside `internal/config` because config models what the user writes and this is what the app writes: `config.json` is a symlink into Drew's dotfiles repo, and a per-quit write there would dirty that repo on every launch. `App.Run` flushes it after the event loop stops, `switchWorkspace` flushes the outgoing workspace before `resetCachedState` wipes it, and the restore is a locator resolved against the live tree, never a serialized node. `config.MigrateLegacyDir()` renames a leftover `~/.linear-tui` on startup; it uses `os.Rename` so symlinked files keep resolving to their targets.
 
 Drew's live config is a symlink chain: `~/.zen-linear/config.json` → dotfiles repo (`drucial-dots/configs/linear-tui/config.json`). The app writes settings in place, so in-app saves show up as diffs in the dotfiles repo — intentional.
 

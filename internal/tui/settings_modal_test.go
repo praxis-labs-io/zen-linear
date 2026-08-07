@@ -45,3 +45,46 @@ func TestSettingsFormRoundTripPreservesConfig(t *testing.T) {
 		t.Fatalf("keybindings stripped on save: %v", settings.Keybindings)
 	}
 }
+
+// TestSettingsFormRoundTripsFlags verifies both on/off pickers survive a save
+// in both directions rather than reverting to a default. They read their value
+// off a selected index, so an off-by-one reads as the opposite setting.
+func TestSettingsFormRoundTripsFlags(t *testing.T) {
+	for _, want := range []bool{true, false} {
+		app := newUXTestApp(t)
+		app.config.SessionRestore = want
+		app.config.RoundedBorders = want
+
+		sm := app.settingsModal
+		sm.Show()
+		settings, err := sm.settingsFromForm()
+		if err != nil {
+			t.Fatalf("settingsFromForm: %v", err)
+		}
+		if settings.SessionRestore != want {
+			t.Errorf("SessionRestore = %v, want %v", settings.SessionRestore, want)
+		}
+		if settings.RoundedBorders != want {
+			t.Errorf("RoundedBorders = %v, want %v", settings.RoundedBorders, want)
+		}
+	}
+}
+
+// TestSettingsPickersSpanMultipleRows guards the row breaks between the
+// settings pickers. Consecutive AddPicker calls pack into one row, so dropping
+// an EndRow silently squeezes every picker into a single row and clips the
+// labels and values rather than failing.
+func TestSettingsPickersSpanMultipleRows(t *testing.T) {
+	app := newUXTestApp(t)
+	sm := app.settingsModal
+
+	widest := 0
+	for _, row := range sm.fm.rows {
+		if row.columns > widest {
+			widest = row.columns
+		}
+	}
+	if widest > 3 {
+		t.Fatalf("widest picker row = %d columns, want at most 3: the settings pickers lost a row break and will clip", widest)
+	}
+}

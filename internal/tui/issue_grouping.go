@@ -174,8 +174,10 @@ func (a *App) toggleIssueExpanded(issueID string) {
 	a.updateIssuesColumnLayout()
 }
 
-// onNavigationSelected handles when a navigation item is selected.
-func (a *App) onNavigationSelected(node *NavigationNode) {
+// onNavigationSelected handles when a navigation item is selected. An
+// optional issueID asks the refresh to land on that issue, which is how a
+// restored session reopens the row the user left on.
+func (a *App) onNavigationSelected(node *NavigationNode, issueID ...string) {
 	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v is_cycle=%v is_issue=%v", node.ID, node.Text, node.IsTeam, node.IsProject, node.IsCycle, node.IsIssue)
 
 	// A new list starts fresh: its own view settings apply again until the
@@ -206,7 +208,7 @@ func (a *App) onNavigationSelected(node *NavigationNode) {
 		go a.preloadTeamMetadataFunc(node.TeamID)
 	}
 
-	a.refreshIssuesWithFocusChange(false)
+	a.refreshIssuesWithFocusChange(false, issueID...)
 }
 
 // preloadTeamMetadata warms team-scoped metadata caches for commands and create-issue defaults.

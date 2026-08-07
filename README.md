@@ -78,6 +78,7 @@ The options beyond the original linear-tui set:
       "sort_by": ["status", "priority"],
       "columns": ["priority", "id", "state", "title", "labels", "assignee", "updated"],
       "default_workspace": "Work",
+      "session_restore": true,
       "workspaces": [
         { "name": "Work", "api_key_env": "LINEAR_API_KEY_WORK" },
         { "name": "Personal", "api_key_env": "LINEAR_API_KEY_PERSONAL" }
@@ -97,6 +98,11 @@ The options beyond the original linear-tui set:
   updated
 - `workspaces` reads keys from the named env vars. Keys are never stored in
   the file
+- `session_restore` reopens the last workspace, list, filters, tab, and
+  focused issue, saved to `~/.zen-linear/session.json` on quit. It is on by
+  default, which makes `default_workspace`, `default_team`, and
+  `default_project` first-run settings. Turn it off to open on those every
+  time
 - `keybindings` remaps palette commands by id, the global quit, open_palette,
   and search actions, and the tab_next, tab_prev, columns_left,
   columns_right, favorite_move_up, favorite_move_down, favorite_nest, and

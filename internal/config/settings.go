@@ -35,6 +35,7 @@ type SettingsFile struct {
 	Keybindings      map[string]string `json:"keybindings"`
 	DefaultTeam      *string           `json:"default_team"`
 	DefaultProject   *string           `json:"default_project"`
+	SessionRestore   *bool             `json:"session_restore"`
 }
 
 // Settings contains concrete settings values for UI and persistence.
@@ -62,6 +63,7 @@ type Settings struct {
 	Keybindings      map[string]string `json:"keybindings,omitempty"`
 	DefaultTeam      string            `json:"default_team"`
 	DefaultProject   string            `json:"default_project"`
+	SessionRestore   bool              `json:"session_restore"`
 }
 
 // DefaultSettings returns the default settings for the config file and UI.
@@ -85,6 +87,7 @@ func DefaultSettings() Settings {
 		AgentWorkspace: "",
 		DefaultTeam:    "",
 		DefaultProject: "",
+		SessionRestore: true,
 	}
 }
 
@@ -114,6 +117,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		Keybindings:      cfg.Keybindings,
 		DefaultTeam:      cfg.DefaultTeam,
 		DefaultProject:   cfg.DefaultProject,
+		SessionRestore:   cfg.SessionRestore,
 	}
 }
 
@@ -219,6 +223,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		Keybindings:      settings.Keybindings,
 		DefaultTeam:      settings.DefaultTeam,
 		DefaultProject:   settings.DefaultProject,
+		SessionRestore:   settings.SessionRestore,
 	}, nil
 }
 
@@ -340,6 +345,9 @@ func LoadSettings(path string) (Settings, error) {
 	}
 	if file.DefaultWorkspace != nil {
 		settings.DefaultWorkspace = *file.DefaultWorkspace
+	}
+	if file.SessionRestore != nil {
+		settings.SessionRestore = *file.SessionRestore
 	}
 
 	return settings, nil

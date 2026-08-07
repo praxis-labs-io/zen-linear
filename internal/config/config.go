@@ -131,6 +131,11 @@ type Config struct {
 	// DefaultWorkspace selects the startup workspace by name. Empty falls
 	// back to the first workspace whose key env var is set.
 	DefaultWorkspace string
+
+	// SessionRestore reopens the last workspace, navigation selection, and
+	// focused issue on startup. When off, DefaultWorkspace, DefaultTeam, and
+	// DefaultProject decide where the app opens.
+	SessionRestore bool
 }
 
 // Workspace describes a switchable Linear workspace. The API key is read from
@@ -156,17 +161,33 @@ func FirstAvailableWorkspace(workspaces []Workspace) (Workspace, bool) {
 	return Workspace{}, false
 }
 
-// StartupWorkspace resolves the workspace to use at startup: the configured
-// default when its key is available, else the first workspace with a key.
-func StartupWorkspace(workspaces []Workspace, defaultName string) (Workspace, bool) {
-	if defaultName != "" {
+// StartupWorkspace resolves the workspace to use at startup: the first name
+// whose key is available, else the first workspace with a key. Names are tried
+// in order so a stale one falls through to the next rather than skipping
+// straight to whatever workspace happens to come first.
+func StartupWorkspace(workspaces []Workspace, names ...string) (Workspace, bool) {
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
 		for _, workspace := range workspaces {
-			if strings.EqualFold(workspace.Name, defaultName) && workspace.APIKey() != "" {
+			if strings.EqualFold(workspace.Name, name) && workspace.APIKey() != "" {
 				return workspace, true
 			}
 		}
 	}
 	return FirstAvailableWorkspace(workspaces)
+}
+
+// StartupWorkspaceNames lists the workspace names to try at startup, best
+// first: the last session's when restore is on, then the configured default.
+// Both are offered because a session name whose key env var is gone must cost
+// the user their default, not silently open an unrelated workspace.
+func StartupWorkspaceNames(settings Settings, lastSession string) []string {
+	if settings.SessionRestore && strings.TrimSpace(lastSession) != "" {
+		return []string{lastSession, settings.DefaultWorkspace}
+	}
+	return []string{settings.DefaultWorkspace}
 }
 
 // LoadFromEnv loads configuration from environment variables.

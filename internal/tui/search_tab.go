@@ -154,6 +154,14 @@ func (a *App) performIssueSearch(query string) {
 			if len(a.searchIssueRows) > 0 {
 				selectedID = a.searchIssueRows[0].IssueID
 			}
+			// A restored session lands on the issue it was left on, when the
+			// results still hold it. One shot: later searches start at the top.
+			if restored := a.pendingSearchIssueID; restored != "" {
+				a.pendingSearchIssueID = ""
+				if _, ok := a.searchIDToIssue[restored]; ok {
+					selectedID = restored
+				}
+			}
 			renderIssuesTableModel(a.searchResultsTable, a.searchIssueRows, a.searchIDToIssue, selectedID, a.theme, a.issueColumns())
 			a.updateSearchBody()
 			a.updateAllPaneTitles()

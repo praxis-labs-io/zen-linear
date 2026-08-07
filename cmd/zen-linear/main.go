@@ -10,6 +10,7 @@ import (
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 	"github.com/zen-linear/zen-linear/internal/logger"
+	"github.com/zen-linear/zen-linear/internal/session"
 	"github.com/zen-linear/zen-linear/internal/tui"
 )
 
@@ -111,12 +112,25 @@ func runTUI() int {
 	oauthClient := oauth.NewClient(oauth.ClientConfig{ClientID: clientID})
 	ctx := context.Background()
 
+	// The logger is not up yet, so these two failures go to stderr like the
+	// other pre-logger errors here. Neither is fatal: without a session file
+	// the app opens on its configured defaults.
+	sessionPath, err := session.Path()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not resolve session path: %v\n", err)
+	}
+	sessionFile, err := session.Load(sessionPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: ignoring unreadable session file: %v\n", err)
+	}
+
 	apiKey := os.Getenv(config.LinearAPIKeyEnv)
 	if apiKey == "" {
-		// With no explicit key, use the configured default workspace (or the
-		// first whose key env var is set); OAuth credentials remain the
-		// fallback.
-		if workspace, ok := config.StartupWorkspace(settings.Workspaces, settings.DefaultWorkspace); ok {
+		// With no explicit key, reopen the last session's workspace, else the
+		// configured default (or the first whose key env var is set); OAuth
+		// credentials remain the fallback.
+		names := config.StartupWorkspaceNames(settings, sessionFile.LastWorkspace)
+		if workspace, ok := config.StartupWorkspace(settings.Workspaces, names...); ok {
 			apiKey = workspace.APIKey()
 		}
 	}
@@ -171,6 +185,7 @@ func runTUI() int {
 	}
 
 	app := tui.NewApp(clientCfg, cfg, promptTemplates)
+	app.UseSession(sessionPath, sessionFile)
 
 	if err := app.Run(); err != nil {
 		logger.ErrorWithErr(err, "app.main: application error")

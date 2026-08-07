@@ -146,6 +146,53 @@ func TestLoadSettingsParsesRoundedBorders(t *testing.T) {
 	}
 }
 
+// TestLoadSettingsParsesSessionRestore verifies the flag defaults to on and
+// that an explicit false in the file survives, which is what the pointer field
+// on SettingsFile buys.
+func TestLoadSettingsParsesSessionRestore(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want bool
+	}{
+		{name: "absent defaults to on", data: `{}`, want: true},
+		{name: "explicit false stays off", data: `{"session_restore": false}`, want: false},
+		{name: "explicit true stays on", data: `{"session_restore": true}`, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settingsPath := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(settingsPath, []byte(tt.data), 0644); err != nil {
+				t.Fatalf("write settings file: %v", err)
+			}
+
+			settings, err := LoadSettings(settingsPath)
+			if err != nil {
+				t.Fatalf("LoadSettings() error: %v", err)
+			}
+			if settings.SessionRestore != tt.want {
+				t.Errorf("SessionRestore = %v, want %v", settings.SessionRestore, tt.want)
+			}
+
+			cfg, err := ConfigFromSettings("test-key", settings)
+			if err != nil {
+				t.Fatalf("ConfigFromSettings() error: %v", err)
+			}
+			if cfg.SessionRestore != tt.want {
+				t.Errorf("Config.SessionRestore = %v, want %v", cfg.SessionRestore, tt.want)
+			}
+			if got := SettingsFromConfig(cfg).SessionRestore; got != tt.want {
+				t.Errorf("SettingsFromConfig().SessionRestore = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	if !DefaultSettings().SessionRestore {
+		t.Error("DefaultSettings().SessionRestore = false, want true")
+	}
+}
+
 // TestConfigFromSettingsValidation checks invalid settings are rejected.
 func TestConfigFromSettingsValidation(t *testing.T) {
 	base := DefaultSettings()
@@ -360,6 +407,61 @@ func TestStartupWorkspace(t *testing.T) {
 	}
 	if workspace, ok := StartupWorkspace(workspaces, ""); !ok || workspace.Name != "Acme" {
 		t.Errorf("StartupWorkspace(empty) = %+v, %v; want Acme", workspace, ok)
+	}
+}
+
+// TestStartupWorkspaceNames verifies the last session's workspace is tried
+// first and only while restore is on, with the configured default kept behind
+// it as the fallback.
+func TestStartupWorkspaceNames(t *testing.T) {
+	tests := []struct {
+		name        string
+		restore     bool
+		configured  string
+		lastSession string
+		want        []string
+	}{
+		{name: "session first, default behind it", restore: true, configured: "Acme", lastSession: "Side", want: []string{"Side", "Acme"}},
+		{name: "no session leaves the default", restore: true, configured: "Acme", lastSession: "", want: []string{"Acme"}},
+		{name: "blank session leaves the default", restore: true, configured: "Acme", lastSession: "   ", want: []string{"Acme"}},
+		{name: "restore off ignores session", restore: false, configured: "Acme", lastSession: "Side", want: []string{"Acme"}},
+		{name: "nothing configured", restore: true, configured: "", lastSession: "", want: []string{""}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := DefaultSettings()
+			settings.SessionRestore = tt.restore
+			settings.DefaultWorkspace = tt.configured
+
+			got := StartupWorkspaceNames(settings, tt.lastSession)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("StartupWorkspaceNames() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestStartupWorkspaceFallsBackToDefault verifies a saved workspace whose key
+// env var is gone costs the user their configured default, not an unrelated
+// workspace that happens to come first.
+func TestStartupWorkspaceFallsBackToDefault(t *testing.T) {
+	t.Setenv("LINEAR_KEY_FIRST", "k-first")
+	t.Setenv("LINEAR_KEY_DEFAULT", "k-default")
+	workspaces := []Workspace{
+		{Name: "Gamma", APIKeyEnv: "LINEAR_KEY_FIRST"},
+		{Name: "Alpha", APIKeyEnv: "LINEAR_KEY_DEFAULT"},
+		{Name: "Beta", APIKeyEnv: "LINEAR_KEY_UNSET"},
+	}
+
+	settings := DefaultSettings()
+	settings.SessionRestore = true
+	settings.DefaultWorkspace = "Alpha"
+
+	names := StartupWorkspaceNames(settings, "Beta")
+	workspace, ok := StartupWorkspace(workspaces, names...)
+	if !ok || workspace.Name != "Alpha" {
+		t.Fatalf("StartupWorkspace(%v) = %+v, %v; want Alpha, not the first workspace with a key", names, workspace, ok)
 	}
 }
 
