@@ -7,6 +7,7 @@ import (
 
 	"github.com/zen-linear/zen-linear/internal/auth"
 	"github.com/zen-linear/zen-linear/internal/auth/oauth"
+	"github.com/zen-linear/zen-linear/internal/cache"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 	"github.com/zen-linear/zen-linear/internal/logger"
@@ -112,9 +113,9 @@ func runTUI() int {
 	oauthClient := oauth.NewClient(oauth.ClientConfig{ClientID: clientID})
 	ctx := context.Background()
 
-	// The logger is not up yet, so these two failures go to stderr like the
-	// other pre-logger errors here. Neither is fatal: without a session file
-	// the app opens on its configured defaults.
+	// The logger is not up yet, so these failures go to stderr like the other
+	// pre-logger errors here. None is fatal: without a session file the app
+	// opens on its configured defaults.
 	sessionPath, err := session.Path()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not resolve session path: %v\n", err)
@@ -122,6 +123,17 @@ func runTUI() int {
 	sessionFile, err := session.Load(sessionPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: ignoring unreadable session file: %v\n", err)
+	}
+
+	// The cached navigation tree is what the sidebar paints before the first
+	// fetch answers. Without it the app just waits, as it always did.
+	navCachePath, err := cache.NavPath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not resolve navigation cache path: %v\n", err)
+	}
+	navCacheFile, err := cache.LoadNav(navCachePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: ignoring unreadable navigation cache: %v\n", err)
 	}
 
 	apiKey := os.Getenv(config.LinearAPIKeyEnv)
@@ -186,6 +198,7 @@ func runTUI() int {
 
 	app := tui.NewApp(clientCfg, cfg, promptTemplates)
 	app.UseSession(sessionPath, sessionFile)
+	app.UseNavCache(navCachePath, navCacheFile)
 
 	if err := app.Run(); err != nil {
 		logger.ErrorWithErr(err, "app.main: application error")

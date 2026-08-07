@@ -141,6 +141,11 @@ func (a *App) updateAllPaneTitles() {
 		a.searchPanel.SetTitle(issuesTitle)
 		a.searchPanel.SetTitleColor(a.theme.Foreground)
 	}
+	if a.issuesPlaceholder != nil {
+		// It stands in for the table, so it wears the same tab strip.
+		a.issuesPlaceholder.SetTitle(issuesTitle)
+		a.issuesPlaceholder.SetTitleColor(a.theme.Foreground)
+	}
 
 	// Update Details pane tab strip
 	isDetailsFocused := a.focusedPane == FocusDetails

@@ -33,6 +33,8 @@ type linearDeps struct {
 	fetchCyclesFunc         func(context.Context, string) ([]linearapi.Cycle, error)
 	fetchUsersFunc          func(context.Context, string) ([]linearapi.User, error)
 	fetchCurrentUserFunc    func(context.Context) (linearapi.User, error)
+	fetchTeamsFunc          func(context.Context) ([]linearapi.Team, error)
+	fetchFavoritesFunc      func(context.Context) ([]linearapi.Favorite, error)
 	createFavoriteFunc      func(context.Context, linearapi.FavoriteTarget) (linearapi.Favorite, error)
 	deleteFavoriteFunc      func(context.Context, string) error
 	updateFavoriteSortFunc  func(context.Context, string, float64) error
@@ -63,6 +65,8 @@ func newLinearDeps(cfg linearapi.ClientConfig, cacheTTL time.Duration) linearDep
 		fetchCyclesFunc:         teamCache.GetCycles,
 		fetchUsersFunc:          teamCache.GetUsers,
 		fetchCurrentUserFunc:    teamCache.GetCurrentUser,
+		fetchTeamsFunc:          teamCache.GetTeams,
+		fetchFavoritesFunc:      api.ListFavorites,
 		createFavoriteFunc:      api.CreateFavorite,
 		deleteFavoriteFunc:      api.DeleteFavorite,
 		updateFavoriteSortFunc:  api.UpdateFavoriteSortOrder,

@@ -131,12 +131,11 @@ func Load(path string) (File, error) {
 	return file, nil
 }
 
-// Save writes the session file, creating directories as needed. The write goes
-// to a temp file and renames over the target: an interrupted in-place write
-// would leave JSON that Load rejects, and the next Record would then rebuild
-// from empty, costing every workspace its saved place rather than just the one
-// being written. Mode 0600 matches the credentials store, since the file holds
-// the user's search text and the issues they were reading.
+// Save writes the session file. The write is atomic: an interrupted in-place
+// write would leave JSON that Load rejects, and the next Record would then
+// rebuild from empty, costing every workspace its saved place rather than just
+// the one being written. Mode 0600 matches the credentials store, since the
+// file holds the user's search text and the issues they were reading.
 func Save(path string, file File) error {
 	if path == "" {
 		return fmt.Errorf("session path is empty")
@@ -149,36 +148,8 @@ func Save(path string, file File) error {
 	}
 	data = append(data, '\n')
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create session directory: %w", err)
-	}
-
-	temp, err := os.CreateTemp(dir, ".session-*.json")
-	if err != nil {
-		return fmt.Errorf("create session temp file: %w", err)
-	}
-	tempName := temp.Name()
-	defer func() {
-		// Harmless once the rename succeeded; the temp file is gone by then.
-		_ = os.Remove(tempName)
-	}()
-
-	if _, err := temp.Write(data); err != nil {
-		// The write error is the one worth reporting; the temp file is removed
-		// either way by the deferred cleanup.
-		_ = temp.Close()
+	if err := config.WriteFileAtomic(path, data, 0o600); err != nil {
 		return fmt.Errorf("write session file: %w", err)
-	}
-	if err := temp.Chmod(0o600); err != nil {
-		_ = temp.Close()
-		return fmt.Errorf("set session file permissions: %w", err)
-	}
-	if err := temp.Close(); err != nil {
-		return fmt.Errorf("close session file: %w", err)
-	}
-	if err := os.Rename(tempName, path); err != nil {
-		return fmt.Errorf("replace session file: %w", err)
 	}
 
 	return nil

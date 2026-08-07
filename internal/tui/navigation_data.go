@@ -12,9 +12,25 @@ import (
 	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
+// navFetchers is the pair the navigation tree is built from, taken off the App
+// so the background goroutines never read fields applySettings reassigns on the
+// UI thread.
+type navFetchers struct {
+	teams     func(context.Context) ([]linearapi.Team, error)
+	favorites func(context.Context) ([]linearapi.Favorite, error)
+}
+
+// navFetchers snapshots the fetch seams. UI thread only.
+func (a *App) navFetchers() navFetchers {
+	return navFetchers{
+		teams:     a.fetchTeamsFunc,
+		favorites: a.fetchFavoritesFunc,
+	}
+}
+
 // fetchNavigationData fetches the teams and favorites the navigation tree is
 // built from. A favorites failure is not fatal: the tree renders without them.
-func (a *App) fetchNavigationData(ctx context.Context) ([]linearapi.Team, []linearapi.Favorite, error) {
+func fetchNavigationData(ctx context.Context, fetchers navFetchers) ([]linearapi.Team, []linearapi.Favorite, error) {
 	var teams []linearapi.Team
 	var favorites []linearapi.Favorite
 	var teamsErr error
@@ -22,11 +38,11 @@ func (a *App) fetchNavigationData(ctx context.Context) ([]linearapi.Team, []line
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		teams, teamsErr = a.cache.GetTeams(ctx)
+		teams, teamsErr = fetchers.teams(ctx)
 	}()
 	go func() {
 		defer wg.Done()
-		fetched, err := a.api.ListFavorites(ctx)
+		fetched, err := fetchers.favorites(ctx)
 		if err != nil {
 			logger.ErrorWithErr(err, "tui.app: failed to load favorites")
 			return
@@ -46,7 +62,11 @@ func (a *App) fetchNavigationData(ctx context.Context) ([]linearapi.Team, []line
 // rebuildNavigationTree rebuilds the navigation tree with real data.
 func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearapi.Favorite) {
 	a.navNodeLabels = make(map[*tview.TreeNode]navNodeLabel)
+	a.navLoadingNode = nil
 	a.favorites = favorites
+	// Held for the disk cache, which a favorites change rewrites without a
+	// teams fetch of its own.
+	a.navTeams = teams
 	rootLabel := "Linear"
 	if a.activeWorkspaceName != "" {
 		rootLabel = "Linear · " + a.activeWorkspaceName

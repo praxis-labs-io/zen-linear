@@ -28,7 +28,7 @@ type AgentOutputModal struct {
 	footerView    *tview.Flex
 	onCancel      func()
 	buffer        *AgentStreamBuffer
-	spinner       *agentSpinner
+	spinner       *spinner
 	statusText    string
 	structured    bool
 	resumeCommand string
@@ -47,7 +47,7 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 	om := &AgentOutputModal{
 		app:     app,
 		buffer:  NewAgentStreamBuffer(),
-		spinner: newAgentSpinner(),
+		spinner: newSpinner(spinnerFramesASCII),
 	}
 
 	om.statusView = tview.NewTextView()

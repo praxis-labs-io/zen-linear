@@ -44,9 +44,10 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 		SetColor(a.theme.Accent).
 		SetSelectable(false)
 
-	loadingNode := tview.NewTreeNode("Loading teams...").
+	loadingNode := tview.NewTreeNode(a.navLoadingText()).
 		SetColor(a.theme.SecondaryText).
 		SetSelectable(false)
+	a.navLoadingNode = loadingNode
 	root.AddChild(loadingNode)
 	a.applySelectionStyleToTree(root)
 

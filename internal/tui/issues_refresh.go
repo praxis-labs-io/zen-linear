@@ -152,7 +152,8 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		a.queueIssuesRefresh(allowFocusChange, issueID...)
 		return
 	}
-	a.isLoading = true
+	a.setIssuesLoading(true)
+	a.issuesErr = nil
 
 	targetIssueID := ""
 	if len(issueID) > 0 {
@@ -203,9 +204,12 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		page, err := fetchPage(ctx, params, nil)
 		if err != nil {
 			a.QueueUpdateDraw(func() {
-				a.isLoading = false
+				a.issuesErr = err
+				a.issuesSettled = true
+				a.setIssuesLoading(false)
 				logger.ErrorWithErr(err, "tui.app: failed to fetch issues")
 				a.updateStatusBarWithError(err)
+				a.updateIssuesColumnLayout()
 				a.notifyRefreshCompleted()
 				a.runQueuedIssuesRefresh()
 			})
@@ -296,7 +300,8 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			if unpainted && generation == a.refreshGeneration.Load() {
 				a.renderAccumulatedIssues()
 			}
-			a.isLoading = false
+			a.issuesSettled = true
+			a.setIssuesLoading(false)
 			logger.Debug("tui.app: refresh completed pages=%d total_fetched=%d elapsed=%s", pageCount, fetchedCount, time.Since(refreshStarted))
 			a.updateStatusBar()
 			a.notifyRefreshCompleted()
@@ -341,11 +346,16 @@ func (a *App) updateIssuesColumnLayout() {
 	// last model change.
 	a.flushPendingSectionRender(a.activeIssuesSection)
 
-	// The three tabs are fixed, so an empty one mounts and shows itself empty.
-	// The Search tab mounts its input-plus-results panel instead of a table.
-	if a.activeIssuesSection == IssuesSectionSearch {
+	// The Search tab mounts its input-plus-results panel instead of a table. A
+	// tab with no rows mounts the placeholder, which says what it is waiting on
+	// rather than showing column headers over nothing.
+	switch {
+	case a.activeIssuesSection == IssuesSectionSearch:
 		a.issuesColumn.AddItem(a.searchPanel, 0, 1, false)
-	} else {
+	case a.issuesPaneIsEmpty() && a.issuesPlaceholder != nil:
+		a.updateIssuesPlaceholder()
+		a.issuesColumn.AddItem(a.issuesPlaceholder, 0, 1, false)
+	default:
 		a.issuesColumn.AddItem(a.tableForSection(a.activeIssuesSection), 0, 1, false)
 	}
 

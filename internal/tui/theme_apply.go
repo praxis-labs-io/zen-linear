@@ -73,6 +73,11 @@ func (a *App) applyThemeToComponents() {
 		a.applyIssuesTableTheme(a.allIssuesTable)
 		renderIssuesTableModel(a.allIssuesTable, a.allIssueRows, a.allIDToIssue, a.selectedIssueID(IssuesSectionAll), a.theme, a.issueColumns())
 	}
+	if a.issuesPlaceholder != nil {
+		// Rebuilt rather than restyled, like the Search panel: the colors are
+		// baked into the flex and its text view at construction.
+		a.buildIssuesPlaceholder()
+	}
 	if a.searchPanel != nil {
 		// Rebuild the panel so the input picks up the new InputBg (tview
 		// bakes it at construction), then restyle and re-render the results.
