@@ -306,7 +306,7 @@ func (a *App) loadInitialData() {
 	pendingSession := a.consumePendingSession()
 	childFetchers := a.teamChildFetchers()
 	navFetchers := a.navFetchers()
-	cacheKey := a.navCacheKey()
+	workspace := a.activeWorkspaceName
 	cached, hasCache := a.cachedNavData()
 	a.setNavLoading(true)
 	go func() {
@@ -392,7 +392,7 @@ func (a *App) loadInitialData() {
 		}
 
 		if fetched.favoritesOK {
-			a.recordNavCache(cacheKey, fetched.teams, fetched.favorites)
+			a.recordNavCache(workspace, fetched.teams, fetched.favorites)
 		}
 
 		if hasCache {

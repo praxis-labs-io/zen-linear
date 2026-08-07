@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/config"
@@ -13,15 +12,13 @@ import (
 )
 
 // newLoadingPaneTestApp builds an App whose issue fetch is held open, so a test
-// can read what the panes say while a fetch is out. The frame loop is parked at
-// an hour: the panes paint their message when the load starts, and a tick
-// landing mid-assertion would only be a race.
+// can read what the panes say while a fetch is out. The panes paint their
+// message when the load starts, so nothing here waits on a frame.
 func newLoadingPaneTestApp(t *testing.T, page linearapi.IssuePage, fetchErr error) (*App, chan struct{}) {
 	t.Helper()
 
 	app := newDefaultNavTestApp(config.Config{})
 	stopBackgroundWorkOnCleanup(t, app)
-	app.loadingFrameDelay = time.Hour
 	t.Cleanup(func() { app.setIssuesLoading(false) })
 
 	release := make(chan struct{})
@@ -148,7 +145,7 @@ func TestDetailsPaneSaysLoadingWhileTheListLoads(t *testing.T) {
 // spinning over panes that already have their answer.
 func TestLoadingIndicatorStopsWithTheLastFetch(t *testing.T) {
 	app := newDefaultNavTestApp(config.Config{})
-	app.loadingFrameDelay = time.Hour
+	stopBackgroundWorkOnCleanup(t, app)
 
 	app.setNavLoading(true)
 	if !app.loading.running() {
@@ -173,7 +170,6 @@ func TestLoadingIndicatorStopsWithTheLastFetch(t *testing.T) {
 func TestSupersededRefreshLeavesTheLoadingFlagAlone(t *testing.T) {
 	app := newDefaultNavTestApp(config.Config{})
 	stopBackgroundWorkOnCleanup(t, app)
-	app.loadingFrameDelay = time.Hour
 
 	app.loadingGeneration = 7
 	app.setIssuesLoading(true)
@@ -224,7 +220,6 @@ func TestFocusLandsOnThePlaceholderWhenMounted(t *testing.T) {
 func TestNavigationFailureAnswersTheWaitingNode(t *testing.T) {
 	app := newDefaultNavTestApp(config.Config{})
 	stopBackgroundWorkOnCleanup(t, app)
-	app.loadingFrameDelay = time.Hour
 
 	app.reportNavigationFailure(errors.New("no route to host"))
 

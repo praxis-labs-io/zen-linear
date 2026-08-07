@@ -12,7 +12,12 @@ import (
 // defaultLoadingFrameInterval is how often the spinner advances. Fast enough to
 // read as motion, slow enough that a whole slow launch costs a few dozen
 // redraws.
-const defaultLoadingFrameInterval = 100 * time.Millisecond
+//
+// A var rather than a const so the test suite can park the frame loop; nothing
+// in the app assigns it. Tests stub queueUpdateDraw to run inline, which puts
+// every tick on the ticker's own goroutine writing App state, and a tick landing
+// mid-assertion is a race in a test that has nothing to do with spinners.
+var defaultLoadingFrameInterval = 100 * time.Millisecond
 
 // loadingIndicator drives the spinner frames the waiting panes paint. tview has
 // no frame loop of its own, so this owns a ticker that queues a redraw, and

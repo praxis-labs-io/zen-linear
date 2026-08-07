@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"slices"
 
 	"github.com/zen-linear/zen-linear/internal/cache"
@@ -17,30 +15,23 @@ func (a *App) UseNavCache(path string, file cache.NavFile) {
 	a.navCache = file
 }
 
-// navCacheKey names the entry this session's tree belongs to. A configured
-// workspace uses its name. A bare API key or an OAuth session has none, and
-// keying every one of those on the empty string would make two unrelated Linear
-// workspaces share an entry and paint each other's teams, so they key on a
-// fingerprint of the token instead. An OAuth refresh rotates the token and so
-// the key, which costs one uncached launch and never shows the wrong tree.
-func (a *App) navCacheKey() string {
-	if a.activeWorkspaceName != "" {
-		return a.activeWorkspaceName
-	}
-	if a.config.LinearAPIKey == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(a.config.LinearAPIKey))
-	return "token-" + hex.EncodeToString(sum[:6])
+// navCacheEnabled reports whether this session's tree can be cached. It needs a
+// configured workspace name to file the entry under. A bare API key or an OAuth
+// session has none, and nothing else on disk tells two Linear workspaces apart:
+// sharing one entry between them would paint the wrong teams, and fingerprinting
+// the token to tell them apart would put a derivative of a live credential in a
+// cache file. Those sessions launch the way every session did before the cache.
+func (a *App) navCacheEnabled() bool {
+	return a.navCachePath != "" && a.activeWorkspaceName != ""
 }
 
 // cachedNavData returns the tree to paint before the network answers. UI
 // thread only.
 func (a *App) cachedNavData() (cache.NavData, bool) {
-	if a.navCachePath == "" {
+	if !a.navCacheEnabled() {
 		return cache.NavData{}, false
 	}
-	return a.navCache.DataFor(a.navCacheKey())
+	return a.navCache.DataFor(a.activeWorkspaceName)
 }
 
 // recordNavCache writes the tree for a cache key and installs it in the copy
@@ -50,7 +41,7 @@ func (a *App) cachedNavData() (cache.NavData, bool) {
 // is logged and swallowed: the cache only buys a faster first paint, so losing
 // it costs nothing the user can act on.
 func (a *App) recordNavCache(key string, teams []linearapi.Team, favorites []linearapi.Favorite) {
-	if a.navCachePath == "" {
+	if a.navCachePath == "" || key == "" {
 		return
 	}
 	data := cache.NavData{Teams: teams, Favorites: favorites}
@@ -66,7 +57,7 @@ func (a *App) recordNavCache(key string, teams []linearapi.Team, favorites []lin
 // recordNavCacheAsync writes the tree from a goroutine, for the UI-thread
 // callers that must not block on a file write.
 func (a *App) recordNavCacheAsync() {
-	if a.navCachePath == "" {
+	if !a.navCacheEnabled() {
 		return
 	}
 	// A workspace switch clears navTeams while the outgoing workspace's tree is
@@ -76,10 +67,10 @@ func (a *App) recordNavCacheAsync() {
 	if len(a.navTeams) == 0 {
 		return
 	}
-	key := a.navCacheKey()
+	workspace := a.activeWorkspaceName
 	teams := slices.Clone(a.navTeams)
 	favorites := slices.Clone(a.favorites)
-	go a.recordNavCache(key, teams, favorites)
+	go a.recordNavCache(workspace, teams, favorites)
 }
 
 // notifyNavigationSettled reports that the launch fetch has been applied.

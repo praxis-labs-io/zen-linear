@@ -51,9 +51,8 @@ func NavPath() (string, error) {
 	return filepath.Join(dir, navFileName), nil
 }
 
-// DataFor returns the cached tree for a key. The key is a workspace name where
-// there is one; callers without one pass something else that identifies the
-// Linear workspace, since two sessions sharing a key would paint each other's
+// DataFor returns the cached tree for a workspace name. Callers with no name to
+// pass have no entry: two Linear workspaces sharing one would paint each other's
 // teams.
 func (f NavFile) DataFor(key string) (NavData, bool) {
 	data, ok := f.Workspaces[navWorkspaceKey(key)]

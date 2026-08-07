@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +19,8 @@ func newNavCacheTestApp(t *testing.T, cfg config.Config, teams []linearapi.Team,
 	t.Helper()
 
 	app := newDefaultNavTestApp(cfg)
+	// The cache only files entries under a configured workspace name.
+	app.activeWorkspaceName = navCacheTestWorkspace
 	stopBackgroundWorkOnCleanup(t, app)
 	release := make(chan struct{})
 	app.fetchTeamsFunc = func(context.Context) ([]linearapi.Team, error) {
@@ -37,6 +38,9 @@ func newNavCacheTestApp(t *testing.T, cfg config.Config, teams []linearapi.Team,
 	path := filepath.Join(t.TempDir(), "nav-cache.json")
 	return app, release, path
 }
+
+// navCacheTestWorkspace is the configured workspace the test apps run as.
+const navCacheTestWorkspace = "Praxis"
 
 // installNavCache seeds the disk copy the app paints its first tree from.
 func installNavCache(t *testing.T, app *App, path, workspace string, data cache.NavData) {
@@ -106,7 +110,7 @@ func findTreeTeamNode(app *App, teamID string) *tview.TreeNode {
 // the sidebar and the issue list are up while the network request is still out.
 func TestLoadInitialDataPaintsCachedTreeBeforeTheFetch(t *testing.T) {
 	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), nil)
-	installNavCache(t, app, path, "", cache.NavData{Teams: defaultNavTeams()})
+	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: defaultNavTeams()})
 	refreshDone := installRefreshCompletionHook(app)
 	settled := installNavSettledHook(app)
 
@@ -128,7 +132,7 @@ func TestLoadInitialDataPaintsCachedTreeBeforeTheFetch(t *testing.T) {
 // fetch confirms what the cache already painted.
 func TestLoadInitialDataLeavesTheCursorOnAnUnchangedRefetch(t *testing.T) {
 	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), nil)
-	installNavCache(t, app, path, "", cache.NavData{Teams: defaultNavTeams()})
+	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: defaultNavTeams()})
 	refreshDone := installRefreshCompletionHook(app)
 	settled := installNavSettledHook(app)
 
@@ -157,7 +161,7 @@ func TestLoadInitialDataLeavesTheCursorOnAnUnchangedRefetch(t *testing.T) {
 func TestLoadInitialDataRebuildsWhenTheFetchDisagrees(t *testing.T) {
 	cached := []linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}
 	app, release, path := newNavCacheTestApp(t, config.Config{DefaultTeam: "ENG"}, defaultNavTeams(), nil)
-	installNavCache(t, app, path, "", cache.NavData{Teams: cached})
+	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: cached})
 	refreshDone := installRefreshCompletionHook(app)
 
 	app.loadInitialData()
@@ -195,7 +199,7 @@ func TestLoadInitialDataRecordsTheFetchedTree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNav: %v", err)
 	}
-	data, ok := file.DataFor("")
+	data, ok := file.DataFor(navCacheTestWorkspace)
 	if !ok {
 		t.Fatal("nothing was recorded for the active workspace")
 	}
@@ -212,7 +216,7 @@ func TestLoadInitialDataKeepsTheCachedTreeWhenTheFetchFails(t *testing.T) {
 		<-release
 		return nil, context.DeadlineExceeded
 	}
-	installNavCache(t, app, path, "", cache.NavData{Teams: defaultNavTeams()})
+	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: defaultNavTeams()})
 	refreshDone := installRefreshCompletionHook(app)
 	settled := installNavSettledHook(app)
 
@@ -262,7 +266,7 @@ func TestLoadInitialDataKeepsTheCacheWhenFavoritesFail(t *testing.T) {
 		<-release
 		return nil, context.DeadlineExceeded
 	}
-	installNavCache(t, app, path, "", cache.NavData{Teams: defaultNavTeams(), Favorites: favorites})
+	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: defaultNavTeams(), Favorites: favorites})
 	refreshDone := installRefreshCompletionHook(app)
 	settled := installNavSettledHook(app)
 
@@ -275,7 +279,7 @@ func TestLoadInitialDataKeepsTheCacheWhenFavoritesFail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNav: %v", err)
 	}
-	data, _ := file.DataFor("")
+	data, _ := file.DataFor(navCacheTestWorkspace)
 	if len(data.Favorites) != 1 {
 		t.Fatalf("cached favorites = %d, want the previous copy left alone", len(data.Favorites))
 	}
@@ -289,7 +293,7 @@ func TestLoadInitialDataKeepsTheCacheWhenFavoritesFail(t *testing.T) {
 func TestLoadInitialDataUpdatesTheCacheItHolds(t *testing.T) {
 	cached := []linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}
 	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), nil)
-	installNavCache(t, app, path, "", cache.NavData{Teams: cached})
+	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: cached})
 	refreshDone := installRefreshCompletionHook(app)
 
 	app.loadInitialData()
@@ -308,7 +312,7 @@ func TestLoadInitialDataUpdatesTheCacheItHolds(t *testing.T) {
 func TestRebuildKeepsTheUserPutWhenTheirListIsGone(t *testing.T) {
 	cached := []linearapi.Team{{ID: "team-9", Key: "OLD", Name: "Retired"}}
 	app, release, path := newNavCacheTestApp(t, config.Config{DefaultTeam: "NEX"}, defaultNavTeams(), nil)
-	installNavCache(t, app, path, "", cache.NavData{Teams: cached})
+	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: cached})
 	refreshDone := installRefreshCompletionHook(app)
 
 	app.loadInitialData()
@@ -327,26 +331,34 @@ func TestRebuildKeepsTheUserPutWhenTheirListIsGone(t *testing.T) {
 	}
 }
 
-// TestNavCacheKeyDistinguishesUnnamedSessions covers two Linear workspaces
-// reached by a bare API key: sharing one entry paints the wrong teams.
-func TestNavCacheKeyDistinguishesUnnamedSessions(t *testing.T) {
-	first := newDefaultNavTestApp(config.Config{LinearAPIKey: "lin_api_first"})
-	stopBackgroundWorkOnCleanup(t, first)
-	second := newDefaultNavTestApp(config.Config{LinearAPIKey: "lin_api_second"})
-	stopBackgroundWorkOnCleanup(t, second)
-
-	if first.navCacheKey() == second.navCacheKey() {
-		t.Fatalf("both unnamed sessions key on %q", first.navCacheKey())
+// TestUnnamedSessionsAreNotCached covers a bare API key or an OAuth session:
+// nothing on disk tells two Linear workspaces reached that way apart, so they
+// get no entry rather than one they would share.
+func TestUnnamedSessionsAreNotCached(t *testing.T) {
+	app := newDefaultNavTestApp(config.Config{LinearAPIKey: "lin_api_anything"})
+	stopBackgroundWorkOnCleanup(t, app)
+	path := filepath.Join(t.TempDir(), "nav-cache.json")
+	if err := cache.RecordNav(path, "Praxis", cache.NavData{Teams: defaultNavTeams()}); err != nil {
+		t.Fatalf("RecordNav: %v", err)
 	}
-	if strings.Contains(first.navCacheKey(), "lin_api_first") {
-		t.Fatalf("cache key %q carries the token", first.navCacheKey())
+	file, err := cache.LoadNav(path)
+	if err != nil {
+		t.Fatalf("LoadNav: %v", err)
+	}
+	app.UseNavCache(path, file)
+
+	if _, ok := app.cachedNavData(); ok {
+		t.Fatal("an unnamed session was handed a cached tree")
 	}
 
-	named := newDefaultNavTestApp(config.Config{LinearAPIKey: "lin_api_first"})
-	stopBackgroundWorkOnCleanup(t, named)
-	named.activeWorkspaceName = "Praxis"
-	if named.navCacheKey() != "Praxis" {
-		t.Fatalf("named workspace keys on %q, want its name", named.navCacheKey())
+	app.navTeams = defaultNavTeams()
+	app.recordNavCacheAsync()
+	after, err := cache.LoadNav(path)
+	if err != nil {
+		t.Fatalf("LoadNav: %v", err)
+	}
+	if len(after.Workspaces) != 1 {
+		t.Fatalf("cache holds %d entries, want only the named one", len(after.Workspaces))
 	}
 }
 
@@ -357,7 +369,7 @@ func TestRecordNavCacheAsyncSkipsATeamlessTree(t *testing.T) {
 	app := newDefaultNavTestApp(config.Config{})
 	stopBackgroundWorkOnCleanup(t, app)
 	path := filepath.Join(t.TempDir(), "nav-cache.json")
-	installNavCache(t, app, path, "", cache.NavData{Teams: defaultNavTeams()})
+	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: defaultNavTeams()})
 
 	app.navTeams = nil
 	app.favorites = []linearapi.Favorite{{ID: "fav-1", Type: "project", ProjectID: "proj-1"}}
@@ -367,7 +379,7 @@ func TestRecordNavCacheAsyncSkipsATeamlessTree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadNav: %v", err)
 	}
-	data, _ := file.DataFor("")
+	data, _ := file.DataFor(navCacheTestWorkspace)
 	if len(data.Teams) != 2 {
 		t.Fatalf("cached teams = %d, want the recorded tree untouched", len(data.Teams))
 	}
