@@ -199,12 +199,22 @@ func setIssuesTableHeaders(table *tview.Table, theme Theme, columns []string) {
 
 	for column, name := range columns {
 		spec := issueColumnSpecs[name]
-		table.SetCell(0, column, tview.NewTableCell(spec.header).
+		table.SetCell(0, column, tview.NewTableCell(headerText(spec.header, name, column)).
 			SetStyle(headerStyle).
 			SetAlign(tview.AlignLeft).
 			SetSelectable(false).
 			SetExpansion(spec.expansion))
 	}
+}
+
+// headerText indents a column header to match the lead space its cells carry:
+// the ID column reserves one for the tree icon wherever it sits, and whatever
+// column lands first gets one from setIssueRowCells.
+func headerText(header, name string, column int) string {
+	if name == ColumnID || column == 0 {
+		return " " + header
+	}
+	return header
 }
 
 // issueColumnCell renders one issue cell for a column identifier.

@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
@@ -260,5 +262,77 @@ func TestAssigneeTextColorFallsBackToForeground(t *testing.T) {
 
 	if got := legacy.AssigneeTextColor(); got != legacy.Foreground {
 		t.Errorf("AssigneeTextColor() = %v, want Foreground %v", got, legacy.Foreground)
+	}
+}
+
+// renderTableLines draws an issues table and returns the screen as text, one
+// string per row.
+func renderTableLines(t *testing.T, issues []linearapi.Issue, columns []string) []string {
+	t.Helper()
+
+	rows, idToIssue := BuildIssueRows(issues, map[string]bool{})
+	table := tview.NewTable()
+	renderIssuesTableModel(table, rows, idToIssue, "", LinearTheme, columns)
+
+	screen := tcell.NewSimulationScreen("UTF-8")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("init simulation screen: %v", err)
+	}
+	t.Cleanup(screen.Fini)
+
+	const width, height = 100, 10
+	screen.SetSize(width, height)
+	table.SetRect(0, 0, width, height)
+	table.Draw(screen)
+	screen.Show()
+
+	cells, screenWidth, screenHeight := screen.GetContents()
+	lines := make([]string, 0, screenHeight)
+	for y := 0; y < screenHeight; y++ {
+		line := make([]rune, 0, screenWidth)
+		for x := 0; x < screenWidth; x++ {
+			runes := cells[y*screenWidth+x].Runes
+			if len(runes) == 0 || runes[0] == 0 {
+				line = append(line, ' ')
+				continue
+			}
+			line = append(line, runes[0])
+		}
+		lines = append(lines, string(line))
+	}
+	return lines
+}
+
+// TestIssueColumnHeadersAlignWithCells covers the header row sitting one cell
+// left of its values: every ID cell leads with the space the tree icon uses,
+// and the header has to lead with one too.
+func TestIssueColumnHeadersAlignWithCells(t *testing.T) {
+	issues := []linearapi.Issue{
+		{ID: "1", Identifier: "ZNL-82", Title: "Triage status icons", State: "Triage"},
+	}
+
+	tests := []struct {
+		name    string
+		columns []string
+		header  string
+		value   string
+	}{
+		{"id after priority", DefaultIssueColumns, "ID", "ZNL-82"},
+		{"id first", []string{ColumnID, ColumnTitle}, "ID", "ZNL-82"},
+		{"title first", []string{ColumnTitle, ColumnID}, "Title", "Triage status icons"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lines := renderTableLines(t, issues, tt.columns)
+			headerAt := strings.Index(lines[0], tt.header)
+			valueAt := strings.Index(lines[1], tt.value)
+			if headerAt < 0 || valueAt < 0 {
+				t.Fatalf("header %q at %d, value %q at %d in:\n%s\n%s", tt.header, headerAt, tt.value, valueAt, lines[0], lines[1])
+			}
+			if headerAt != valueAt {
+				t.Errorf("header %q starts at column %d, value starts at %d:\n%s\n%s", tt.header, headerAt, valueAt, lines[0], lines[1])
+			}
+		})
 	}
 }
