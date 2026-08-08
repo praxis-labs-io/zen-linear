@@ -9,6 +9,16 @@ const (
 	layoutNarrow                   // one pane: whichever has focus
 )
 
+// Flex weights for the content split. The three-pane layout is 1:3:2; the
+// numbers are scaled by five so navWeightMedium can hold the nav pane at the
+// same share of a two-pane split, where details is gone.
+const (
+	navWeight       = 5
+	issuesWeight    = 15
+	detailsWeight   = 10
+	navWeightMedium = 3
+)
+
 // layoutModeForWidth picks the layout mode for a terminal width in cells.
 func layoutModeForWidth(width int) layoutMode {
 	switch {
@@ -33,7 +43,7 @@ func (a *App) rebuildContentLayout() {
 	showNav := !a.navigationHidden
 	showDetails := !a.detailsHidden
 	showIssues := true
-	navWeight := 2
+	nav := navWeight
 	switch a.layoutMode {
 	case layoutMedium:
 		if a.focusedPane == FocusDetails {
@@ -41,7 +51,7 @@ func (a *App) rebuildContentLayout() {
 		} else {
 			showDetails = false
 		}
-		navWeight = 1
+		nav = navWeightMedium
 	case layoutNarrow:
 		showNav = showNav && a.focusedPane == FocusNavigation
 		showDetails = showDetails && a.focusedPane == FocusDetails
@@ -50,13 +60,13 @@ func (a *App) rebuildContentLayout() {
 
 	a.contentFlex.Clear()
 	if showNav {
-		a.contentFlex.AddItem(a.navigationTree, 0, navWeight, a.focusedPane == FocusNavigation)
+		a.contentFlex.AddItem(a.navigationTree, 0, nav, a.focusedPane == FocusNavigation)
 	}
 	if showIssues {
-		a.contentFlex.AddItem(a.issuesColumn, 0, 5, a.focusedPane == FocusIssues)
+		a.contentFlex.AddItem(a.issuesColumn, 0, issuesWeight, a.focusedPane == FocusIssues)
 	}
 	if showDetails {
-		a.contentFlex.AddItem(a.detailsView, 0, 3, a.focusedPane == FocusDetails)
+		a.contentFlex.AddItem(a.detailsView, 0, detailsWeight, a.focusedPane == FocusDetails)
 	}
 }
 

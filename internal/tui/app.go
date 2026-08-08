@@ -636,11 +636,9 @@ func (a *App) buildLayout() {
 	a.detailsView = a.buildDetailsView()
 	a.statusBar = a.buildStatusBar()
 
-	// Create horizontal split: navigation (20%) | issues (50%) | details (30%)
-	a.contentFlex = tview.NewFlex().
-		AddItem(a.navigationTree, 0, 2, true).
-		AddItem(a.issuesColumn, 0, 5, false).
-		AddItem(a.detailsView, 0, 3, false)
+	// Horizontal split. rebuildContentLayout below owns the weights and which
+	// panes are mounted.
+	a.contentFlex = tview.NewFlex()
 
 	// Create vertical layout: content + status bar
 	a.mainLayout = tview.NewFlex().
