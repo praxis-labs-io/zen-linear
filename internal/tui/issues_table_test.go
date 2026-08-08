@@ -44,7 +44,7 @@ func TestRenderIssueRow(t *testing.T) {
 			wantID:       "LIN-1",
 			wantState:    "○",
 			wantPriority: "=",
-			wantAssignee: "John Doe",
+			wantAssignee: "JD",
 			wantLabels:   "Bug, UI",
 		},
 		{
@@ -76,7 +76,7 @@ func TestRenderIssueRow(t *testing.T) {
 			wantID:       "VERY-LONG-", // truncated to 10 chars
 			wantState:    "●",
 			wantPriority: "-",
-			wantAssignee: "Jane",
+			wantAssignee: "J",
 			wantLabels:   "-",
 		},
 	}
@@ -125,8 +125,8 @@ func TestRenderIssueRow_Truncation(t *testing.T) {
 	if len(row[rowColID]) > 10 {
 		t.Errorf("Identifier length = %d, want <= 10", len(row[rowColID]))
 	}
-	if len(row[rowColAssignee]) > 14 {
-		t.Errorf("Assignee length = %d, want <= 14", len(row[rowColAssignee]))
+	if row[rowColAssignee] != "A" {
+		t.Errorf("Assignee = %q, want the initial A", row[rowColAssignee])
 	}
 }
 
@@ -208,5 +208,46 @@ func TestFormatStateIconTriageFallsBackToTodo(t *testing.T) {
 	}
 	if color != legacy.StatusTodo {
 		t.Errorf("color = %v, want StatusTodo %v", color, legacy.StatusTodo)
+	}
+}
+
+// TestFormatAssigneeInitials covers the name shapes the column has to render
+// in two cells.
+func TestFormatAssigneeInitials(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"Drew White", "DW"},
+		{"drew white", "DW"},
+		{"drucial", "D"},
+		{"Jean Luc Picard", "JP"},
+		{"Mary-Jane Watson", "MW"},
+		{"  Drew   White  ", "DW"},
+		{"Åsa Öberg", "ÅÖ"},
+		{"", ""},
+		{"   ", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatAssigneeInitials(tt.name); got != tt.want {
+				t.Errorf("formatAssigneeInitials(%q) = %q, want %q", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestAssigneeColumnCell pins what the list actually renders, including the
+// dash an unassigned issue gets.
+func TestAssigneeColumnCell(t *testing.T) {
+	assigned := &linearapi.Issue{Assignee: "Drew White"}
+	if text, color := issueColumnCell(ColumnAssignee, assigned, "", LinearTheme); text != "DW" || color != LinearTheme.Foreground {
+		t.Errorf("assigned cell = %q, %v; want DW, Foreground", text, color)
+	}
+
+	unassigned := &linearapi.Issue{}
+	if text, color := issueColumnCell(ColumnAssignee, unassigned, "", LinearTheme); text != "-" || color != LinearTheme.SecondaryText {
+		t.Errorf("unassigned cell = %q, %v; want -, SecondaryText", text, color)
 	}
 }

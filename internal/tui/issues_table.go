@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -98,6 +100,29 @@ func formatUpdatedAt(updatedAt time.Time) string {
 	return updatedAt.Format("Jan 2")
 }
 
+// formatAssigneeInitials condenses a full name to the first letters of its
+// first and last words, so the column costs two cells instead of a name's
+// worth. A one-word name gives one letter. An empty name gives an empty
+// string, which callers render as unassigned.
+func formatAssigneeInitials(name string) string {
+	words := strings.Fields(name)
+	if len(words) == 0 {
+		return ""
+	}
+	initials := initialLetter(words[0])
+	if len(words) > 1 {
+		initials += initialLetter(words[len(words)-1])
+	}
+	return initials
+}
+
+// initialLetter returns a word's first rune, uppercased. strings.Fields never
+// yields an empty word, so there is always a rune to read.
+func initialLetter(word string) string {
+	first, _ := utf8.DecodeRuneInString(word)
+	return string(unicode.ToUpper(first))
+}
+
 // formatLabels renders label names as a compact comma list.
 func formatLabels(labels []linearapi.IssueLabel) string {
 	if len(labels) == 0 {
@@ -145,7 +170,7 @@ var issueColumnSpecs = map[string]issueColumnSpec{
 	ColumnState:     {header: " ", expansion: 0},
 	ColumnTitle:     {header: "Title", expansion: 4, maxWidth: 45},
 	ColumnLabels:    {header: "Labels", expansion: 1, maxWidth: 18},
-	ColumnAssignee:  {header: "Assignee", expansion: 1},
+	ColumnAssignee:  {header: " ", expansion: 0},
 	ColumnUpdated:   {header: "Updated", expansion: 0},
 	ColumnCycle:     {header: "Cycle", expansion: 1, maxWidth: 15},
 	ColumnDue:       {header: "Due", expansion: 0},
@@ -200,14 +225,11 @@ func issueColumnCell(name string, issue *linearapi.Issue, identifierPrefix strin
 		}
 		return labels, theme.HeaderText
 	case ColumnAssignee:
-		if issue.Assignee == "" {
+		initials := formatAssigneeInitials(issue.Assignee)
+		if initials == "" {
 			return "-", theme.SecondaryText
 		}
-		assignee := issue.Assignee
-		if len(assignee) > 14 {
-			assignee = assignee[:14]
-		}
-		return assignee, theme.Foreground
+		return initials, theme.Foreground
 	case ColumnUpdated:
 		return formatUpdatedAt(issue.UpdatedAt), theme.SecondaryText
 	case ColumnCycle:
@@ -730,12 +752,9 @@ func renderIssueRow(issue linearapi.Issue) []string {
 	priorityText, _ := formatPriority(issue.Priority, LinearTheme)
 	stateIcon, _ := formatStateIcon(issue.State, LinearTheme)
 
-	assignee := issue.Assignee
+	assignee := formatAssigneeInitials(issue.Assignee)
 	if assignee == "" {
 		assignee = "-"
-	}
-	if len(assignee) > 14 {
-		assignee = assignee[:14]
 	}
 
 	return []string{priorityText, identifier, stateIcon, issue.Title, formatLabels(issue.Labels), assignee, formatUpdatedAt(issue.UpdatedAt)}
