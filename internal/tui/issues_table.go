@@ -229,7 +229,7 @@ func issueColumnCell(name string, issue *linearapi.Issue, identifierPrefix strin
 		if initials == "" {
 			return "-", theme.SecondaryText
 		}
-		return initials, theme.Foreground
+		return initials, theme.AssigneeTextColor()
 	case ColumnUpdated:
 		return formatUpdatedAt(issue.UpdatedAt), theme.SecondaryText
 	case ColumnCycle:

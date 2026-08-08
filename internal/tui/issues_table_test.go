@@ -242,12 +242,23 @@ func TestFormatAssigneeInitials(t *testing.T) {
 // dash an unassigned issue gets.
 func TestAssigneeColumnCell(t *testing.T) {
 	assigned := &linearapi.Issue{Assignee: "Drew White"}
-	if text, color := issueColumnCell(ColumnAssignee, assigned, "", LinearTheme); text != "DW" || color != LinearTheme.Foreground {
-		t.Errorf("assigned cell = %q, %v; want DW, Foreground", text, color)
+	if text, color := issueColumnCell(ColumnAssignee, assigned, "", LinearTheme); text != "DW" || color != LinearTheme.AssigneeText {
+		t.Errorf("assigned cell = %q, %v; want DW, AssigneeText", text, color)
 	}
 
 	unassigned := &linearapi.Issue{}
 	if text, color := issueColumnCell(ColumnAssignee, unassigned, "", LinearTheme); text != "-" || color != LinearTheme.SecondaryText {
 		t.Errorf("unassigned cell = %q, %v; want -, SecondaryText", text, color)
+	}
+}
+
+// TestAssigneeTextColorFallsBackToForeground covers themes that predate the
+// AssigneeText field.
+func TestAssigneeTextColorFallsBackToForeground(t *testing.T) {
+	legacy := LinearTheme
+	legacy.AssigneeText = tcell.ColorDefault
+
+	if got := legacy.AssigneeTextColor(); got != legacy.Foreground {
+		t.Errorf("AssigneeTextColor() = %v, want Foreground %v", got, legacy.Foreground)
 	}
 }
