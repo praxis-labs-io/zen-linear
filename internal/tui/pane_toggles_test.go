@@ -47,7 +47,7 @@ func paneWidths(t *testing.T, app *App, width int) (nav, issues, details int) {
 	return nav, issues, details
 }
 
-// TestWidePaneSplit pins the three-pane ratio at 1:3:2.
+// TestWidePaneSplit pins the three-pane ratio at 6:15:10.
 func TestWidePaneSplit(t *testing.T) {
 	app := &App{}
 	nav, issues, details := paneWidths(t, app, 180)
@@ -55,11 +55,26 @@ func TestWidePaneSplit(t *testing.T) {
 	if app.layoutMode != layoutWide {
 		t.Fatalf("layoutMode = %v, want layoutWide", app.layoutMode)
 	}
-	if nav != 30 || issues != 90 || details != 60 {
-		t.Errorf("split = %d | %d | %d; want 30 | 90 | 60", nav, issues, details)
+	if nav != 34 || issues != 87 || details != 59 {
+		t.Errorf("split = %d | %d | %d; want 34 | 87 | 59", nav, issues, details)
 	}
 	if left, _ := paneRect(app.issuesColumn); left != nav {
 		t.Errorf("issues pane starts at %d, want %d right after the nav pane", left, nav)
+	}
+}
+
+// TestWidePaneSplitWithDetailsHidden covers toggling details off, where the
+// nav pane keeps the share it had before it got a bump for the three-pane
+// case.
+func TestWidePaneSplitWithDetailsHidden(t *testing.T) {
+	app := &App{detailsHidden: true}
+	nav, issues, details := paneWidths(t, app, 180)
+
+	if details != 0 {
+		t.Errorf("details width = %d, want the pane left out", details)
+	}
+	if nav != 45 || issues != 135 {
+		t.Errorf("split = %d | %d; want 45 | 135", nav, issues)
 	}
 }
 

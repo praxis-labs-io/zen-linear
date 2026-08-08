@@ -9,14 +9,16 @@ const (
 	layoutNarrow                   // one pane: whichever has focus
 )
 
-// Flex weights for the content split. The three-pane layout is 1:3:2; the
-// numbers are scaled by five so navWeightMedium can hold the nav pane at the
-// same share of a two-pane split, where details is gone.
+// Flex weights for the content split. The nav pane takes a different share in
+// each of the three arrangements it appears in, so it has a weight per case;
+// the other two panes keep theirs. The numbers are scaled by five so the
+// medium weight lands on a whole number.
 const (
-	navWeight       = 5
-	issuesWeight    = 15
-	detailsWeight   = 10
-	navWeightMedium = 3
+	navWeight            = 5 // nav and issues, with details toggled off
+	navWeightWithDetails = 6 // all three panes
+	navWeightMedium      = 3 // the two-pane responsive layout
+	issuesWeight         = 15
+	detailsWeight        = 10
 )
 
 // layoutModeForWidth picks the layout mode for a terminal width in cells.
@@ -45,6 +47,10 @@ func (a *App) rebuildContentLayout() {
 	showIssues := true
 	nav := navWeight
 	switch a.layoutMode {
+	case layoutWide:
+		if showDetails {
+			nav = navWeightWithDetails
+		}
 	case layoutMedium:
 		if a.focusedPane == FocusDetails {
 			showNav = false
