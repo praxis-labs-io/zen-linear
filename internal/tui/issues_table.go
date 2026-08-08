@@ -75,7 +75,9 @@ func formatStateIcon(state string, theme Theme) (string, tcell.Color) {
 	case strings.Contains(lowerState, "review"):
 		return "◉", theme.StatusReviewColor()
 	case strings.Contains(lowerState, "progress"):
-		return "◉", theme.StatusInProgress
+		return "⊙", theme.StatusInProgress
+	case strings.Contains(lowerState, "triage"):
+		return "◎", theme.StatusTriageColor()
 	case strings.Contains(lowerState, "cancel") || strings.Contains(lowerState, "duplicate"):
 		return "⊘", theme.StatusCanceled
 	case strings.Contains(lowerState, "backlog"):

@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
@@ -57,7 +58,7 @@ func TestRenderIssueRow(t *testing.T) {
 				Priority:   1, // Urgent priority
 			},
 			wantID:       "LIN-2",
-			wantState:    "◉",
+			wantState:    "⊙",
 			wantPriority: "▲",
 			wantAssignee: "-",
 			wantLabels:   "-",
@@ -166,5 +167,46 @@ func TestBuildFlatSearchRowsPreservesOrder(t *testing.T) {
 	}
 	if idToIssue["child"] == nil || idToIssue["parent"] == nil {
 		t.Fatal("idToIssue missing entries")
+	}
+}
+
+// TestFormatStateIcon pins one distinct icon and color per lifecycle state.
+// Triage used to fall through to the Todo default and render identically.
+func TestFormatStateIcon(t *testing.T) {
+	tests := []struct {
+		state     string
+		wantIcon  string
+		wantColor tcell.Color
+	}{
+		{"Triage", "◎", LinearTheme.StatusTriage},
+		{"Todo", "○", LinearTheme.StatusTodo},
+		{"In Progress", "⊙", LinearTheme.StatusInProgress},
+		{"In Review", "◉", LinearTheme.StatusReview},
+		{"Done", "●", LinearTheme.StatusDone},
+		{"Canceled", "⊘", LinearTheme.StatusCanceled},
+		{"Duplicate", "⊘", LinearTheme.StatusCanceled},
+		{"Backlog", "◌", LinearTheme.SecondaryText},
+	}
+
+	for _, tt := range tests {
+		icon, color := formatStateIcon(tt.state, LinearTheme)
+		if icon != tt.wantIcon || color != tt.wantColor {
+			t.Errorf("formatStateIcon(%q) = %q, %v; want %q, %v", tt.state, icon, color, tt.wantIcon, tt.wantColor)
+		}
+	}
+}
+
+// TestFormatStateIconTriageFallsBackToTodo covers themes that predate
+// StatusTriage: the icon still separates triage from todo.
+func TestFormatStateIconTriageFallsBackToTodo(t *testing.T) {
+	legacy := LinearTheme
+	legacy.StatusTriage = tcell.ColorDefault
+
+	icon, color := formatStateIcon("Triage", legacy)
+	if icon != "◎" {
+		t.Errorf("icon = %q, want ◎", icon)
+	}
+	if color != legacy.StatusTodo {
+		t.Errorf("color = %v, want StatusTodo %v", color, legacy.StatusTodo)
 	}
 }
