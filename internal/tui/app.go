@@ -68,27 +68,34 @@ type App struct {
 	issuesColumn           *tview.Flex     // Vertical flex holding the active issues tab
 	detailsView            *tview.Flex     // Flex container for details (description + comments)
 	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
-	detailsCommentsView    *tview.TextView // Scrollable comments view
-	statusBar              *tview.TextView
-	paletteModal           *tview.Flex
-	paletteInput           *tview.InputField
-	paletteList            *tview.List
-	paletteModalContent    *tview.Flex
-	paletteCtrl            *PaletteController
-	pickerModal            *PickerModal
-	issueFormModal         *IssueFormModal
-	createCommentModal     *CreateCommentModal
-	editDescriptionModal   *EditDescriptionModal
-	editLabelsModal        *EditLabelsModal
-	textInputModal         *TextInputModal
-	multiSelectModal       *MultiSelectModal
-	settingsModal          *SettingsModal
-	promptTemplatesModal   *AgentPromptTemplatesModal
-	agentPromptModal       *AgentPromptModal
-	agentOutputModal       *AgentOutputModal
-	confirmationModal      *ConfirmationModal
-	agentRunner            *agents.Runner
-	agentPromptTemplates   []config.AgentPromptTemplate
+	// detailsHeaderLines is the metadata block untruncated, kept so a resize
+	// can refit it, and detailsBody is the description already rendered so the
+	// refit does not re-run the markdown renderer. detailsFittedWidth is the
+	// pane width the two were last joined at.
+	detailsHeaderLines   []string
+	detailsBody          string
+	detailsFittedWidth   int
+	detailsCommentsView  *tview.TextView // Scrollable comments view
+	statusBar            *tview.TextView
+	paletteModal         *tview.Flex
+	paletteInput         *tview.InputField
+	paletteList          *tview.List
+	paletteModalContent  *tview.Flex
+	paletteCtrl          *PaletteController
+	pickerModal          *PickerModal
+	issueFormModal       *IssueFormModal
+	createCommentModal   *CreateCommentModal
+	editDescriptionModal *EditDescriptionModal
+	editLabelsModal      *EditLabelsModal
+	textInputModal       *TextInputModal
+	multiSelectModal     *MultiSelectModal
+	settingsModal        *SettingsModal
+	promptTemplatesModal *AgentPromptTemplatesModal
+	agentPromptModal     *AgentPromptModal
+	agentOutputModal     *AgentOutputModal
+	confirmationModal    *ConfirmationModal
+	agentRunner          *agents.Runner
+	agentPromptTemplates []config.AgentPromptTemplate
 
 	// App state (protected by issuesMu)
 	issuesMu            sync.RWMutex
