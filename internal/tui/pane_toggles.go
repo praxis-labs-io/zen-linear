@@ -135,11 +135,10 @@ func (a *App) toggleDetailsZoom() {
 	}
 	a.detailsZoomed = !a.detailsZoomed
 	a.detailsHidden = false
-	if a.detailsZoomed {
-		a.focusedPane = FocusDetails
-	} else {
-		a.focusedPane = FocusIssues
-	}
+	// The zoom is a way of looking at the details pane, not a way of leaving
+	// it, so unzooming keeps you there. Esc, h, Left, and 2 are the keys that
+	// mean the list.
+	a.focusedPane = FocusDetails
 	a.rebuildContentLayout()
 	a.updateFocus()
 	if a.detailsZoomed {

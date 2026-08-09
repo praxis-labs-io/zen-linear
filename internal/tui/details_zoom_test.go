@@ -54,6 +54,27 @@ func TestZoomFocusesTheDetailsPane(t *testing.T) {
 	}
 }
 
+// Unzooming is a change of view, not a move between panes, so it leaves focus
+// where it was. Landing back on the issues list stole the keys from whoever was
+// mid-read.
+func TestUnzoomKeepsFocusOnTheDetailsPane(t *testing.T) {
+	app := newZoomTestApp(t)
+	app.focusedPane = FocusIssues
+
+	zoomKey(app)
+	zoomKey(app)
+
+	if app.detailsZoomed {
+		t.Fatal("the second v did not unzoom")
+	}
+	if app.focusedPane != FocusDetails {
+		t.Errorf("focusedPane = %v after unzooming, want FocusDetails", app.focusedPane)
+	}
+	if app.detailsHidden {
+		t.Error("unzooming closed the details pane")
+	}
+}
+
 // Zooming an empty pane would show a full-width "No issue selected".
 func TestZoomNeedsASelectedIssue(t *testing.T) {
 	app := newUXTestApp(t)
