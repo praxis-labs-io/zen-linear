@@ -185,6 +185,9 @@ func (a *App) onNavigationSelected(node *NavigationNode, issueID ...string) {
 	a.groupingOverridden = false
 	a.sortOverridden = false
 
+	// Picking a list is asking to see it, so the zoom covering it gives way.
+	a.detailsZoomed = false
+
 	// A favorited issue is not a filter of its own: scope to its team and ask
 	// the refresh to land on the issue via the target-issue plumbing.
 	if node.IsIssue {

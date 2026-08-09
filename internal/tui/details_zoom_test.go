@@ -55,24 +55,68 @@ func TestZoomFocusesTheDetailsPane(t *testing.T) {
 	}
 }
 
-// Unzooming is a change of view, not a move between panes, so it leaves focus
-// where it was. Landing back on the issues list stole the keys from whoever was
-// mid-read.
-func TestUnzoomKeepsFocusOnTheDetailsPane(t *testing.T) {
+// The zoom is a round trip. Unzooming puts you back where you asked from,
+// rather than always landing on one pane: from the list you get the list back,
+// and from the details pane you stay in it.
+func TestUnzoomReturnsToThePaneTheZoomCameFrom(t *testing.T) {
+	for _, from := range []FocusTarget{FocusNavigation, FocusIssues, FocusDetails} {
+		app := newZoomTestApp(t)
+		app.detailsHidden = false
+		app.layoutMode = layoutWide
+		app.focusedPane = from
+
+		zoomKey(app)
+		if app.focusedPane != FocusDetails {
+			t.Errorf("from %v: focusedPane = %v while zoomed, want FocusDetails", from, app.focusedPane)
+		}
+
+		zoomKey(app)
+		if app.detailsZoomed {
+			t.Fatalf("from %v: the second v did not unzoom", from)
+		}
+		if app.focusedPane != from {
+			t.Errorf("from %v: focusedPane = %v after unzooming, want %v", from, app.focusedPane, from)
+		}
+		if app.detailsHidden {
+			t.Errorf("from %v: unzooming closed the details pane", from)
+		}
+	}
+}
+
+// The details pane opens on demand, so zooming from a layout that had it
+// closed must not leave it open afterwards.
+func TestUnzoomRestoresAClosedDetailsPane(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.focusedPane = FocusIssues
+	if !app.detailsHidden {
+		t.Fatal("details pane starts open; this test covers the closed case")
+	}
 
 	zoomKey(app)
+	if app.detailsHidden {
+		t.Fatal("zoom did not open the details pane")
+	}
+
 	zoomKey(app)
+	if !app.detailsHidden {
+		t.Error("unzooming left the details pane open, when it was closed before the zoom")
+	}
+	if app.focusedPane != FocusIssues {
+		t.Errorf("focusedPane = %v, want FocusIssues", app.focusedPane)
+	}
+}
+
+// Picking a list is asking to see it, so the zoom covering it gives way.
+func TestSelectingANavigationNodeReleasesTheZoom(t *testing.T) {
+	app := newZoomTestApp(t)
+	app.detailsHidden = false
+	app.detailsZoomed = true
+	app.focusedPane = FocusDetails
+
+	app.onNavigationSelected(&NavigationNode{ID: "team-1", Text: "Engineering", TeamID: "team-1", IsTeam: true})
 
 	if app.detailsZoomed {
-		t.Fatal("the second v did not unzoom")
-	}
-	if app.focusedPane != FocusDetails {
-		t.Errorf("focusedPane = %v after unzooming, want FocusDetails", app.focusedPane)
-	}
-	if app.detailsHidden {
-		t.Error("unzooming closed the details pane")
+		t.Error("selecting a navigation node left the issues list hidden behind the zoom")
 	}
 }
 

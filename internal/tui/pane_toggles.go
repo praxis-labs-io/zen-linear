@@ -142,12 +142,21 @@ func (a *App) toggleDetailsZoom() {
 		a.flashStatus("No issue selected")
 		return
 	}
-	a.detailsZoomed = !a.detailsZoomed
-	a.detailsHidden = false
-	// The zoom is a way of looking at the details pane, not a way of leaving
-	// it, so unzooming keeps you there. Esc, h, Left, and 2 are the keys that
-	// mean the list.
-	a.focusedPane = FocusDetails
+	// The zoom is a round trip: it hands you the details pane to read, then
+	// puts the layout back the way it was. Zooming out of the pane you were
+	// already in leaves you in it, and a details pane that was closed before
+	// the zoom closes again after it.
+	if a.detailsZoomed {
+		a.detailsZoomed = false
+		a.detailsHidden = a.zoomPreviousHidden
+		a.focusedPane = a.zoomPreviousPane
+	} else {
+		a.zoomPreviousPane = a.focusedPane
+		a.zoomPreviousHidden = a.detailsHidden
+		a.detailsZoomed = true
+		a.detailsHidden = false
+		a.focusedPane = FocusDetails
+	}
 	a.rebuildContentLayout()
 	a.updateFocus()
 	if a.detailsZoomed {

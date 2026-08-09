@@ -283,3 +283,53 @@ func TestDetailsBelowTheMeasureUsesTheWholePane(t *testing.T) {
 		t.Errorf("content starts at column %d, want the padding alone at %d", left, app.density.DetailsPadding.Left)
 	}
 }
+
+// tableFixture is an issue whose description holds a markdown table wide enough
+// that glamour has to size its columns to something.
+func tableFixture() *linearapi.Issue {
+	return &linearapi.Issue{
+		ID: "issue-2", Identifier: "ZNO-6", Title: "Table", State: "Todo",
+		Description: "Intro paragraph.\n\n" +
+			"| Object | Paths to create |\n" +
+			"| --- | --- |\n" +
+			"| Workspace | the picker's add affordance (WindowController.swift:923), and Settings (:1121) |\n" +
+			"| Tool | Settings only (SettingsToolsSection then onEditFloat then ToolFloatFormOverlay) |\n",
+	}
+}
+
+// Glamour sizes table columns to its wrap width. Given none it laid the table
+// out at its natural width and the text view re-wrapped it, which broke every
+// row onto a continuation line with no column gutter.
+func TestDescriptionTablesFitTheReadingMeasure(t *testing.T) {
+	for _, width := range []int{180, 70} {
+		app := newDetailsTestApp(t)
+		app.selectedIssue = tableFixture()
+		app.updateDetailsView()
+		lines := drawDetails(t, app, width)
+
+		// The table spans from its first gutter line to its last. A cell that
+		// spilled past the width lands in that span as a line with no gutter
+		// at all, which is exactly what the broken render looks like.
+		first, last := -1, -1
+		for i, line := range lines {
+			if strings.Contains(line, "│") || strings.Contains(line, "┼") {
+				if first < 0 {
+					first = i
+				}
+				last = i
+			}
+		}
+		if first < 0 {
+			t.Fatalf("at %d: no table drawn at all", width)
+		}
+		for i := first; i <= last; i++ {
+			line := strings.TrimSpace(lines[i])
+			if line == "" {
+				continue
+			}
+			if !strings.Contains(line, "│") && !strings.Contains(line, "┼") {
+				t.Errorf("at %d: line %d sits inside the table but carries no column gutter: %q", width, i, lines[i])
+			}
+		}
+	}
+}

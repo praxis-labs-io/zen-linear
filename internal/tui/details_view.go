@@ -10,43 +10,70 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
-// markdownRenderer is a shared glamour renderer for markdown content.
-var markdownRenderer *glamour.TermRenderer
+// The shared glamour renderer, plus the theme and wrap width it was built for.
+// Rebuilding is only needed when one of those two moves.
+var (
+	markdownRenderer  *glamour.TermRenderer
+	markdownTheme     = LinearTheme
+	markdownWrapWidth = -1
+)
 
-// initMarkdownRenderer initializes the glamour markdown renderer with colors
-// derived from the theme. Word wrap stays disabled: glamour cannot know the
-// pane width, and pre-wrapped output re-wraps badly inside the text views.
+// initMarkdownRenderer records the theme markdown is rendered in and drops the
+// renderer built for the previous one.
 func initMarkdownRenderer(theme Theme) {
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStyles(themeMarkdownStyle(theme)),
-		glamour.WithWordWrap(0),
-	)
-	if err != nil {
-		// Fallback: create a basic renderer if the themed style fails
-		markdownRenderer, _ = glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
-			glamour.WithWordWrap(0),
-		)
-		return
-	}
-	markdownRenderer = renderer
+	markdownTheme = theme
+	markdownRenderer = nil
+	markdownWrapWidth = -1
 }
 
-// renderMarkdown renders markdown content using glamour.
-// Falls back to plain text if rendering fails.
-func renderMarkdown(content string) string {
-	if markdownRenderer == nil {
-		initMarkdownRenderer(LinearTheme)
+// markdownRendererFor returns a renderer wrapping at width, building one when
+// the width or the theme has moved. Width 0 leaves glamour's wrapping off, for
+// callers whose view does its own.
+func markdownRendererFor(width int) *glamour.TermRenderer {
+	if markdownRenderer != nil && markdownWrapWidth == width {
+		return markdownRenderer
 	}
-
-	rendered, err := markdownRenderer.Render(content)
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStyles(themeMarkdownStyle(markdownTheme)),
+		glamour.WithWordWrap(width),
+	)
 	if err != nil {
-		// Fallback to plain text on error
+		renderer, err = glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(width))
+		if err != nil {
+			return nil
+		}
+	}
+	markdownRenderer = renderer
+	markdownWrapWidth = width
+	return renderer
+}
+
+// renderMarkdownAt renders markdown wrapped to width. Tables are why the width
+// matters: glamour sizes their columns to it, and given nothing it lays a table
+// out at its natural width, which the text view then re-wraps into a heap.
+// Falls back to plain text if rendering fails.
+func renderMarkdownAt(content string, width int) string {
+	renderer := markdownRendererFor(max(0, width))
+	if renderer == nil {
 		return content
 	}
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		return content
+	}
+	// Glamour pads every line out to the wrap width, which would push the
+	// text view's own wrapping over by the padding on a full-width line.
+	lines := strings.Split(strings.TrimSpace(rendered), "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " ")
+	}
+	return strings.Join(lines, "\n")
+}
 
-	// Trim extra whitespace that glamour may add
-	return strings.TrimSpace(rendered)
+// renderMarkdown renders markdown without wrapping, for views that wrap it
+// themselves.
+func renderMarkdown(content string) string {
+	return renderMarkdownAt(content, 0)
 }
 
 func formatIssueReference(ref linearapi.IssueRef) string {
@@ -74,6 +101,31 @@ func formatUserDisplayName(user linearapi.User) string {
 // from one line to the next.
 const detailsMeasure = 90
 
+// detailsDrawFunc returns the draw func both details tabs use: it hands the
+// tab its capped, centered content rect and tells it the width to lay out at.
+// The draw func is the only place the live width is known, and a pane narrower
+// than its own border and padding would otherwise hand tview a negative
+// content rect, which it draws from without checking.
+func (a *App) detailsDrawFunc(refit func(int)) func(tcell.Screen, int, int, int, int) (int, int, int, int) {
+	return func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		inner := a.density.DetailsPadding
+		innerWidth := max(0, width-2-inner.Left-inner.Right)
+		innerHeight := max(0, height-2-inner.Top-inner.Bottom)
+		measure, gutter := readingMeasure(innerWidth)
+		refit(measure)
+		return x + 1 + inner.Left + gutter, y + 1 + inner.Top, measure, innerHeight
+	}
+}
+
+// detailsDivider draws the rule between sections at the width the text is set
+// at, falling back to a short one before the first draw fixes that width.
+func detailsDivider(width int) string {
+	if width <= 0 {
+		width = 40
+	}
+	return strings.Repeat("─", width)
+}
+
 // readingMeasure caps a pane's content width and centers what is left over,
 // returning the width to set text at and the gutter to start it from.
 func readingMeasure(innerWidth int) (measure int, gutter int) {
@@ -96,18 +148,7 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetBackgroundColor(tcell.ColorDefault)
 	padding := a.density.DetailsPadding
 	a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-	// The metadata header is fitted to the pane, so it has to re-fit when the
-	// pane resizes. The draw func is the only place the live width is known.
-	// A pane narrower than its own border and padding would otherwise hand
-	// tview a negative content rect, which it draws from without checking.
-	a.detailsDescriptionView.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
-		inner := a.density.DetailsPadding
-		innerWidth := max(0, width-2-inner.Left-inner.Right)
-		innerHeight := max(0, height-2-inner.Top-inner.Bottom)
-		measure, gutter := readingMeasure(innerWidth)
-		a.refitDetailsHeader(measure)
-		return x + 1 + inner.Left + gutter, y + 1 + inner.Top, measure, innerHeight
-	})
+	a.detailsDescriptionView.SetDrawFunc(a.detailsDrawFunc(a.refitDetailsHeader))
 
 	// Create comments view (bottom section, scrollable, fixed height)
 	a.detailsCommentsView = tview.NewTextView()
@@ -121,13 +162,7 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(tcell.ColorDefault)
 	a.detailsCommentsView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-	a.detailsCommentsView.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
-		inner := a.density.DetailsPadding
-		innerWidth := max(0, width-2-inner.Left-inner.Right)
-		innerHeight := max(0, height-2-inner.Top-inner.Bottom)
-		measure, gutter := readingMeasure(innerWidth)
-		return x + 1 + inner.Left + gutter, y + 1 + inner.Top, measure, innerHeight
-	})
+	a.detailsCommentsView.SetDrawFunc(a.detailsDrawFunc(a.refitDetailsComments))
 
 	// Create flex layout; comments are added conditionally after issue selection.
 	detailsFlex := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -218,9 +253,26 @@ func (a *App) renderDetailsDescription() {
 	a.detailsDescriptionView.SetText(text + a.detailsBody)
 }
 
-// refitDetailsHeader re-truncates the header for a pane width, keeping the
+// renderDetailsBody renders the description markdown at the fitted width. The
+// raw markdown is kept rather than the issue so this can run from a draw func,
+// where taking the issues lock would be a poor idea.
+func (a *App) renderDetailsBody() {
+	if a.detailsDescriptionMarkdown == "" {
+		a.detailsBody = fmt.Sprintf("%sNo description available[-]", a.themeTags.SecondaryText)
+		return
+	}
+	var body strings.Builder
+	writer := tview.ANSIWriter(&body)
+	_, _ = fmt.Fprintf(writer, "%sDescription:[-]\n\n", a.themeTags.SecondaryText)
+	_, _ = fmt.Fprint(writer, renderMarkdownAt(a.detailsDescriptionMarkdown, a.detailsFittedWidth))
+	a.detailsBody = body.String()
+}
+
+// refitDetailsHeader re-fits the description tab to a pane width, keeping the
 // scroll position. It runs from the view's draw func, the only place the live
 // width is known, so it skips the work whenever the width has not moved.
+// The body is re-rendered too, not just re-truncated: glamour sizes tables to
+// the width it was given, so a stale one draws them at the old measure.
 func (a *App) refitDetailsHeader(width int) {
 	if width == a.detailsFittedWidth {
 		return
@@ -230,8 +282,24 @@ func (a *App) refitDetailsHeader(width int) {
 		return
 	}
 	row, column := a.detailsDescriptionView.GetScrollOffset()
+	a.renderDetailsBody()
 	a.renderDetailsDescription()
 	a.detailsDescriptionView.ScrollTo(row, column)
+}
+
+// refitDetailsComments re-renders the comments tab at a pane width, for the
+// same reason the description needs it.
+func (a *App) refitDetailsComments(width int) {
+	if width == a.detailsCommentsFittedWidth {
+		return
+	}
+	a.detailsCommentsFittedWidth = width
+	if len(a.detailsCommentsSource) == 0 {
+		return
+	}
+	row, column := a.detailsCommentsView.GetScrollOffset()
+	a.renderDetailsComments()
+	a.detailsCommentsView.ScrollTo(row, column)
 }
 
 // updateDetailsView updates the details view with the selected issue.
@@ -245,6 +313,8 @@ func (a *App) updateDetailsView() {
 	if selectedIssue == nil {
 		a.detailsHeaderLines = nil
 		a.detailsBody = ""
+		a.detailsDescriptionMarkdown = ""
+		a.detailsCommentsSource = nil
 		a.detailsDescriptionView.SetText(a.emptyDetailsMessage())
 		a.detailsCommentsView.SetText("")
 		a.updateAllPaneTitles()
@@ -386,71 +456,62 @@ func (a *App) updateDetailsView() {
 	for i := 0; i < sectionGap; i++ {
 		headerLines = append(headerLines, "")
 	}
-	headerLines = append(headerLines, fmt.Sprintf("%s────────────────────────────────────────[-]", dividerColor))
+	headerLines = append(headerLines, fmt.Sprintf("%s%s[-]", dividerColor, detailsDivider(a.detailsFittedWidth)))
 	for i := 0; i < sectionGap; i++ {
 		headerLines = append(headerLines, "")
 	}
 
-	// The description is rendered once into a buffer rather than straight into
-	// the view, so refitting the header to a new pane width does not re-run
-	// glamour. ANSIWriter translates glamour's escape codes to tview tags.
-	var body strings.Builder
-	writer := tview.ANSIWriter(&body)
-	if issue.Description != "" {
-		_, _ = fmt.Fprintf(writer, "%sDescription:[-]\n\n", keyColor)
-		_, _ = fmt.Fprint(writer, renderMarkdown(issue.Description))
-	} else {
-		_, _ = fmt.Fprintf(writer, "%sNo description available[-]", keyColor)
-	}
-
 	a.detailsHeaderLines = headerLines
-	a.detailsBody = body.String()
+	// The raw markdown is kept, not just its rendering, because the width it
+	// is laid out at can change without the issue changing.
+	a.detailsDescriptionMarkdown = issue.Description
+	a.detailsCommentsSource = issue.Comments
+	a.renderDetailsBody()
 	a.renderDetailsDescription()
 	a.detailsDescriptionView.ScrollToBeginning()
 
-	// ===== Update Comments View =====
-	a.detailsCommentsView.Clear()
-	commentsWriter := tview.ANSIWriter(a.detailsCommentsView)
-
-	if len(issue.Comments) > 0 {
-		_, _ = fmt.Fprintf(commentsWriter, "%sComments:[-] (%d)\n\n", keyColor, len(issue.Comments))
-
-		for i, comment := range issue.Comments {
-			// Comment header: author and timestamp
-			authorDisplay := comment.Author.DisplayName
-			if authorDisplay == "" {
-				authorDisplay = comment.Author.Name
-			}
-			if comment.Author.IsMe {
-				authorDisplay = fmt.Sprintf("%s (me)", authorDisplay)
-			}
-
-			// Format timestamp
-			timeStr := comment.CreatedAt.Format("Jan 2, 2006 3:04 PM")
-			if !comment.UpdatedAt.Equal(comment.CreatedAt) {
-				timeStr += " (edited)"
-			}
-
-			_, _ = fmt.Fprintf(commentsWriter, "%s%s[-] %s%s[-]\n", accentColor, authorDisplay, keyColor, timeStr)
-			_, _ = fmt.Fprint(commentsWriter, "\n")
-
-			// Render comment body as markdown
-			renderedComment := renderMarkdown(comment.Body)
-			_, _ = fmt.Fprint(commentsWriter, renderedComment)
-
-			// Add separator between comments (but not after the last one)
-			if i < len(issue.Comments)-1 {
-				_, _ = fmt.Fprint(commentsWriter, "\n\n")
-				_, _ = fmt.Fprintf(commentsWriter, "%s────────────────────────────────────────[-]\n\n", dividerColor)
-			}
-		}
-	} else {
-		// Empty state for comments
-		_, _ = fmt.Fprintf(commentsWriter, "%sNo comments yet.[-]", keyColor)
-	}
-
+	a.renderDetailsComments()
 	a.detailsCommentsView.ScrollToBeginning()
 	// Comments arrive with the async full-issue fetch; refresh the tab strip
 	// so its count tracks what just rendered.
 	a.updateAllPaneTitles()
+}
+
+// renderDetailsComments writes the comments tab at its fitted width.
+func (a *App) renderDetailsComments() {
+	keyColor := a.themeTags.SecondaryText
+	accentColor := a.themeTags.Accent
+	dividerColor := a.themeTags.Border
+	width := a.detailsCommentsFittedWidth
+
+	a.detailsCommentsView.Clear()
+	writer := tview.ANSIWriter(a.detailsCommentsView)
+
+	if len(a.detailsCommentsSource) == 0 {
+		_, _ = fmt.Fprintf(writer, "%sNo comments yet.[-]", keyColor)
+		return
+	}
+
+	_, _ = fmt.Fprintf(writer, "%sComments:[-] (%d)\n\n", keyColor, len(a.detailsCommentsSource))
+	for i, comment := range a.detailsCommentsSource {
+		authorDisplay := comment.Author.DisplayName
+		if authorDisplay == "" {
+			authorDisplay = comment.Author.Name
+		}
+		if comment.Author.IsMe {
+			authorDisplay = fmt.Sprintf("%s (me)", authorDisplay)
+		}
+
+		timeStr := comment.CreatedAt.Format("Jan 2, 2006 3:04 PM")
+		if !comment.UpdatedAt.Equal(comment.CreatedAt) {
+			timeStr += " (edited)"
+		}
+
+		_, _ = fmt.Fprintf(writer, "%s%s[-] %s%s[-]\n\n", accentColor, authorDisplay, keyColor, timeStr)
+		_, _ = fmt.Fprint(writer, renderMarkdownAt(comment.Body, width))
+
+		if i < len(a.detailsCommentsSource)-1 {
+			_, _ = fmt.Fprintf(writer, "\n\n%s%s[-]\n\n", dividerColor, detailsDivider(width))
+		}
+	}
 }
