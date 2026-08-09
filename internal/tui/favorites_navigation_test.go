@@ -175,7 +175,7 @@ func TestFavoriteNavigationNodesViews(t *testing.T) {
 // TestRebuildNavigationTreeOmitsEmptyFavorites verifies the Favorites group
 // only renders when displayable favorites exist.
 func TestRebuildNavigationTreeOmitsEmptyFavorites(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{})
+	app := newDefaultNavTestApp(t, config.Config{})
 	teams := []linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}
 
 	app.rebuildNavigationTree(teams, nil)

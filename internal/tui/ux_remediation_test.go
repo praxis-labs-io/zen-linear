@@ -42,6 +42,12 @@ func stopBackgroundWorkOnCleanup(t testing.TB, app *App) {
 		}
 		app.uiUpdateMu.Lock()
 		app.detailFetchGeneration.Add(1)
+		// An issues refresh in flight guards on refreshGeneration, not the
+		// detail one. Left current, it paints tables from its own goroutine
+		// after the test returns, racing the next test's NewApp over tview's
+		// package-level Styles.
+		app.refreshGeneration.Add(1)
+		app.searchFetchGeneration.Add(1)
 		app.uiUpdateMu.Unlock()
 	})
 }

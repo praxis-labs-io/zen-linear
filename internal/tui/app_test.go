@@ -49,7 +49,11 @@ func waitForRefreshCompletions(t *testing.T, done <-chan struct{}, count int) {
 	for i := 0; i < count; i++ {
 		select {
 		case <-done:
-		case <-time.After(time.Second):
+		// Generous on purpose: the wait is event-driven, so a longer bound
+		// costs nothing when the refresh lands and only decides how fast a
+		// genuine hang reports. A second was tight enough that -race on a
+		// loaded machine failed the restore tests roughly one run in four.
+		case <-time.After(30 * time.Second):
 			t.Fatalf("timed out waiting for refresh completion %d of %d", i+1, count)
 		}
 	}

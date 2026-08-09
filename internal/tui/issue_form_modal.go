@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -98,7 +99,9 @@ type IssueFormModal struct {
 	// for that, so a refusal keeps the typing and the caret where they were.
 	saving bool
 	// openGen discards an option fetch from an earlier opening of the form.
-	openGen int
+	// Atomic because the option loaders read it from their own goroutines
+	// while a close writes it, which the UI thread alone does not order.
+	openGen atomic.Int64
 	// milestoneGen discards a milestone fetch whose project has since changed.
 	milestoneGen int
 }
@@ -147,7 +150,7 @@ func NewIssueFormModal(app *App) *IssueFormModal {
 
 // Show opens the form for one create or edit.
 func (f *IssueFormModal) Show(options IssueFormOptions) {
-	f.openGen++
+	f.openGen.Add(1)
 	f.mode = options.Mode
 	f.teamID = options.TeamID
 	f.parentID = options.ParentID
@@ -412,9 +415,9 @@ func (f *IssueFormModal) begin(message string) {
 // user escaped out of, or one from a form since reopened on another issue,
 // must not close or repaint what is on screen now.
 func (f *IssueFormModal) completion() func(error) {
-	generation := f.openGen
+	generation := f.openGen.Load()
 	return func(err error) {
-		if generation != f.openGen {
+		if generation != f.openGen.Load() {
 			return
 		}
 		f.finish(err)
@@ -551,12 +554,12 @@ func loadIssueFormOptions[T any](
 		populate(nil)
 		return
 	}
-	generation := f.openGen
+	generation := f.openGen.Load()
 	go func() {
 		loaded, err := fetch(scopeID)
 		f.app.QueueUpdateDraw(func() {
 			// A fetch from an earlier opening must not write into this one.
-			if generation != f.openGen {
+			if generation != f.openGen.Load() {
 				return
 			}
 			if err != nil {
@@ -717,7 +720,7 @@ func labelIDs(labels []linearapi.IssueLabel) []string {
 // Hide closes the form, and retires this opening so a write or a fetch still
 // in flight cannot write into the next one.
 func (f *IssueFormModal) Hide() {
-	f.openGen++
+	f.openGen.Add(1)
 	f.fm.Hide("issue_form")
 }
 

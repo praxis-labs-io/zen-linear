@@ -14,8 +14,7 @@ import (
 func newSessionRestoreTestApp(t *testing.T, state session.State) (*App, *linearapi.FetchIssuesParams) {
 	t.Helper()
 
-	app := newDefaultNavTestApp(config.Config{SessionRestore: true})
-	stopBackgroundWorkOnCleanup(t, app)
+	app := newDefaultNavTestApp(t, config.Config{SessionRestore: true})
 	app.fetchWorkflowStatesFunc = func(context.Context, string) ([]linearapi.WorkflowState, error) {
 		return []linearapi.WorkflowState{
 			{ID: "state-1", Name: "Todo", Type: "unstarted", Position: 1},
@@ -382,7 +381,7 @@ func TestApplySessionNavigationIsOneShot(t *testing.T) {
 // TestApplySessionNavigationWithoutPendingState verifies an app that never
 // had a session to restore leaves startup to the configured default.
 func TestApplySessionNavigationWithoutPendingState(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{SessionRestore: true})
+	app := newDefaultNavTestApp(t, config.Config{SessionRestore: true})
 
 	if app.startSessionRestore(context.Background(), defaultNavTeams(), nil) {
 		t.Fatal("applySessionNavigation() = true, want false")

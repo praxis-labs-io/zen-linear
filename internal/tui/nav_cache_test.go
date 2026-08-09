@@ -18,7 +18,7 @@ import (
 func newNavCacheTestApp(t *testing.T, cfg config.Config, teams []linearapi.Team, favorites []linearapi.Favorite) (*App, chan struct{}, string) {
 	t.Helper()
 
-	app := newDefaultNavTestApp(cfg)
+	app := newDefaultNavTestApp(t, cfg)
 	// The cache only files entries under a configured workspace name.
 	app.activeWorkspaceName = navCacheTestWorkspace
 	stopBackgroundWorkOnCleanup(t, app)
@@ -335,8 +335,7 @@ func TestRebuildKeepsTheUserPutWhenTheirListIsGone(t *testing.T) {
 // nothing on disk tells two Linear workspaces reached that way apart, so they
 // get no entry rather than one they would share.
 func TestUnnamedSessionsAreNotCached(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{LinearAPIKey: "lin_api_anything"})
-	stopBackgroundWorkOnCleanup(t, app)
+	app := newDefaultNavTestApp(t, config.Config{LinearAPIKey: "lin_api_anything"})
 	path := filepath.Join(t.TempDir(), "nav-cache.json")
 	if err := cache.RecordNav(path, "Praxis", cache.NavData{Teams: defaultNavTeams()}); err != nil {
 		t.Fatalf("RecordNav: %v", err)
@@ -366,8 +365,7 @@ func TestUnnamedSessionsAreNotCached(t *testing.T) {
 // where the tree on screen has outlived its teams: a favorites action there
 // would file the old favorites under the new workspace with no teams.
 func TestRecordNavCacheAsyncSkipsATeamlessTree(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{})
-	stopBackgroundWorkOnCleanup(t, app)
+	app := newDefaultNavTestApp(t, config.Config{})
 	path := filepath.Join(t.TempDir(), "nav-cache.json")
 	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: defaultNavTeams()})
 
@@ -388,8 +386,7 @@ func TestRecordNavCacheAsyncSkipsATeamlessTree(t *testing.T) {
 // TestResetNavigationTreeStopsShowingTheOldWorkspace covers the switch window:
 // the sidebar must not keep offering teams the new key cannot resolve.
 func TestResetNavigationTreeStopsShowingTheOldWorkspace(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{})
-	stopBackgroundWorkOnCleanup(t, app)
+	app := newDefaultNavTestApp(t, config.Config{})
 	app.rebuildNavigationTree(defaultNavTeams(), nil)
 
 	app.resetNavigationTree()
