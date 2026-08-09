@@ -248,6 +248,7 @@ func (a *App) buildIssuesPlaceholder() {
 	a.issuesPlaceholder.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
 	a.issuesPlaceholder.
 		SetBorder(true).
+		SetTitleAlign(tview.AlignLeft).
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)

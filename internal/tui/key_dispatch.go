@@ -54,6 +54,15 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		case a.actionKey("search", '/'):
 			a.openSearchTab()
 			return nil
+		case a.actionKey("focus_navigation", '1'):
+			a.focusPane(FocusNavigation)
+			return nil
+		case a.actionKey("focus_issues", '2'):
+			a.focusPane(FocusIssues)
+			return nil
+		case a.actionKey("focus_details", '3'):
+			a.focusPane(FocusDetails)
+			return nil
 		}
 	}
 

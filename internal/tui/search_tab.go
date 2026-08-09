@@ -62,6 +62,7 @@ func (a *App) buildSearchPanel() {
 	a.searchPanel.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
 	a.searchPanel.
 		SetBorder(true).
+		SetTitleAlign(tview.AlignLeft).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)
 	a.searchPanel.

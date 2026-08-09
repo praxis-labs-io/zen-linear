@@ -15,7 +15,7 @@ func tabLabels(t *testing.T, app *App) []string {
 	t.Helper()
 	title := app.issuesTabsTitle(false)
 	var labels []string
-	for _, segment := range strings.Split(title, "·") {
+	for _, segment := range strings.Split(title, tabSeparator) {
 		clean := strings.TrimSpace(stripColorTags(segment))
 		if clean != "" {
 			labels = append(labels, clean)

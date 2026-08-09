@@ -26,7 +26,12 @@ type Theme struct {
 	// paintable color there. Zero value falls back to Background.
 	InverseText tcell.Color
 
+	// AssigneeText colors the assignee initials in the issue list. Zero value
+	// falls back to Foreground.
+	AssigneeText tcell.Color
+
 	// Status Colors
+	StatusTriage     tcell.Color // zero value falls back to StatusTodo
 	StatusTodo       tcell.Color
 	StatusInProgress tcell.Color
 	StatusReview     tcell.Color // zero value falls back to StatusDone
@@ -53,6 +58,24 @@ func (t Theme) InverseTextColor() tcell.Color {
 	return t.Background
 }
 
+// AssigneeTextColor returns the color for assignee initials, falling back to
+// the foreground for themes that predate the field.
+func (t Theme) AssigneeTextColor() tcell.Color {
+	if t.AssigneeText != tcell.ColorDefault {
+		return t.AssigneeText
+	}
+	return t.Foreground
+}
+
+// StatusTriageColor returns the color for triage states, falling back to the
+// todo color for themes that predate the field.
+func (t Theme) StatusTriageColor() tcell.Color {
+	if t.StatusTriage != tcell.ColorDefault {
+		return t.StatusTriage
+	}
+	return t.StatusTodo
+}
+
 // StatusReviewColor returns the color for review states, falling back to the
 // done color for themes that predate the field.
 func (t Theme) StatusReviewColor() tcell.Color {
@@ -75,7 +98,9 @@ var LinearTheme = Theme{
 	SecondaryText: tcell.NewRGBColor(120, 120, 120), // #787878
 	Accent:        tcell.NewRGBColor(94, 106, 210),  // #5E6AD2
 	InputBg:       tcell.ColorDarkGray,
+	AssigneeText:  tcell.NewRGBColor(242, 153, 74), // #F2994A orange
 
+	StatusTriage:     tcell.NewRGBColor(242, 153, 74),  // #F2994A orange
 	StatusTodo:       tcell.NewRGBColor(140, 140, 140), // Gray
 	StatusInProgress: tcell.NewRGBColor(242, 201, 76),  // Yellow
 	StatusReview:     tcell.NewRGBColor(76, 183, 130),  // #4CB782 green
@@ -96,7 +121,9 @@ var HighContrastTheme = Theme{
 	SecondaryText: tcell.NewRGBColor(200, 200, 200), // #C8C8C8
 	Accent:        tcell.NewRGBColor(255, 255, 0),   // #FFFF00
 	InputBg:       tcell.NewRGBColor(30, 30, 30),    // #1E1E1E
+	AssigneeText:  tcell.NewRGBColor(255, 128, 0),   // #FF8000 orange
 
+	StatusTriage:     tcell.NewRGBColor(255, 128, 0),   // #FF8000 orange
 	StatusTodo:       tcell.NewRGBColor(255, 255, 255), // White
 	StatusInProgress: tcell.NewRGBColor(255, 255, 0),   // Yellow
 	StatusReview:     tcell.NewRGBColor(0, 255, 0),     // Green
@@ -117,7 +144,9 @@ var ColorBlindTheme = Theme{
 	SecondaryText: tcell.NewRGBColor(154, 154, 154), // #9A9A9A
 	Accent:        tcell.NewRGBColor(0, 114, 178),   // #0072B2
 	InputBg:       tcell.NewRGBColor(42, 42, 42),    // #2A2A2A
+	AssigneeText:  tcell.NewRGBColor(230, 159, 0),   // #E69F00 orange
 
+	StatusTriage:     tcell.NewRGBColor(230, 159, 0),   // #E69F00 orange
 	StatusTodo:       tcell.NewRGBColor(153, 153, 153), // Gray
 	StatusInProgress: tcell.NewRGBColor(86, 180, 233),  // #56B4E9
 	StatusReview:     tcell.NewRGBColor(0, 158, 115),   // #009E73
@@ -141,7 +170,9 @@ var RosePineMoonTheme = Theme{
 	Accent:        tcell.NewRGBColor(196, 167, 231), // #C4A7E7 iris
 	InputBg:       tcell.NewRGBColor(57, 53, 82),    // #393552 overlay
 	InverseText:   tcell.NewRGBColor(35, 33, 54),    // #232136 base
+	AssigneeText:  tcell.NewRGBColor(234, 154, 151), // #EA9A97 rose
 
+	StatusTriage:     tcell.NewRGBColor(234, 154, 151), // #EA9A97 rose
 	StatusTodo:       tcell.NewRGBColor(62, 143, 176),  // #3E8FB0 pine
 	StatusInProgress: tcell.NewRGBColor(246, 193, 119), // #F6C177 gold
 	StatusReview:     tcell.NewRGBColor(76, 183, 130),  // #4CB782 green; the Rose Pine palette has no green

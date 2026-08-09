@@ -9,6 +9,20 @@ const (
 	layoutNarrow                   // one pane: whichever has focus
 )
 
+// Flex weights for the content split, as shares of the visible panes' total.
+// The nav pane takes a different share in each of the three arrangements it
+// appears in, so it has a weight per case; the other two panes keep theirs.
+// The issues weight is 15 because that is the smallest number leaving every
+// nav weight a whole one. Change a share by working out the fraction it should
+// be of the panes on screen, not by rescaling these.
+const (
+	navWeight            = 5 // nav and issues, with details toggled off
+	navWeightWithDetails = 6 // all three panes
+	navWeightMedium      = 3 // the two-pane responsive layout
+	issuesWeight         = 15
+	detailsWeight        = 10
+)
+
 // layoutModeForWidth picks the layout mode for a terminal width in cells.
 func layoutModeForWidth(width int) layoutMode {
 	switch {
@@ -33,15 +47,19 @@ func (a *App) rebuildContentLayout() {
 	showNav := !a.navigationHidden
 	showDetails := !a.detailsHidden
 	showIssues := true
-	navWeight := 2
+	nav := navWeight
 	switch a.layoutMode {
+	case layoutWide:
+		if showDetails {
+			nav = navWeightWithDetails
+		}
 	case layoutMedium:
 		if a.focusedPane == FocusDetails {
 			showNav = false
 		} else {
 			showDetails = false
 		}
-		navWeight = 1
+		nav = navWeightMedium
 	case layoutNarrow:
 		showNav = showNav && a.focusedPane == FocusNavigation
 		showDetails = showDetails && a.focusedPane == FocusDetails
@@ -50,13 +68,13 @@ func (a *App) rebuildContentLayout() {
 
 	a.contentFlex.Clear()
 	if showNav {
-		a.contentFlex.AddItem(a.navigationTree, 0, navWeight, a.focusedPane == FocusNavigation)
+		a.contentFlex.AddItem(a.navigationTree, 0, nav, a.focusedPane == FocusNavigation)
 	}
 	if showIssues {
-		a.contentFlex.AddItem(a.issuesColumn, 0, 5, a.focusedPane == FocusIssues)
+		a.contentFlex.AddItem(a.issuesColumn, 0, issuesWeight, a.focusedPane == FocusIssues)
 	}
 	if showDetails {
-		a.contentFlex.AddItem(a.detailsView, 0, 3, a.focusedPane == FocusDetails)
+		a.contentFlex.AddItem(a.detailsView, 0, detailsWeight, a.focusedPane == FocusDetails)
 	}
 }
 

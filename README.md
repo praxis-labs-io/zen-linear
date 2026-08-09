@@ -105,16 +105,21 @@ The options beyond the original linear-tui set:
   time
 - `keybindings` remaps palette commands by id, the global quit, open_palette,
   and search actions, and the tab_next, tab_prev, columns_left,
-  columns_right, favorite_move_up, favorite_move_down, favorite_nest, and
-  favorite_unnest actions
+  columns_right, focus_navigation, focus_issues, focus_details,
+  favorite_move_up, favorite_move_down, favorite_nest, and favorite_unnest
+  actions
 
 ## Keys
 
     j/k         move            Enter       toggle details
     h/l, Tab    switch panes    Space       expand sub-issues
-    { }         toggle panes    [ ]         cycle issue tabs*
-    H/L         scroll columns  :           command palette
-    /           search          q           quit
+    1/2/3       focus a pane    [ ]         cycle issue tabs*
+    { }         toggle panes    :           command palette
+    H/L         scroll columns  q           quit
+    /           search
+
+Each pane's number is shown in its title. Typing one focuses that pane, and
+brings it back if it has been toggled off.
 
 In the navigation pane:
 

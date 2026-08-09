@@ -43,6 +43,7 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 
 	tree.SetBorder(true).
 		SetTitle(" Navigation ").
+		SetTitleAlign(tview.AlignLeft).
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border)
 	tree.SetBackgroundColor(a.theme.Background)

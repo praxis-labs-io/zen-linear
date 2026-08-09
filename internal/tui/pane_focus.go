@@ -59,6 +59,24 @@ func (a *App) cyclePanes(direction int) {
 	a.updateFocus()
 }
 
+// focusPane moves focus straight to a pane by its number, revealing it first
+// when it has been toggled off. The numbers are fixed to the pane, so typing
+// one is also how a hidden pane is summoned back.
+func (a *App) focusPane(pane FocusTarget) {
+	switch pane {
+	case FocusNavigation:
+		a.navigationHidden = false
+	case FocusDetails:
+		a.detailsHidden = false
+		// Enter on the description, the same way Tab and l enter it.
+		a.focusedDetailsView = false
+	case FocusIssues, FocusPalette:
+	}
+	a.focusedPane = pane
+	a.rebuildContentLayout()
+	a.updateFocus()
+}
+
 // cyclePanesForward cycles focus forward: Navigation, Issues, Details, wrap.
 func (a *App) cyclePanesForward() { a.cyclePanes(1) }
 
@@ -156,17 +174,13 @@ func (a *App) updateFocus() {
 // updateAllPaneTitles updates all pane titles with visual indicators for the active pane.
 func (a *App) updateAllPaneTitles() {
 	// Update Navigation pane title
-	if a.focusedPane == FocusNavigation {
-		a.navigationTree.SetTitle(" ▶ Navigation ")
-		a.navigationTree.SetTitleColor(a.theme.Accent)
-	} else {
-		a.navigationTree.SetTitle(" Navigation ")
-		a.navigationTree.SetTitleColor(a.theme.Foreground)
-	}
+	isNavFocused := a.focusedPane == FocusNavigation
+	a.navigationTree.SetTitle(a.paneTitle(paneNumberNavigation, a.tabSegment("Navigation", true, isNavFocused), isNavFocused))
+	a.navigationTree.SetTitleColor(a.theme.Foreground)
 
 	// Update Issues pane tab strip
 	isIssuesFocused := a.focusedPane == FocusIssues
-	issuesTitle := a.issuesTabsTitle(isIssuesFocused)
+	issuesTitle := a.paneTitle(paneNumberIssues, a.issuesTabsTitle(isIssuesFocused), isIssuesFocused)
 	a.myIssuesTable.SetTitle(issuesTitle)
 	a.myIssuesTable.SetTitleColor(a.theme.Foreground)
 	a.allIssuesTable.SetTitle(issuesTitle)
@@ -184,7 +198,7 @@ func (a *App) updateAllPaneTitles() {
 	// Update Details pane tab strip
 	isDetailsFocused := a.focusedPane == FocusDetails
 	if a.detailsDescriptionView != nil {
-		detailsTitle := a.detailsTabsTitle(isDetailsFocused)
+		detailsTitle := a.paneTitle(paneNumberDetails, a.detailsTabsTitle(isDetailsFocused), isDetailsFocused)
 		a.detailsDescriptionView.SetTitle(detailsTitle)
 		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
 		if a.detailsCommentsView != nil {

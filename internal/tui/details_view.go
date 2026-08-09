@@ -78,11 +78,23 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetWordWrap(true).
 		SetBorder(true).
 		SetTitle(" Details ").
+		SetTitleAlign(tview.AlignLeft).
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(tcell.ColorDefault)
 	padding := a.density.DetailsPadding
 	a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	// The metadata header is fitted to the pane, so it has to re-fit when the
+	// pane resizes. The draw func is the only place the live width is known.
+	// A pane narrower than its own border and padding would otherwise hand
+	// tview a negative content rect, which it draws from without checking.
+	a.detailsDescriptionView.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		inner := a.density.DetailsPadding
+		innerWidth := max(0, width-2-inner.Left-inner.Right)
+		innerHeight := max(0, height-2-inner.Top-inner.Bottom)
+		a.refitDetailsHeader(innerWidth)
+		return x + 1 + inner.Left, y + 1 + inner.Top, innerWidth, innerHeight
+	})
 
 	// Create comments view (bottom section, scrollable, fixed height)
 	a.detailsCommentsView = tview.NewTextView()
@@ -91,6 +103,7 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetWordWrap(true).
 		SetBorder(true).
 		SetTitle(" Comments ").
+		SetTitleAlign(tview.AlignLeft).
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(tcell.ColorDefault)
@@ -117,6 +130,60 @@ func (a *App) setDetailsCommentsVisibility(showComments bool) {
 	a.updateDetailsLayout()
 }
 
+// truncateTagged shortens a color-tagged line to width cells and marks the cut
+// with an ellipsis. tview's wrapper does the measuring, so the cut never lands
+// inside a tag, and the reset keeps a clipped color off the following line.
+func truncateTagged(line string, width int) string {
+	if width <= 0 || tview.TaggedStringWidth(line) <= width {
+		return line
+	}
+	wrapped := tview.WordWrap(line, width-1)
+	if len(wrapped) == 0 {
+		return line
+	}
+	return wrapped[0] + "…[-]"
+}
+
+// renderDetailsDescription writes the metadata header and the description at
+// the width of the pane's last draw. The header lines are single rows of
+// fielded text, so they truncate; the description below is prose and keeps
+// wrapping. Before the first draw the width is unknown and nothing is cut, so
+// a render that beats the layout does not shorten the header to a stale box.
+func (a *App) renderDetailsDescription() {
+	if a.detailsDescriptionView == nil {
+		return
+	}
+
+	fitted := make([]string, len(a.detailsHeaderLines))
+	for i, line := range a.detailsHeaderLines {
+		fitted[i] = truncateTagged(line, a.detailsFittedWidth)
+	}
+
+	// The compact density ends the header on the divider with no trailing gap
+	// line, so the description needs its own break or it lands on the divider.
+	text := strings.Join(fitted, "\n")
+	if text != "" && a.detailsBody != "" && !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	a.detailsDescriptionView.SetText(text + a.detailsBody)
+}
+
+// refitDetailsHeader re-truncates the header for a pane width, keeping the
+// scroll position. It runs from the view's draw func, the only place the live
+// width is known, so it skips the work whenever the width has not moved.
+func (a *App) refitDetailsHeader(width int) {
+	if width == a.detailsFittedWidth {
+		return
+	}
+	a.detailsFittedWidth = width
+	if len(a.detailsHeaderLines) == 0 {
+		return
+	}
+	row, column := a.detailsDescriptionView.GetScrollOffset()
+	a.renderDetailsDescription()
+	a.detailsDescriptionView.ScrollTo(row, column)
+}
+
 // updateDetailsView updates the details view with the selected issue.
 func (a *App) updateDetailsView() {
 	a.issuesMu.RLock()
@@ -126,6 +193,8 @@ func (a *App) updateDetailsView() {
 	// without comments shows the empty state.
 	a.setDetailsCommentsVisibility(selectedIssue != nil)
 	if selectedIssue == nil {
+		a.detailsHeaderLines = nil
+		a.detailsBody = ""
 		a.detailsDescriptionView.SetText(a.emptyDetailsMessage())
 		a.detailsCommentsView.SetText("")
 		a.updateAllPaneTitles()
@@ -221,6 +290,17 @@ func (a *App) updateDetailsView() {
 		}
 	}
 
+	if len(issue.Subscribers) > 0 {
+		for i := 0; i < sectionGap; i++ {
+			headerLines = append(headerLines, "")
+		}
+		subscribers := make([]string, 0, len(issue.Subscribers))
+		for _, subscriber := range issue.Subscribers {
+			subscribers = append(subscribers, formatUserDisplayName(subscriber))
+		}
+		headerLines = append(headerLines, fmt.Sprintf("%sSubscribers:[-] %s%s[-]", keyColor, valColor, strings.Join(subscribers, ", ")))
+	}
+
 	if len(issue.Relations) > 0 {
 		for i := 0; i < sectionGap; i++ {
 			headerLines = append(headerLines, "")
@@ -233,17 +313,6 @@ func (a *App) updateDetailsView() {
 			}
 			headerLines = append(headerLines, fmt.Sprintf("  %s%s[-] %s%s[-]", keyColor, relation.DisplayType(), accentColor, formatIssueReference(ref)))
 		}
-	}
-
-	if len(issue.Subscribers) > 0 {
-		for i := 0; i < sectionGap; i++ {
-			headerLines = append(headerLines, "")
-		}
-		subscribers := make([]string, 0, len(issue.Subscribers))
-		for _, subscriber := range issue.Subscribers {
-			subscribers = append(subscribers, formatUserDisplayName(subscriber))
-		}
-		headerLines = append(headerLines, fmt.Sprintf("%sSubscribers:[-] %s%s[-]", keyColor, valColor, strings.Join(subscribers, ", ")))
 	}
 
 	if len(issue.Attachments) > 0 {
@@ -272,23 +341,21 @@ func (a *App) updateDetailsView() {
 		headerLines = append(headerLines, "")
 	}
 
-	// Set header first, then append description via ANSIWriter
-	a.detailsDescriptionView.Clear()
-	a.detailsDescriptionView.SetText(strings.Join(headerLines, "\n"))
-	writer := tview.ANSIWriter(a.detailsDescriptionView)
-
-	// Description
+	// The description is rendered once into a buffer rather than straight into
+	// the view, so refitting the header to a new pane width does not re-run
+	// glamour. ANSIWriter translates glamour's escape codes to tview tags.
+	var body strings.Builder
+	writer := tview.ANSIWriter(&body)
 	if issue.Description != "" {
 		_, _ = fmt.Fprintf(writer, "%sDescription:[-]\n\n", keyColor)
-
-		// Render description as markdown and write through ANSIWriter
-		// ANSIWriter translates ANSI escape codes to tview color tags
-		renderedDesc := renderMarkdown(issue.Description)
-		_, _ = fmt.Fprint(writer, renderedDesc)
+		_, _ = fmt.Fprint(writer, renderMarkdown(issue.Description))
 	} else {
 		_, _ = fmt.Fprintf(writer, "%sNo description available[-]", keyColor)
 	}
 
+	a.detailsHeaderLines = headerLines
+	a.detailsBody = body.String()
+	a.renderDetailsDescription()
 	a.detailsDescriptionView.ScrollToBeginning()
 
 	// ===== Update Comments View =====

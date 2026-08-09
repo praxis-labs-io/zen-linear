@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -75,7 +77,9 @@ func formatStateIcon(state string, theme Theme) (string, tcell.Color) {
 	case strings.Contains(lowerState, "review"):
 		return "◉", theme.StatusReviewColor()
 	case strings.Contains(lowerState, "progress"):
-		return "◉", theme.StatusInProgress
+		return "⊙", theme.StatusInProgress
+	case strings.Contains(lowerState, "triage"):
+		return "◎", theme.StatusTriageColor()
 	case strings.Contains(lowerState, "cancel") || strings.Contains(lowerState, "duplicate"):
 		return "⊘", theme.StatusCanceled
 	case strings.Contains(lowerState, "backlog"):
@@ -94,6 +98,37 @@ func formatUpdatedAt(updatedAt time.Time) string {
 		return updatedAt.Format("Jan 2006")
 	}
 	return updatedAt.Format("Jan 2")
+}
+
+// formatAssigneeInitials condenses a full name to the first letters of its
+// first and last words, so the column costs a couple of cells instead of a
+// name's worth. A one-word name gives one letter. An empty name gives an
+// empty string, which callers render as unassigned.
+//
+// Words that do not start with a letter are skipped, so a pronoun or a role
+// in parentheses does not turn the initials into punctuation.
+func formatAssigneeInitials(name string) string {
+	words := make([]string, 0, 2)
+	for _, word := range strings.Fields(name) {
+		if first, _ := utf8.DecodeRuneInString(word); unicode.IsLetter(first) {
+			words = append(words, word)
+		}
+	}
+	if len(words) == 0 {
+		return ""
+	}
+	initials := initialLetter(words[0])
+	if len(words) > 1 {
+		initials += initialLetter(words[len(words)-1])
+	}
+	return initials
+}
+
+// initialLetter returns a word's first rune, uppercased. Callers filter to
+// words starting with a letter, so there is always a rune to read.
+func initialLetter(word string) string {
+	first, _ := utf8.DecodeRuneInString(word)
+	return string(unicode.ToUpper(first))
 }
 
 // formatLabels renders label names as a compact comma list.
@@ -143,7 +178,7 @@ var issueColumnSpecs = map[string]issueColumnSpec{
 	ColumnState:     {header: " ", expansion: 0},
 	ColumnTitle:     {header: "Title", expansion: 4, maxWidth: 45},
 	ColumnLabels:    {header: "Labels", expansion: 1, maxWidth: 18},
-	ColumnAssignee:  {header: "Assignee", expansion: 1},
+	ColumnAssignee:  {header: " ", expansion: 0},
 	ColumnUpdated:   {header: "Updated", expansion: 0},
 	ColumnCycle:     {header: "Cycle", expansion: 1, maxWidth: 15},
 	ColumnDue:       {header: "Due", expansion: 0},
@@ -172,12 +207,22 @@ func setIssuesTableHeaders(table *tview.Table, theme Theme, columns []string) {
 
 	for column, name := range columns {
 		spec := issueColumnSpecs[name]
-		table.SetCell(0, column, tview.NewTableCell(spec.header).
+		table.SetCell(0, column, tview.NewTableCell(headerText(spec.header, name, column)).
 			SetStyle(headerStyle).
 			SetAlign(tview.AlignLeft).
 			SetSelectable(false).
 			SetExpansion(spec.expansion))
 	}
+}
+
+// headerText indents a column header to match the lead space its cells carry:
+// the ID column reserves one for the tree icon wherever it sits, and whatever
+// column lands first gets one from setIssueRowCells.
+func headerText(header, name string, column int) string {
+	if name == ColumnID || column == 0 {
+		return " " + header
+	}
+	return header
 }
 
 // issueColumnCell renders one issue cell for a column identifier.
@@ -198,14 +243,11 @@ func issueColumnCell(name string, issue *linearapi.Issue, identifierPrefix strin
 		}
 		return labels, theme.HeaderText
 	case ColumnAssignee:
-		if issue.Assignee == "" {
+		initials := formatAssigneeInitials(issue.Assignee)
+		if initials == "" {
 			return "-", theme.SecondaryText
 		}
-		assignee := issue.Assignee
-		if len(assignee) > 14 {
-			assignee = assignee[:14]
-		}
-		return assignee, theme.Foreground
+		return initials, theme.AssigneeTextColor()
 	case ColumnUpdated:
 		return formatUpdatedAt(issue.UpdatedAt), theme.SecondaryText
 	case ColumnCycle:
@@ -283,6 +325,7 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 					SetSelectable(true, false).
 					SetBorder(true).
 					SetTitle(title).
+					SetTitleAlign(tview.AlignLeft).
 					SetTitleColor(a.theme.Foreground).
 					SetBorderColor(a.theme.Border).
 					SetBackgroundColor(a.theme.Background)
@@ -728,12 +771,9 @@ func renderIssueRow(issue linearapi.Issue) []string {
 	priorityText, _ := formatPriority(issue.Priority, LinearTheme)
 	stateIcon, _ := formatStateIcon(issue.State, LinearTheme)
 
-	assignee := issue.Assignee
+	assignee := formatAssigneeInitials(issue.Assignee)
 	if assignee == "" {
 		assignee = "-"
-	}
-	if len(assignee) > 14 {
-		assignee = assignee[:14]
 	}
 
 	return []string{priorityText, identifier, stateIcon, issue.Title, formatLabels(issue.Labels), assignee, formatUpdatedAt(issue.UpdatedAt)}
