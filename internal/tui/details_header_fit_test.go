@@ -184,3 +184,31 @@ func TestDetailsPaneContentSitsInsideItsBorder(t *testing.T) {
 		})
 	}
 }
+
+// TestDetailsSectionOrder pins the order of the metadata sections below the
+// fields: sub-issues, then subscribers, then relations, then attachments.
+func TestDetailsSectionOrder(t *testing.T) {
+	app := newDetailsTestApp(t)
+	app.selectedIssue.Subscribers = []linearapi.User{{ID: "u1", DisplayName: "Ada Lovelace"}}
+	app.selectedIssue.Relations = []linearapi.IssueRelation{{
+		ID:           "r1",
+		Type:         string(linearapi.IssueRelationBlocks),
+		RelatedIssue: linearapi.IssueRef{ID: "i2", Identifier: "ZNO-7", Title: "Dependency"},
+	}}
+	app.selectedIssue.Attachments = []linearapi.Attachment{{
+		ID: "a1", Title: "Pull request", SourceType: "github", URL: "https://example.com/pr/1",
+	}}
+	app.updateDetailsView()
+
+	lines := drawDetails(t, app, 90)
+	want := []string{"Sub-issues:", "Subscribers:", "Relations:", "Attachments:"}
+	at := make([]int, len(want))
+	for i, section := range want {
+		at[i] = indexOfLine(lines, findLine(t, lines, section))
+	}
+	for i := 1; i < len(at); i++ {
+		if at[i] <= at[i-1] {
+			t.Errorf("%s at line %d, want it below %s at line %d", want[i], at[i], want[i-1], at[i-1])
+		}
+	}
+}

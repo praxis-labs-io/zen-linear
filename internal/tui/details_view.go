@@ -279,6 +279,17 @@ func (a *App) updateDetailsView() {
 		}
 	}
 
+	if len(issue.Subscribers) > 0 {
+		for i := 0; i < sectionGap; i++ {
+			headerLines = append(headerLines, "")
+		}
+		subscribers := make([]string, 0, len(issue.Subscribers))
+		for _, subscriber := range issue.Subscribers {
+			subscribers = append(subscribers, formatUserDisplayName(subscriber))
+		}
+		headerLines = append(headerLines, fmt.Sprintf("%sSubscribers:[-] %s%s[-]", keyColor, valColor, strings.Join(subscribers, ", ")))
+	}
+
 	if len(issue.Relations) > 0 {
 		for i := 0; i < sectionGap; i++ {
 			headerLines = append(headerLines, "")
@@ -291,17 +302,6 @@ func (a *App) updateDetailsView() {
 			}
 			headerLines = append(headerLines, fmt.Sprintf("  %s%s[-] %s%s[-]", keyColor, relation.DisplayType(), accentColor, formatIssueReference(ref)))
 		}
-	}
-
-	if len(issue.Subscribers) > 0 {
-		for i := 0; i < sectionGap; i++ {
-			headerLines = append(headerLines, "")
-		}
-		subscribers := make([]string, 0, len(issue.Subscribers))
-		for _, subscriber := range issue.Subscribers {
-			subscribers = append(subscribers, formatUserDisplayName(subscriber))
-		}
-		headerLines = append(headerLines, fmt.Sprintf("%sSubscribers:[-] %s%s[-]", keyColor, valColor, strings.Join(subscribers, ", ")))
 	}
 
 	if len(issue.Attachments) > 0 {
