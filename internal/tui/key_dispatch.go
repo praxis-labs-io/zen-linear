@@ -94,14 +94,12 @@ func (a *App) runCommandShortcut(r rune) bool {
 func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyRight:
-		a.focusedPane = FocusIssues
-		a.updateFocus()
+		a.stepPane(1)
 		return nil
 	case tcell.KeyRune:
 		switch r := event.Rune(); r {
 		case 'l':
-			a.focusedPane = FocusIssues
-			a.updateFocus()
+			a.stepPane(1)
 			return nil
 		case a.actionKey("favorite_move_up", 'K'):
 			if a.moveFavorite(a.currentNavigationNode(), -1) {
@@ -141,26 +139,20 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 	case tcell.KeyLeft:
-		a.focusedPane = FocusNavigation
-		a.updateFocus()
+		a.stepPane(-1)
 		return nil
 	case tcell.KeyRight:
-		a.focusedPane = FocusDetails
-		a.focusedDetailsView = false // Start with description
-		a.updateFocus()
+		a.stepPane(1)
 		return nil
 	case tcell.KeyRune:
 		r := event.Rune()
 		// Handle vim-style navigation first
 		switch r {
 		case 'h':
-			a.focusedPane = FocusNavigation
-			a.updateFocus()
+			a.stepPane(-1)
 			return nil
 		case 'l':
-			a.focusedPane = FocusDetails
-			a.focusedDetailsView = false // Start with description
-			a.updateFocus()
+			a.stepPane(1)
 			return nil
 		}
 		// { and } cycle the issues tabs, lazygit-style ([ and ] keep their
@@ -209,12 +201,12 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 		a.toggleDetailsPane()
 		return nil
 	case tcell.KeyLeft:
-		a.leaveDetailsForIssues()
+		a.stepPane(-1)
 		return nil
 	case tcell.KeyRune:
 		switch r := event.Rune(); r {
 		case 'h':
-			a.leaveDetailsForIssues()
+			a.stepPane(-1)
 			return nil
 		case a.actionKey("tab_prev", '{'), a.actionKey("tab_next", '}'):
 			// Cycle the Details/Comments tabs, lazygit-style.

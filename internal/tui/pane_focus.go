@@ -86,6 +86,31 @@ func (a *App) focusPane(pane FocusTarget) {
 	a.updateFocus()
 }
 
+// stepPane moves focus one pane left (-1) or right (+1) without wrapping, so
+// h and l walk what is on screen rather than naming a fixed neighbor. The
+// zoom takes the issues column away, and a pane that names it lands focus
+// somewhere the user cannot see.
+func (a *App) stepPane(direction int) {
+	panes := a.visiblePanes()
+	current := -1
+	for i, pane := range panes {
+		if pane == a.focusedPane {
+			current = i
+			break
+		}
+	}
+	next := current + direction
+	if current < 0 || next < 0 || next >= len(panes) {
+		return
+	}
+	a.focusedPane = panes[next]
+	if a.focusedPane == FocusDetails {
+		// Enter on the description, the same way Tab does.
+		a.focusedDetailsView = false
+	}
+	a.updateFocus()
+}
+
 // cyclePanesForward cycles focus forward: Navigation, Issues, Details, wrap.
 func (a *App) cyclePanesForward() { a.cyclePanes(1) }
 

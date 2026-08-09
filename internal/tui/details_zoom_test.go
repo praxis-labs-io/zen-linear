@@ -159,20 +159,55 @@ func TestEscapeReleasesTheZoomAndKeepsThePane(t *testing.T) {
 	}
 }
 
-// Left and h mean "back to the list", which the zoom is covering.
-func TestLeftReleasesTheZoom(t *testing.T) {
+// Left and h walk to the pane on the left, which while zoomed is the
+// navigation tree. They used to name the issues pane, which the zoom has
+// taken off screen.
+func TestLeftMovesToTheNavigationPaneWhileZoomed(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails
 	app.detailsZoomed = true
+	app.layoutMode = layoutWide
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
 
-	if app.detailsZoomed {
-		t.Error("Left did not release the zoom")
+	if app.focusedPane != FocusNavigation {
+		t.Errorf("focusedPane = %v, want FocusNavigation", app.focusedPane)
 	}
-	if app.focusedPane != FocusIssues {
-		t.Errorf("focusedPane = %v, want FocusIssues", app.focusedPane)
+	if !app.detailsZoomed {
+		t.Error("Left released the zoom instead of moving focus")
+	}
+}
+
+// Right walks back into the zoomed pane rather than into the issues column
+// the zoom replaced.
+func TestRightReturnsToTheZoomedDetailsPane(t *testing.T) {
+	app := newZoomTestApp(t)
+	app.detailsHidden = false
+	app.focusedPane = FocusNavigation
+	app.detailsZoomed = true
+	app.layoutMode = layoutWide
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone))
+
+	if app.focusedPane != FocusDetails {
+		t.Errorf("focusedPane = %v, want FocusDetails", app.focusedPane)
+	}
+}
+
+// With the nav gone too there is nothing to the left, so the key holds rather
+// than dropping focus onto an unmounted pane.
+func TestLeftHoldsTheZoomedPaneWithNoNavOnScreen(t *testing.T) {
+	app := newZoomTestApp(t)
+	app.detailsHidden = false
+	app.focusedPane = FocusDetails
+	app.detailsZoomed = true
+	app.layoutMode = layoutNarrow
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
+
+	if app.focusedPane != FocusDetails {
+		t.Errorf("focusedPane = %v, want FocusDetails", app.focusedPane)
 	}
 }
 
