@@ -126,9 +126,14 @@ const (
 // tabSeparator sits between tab labels in a pane title.
 const tabSeparator = " - "
 
-// paneTitle wraps a pane's tab strip with its number.
-func (a *App) paneTitle(number int, tabs string) string {
-	return fmt.Sprintf(" %s[%d][-] %s ", a.themeTags.SecondaryText, number, tabs)
+// paneTitle wraps a pane's tab strip with its number, which goes accent
+// colored while the pane holds focus.
+func (a *App) paneTitle(number int, tabs string, focused bool) string {
+	tag := a.themeTags.SecondaryText
+	if focused {
+		tag = a.themeTags.Accent
+	}
+	return fmt.Sprintf(" %s[%d][-] %s ", tag, number, tabs)
 }
 
 // issuesTabsTitle renders the tab strip for the issues pane border.

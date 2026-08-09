@@ -132,3 +132,30 @@ func TestNumberKeysRebind(t *testing.T) {
 		t.Error("3 still focused Details after focus_details was rebound to d")
 	}
 }
+
+// TestFocusedPaneNumberTakesTheAccent covers the number carrying focus along
+// with the border: dim while the pane is idle, accent while it holds the keys.
+func TestFocusedPaneNumberTakesTheAccent(t *testing.T) {
+	app := newUXTestApp(t)
+	app.detailsHidden = false
+
+	titleFor := map[FocusTarget]func() string{
+		FocusNavigation: app.navigationTree.GetTitle,
+		FocusIssues:     app.allIssuesTable.GetTitle,
+		FocusDetails:    app.detailsDescriptionView.GetTitle,
+	}
+
+	for pane, title := range titleFor {
+		app.focusedPane = pane
+		app.updateAllPaneTitles()
+		if got := title(); !strings.HasPrefix(strings.TrimSpace(got), app.themeTags.Accent) {
+			t.Errorf("focused %v number = %q, want it to lead with the accent tag %q", pane, got, app.themeTags.Accent)
+		}
+
+		app.focusedPane = FocusPalette
+		app.updateAllPaneTitles()
+		if got := title(); !strings.HasPrefix(strings.TrimSpace(got), app.themeTags.SecondaryText) {
+			t.Errorf("idle %v number = %q, want it to lead with the secondary tag %q", pane, got, app.themeTags.SecondaryText)
+		}
+	}
+}

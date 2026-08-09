@@ -175,12 +175,12 @@ func (a *App) updateFocus() {
 func (a *App) updateAllPaneTitles() {
 	// Update Navigation pane title
 	isNavFocused := a.focusedPane == FocusNavigation
-	a.navigationTree.SetTitle(a.paneTitle(paneNumberNavigation, a.tabSegment("Navigation", true, isNavFocused)))
+	a.navigationTree.SetTitle(a.paneTitle(paneNumberNavigation, a.tabSegment("Navigation", true, isNavFocused), isNavFocused))
 	a.navigationTree.SetTitleColor(a.theme.Foreground)
 
 	// Update Issues pane tab strip
 	isIssuesFocused := a.focusedPane == FocusIssues
-	issuesTitle := a.paneTitle(paneNumberIssues, a.issuesTabsTitle(isIssuesFocused))
+	issuesTitle := a.paneTitle(paneNumberIssues, a.issuesTabsTitle(isIssuesFocused), isIssuesFocused)
 	a.myIssuesTable.SetTitle(issuesTitle)
 	a.myIssuesTable.SetTitleColor(a.theme.Foreground)
 	a.allIssuesTable.SetTitle(issuesTitle)
@@ -198,7 +198,7 @@ func (a *App) updateAllPaneTitles() {
 	// Update Details pane tab strip
 	isDetailsFocused := a.focusedPane == FocusDetails
 	if a.detailsDescriptionView != nil {
-		detailsTitle := a.paneTitle(paneNumberDetails, a.detailsTabsTitle(isDetailsFocused))
+		detailsTitle := a.paneTitle(paneNumberDetails, a.detailsTabsTitle(isDetailsFocused), isDetailsFocused)
 		a.detailsDescriptionView.SetTitle(detailsTitle)
 		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
 		if a.detailsCommentsView != nil {
