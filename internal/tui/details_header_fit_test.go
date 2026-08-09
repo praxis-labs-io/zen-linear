@@ -212,3 +212,39 @@ func TestDetailsSectionOrder(t *testing.T) {
 		}
 	}
 }
+
+// TestDetailsDescriptionKeepsItsOwnLine covers the compact density, where the
+// header ends on the divider with no trailing gap line and the description
+// would otherwise be appended to it.
+func TestDetailsDescriptionKeepsItsOwnLine(t *testing.T) {
+	app := newDetailsTestApp(t)
+	app.density = ResolveDensity(config.DensityCompact)
+	app.updateDetailsView()
+
+	lines := drawDetails(t, app, 60)
+	for _, line := range lines {
+		if strings.Contains(line, "────") && strings.Contains(line, "Description:") {
+			t.Errorf("divider and description share a line: %q", line)
+		}
+	}
+	findLine(t, lines, "Description:")
+}
+
+// TestDetailsPaneSurvivesAPaneNarrowerThanItsBorder covers the draw func
+// handing tview a content rect: a pane with no room for its own border and
+// padding must not produce a negative one.
+func TestDetailsPaneSurvivesAPaneNarrowerThanItsBorder(t *testing.T) {
+	app := newDetailsTestApp(t)
+
+	for _, width := range []int{0, 1, 3, 5} {
+		lines := drawDetails(t, app, width)
+		if len(lines) == 0 {
+			t.Fatalf("width %d drew nothing", width)
+		}
+		// The draw func's return value is what GetInnerRect reports back.
+		_, _, innerWidth, innerHeight := app.detailsDescriptionView.GetInnerRect()
+		if innerWidth < 0 || innerHeight < 0 {
+			t.Errorf("width %d gave a content rect of %dx%d", width, innerWidth, innerHeight)
+		}
+	}
+}

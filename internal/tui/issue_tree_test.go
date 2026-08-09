@@ -314,19 +314,19 @@ func TestBuildIssueRows_ChildrenSortedByIdentifier(t *testing.T) {
 }
 
 // TestStatusRank verifies lifecycle ordering, including that "Unstarted" does
-// not match the "started" category.
+// not match the "started" category despite containing it.
 func TestStatusRank(t *testing.T) {
-	ordered := []string{"Triage", "In Progress", "Todo", "Backlog", "Done", "Canceled"}
+	ordered := []string{"Triage", "In Review", "In Progress", "Todo", "Backlog", "Done", "Canceled"}
 	for i := 1; i < len(ordered); i++ {
-		if statusRank(ordered[i-1]) > statusRank(ordered[i]) {
-			t.Errorf("statusRank(%q)=%d > statusRank(%q)=%d", ordered[i-1], statusRank(ordered[i-1]), ordered[i], statusRank(ordered[i]))
+		if statusRank(ordered[i-1]) >= statusRank(ordered[i]) {
+			t.Errorf("statusRank(%q)=%d, statusRank(%q)=%d; want the first to rank ahead", ordered[i-1], statusRank(ordered[i-1]), ordered[i], statusRank(ordered[i]))
 		}
 	}
 	if statusRank("Unstarted") == statusRank("In Progress") {
 		t.Error("Unstarted must not rank with started states")
 	}
-	if statusRank("In Review") != statusRank("In Progress") {
-		t.Error("In Review should rank with started states")
+	if statusRank("Unstarted") != statusRank("Todo") {
+		t.Error("Unstarted and Todo share a rank")
 	}
 }
 

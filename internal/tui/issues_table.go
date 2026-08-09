@@ -101,11 +101,19 @@ func formatUpdatedAt(updatedAt time.Time) string {
 }
 
 // formatAssigneeInitials condenses a full name to the first letters of its
-// first and last words, so the column costs two cells instead of a name's
-// worth. A one-word name gives one letter. An empty name gives an empty
-// string, which callers render as unassigned.
+// first and last words, so the column costs a couple of cells instead of a
+// name's worth. A one-word name gives one letter. An empty name gives an
+// empty string, which callers render as unassigned.
+//
+// Words that do not start with a letter are skipped, so a pronoun or a role
+// in parentheses does not turn the initials into punctuation.
 func formatAssigneeInitials(name string) string {
-	words := strings.Fields(name)
+	words := make([]string, 0, 2)
+	for _, word := range strings.Fields(name) {
+		if first, _ := utf8.DecodeRuneInString(word); unicode.IsLetter(first) {
+			words = append(words, word)
+		}
+	}
 	if len(words) == 0 {
 		return ""
 	}
@@ -116,8 +124,8 @@ func formatAssigneeInitials(name string) string {
 	return initials
 }
 
-// initialLetter returns a word's first rune, uppercased. strings.Fields never
-// yields an empty word, so there is always a rune to read.
+// initialLetter returns a word's first rune, uppercased. Callers filter to
+// words starting with a letter, so there is always a rune to read.
 func initialLetter(word string) string {
 	first, _ := utf8.DecodeRuneInString(word)
 	return string(unicode.ToUpper(first))

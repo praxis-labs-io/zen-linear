@@ -86,11 +86,14 @@ func (a *App) buildDetailsView() *tview.Flex {
 	a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 	// The metadata header is fitted to the pane, so it has to re-fit when the
 	// pane resizes. The draw func is the only place the live width is known.
+	// A pane narrower than its own border and padding would otherwise hand
+	// tview a negative content rect, which it draws from without checking.
 	a.detailsDescriptionView.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		inner := a.density.DetailsPadding
-		innerWidth := width - 2 - inner.Left - inner.Right
+		innerWidth := max(0, width-2-inner.Left-inner.Right)
+		innerHeight := max(0, height-2-inner.Top-inner.Bottom)
 		a.refitDetailsHeader(innerWidth)
-		return x + 1 + inner.Left, y + 1 + inner.Top, innerWidth, height - 2 - inner.Top - inner.Bottom
+		return x + 1 + inner.Left, y + 1 + inner.Top, innerWidth, innerHeight
 	})
 
 	// Create comments view (bottom section, scrollable, fixed height)
@@ -156,7 +159,13 @@ func (a *App) renderDetailsDescription() {
 		fitted[i] = truncateTagged(line, a.detailsFittedWidth)
 	}
 
-	a.detailsDescriptionView.SetText(strings.Join(fitted, "\n") + a.detailsBody)
+	// The compact density ends the header on the divider with no trailing gap
+	// line, so the description needs its own break or it lands on the divider.
+	text := strings.Join(fitted, "\n")
+	if text != "" && a.detailsBody != "" && !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	a.detailsDescriptionView.SetText(text + a.detailsBody)
 }
 
 // refitDetailsHeader re-truncates the header for a pane width, keeping the

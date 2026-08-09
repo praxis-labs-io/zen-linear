@@ -227,6 +227,9 @@ func TestFormatAssigneeInitials(t *testing.T) {
 		{"Mary-Jane Watson", "MW"},
 		{"  Drew   White  ", "DW"},
 		{"Åsa Öberg", "ÅÖ"},
+		{"Jane Doe (she/her)", "JD"},
+		{"Linear (bot)", "L"},
+		{"(bot)", ""},
 		{"", ""},
 		{"   ", ""},
 	}

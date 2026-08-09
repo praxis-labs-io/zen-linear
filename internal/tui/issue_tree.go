@@ -25,26 +25,33 @@ type IssueRow struct {
 }
 
 // statusRank orders workflow states by lifecycle category the way Linear's
-// grouped list does: triage, started, unstarted, backlog, completed,
-// canceled. The state type is not fetched, so the category is derived from
-// the state name.
+// grouped list does: triage, review, started, unstarted, backlog, completed,
+// canceled. "unstarted" is matched before the started group because it
+// contains "started".
+//
+// Ranking review ahead of in-progress is a placeholder for ZNL-90. Review is
+// a team-added state, so its real order lives in the team's workflow
+// position, which this cannot see. Categories come from the state name here,
+// which only knows the states Linear ships with.
 func statusRank(state string) int {
 	lowerState := strings.ToLower(state)
 	switch {
 	case strings.Contains(lowerState, "triage"):
 		return 0
 	case strings.Contains(lowerState, "unstarted"):
-		return 2
-	case strings.Contains(lowerState, "progress") || strings.Contains(lowerState, "review") || strings.Contains(lowerState, "started"):
-		return 1
-	case strings.Contains(lowerState, "backlog"):
 		return 3
-	case strings.Contains(lowerState, "done") || strings.Contains(lowerState, "complete"):
+	case strings.Contains(lowerState, "review"):
+		return 1
+	case strings.Contains(lowerState, "progress") || strings.Contains(lowerState, "started"):
+		return 2
+	case strings.Contains(lowerState, "backlog"):
 		return 4
-	case strings.Contains(lowerState, "cancel") || strings.Contains(lowerState, "duplicate"):
+	case strings.Contains(lowerState, "done") || strings.Contains(lowerState, "complete"):
 		return 5
+	case strings.Contains(lowerState, "cancel") || strings.Contains(lowerState, "duplicate"):
+		return 6
 	default:
-		return 2 // todo and anything unrecognized sit with unstarted
+		return 3 // todo and anything unrecognized sit with unstarted
 	}
 }
 
