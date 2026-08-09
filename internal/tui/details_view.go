@@ -137,6 +137,36 @@ func (a *App) buildDetailsView() *tview.Flex {
 	return a.detailsView
 }
 
+// viewHeight returns the rows a text view has to draw into. A box smaller than
+// its own border and padding reports a negative rect, which reads as none.
+func viewHeight(view *tview.TextView) int {
+	if _, _, _, height := view.GetInnerRect(); height > 0 {
+		return height
+	}
+	return 0
+}
+
+// visibleDetailsView returns the details tab currently on screen.
+func (a *App) visibleDetailsView() *tview.TextView {
+	if a.detailsCommentsVisible && a.focusedDetailsView {
+		return a.detailsCommentsView
+	}
+	return a.detailsDescriptionView
+}
+
+// scrollDetailsHalfPage moves the details tab half a screen down (+1) or up
+// (-1). tview's TextView stops at whole pages and keeps its page size private,
+// so the height comes off the inner rect the draw func set.
+func (a *App) scrollDetailsHalfPage(direction int) {
+	view := a.visibleDetailsView()
+	if view == nil {
+		return
+	}
+	step := max(1, viewHeight(view)/2)
+	row, column := view.GetScrollOffset()
+	view.ScrollTo(max(0, row+direction*step), column)
+}
+
 // setDetailsCommentsVisibility records whether the Comments tab exists and
 // re-renders the tabbed details layout.
 func (a *App) setDetailsCommentsVisibility(showComments bool) {

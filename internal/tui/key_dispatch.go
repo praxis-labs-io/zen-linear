@@ -203,6 +203,12 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyLeft:
 		a.stepPane(-1)
 		return nil
+	case tcell.KeyCtrlD:
+		a.scrollDetailsHalfPage(1)
+		return nil
+	case tcell.KeyCtrlU:
+		a.scrollDetailsHalfPage(-1)
+		return nil
 	case tcell.KeyRune:
 		switch r := event.Rune(); r {
 		case 'h':

@@ -230,3 +230,59 @@ func TestZoomHonoursAKeybindingOverride(t *testing.T) {
 		t.Error("V did not zoom after being bound to it")
 	}
 }
+
+// Half-page scrolling is ours: tview's TextView stops at whole pages and keeps
+// its page size private.
+func TestCtrlDAndCtrlUScrollTheDetailsPaneHalfAPage(t *testing.T) {
+	const height = 40
+	app := newDetailsTestApp(t)
+	app.focusedPane = FocusDetails
+	drawDetails(t, app, 60)
+	app.detailsDescriptionView.SetRect(0, 0, 60, height)
+
+	inner := viewHeight(app.detailsDescriptionView)
+	want := inner / 2
+	if want < 1 {
+		t.Fatalf("inner height %d leaves no half page to scroll", inner)
+	}
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlD, 0, tcell.ModNone))
+	if row, _ := app.detailsDescriptionView.GetScrollOffset(); row != want {
+		t.Errorf("Ctrl+D scrolled to row %d, want %d", row, want)
+	}
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlU, 0, tcell.ModNone))
+	if row, _ := app.detailsDescriptionView.GetScrollOffset(); row != 0 {
+		t.Errorf("Ctrl+U scrolled to row %d, want back to 0", row)
+	}
+}
+
+// Scrolling up at the top must not walk the offset negative.
+func TestCtrlUStopsAtTheTop(t *testing.T) {
+	app := newDetailsTestApp(t)
+	app.focusedPane = FocusDetails
+	drawDetails(t, app, 60)
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlU, 0, tcell.ModNone))
+	if row, _ := app.detailsDescriptionView.GetScrollOffset(); row != 0 {
+		t.Errorf("Ctrl+U at the top scrolled to row %d, want 0", row)
+	}
+}
+
+// The keys follow the tab on screen rather than always driving the description.
+func TestCtrlDScrollsTheCommentsTab(t *testing.T) {
+	app := newDetailsTestApp(t)
+	app.focusedPane = FocusDetails
+	app.detailsCommentsVisible = true
+	app.focusedDetailsView = true
+	app.detailsCommentsView.SetRect(0, 0, 60, 40)
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlD, 0, tcell.ModNone))
+
+	if row, _ := app.detailsCommentsView.GetScrollOffset(); row == 0 {
+		t.Error("Ctrl+D did not scroll the comments tab")
+	}
+	if row, _ := app.detailsDescriptionView.GetScrollOffset(); row != 0 {
+		t.Errorf("Ctrl+D scrolled the description tab to %d as well", row)
+	}
+}
