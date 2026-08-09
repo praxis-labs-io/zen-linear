@@ -189,8 +189,11 @@ func (a *App) ShowTeamPicker(contextLine string, onSelect func(teamID string)) {
 		a.showTeamPickerWithTeams(a.navTeams, contextLine, onSelect)
 		return
 	}
+	// Snapshotted on the UI thread: applySettings reassigns linearDeps whole,
+	// so reading the seam inside the goroutine races it.
+	fetch := a.fetchTeamsFunc
 	go func() {
-		teams, err := a.fetchTeamsFunc(context.Background())
+		teams, err := fetch(context.Background())
 		a.QueueUpdateDraw(func() {
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.app: failed to load teams for picker")

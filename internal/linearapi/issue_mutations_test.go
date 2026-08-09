@@ -1,6 +1,10 @@
 package linearapi
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
@@ -82,5 +86,65 @@ func TestBuildIssueCreateInputKeepsAZeroEstimate(t *testing.T) {
 	}
 	if got["estimate"] != graphql.Float(0) {
 		t.Fatalf("estimate = %#v, want graphql.Float(0)", got["estimate"])
+	}
+}
+
+// TestUpdateIssue_SendsTeamID pins the wire key for a team move. The update
+// input is a map scalar, so a typo here only surfaces as a Linear rejection.
+func TestUpdateIssue_SendsTeamID(t *testing.T) {
+	var inputs []map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+		variables, ok := reqBody["variables"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("Request body missing variables")
+		}
+		input, ok := variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("variables.input = %#v, want object", variables["input"])
+		}
+		inputs = append(inputs, input)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mutationIssueResponse("issueUpdate")))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		Token:    "test-token",
+		Endpoint: server.URL,
+	})
+
+	title := "Untouched team"
+	empty := ""
+	teamID := "team-2"
+	for _, tc := range []struct {
+		name  string
+		input UpdateIssueInput
+	}{
+		{"move", UpdateIssueInput{ID: "issue-1", TeamID: &teamID}},
+		{"no change", UpdateIssueInput{ID: "issue-1", Title: &title}},
+		{"empty", UpdateIssueInput{ID: "issue-1", Title: &title, TeamID: &empty}},
+	} {
+		if _, err := client.UpdateIssue(context.Background(), tc.input); err != nil {
+			t.Fatalf("UpdateIssue(%s) error: %v", tc.name, err)
+		}
+	}
+
+	if len(inputs) != 3 {
+		t.Fatalf("inputs length = %d, want 3", len(inputs))
+	}
+	if inputs[0]["teamId"] != "team-2" {
+		t.Fatalf("teamId = %#v, want team-2", inputs[0]["teamId"])
+	}
+	// An issue has no "no team", so neither a nil nor an empty TeamID may
+	// reach the wire: a null or an empty id fails the whole update, taking
+	// the other fields in the same input with it.
+	for _, i := range []int{1, 2} {
+		if value, present := inputs[i]["teamId"]; present {
+			t.Fatalf("inputs[%d] teamId = %#v, want it absent", i, value)
+		}
 	}
 }
