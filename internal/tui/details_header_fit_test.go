@@ -146,3 +146,41 @@ func indexOfLine(lines []string, want string) int {
 	}
 	return -1
 }
+
+// TestDetailsPaneContentSitsInsideItsBorder pins the inner rect the draw func
+// returns. Fitting the header means the draw func has to hand back the content
+// area tview would have computed itself, and getting it wrong shifts every
+// line without failing anything else.
+func TestDetailsPaneContentSitsInsideItsBorder(t *testing.T) {
+	densities := []struct {
+		name       string
+		id         string
+		wantIndent int
+	}{
+		{"comfortable", config.DensityComfortable, 2},
+		{"compact", config.DensityCompact, 1},
+	}
+
+	for _, density := range densities {
+		t.Run(density.name, func(t *testing.T) {
+			app := newDetailsTestApp(t)
+			app.density = ResolveDensity(density.id)
+			padding := app.density.DetailsPadding
+			app.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+			app.updateDetailsView()
+
+			const width = 60
+			lines := drawDetails(t, app, width)
+
+			// drawDetails already drops the border columns, so the remaining
+			// indent is the padding and nothing else.
+			state := findLine(t, lines, "State:")
+			if indent := len(state) - len(strings.TrimLeft(state, " ")); indent != density.wantIndent {
+				t.Errorf("content indent = %d, want %d for %s padding", indent, density.wantIndent, density.name)
+			}
+			if got := app.detailsFittedWidth; got != width-2-padding.Left-padding.Right {
+				t.Errorf("fitted width = %d, want %d", got, width-2-padding.Left-padding.Right)
+			}
+		})
+	}
+}
