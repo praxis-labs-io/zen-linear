@@ -210,6 +210,30 @@ func (a *App) showSetProjectPicker() {
 	})
 }
 
+func (a *App) showChangeTeamPicker() {
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	// The picker names this issue, so the write targets it even if a refresh
+	// moves the selection while the picker is open.
+	target := *issue
+	a.ShowTeamPicker(a.issueContextLine(target), func(teamID string) {
+		if teamID == target.TeamID {
+			a.flashStatus("Already in that team")
+			return
+		}
+		// The move renumbers the issue, so the message names the identifier
+		// the user picked it by, not the one it now has.
+		message := fmt.Sprintf("Moved %s", target.Identifier)
+		if team := findTeamByID(a.navTeams, teamID); team != nil {
+			message = fmt.Sprintf("Moved %s to %s", target.Identifier, team.Name)
+		}
+		a.runIssueUpdate(linearapi.UpdateIssueInput{ID: target.ID, TeamID: &teamID}, message)
+	})
+}
+
 func (a *App) clearProjectForSelectedIssue() {
 	issue := a.GetSelectedIssue()
 	if issue == nil {

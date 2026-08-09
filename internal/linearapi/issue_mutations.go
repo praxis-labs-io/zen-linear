@@ -186,6 +186,9 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 			issueInput["projectMilestoneId"] = graphql.ID(*input.ProjectMilestoneID)
 		}
 	}
+	if input.TeamID != nil {
+		issueInput["teamId"] = graphql.ID(*input.TeamID)
+	}
 
 	variables := map[string]interface{}{
 		"id":    graphql.String(input.ID),
