@@ -78,6 +78,7 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetWordWrap(true).
 		SetBorder(true).
 		SetTitle(" Details ").
+		SetTitleAlign(tview.AlignLeft).
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(tcell.ColorDefault)
@@ -99,6 +100,7 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetWordWrap(true).
 		SetBorder(true).
 		SetTitle(" Comments ").
+		SetTitleAlign(tview.AlignLeft).
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(tcell.ColorDefault)

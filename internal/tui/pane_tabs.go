@@ -115,12 +115,24 @@ func (a *App) cycleIssuesSection(direction int) {
 	a.jumpToSection(order[((current+direction)%len(order)+len(order))%len(order)], 0)
 }
 
+// Pane numbers shown in the titles and typed to focus a pane. They are fixed
+// to the pane, not to what is on screen, so a hidden pane keeps its number.
+const (
+	paneNumberNavigation = 1
+	paneNumberIssues     = 2
+	paneNumberDetails    = 3
+)
+
+// tabSeparator sits between tab labels in a pane title.
+const tabSeparator = " - "
+
+// paneTitle wraps a pane's tab strip with its number.
+func (a *App) paneTitle(number int, tabs string) string {
+	return fmt.Sprintf(" %s[%d][-] %s ", a.themeTags.SecondaryText, number, tabs)
+}
+
 // issuesTabsTitle renders the tab strip for the issues pane border.
 func (a *App) issuesTabsTitle(focused bool) string {
-	prefix := " "
-	if focused {
-		prefix = " ▶ "
-	}
 	shown := a.activeIssuesSection
 	segments := []string{
 		a.tabSegment(fmt.Sprintf("All (%d)", tabRowCount(a.allIssueRows)), shown == IssuesSectionAll, focused),
@@ -131,21 +143,17 @@ func (a *App) issuesTabsTitle(focused bool) string {
 		searchLabel = fmt.Sprintf("Search (%d)", tabRowCount(a.searchIssueRows))
 	}
 	segments = append(segments, a.tabSegment(searchLabel, shown == IssuesSectionSearch, focused))
-	return prefix + strings.Join(segments, " · ") + " "
+	return strings.Join(segments, tabSeparator)
 }
 
 // detailsTabsTitle renders the tab strip for the details pane border.
 func (a *App) detailsTabsTitle(focused bool) string {
-	prefix := " "
-	if focused {
-		prefix = " ▶ "
-	}
 	if !a.detailsCommentsVisible {
-		return prefix + "Details "
+		return a.tabSegment("Details", true, focused)
 	}
 	details := a.tabSegment("Details", !a.focusedDetailsView, focused)
 	comments := a.tabSegment(fmt.Sprintf("Comments (%d)", a.selectedIssueCommentCount()), a.focusedDetailsView, focused)
-	return prefix + details + " · " + comments + " "
+	return details + tabSeparator + comments
 }
 
 // selectedIssueCommentCount returns how many comments the selected issue has.

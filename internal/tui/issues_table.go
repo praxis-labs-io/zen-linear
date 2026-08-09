@@ -317,6 +317,7 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 					SetSelectable(true, false).
 					SetBorder(true).
 					SetTitle(title).
+					SetTitleAlign(tview.AlignLeft).
 					SetTitleColor(a.theme.Foreground).
 					SetBorderColor(a.theme.Border).
 					SetBackgroundColor(a.theme.Background)
