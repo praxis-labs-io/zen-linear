@@ -738,6 +738,15 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:           "change_team",
+			Title:        "Change team",
+			Keywords:     []string{"team", "move", "change", "transfer"},
+			ShortcutRune: 'M',
+			Run: func(a *App) {
+				a.showChangeTeamPicker()
+			},
+		},
+		{
 			ID:           "create_issue",
 			Title:        "Create new issue",
 			Keywords:     []string{"create", "new", "add", "issue"},

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
@@ -181,5 +182,84 @@ func TestEditIssueCommandOpensThePrefilledForm(t *testing.T) {
 	}
 	if app.issueFormModal.fm.title != "Edit Issue" {
 		t.Fatalf("modal title = %q, want Edit Issue", app.issueFormModal.fm.title)
+	}
+}
+
+// TestChangeTeamCommandMovesTheIssue drives the shortcut the way the key
+// dispatcher does, and pins the write to the issue the picker named.
+func TestChangeTeamCommandMovesTheIssue(t *testing.T) {
+	app := newUXTestApp(t)
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		t.Error("a single-issue update refetched the whole list")
+		return linearapi.IssuePage{}, nil
+	}
+	app.navTeams = []linearapi.Team{
+		{ID: "team-1", Key: "LIN", Name: "Linear"},
+		{ID: "team-2", Key: "DES", Name: "Design"},
+	}
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Wrong team", TeamID: "team-1"}
+	app.issuesMu.Unlock()
+
+	called := make(chan linearapi.UpdateIssueInput, 1)
+	app.updateIssueFunc = func(ctx context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
+		called <- input
+		return linearapi.Issue{ID: input.ID}, nil
+	}
+
+	if !app.runCommandShortcut('M') {
+		t.Fatal("M did not run a command")
+	}
+
+	// The selection moves out from under an open picker on a background
+	// refresh; the write must still land on the issue the picker named.
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Moved on", TeamID: "team-1"}
+	app.issuesMu.Unlock()
+	selectPickerItem(t, app, "Design (DES)")
+
+	select {
+	case input := <-called:
+		if input.ID != "issue-1" {
+			t.Fatalf("issue ID = %q, want issue-1", input.ID)
+		}
+		if input.TeamID == nil || *input.TeamID != "team-2" {
+			t.Fatalf("TeamID = %v, want team-2", input.TeamID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the team move")
+	}
+}
+
+// TestChangeTeamCommandSkipsTheCurrentTeam keeps the command from spending a
+// mutation, and a renumbering, on the team the issue is already in.
+func TestChangeTeamCommandSkipsTheCurrentTeam(t *testing.T) {
+	app := newUXTestApp(t)
+	app.navTeams = []linearapi.Team{
+		{ID: "team-1", Key: "LIN", Name: "Linear"},
+		{ID: "team-2", Key: "DES", Name: "Design"},
+	}
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Right team", TeamID: "team-1"}
+	app.issuesMu.Unlock()
+
+	called := make(chan linearapi.UpdateIssueInput, 1)
+	app.updateIssueFunc = func(ctx context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
+		called <- input
+		return linearapi.Issue{ID: input.ID}, nil
+	}
+
+	if !app.runCommandShortcut('M') {
+		t.Fatal("M did not run a command")
+	}
+	selectPickerItem(t, app, "Linear (LIN)")
+
+	select {
+	case input := <-called:
+		t.Fatalf("update sent for a no-op move: %#v", input)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if got := app.statusBar.GetText(true); !strings.Contains(got, "Already in that team") {
+		t.Fatalf("status bar = %q, want it to say the issue is already in that team", got)
 	}
 }

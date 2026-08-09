@@ -180,6 +180,48 @@ func (a *App) showProjectPickerWithProjects(projects []linearapi.Project, contex
 	a.presentPicker("Select Project", contextLine, items, onSelect)
 }
 
+// ShowTeamPicker shows a picker for the workspace's teams. The navigation tree
+// is built from that same list, so this only fetches in the window before the
+// tree has painted. contextLine names the issue being moved.
+func (a *App) ShowTeamPicker(contextLine string, onSelect func(teamID string)) {
+	logger.Debug("tui.app: showing team picker")
+	if len(a.navTeams) > 0 {
+		a.showTeamPickerWithTeams(a.navTeams, contextLine, onSelect)
+		return
+	}
+	// Snapshotted on the UI thread: applySettings reassigns linearDeps whole,
+	// so reading the seam inside the goroutine races it.
+	fetch := a.fetchTeamsFunc
+	go func() {
+		teams, err := fetch(context.Background())
+		a.QueueUpdateDraw(func() {
+			if err != nil {
+				logger.ErrorWithErr(err, "tui.app: failed to load teams for picker")
+				a.updateStatusBarWithError(err)
+				return
+			}
+			a.showTeamPickerWithTeams(teams, contextLine, onSelect)
+		})
+	}()
+}
+
+func (a *App) showTeamPickerWithTeams(teams []linearapi.Team, contextLine string, onSelect func(teamID string)) {
+	if len(teams) == 0 {
+		logger.Warning("tui.app: no teams available for picker")
+		a.updateStatusBarWithError(fmt.Errorf("no teams available"))
+		return
+	}
+	items := make([]PickerItem, 0, len(teams))
+	for _, team := range teams {
+		items = append(items, PickerItem{
+			ID:    team.ID,
+			Label: fmt.Sprintf("%s (%s)", team.Name, team.Key),
+		})
+	}
+
+	a.presentPicker("Select Team", contextLine, items, onSelect)
+}
+
 // ShowParentIssuePicker shows a picker for selecting a parent issue.
 // It lists all top-level issues (issues without a parent) from the current
 // list. contextLine names the issue being reparented.

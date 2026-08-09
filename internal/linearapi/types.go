@@ -545,6 +545,9 @@ type UpdateIssueInput struct {
 	ClearEstimate      bool      // true = clear estimate
 	ProjectID          *string   // nil = no change, empty string = clear project, non-empty = set project
 	ProjectMilestoneID *string   // nil = no change, empty string = clear milestone, non-empty = set milestone
+	// TeamID moves the issue to another team. There is no clear: an issue
+	// always belongs to a team.
+	TeamID *string
 }
 
 // CreateCommentInput contains input for creating a new comment.

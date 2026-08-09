@@ -695,3 +695,38 @@ func TestIssueFormStaleSaveDoesNotCloseAReopenedForm(t *testing.T) {
 		t.Fatalf("modal status line = %q, want no error from the earlier save", got)
 	}
 }
+
+// TestIssueFormCreateTitleNamesTheTeam pins the team into the border. A create
+// takes its team from the navigation selection and has no picker for it, so
+// the title is the only thing telling the user where the issue lands.
+func TestIssueFormCreateTitleNamesTheTeam(t *testing.T) {
+	app, _ := newIssueFormTestApp(t)
+	app.navTeams = []linearapi.Team{
+		{ID: "team-1", Key: "LIN", Name: "Linear"},
+		{ID: "team-2", Key: "DES", Name: "Design"},
+	}
+	form := app.issueFormModal
+
+	form.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-2"})
+	if form.fm.title != "New Issue · Design" {
+		t.Fatalf("modal title = %q, want it to name the Design team", form.fm.title)
+	}
+	form.Hide()
+
+	form.Show(IssueFormOptions{
+		Mode:   IssueFormCreate,
+		TeamID: "team-1",
+		Parent: &linearapi.IssueRef{ID: "parent-1", Identifier: "LIN-1", Title: "Parent issue"},
+	})
+	if form.fm.title != "New Sub-Issue · Linear" {
+		t.Fatalf("sub-issue title = %q, want it to name the Linear team", form.fm.title)
+	}
+	form.Hide()
+
+	// An edit is already identified by ZNL-81 in the context line, and the
+	// team is not the user's to change from here.
+	form.Show(IssueFormOptions{Mode: IssueFormEdit, TeamID: "team-1", Issue: &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", TeamID: "team-1"}})
+	if form.fm.title != "Edit Issue" {
+		t.Fatalf("edit title = %q, want Edit Issue", form.fm.title)
+	}
+}

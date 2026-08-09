@@ -191,11 +191,11 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 		f.fm.SetButtonLabel(0, "Save")
 		f.fm.SetHint("Esc cancel · Tab next · Space toggle · ⏎ open dropdown · ⌃⏎ save")
 	case options.Parent != nil:
-		f.fm.SetTitle("New Sub-Issue")
+		f.fm.SetTitle(f.createTitle("New Sub-Issue"))
 		f.fm.SetButtonLabel(0, "Create")
 		f.fm.SetHint("Esc cancel · Tab next · Space toggle · ⏎ open dropdown · ⌃⏎ create")
 	default:
-		f.fm.SetTitle("New Issue")
+		f.fm.SetTitle(f.createTitle("New Issue"))
 		f.fm.SetButtonLabel(0, "Create")
 		f.fm.SetHint("Esc cancel · Tab next · Space toggle · ⏎ open dropdown · ⌃⏎ create")
 	}
@@ -252,6 +252,17 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 	f.setPicker(f.projectField, "No project", nil, f.project, f.assignProject)
 	f.setPicker(f.milestoneField, "No milestone", nil, f.milestone, f.assignMilestone)
 	f.setPicker(f.cycleField, "No cycle", nil, f.cycle, f.assignCycle)
+}
+
+// createTitle names the team the new issue will land in. A create takes its
+// team from the navigation selection and offers no way to change it, so the
+// border is the only place that says where the issue is going.
+func (f *IssueFormModal) createTitle(base string) string {
+	team := findTeamByID(f.app.navTeams, f.teamID)
+	if team == nil {
+		return base
+	}
+	return base + " · " + team.Name
 }
 
 func (f *IssueFormModal) assignState(option pickerOption)     { f.state = option }

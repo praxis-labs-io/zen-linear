@@ -186,6 +186,11 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 			issueInput["projectMilestoneId"] = graphql.ID(*input.ProjectMilestoneID)
 		}
 	}
+	// An empty team is no team, which Linear rejects, taking every other field
+	// in the same input down with it. Skip the key rather than send it.
+	if input.TeamID != nil && *input.TeamID != "" {
+		issueInput["teamId"] = graphql.ID(*input.TeamID)
+	}
 
 	variables := map[string]interface{}{
 		"id":    graphql.String(input.ID),
