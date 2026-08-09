@@ -248,3 +248,38 @@ func TestDetailsPaneSurvivesAPaneNarrowerThanItsBorder(t *testing.T) {
 		}
 	}
 }
+
+// TestDetailsCapsTheReadingMeasure covers a details pane wider than a line of
+// prose should be: the text holds its measure and centers, and the border still
+// spans the pane.
+func TestDetailsCapsTheReadingMeasure(t *testing.T) {
+	const width = 180
+	app := newDetailsTestApp(t)
+	lines := drawDetails(t, app, width)
+
+	title := findLine(t, lines, "M3: comment infrastructure")
+	left := len(title) - len(strings.TrimLeft(title, " "))
+	if wantGutter := (width - 2 - detailsMeasure) / 2; left != wantGutter {
+		t.Errorf("content starts at column %d, want %d to center the measure", left, wantGutter)
+	}
+
+	// The first and last rows are the pane's own border, which is meant to span
+	// the full width; the cap is on what is set inside it.
+	for i, line := range lines[1 : len(lines)-1] {
+		if got := len([]rune(line)); got > left+detailsMeasure {
+			t.Errorf("line %d runs to %d cells, past the %d measure: %q", i+1, got, detailsMeasure, line)
+		}
+	}
+}
+
+// TestDetailsBelowTheMeasureUsesTheWholePane guards against the cap stealing
+// width a narrow pane does not have to give.
+func TestDetailsBelowTheMeasureUsesTheWholePane(t *testing.T) {
+	app := newDetailsTestApp(t)
+	lines := drawDetails(t, app, 60)
+
+	title := findLine(t, lines, "M3: comment infrastructure")
+	if left := len(title) - len(strings.TrimLeft(title, " ")); left != app.density.DetailsPadding.Left {
+		t.Errorf("content starts at column %d, want the padding alone at %d", left, app.density.DetailsPadding.Left)
+	}
+}

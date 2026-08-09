@@ -29,10 +29,12 @@ func (a *App) issuesPaneHasFocus() bool {
 // has to bounce back, which reads as Tab getting stuck.
 func (a *App) visiblePanes() []FocusTarget {
 	panes := make([]FocusTarget, 0, 3)
-	if !a.navigationHidden {
+	if !a.navigationHidden && (!a.detailsZoomed || a.layoutMode == layoutWide) {
 		panes = append(panes, FocusNavigation)
 	}
-	panes = append(panes, FocusIssues)
+	if !a.detailsZoomed {
+		panes = append(panes, FocusIssues)
+	}
 	if !a.detailsHidden {
 		panes = append(panes, FocusDetails)
 	}
@@ -44,6 +46,9 @@ func (a *App) visiblePanes() []FocusTarget {
 // own panes' business, so both stay put.
 func (a *App) cyclePanes(direction int) {
 	panes := a.visiblePanes()
+	if len(panes) == 0 {
+		return
+	}
 	current := 0
 	for i, pane := range panes {
 		if pane == a.focusedPane {
@@ -70,7 +75,11 @@ func (a *App) focusPane(pane FocusTarget) {
 		a.detailsHidden = false
 		// Enter on the description, the same way Tab and l enter it.
 		a.focusedDetailsView = false
-	case FocusIssues, FocusPalette:
+	case FocusIssues:
+		// The issues list is not on screen while zoomed, so asking for it by
+		// number is also how the zoom is released.
+		a.detailsZoomed = false
+	case FocusPalette:
 	}
 	a.focusedPane = pane
 	a.rebuildContentLayout()
@@ -89,6 +98,14 @@ func (a *App) updateFocus() {
 	if (a.focusedPane == FocusNavigation && a.navigationHidden) ||
 		(a.focusedPane == FocusDetails && a.detailsHidden) {
 		a.focusedPane = FocusIssues
+	}
+	// The zoom drops the issues column, and drops the nav tree too once the
+	// terminal is too narrow for both. Either way the details pane is what is
+	// left to hold focus.
+	if a.detailsZoomed && !a.detailsHidden &&
+		(a.focusedPane == FocusIssues ||
+			(a.focusedPane == FocusNavigation && a.layoutMode != layoutWide)) {
+		a.focusedPane = FocusDetails
 	}
 	// In responsive modes the focused pane decides what is visible.
 	if a.layoutMode != layoutWide {

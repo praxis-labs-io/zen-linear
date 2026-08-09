@@ -49,6 +49,7 @@ type App struct {
 	contentFlex            *tview.Flex
 	navigationHidden       bool
 	detailsHidden          bool
+	detailsZoomed          bool
 	layoutMode             layoutMode
 	palettePreviousPane    FocusTarget
 	navigationTree         *tview.TreeView

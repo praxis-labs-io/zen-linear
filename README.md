@@ -113,10 +113,10 @@ The options beyond the original linear-tui set:
 
     j/k         move            Enter       toggle details
     h/l, Tab    switch panes    Space       expand sub-issues
-    1/2/3       focus a pane    [ ]         cycle issue tabs*
-    { }         toggle panes    :           command palette
-    H/L         scroll columns  q           quit
-    /           search
+    1/2/3       focus a pane    { }         cycle tabs
+    v           zoom details    [ ]         expand/collapse all
+    H/L         scroll columns  :           command palette
+    /           search          q           quit
 
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.
@@ -128,8 +128,8 @@ In the navigation pane:
     L           move a favorite into the folder above it
     H           move a favorite back out of its folder
 
-*Defaults shown reflect the example config; earlier builds kept
-[ ] on expand and collapse all.
+Zoom widens the details pane over the issues list, keeping the navigation
+tree. Text caps at 90 columns so a wide terminal stays readable.
 
 ## Credits
 

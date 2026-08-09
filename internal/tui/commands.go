@@ -298,6 +298,15 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:           "zoom_details",
+			Title:        "Zoom details",
+			Keywords:     []string{"zoom", "details", "focus", "full", "expand", "read", "view"},
+			ShortcutRune: 'v',
+			Run: func(a *App) {
+				a.toggleDetailsZoom()
+			},
+		},
+		{
 			ID:       "edit_prompt_templates",
 			Title:    "Edit agent prompt templates",
 			Keywords: []string{"agent", "prompt", "prompts", "template", "templates"},

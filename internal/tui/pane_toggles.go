@@ -19,6 +19,7 @@ const (
 	navWeight            = 5 // nav and issues, with details toggled off
 	navWeightWithDetails = 6 // all three panes
 	navWeightMedium      = 3 // the two-pane responsive layout
+	navWeightZoomed      = 3 // the zoomed details view, with the nav kept as a spine
 	issuesWeight         = 15
 	detailsWeight        = 10
 )
@@ -48,6 +49,18 @@ func (a *App) rebuildContentLayout() {
 	showDetails := !a.detailsHidden
 	showIssues := true
 	nav := navWeight
+	if a.detailsZoomed && showDetails {
+		// The zoom drops the issues list. The nav tree is the spine you keep
+		// your place on, so it survives on a wide terminal; below that
+		// breakpoint it does not fit beside the reading measure, and the
+		// reading is the point.
+		a.contentFlex.Clear()
+		if showNav && a.layoutMode == layoutWide {
+			a.contentFlex.AddItem(a.navigationTree, 0, navWeightZoomed, a.focusedPane == FocusNavigation)
+		}
+		a.contentFlex.AddItem(a.detailsView, 0, detailsWeight, a.focusedPane == FocusDetails)
+		return
+	}
 	switch a.layoutMode {
 	case layoutWide:
 		if showDetails {
@@ -102,11 +115,36 @@ func (a *App) toggleNavigationPane() {
 // toggleDetailsPane shows or hides the details pane.
 func (a *App) toggleDetailsPane() {
 	a.detailsHidden = !a.detailsHidden
+	// Hiding a zoomed pane would leave the content area holding nothing.
+	a.detailsZoomed = a.detailsZoomed && !a.detailsHidden
 	a.rebuildContentLayout()
 	a.updateFocus()
 	if a.detailsHidden {
 		a.flashStatus("Details pane hidden")
 	} else {
 		a.flashStatus("Details pane shown")
+	}
+}
+
+// toggleDetailsZoom widens the details pane over the issues list, for reading a
+// whole issue rather than glancing at one.
+func (a *App) toggleDetailsZoom() {
+	if !a.detailsZoomed && a.GetSelectedIssue() == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	a.detailsZoomed = !a.detailsZoomed
+	a.detailsHidden = false
+	if a.detailsZoomed {
+		a.focusedPane = FocusDetails
+	} else {
+		a.focusedPane = FocusIssues
+	}
+	a.rebuildContentLayout()
+	a.updateFocus()
+	if a.detailsZoomed {
+		a.flashStatus("Details zoomed")
+	} else {
+		a.flashStatus("Details unzoomed")
 	}
 }

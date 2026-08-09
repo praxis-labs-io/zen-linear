@@ -183,23 +183,38 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
+// leaveDetailsForIssues moves focus back to the issues list, releasing the zoom
+// that was covering it.
+func (a *App) leaveDetailsForIssues() {
+	a.detailsZoomed = false
+	a.focusedPane = FocusIssues
+	a.rebuildContentLayout()
+	a.updateFocus()
+}
+
 // handleDetailsKey handles keyboard input when details pane is focused.
 func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
-	case tcell.KeyEnter:
-		// Enter closes the details pane and returns to the issues list.
+	case tcell.KeyEnter, tcell.KeyEscape:
+		// Zoomed, the way back is the issues list itself; unzoomed, Enter
+		// closes the pane to get there. Escape only has the first meaning.
+		if a.detailsZoomed {
+			a.leaveDetailsForIssues()
+			return nil
+		}
+		if event.Key() == tcell.KeyEscape {
+			return event
+		}
 		a.focusedPane = FocusIssues
 		a.toggleDetailsPane()
 		return nil
 	case tcell.KeyLeft:
-		a.focusedPane = FocusIssues
-		a.updateFocus()
+		a.leaveDetailsForIssues()
 		return nil
 	case tcell.KeyRune:
 		switch r := event.Rune(); r {
 		case 'h':
-			a.focusedPane = FocusIssues
-			a.updateFocus()
+			a.leaveDetailsForIssues()
 			return nil
 		case a.actionKey("tab_prev", '{'), a.actionKey("tab_next", '}'):
 			// Cycle the Details/Comments tabs, lazygit-style.

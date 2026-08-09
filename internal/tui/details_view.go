@@ -69,6 +69,18 @@ func formatUserDisplayName(user linearapi.User) string {
 	return user.ID
 }
 
+// detailsMeasure caps the details pane's text at a readable line length. Prose
+// set to the full width of a zoomed pane on a wide terminal is hard to track
+// from one line to the next.
+const detailsMeasure = 90
+
+// readingMeasure caps a pane's content width and centers what is left over,
+// returning the width to set text at and the gutter to start it from.
+func readingMeasure(innerWidth int) (measure int, gutter int) {
+	measure = min(innerWidth, detailsMeasure)
+	return measure, (innerWidth - measure) / 2
+}
+
 // buildDetailsView creates and configures the details view with separate description and comments sections.
 func (a *App) buildDetailsView() *tview.Flex {
 	// Create description/metadata view (top section, scrollable)
@@ -92,8 +104,9 @@ func (a *App) buildDetailsView() *tview.Flex {
 		inner := a.density.DetailsPadding
 		innerWidth := max(0, width-2-inner.Left-inner.Right)
 		innerHeight := max(0, height-2-inner.Top-inner.Bottom)
-		a.refitDetailsHeader(innerWidth)
-		return x + 1 + inner.Left, y + 1 + inner.Top, innerWidth, innerHeight
+		measure, gutter := readingMeasure(innerWidth)
+		a.refitDetailsHeader(measure)
+		return x + 1 + inner.Left + gutter, y + 1 + inner.Top, measure, innerHeight
 	})
 
 	// Create comments view (bottom section, scrollable, fixed height)
@@ -108,6 +121,13 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(tcell.ColorDefault)
 	a.detailsCommentsView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	a.detailsCommentsView.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		inner := a.density.DetailsPadding
+		innerWidth := max(0, width-2-inner.Left-inner.Right)
+		innerHeight := max(0, height-2-inner.Top-inner.Bottom)
+		measure, gutter := readingMeasure(innerWidth)
+		return x + 1 + inner.Left + gutter, y + 1 + inner.Top, measure, innerHeight
+	})
 
 	// Create flex layout; comments are added conditionally after issue selection.
 	detailsFlex := tview.NewFlex().SetDirection(tview.FlexRow)

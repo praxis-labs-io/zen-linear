@@ -33,7 +33,11 @@ func (a *App) updateStatusBar() {
 	case FocusIssues:
 		helpText = fmt.Sprintf("%sj/k: navigate | Enter: select | Tab/→/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
 	case FocusDetails:
-		helpText = fmt.Sprintf("%sj/k: scroll | Tab: switch description/comments | →/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		if a.detailsZoomed {
+			helpText = fmt.Sprintf("%sj/k: scroll | {}: switch description/comments | v/Esc: unzoom | :: palette | /: search | q: quit[-]", keyColor)
+			break
+		}
+		helpText = fmt.Sprintf("%sj/k: scroll | {}: switch description/comments | v: zoom | →/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
 	case FocusPalette:
 		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: execute | Esc: close[-]", keyColor)
 	default:

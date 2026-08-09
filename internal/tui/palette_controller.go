@@ -31,7 +31,7 @@ var issueScopedCommands = map[string]bool{
 	"edit_labels":       true,
 	"toggle_sub_issues": true, "view_parent": true,
 	"create_sub_issue": true, "set_parent": true, "remove_parent": true,
-	"add_comment": true,
+	"add_comment": true, "zoom_details": true,
 }
 
 // SetIssueContext records whether the palette was opened from an
