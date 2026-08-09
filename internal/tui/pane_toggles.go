@@ -94,9 +94,18 @@ func (a *App) rebuildContentLayout() {
 // watchLayoutWidth re-evaluates the responsive layout before every draw and
 // rebuilds the panes when the terminal crosses a breakpoint.
 func (a *App) watchLayoutWidth(width int) {
-	if mode := layoutModeForWidth(width); mode != a.layoutMode {
-		a.layoutMode = mode
-		a.rebuildContentLayout()
+	mode := layoutModeForWidth(width)
+	if mode == a.layoutMode {
+		return
+	}
+	a.layoutMode = mode
+	a.rebuildContentLayout()
+	// The responsive modes mount whatever holds focus, so a plain rebuild
+	// keeps it. The zoom does not: it drops the nav tree below the wide
+	// breakpoint whoever is in it, which would leave the keys on a tree that
+	// is no longer on screen.
+	if a.detailsZoomed && a.focusedPane != FocusDetails {
+		a.updateFocus()
 	}
 }
 

@@ -131,6 +131,10 @@ In the navigation pane:
 Zoom widens the details pane over the issues list, keeping the navigation
 tree. Text caps at 90 columns so a wide terminal stays readable.
 
+Hiding a pane outright is a palette command rather than a key, so bind
+`toggle_navigation_pane` or `toggle_details_pane` under `keybindings` to
+reach either from the keyboard.
+
 ## Credits
 
 Built on [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui).

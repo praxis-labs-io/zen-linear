@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -284,5 +285,97 @@ func TestCtrlDScrollsTheCommentsTab(t *testing.T) {
 	}
 	if row, _ := app.detailsDescriptionView.GetScrollOffset(); row != 0 {
 		t.Errorf("Ctrl+D scrolled the description tab to %d as well", row)
+	}
+}
+
+// Crossing the wide breakpoint while zoomed drops the nav tree whoever is in
+// it, so the rebuild has to move focus off a pane it just unmounted.
+func TestShrinkingBelowWideMovesFocusOffTheDroppedNavPane(t *testing.T) {
+	app := newZoomTestApp(t)
+	app.detailsHidden = false
+	app.detailsZoomed = true
+	app.layoutMode = layoutWide
+	app.focusedPane = FocusNavigation
+
+	app.watchLayoutWidth(80)
+
+	if app.layoutMode != layoutMedium {
+		t.Fatalf("layoutMode = %v, want layoutMedium", app.layoutMode)
+	}
+	if app.focusedPane != FocusDetails {
+		t.Errorf("focusedPane = %v, want FocusDetails once the tree is gone", app.focusedPane)
+	}
+}
+
+// A workspace switch drops the selection the zoom was opened on. Left on, the
+// content area is one empty details pane with the list still hidden.
+func TestResetCachedStateReleasesTheZoom(t *testing.T) {
+	app := newZoomTestApp(t)
+	app.detailsHidden = false
+	app.detailsZoomed = true
+
+	app.resetCachedState()
+
+	if app.detailsZoomed {
+		t.Error("resetCachedState left the zoom on")
+	}
+}
+
+// Typing 1 has to reach the navigation tree. Zoomed and narrow there is no
+// room for it beside the details pane, so the zoom gives way.
+func TestPaneNumberOneReachesTheNavigationTreeWhileZoomed(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		mode       layoutMode
+		wantZoomed bool
+	}{
+		{name: "wide keeps the zoom", mode: layoutWide, wantZoomed: true},
+		{name: "medium releases it", mode: layoutMedium, wantZoomed: false},
+		{name: "narrow releases it", mode: layoutNarrow, wantZoomed: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := newZoomTestApp(t)
+			app.detailsHidden = false
+			app.detailsZoomed = true
+			app.focusedPane = FocusDetails
+			app.layoutMode = tc.mode
+
+			app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModNone))
+
+			if app.focusedPane != FocusNavigation {
+				t.Errorf("focusedPane = %v, want FocusNavigation", app.focusedPane)
+			}
+			if app.detailsZoomed != tc.wantZoomed {
+				t.Errorf("detailsZoomed = %v, want %v", app.detailsZoomed, tc.wantZoomed)
+			}
+		})
+	}
+}
+
+// The zoomed help must not offer a key that does nothing, and must not lose
+// the global search shortcut that still works.
+func TestZoomedStatusBarHelpMatchesTheKeysThatWork(t *testing.T) {
+	app := newZoomTestApp(t)
+	app.detailsHidden = false
+	app.detailsZoomed = true
+	app.focusedPane = FocusDetails
+
+	app.layoutMode = layoutWide
+	app.updateStatusBar()
+	wide := app.statusBar.GetText(true)
+	if !strings.Contains(wide, "navigation") {
+		t.Errorf("wide zoomed help = %q, want the navigation key offered", wide)
+	}
+
+	app.layoutMode = layoutNarrow
+	app.updateStatusBar()
+	narrow := app.statusBar.GetText(true)
+	if strings.Contains(narrow, "navigation") {
+		t.Errorf("narrow zoomed help = %q, want no navigation key with no tree on screen", narrow)
+	}
+	for _, want := range []string{"/: search", "v: unzoom", "Esc"} {
+		if !strings.Contains(narrow, want) {
+			t.Errorf("zoomed help = %q, want it to mention %q", narrow, want)
+		}
 	}
 }

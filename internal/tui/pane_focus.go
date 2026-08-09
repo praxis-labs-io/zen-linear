@@ -71,6 +71,12 @@ func (a *App) focusPane(pane FocusTarget) {
 	switch pane {
 	case FocusNavigation:
 		a.navigationHidden = false
+		// Below the wide breakpoint the zoom leaves no room for the tree, so
+		// asking for it by number releases the zoom the way 2 does. Wide, the
+		// tree is already there and the zoom can stay.
+		if a.layoutMode != layoutWide {
+			a.detailsZoomed = false
+		}
 	case FocusDetails:
 		a.detailsHidden = false
 		// Enter on the description, the same way Tab and l enter it.

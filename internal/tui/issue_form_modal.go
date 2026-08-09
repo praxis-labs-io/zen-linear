@@ -99,8 +99,9 @@ type IssueFormModal struct {
 	// for that, so a refusal keeps the typing and the caret where they were.
 	saving bool
 	// openGen discards an option fetch from an earlier opening of the form.
-	// Atomic because the option loaders read it from their own goroutines
-	// while a close writes it, which the UI thread alone does not order.
+	// Atomic because the guard has to hold wherever the queued callback runs:
+	// the tests stub QueueUpdateDraw to run inline, so the loader reads this
+	// on its own goroutine while a close writes it from the test's.
 	openGen atomic.Int64
 	// milestoneGen discards a milestone fetch whose project has since changed.
 	milestoneGen int
