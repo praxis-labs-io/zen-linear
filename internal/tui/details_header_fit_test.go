@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -28,8 +29,15 @@ func detailsFixture() *linearapi.Issue {
 	}
 }
 
-// drawDetails renders the details pane at a width and returns its lines.
+// drawDetails renders the description tab at a width and returns its lines.
 func drawDetails(t *testing.T, app *App, width int) []string {
+	t.Helper()
+	return drawTextView(t, app.detailsDescriptionView, width)
+}
+
+// drawTextView renders a text view at a width and returns what landed on the
+// screen, one string per row.
+func drawTextView(t *testing.T, view *tview.TextView, width int) []string {
 	t.Helper()
 
 	screen := tcell.NewSimulationScreen("UTF-8")
@@ -40,8 +48,8 @@ func drawDetails(t *testing.T, app *App, width int) []string {
 
 	const height = 40
 	screen.SetSize(width, height)
-	app.detailsDescriptionView.SetRect(0, 0, width, height)
-	app.detailsDescriptionView.Draw(screen)
+	view.SetRect(0, 0, width, height)
+	view.Draw(screen)
 	screen.Show()
 
 	// Columns 0 and width-1 are the pane border, which would otherwise sit on

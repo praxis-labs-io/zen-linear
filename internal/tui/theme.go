@@ -186,6 +186,7 @@ type ThemeTags struct {
 	SecondaryText string
 	HeaderText    string
 	Accent        string
+	AssigneeText  string
 	Border        string
 	Warning       string
 	Error         string
@@ -214,9 +215,12 @@ func NewThemeTags(theme Theme) ThemeTags {
 		SecondaryText: colorTag(theme.SecondaryText),
 		HeaderText:    colorTag(theme.HeaderText),
 		Accent:        colorTag(theme.Accent),
-		Border:        colorTag(theme.Border),
-		Warning:       colorTag(theme.StatusInProgress),
-		Error:         colorTag(theme.StatusCanceled),
+		// Through the accessor, not the field: an unset optional color is
+		// ColorDefault, which colorTag would hand back as [default].
+		AssigneeText: colorTag(theme.AssigneeTextColor()),
+		Border:       colorTag(theme.Border),
+		Warning:      colorTag(theme.StatusInProgress),
+		Error:        colorTag(theme.StatusCanceled),
 	}
 }
 

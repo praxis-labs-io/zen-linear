@@ -1,5 +1,7 @@
 package linearapi
 
+import "slices"
+
 // toRef converts the cycle selection into a CycleRef, treating a missing id as
 // no cycle.
 func (n *cycleRefNode) toRef() *CycleRef {
@@ -202,6 +204,12 @@ func (n issueDetailNode) toIssue() Issue {
 			IssueID: string(n.ID),
 		})
 	}
+	// A thread reads oldest first. The query takes them newest first on purpose:
+	// with a cap of 100 that keeps the most recent hundred on a long issue,
+	// where asking for them ascending would return the first hundred instead.
+	slices.SortStableFunc(issue.Comments, func(a, b Comment) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
 
 	return issue
 }

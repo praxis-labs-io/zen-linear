@@ -48,6 +48,21 @@ func TestInverseTextColor(t *testing.T) {
 	}
 }
 
+// TestThemeTagsAssigneeUsesTheAccessor covers the tag a comment byline colors
+// its author with. Built off the raw field, a theme that predates it would tag
+// as [default] rather than falling back to the foreground.
+func TestThemeTagsAssigneeUsesTheAccessor(t *testing.T) {
+	if got := NewThemeTags(LinearTheme).AssigneeText; got != colorTag(LinearTheme.AssigneeText) {
+		t.Errorf("AssigneeText tag = %q, want the theme's own color %q", got, colorTag(LinearTheme.AssigneeText))
+	}
+
+	legacy := LinearTheme
+	legacy.AssigneeText = tcell.ColorDefault
+	if got := NewThemeTags(legacy).AssigneeText; got != colorTag(legacy.Foreground) {
+		t.Errorf("AssigneeText tag with the field unset = %q, want the foreground %q", got, colorTag(legacy.Foreground))
+	}
+}
+
 // TestRosePineMoonBackgroundTransparent pins the transparent background: the
 // theme must keep tcell.ColorDefault so the terminal background shows through.
 func TestRosePineMoonBackgroundTransparent(t *testing.T) {
