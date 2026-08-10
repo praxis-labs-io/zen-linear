@@ -16,9 +16,18 @@ import (
 // its own goroutine while the details pane renders at its measure on the event
 // loop, so one slot both races and hands each caller the other's width. The
 // mutex covers rendering too, since a TermRenderer is not safe to share.
+// markdownWriter is one width's renderer and the lock serializing its use.
+// The lock is per width, not global: the agent output modal renders unwrapped
+// on its own goroutine so a long answer does not block the UI, and a global
+// one would let that render hold the event loop inside Draw.
+type markdownWriter struct {
+	mu       sync.Mutex
+	renderer *glamour.TermRenderer
+}
+
 var (
 	markdownMu        sync.Mutex
-	markdownRenderers = map[int]*glamour.TermRenderer{}
+	markdownRenderers = map[int]*markdownWriter{}
 	markdownTheme     = LinearTheme
 )
 
@@ -31,12 +40,16 @@ func initMarkdownRenderer(theme Theme) {
 	clear(markdownRenderers)
 }
 
-// markdownRendererFor returns a renderer wrapping at width, building one the
+// markdownRendererFor returns the writer for a wrap width, building one the
 // first time that width is asked for. Width 0 leaves glamour's wrapping off,
-// for callers whose view does its own. Callers hold markdownMu.
-func markdownRendererFor(width int) *glamour.TermRenderer {
-	if renderer, ok := markdownRenderers[width]; ok {
-		return renderer
+// for callers whose view does its own. The map lock is held only long enough
+// to find or build the entry, never across a render.
+func markdownRendererFor(width int) *markdownWriter {
+	markdownMu.Lock()
+	defer markdownMu.Unlock()
+
+	if writer, ok := markdownRenderers[width]; ok {
+		return writer
 	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStyles(themeMarkdownStyle(markdownTheme)),
@@ -48,8 +61,9 @@ func markdownRendererFor(width int) *glamour.TermRenderer {
 			return nil
 		}
 	}
-	markdownRenderers[width] = renderer
-	return renderer
+	writer := &markdownWriter{renderer: renderer}
+	markdownRenderers[width] = writer
+	return writer
 }
 
 // renderMarkdownAt renders markdown wrapped to width. Tables are why the width
@@ -57,14 +71,13 @@ func markdownRendererFor(width int) *glamour.TermRenderer {
 // out at its natural width, which the text view then re-wraps into a heap.
 // Falls back to plain text if rendering fails.
 func renderMarkdownAt(content string, width int) string {
-	markdownMu.Lock()
-	defer markdownMu.Unlock()
-
-	renderer := markdownRendererFor(max(0, width))
-	if renderer == nil {
+	writer := markdownRendererFor(max(0, width))
+	if writer == nil {
 		return content
 	}
-	rendered, err := renderer.Render(content)
+	writer.mu.Lock()
+	rendered, err := writer.renderer.Render(content)
+	writer.mu.Unlock()
 	if err != nil {
 		return content
 	}

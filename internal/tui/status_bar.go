@@ -22,6 +22,17 @@ func (a *App) buildStatusBar() *tview.TextView {
 	return statusBar
 }
 
+// zoomHint names the zoom key and the verb it performs, or nothing at all when
+// a keybinding has stolen the rune and left the command reachable only from the
+// palette. The trailing separator belongs to the hint so it disappears with it.
+func (a *App) zoomHint(verb string) string {
+	key, ok := a.commandShortcutLabel("zoom_details")
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%s: %s | ", key, verb)
+}
+
 // updateStatusBar updates the status bar with current information.
 func (a *App) updateStatusBar() {
 	var helpText string
@@ -36,7 +47,6 @@ func (a *App) updateStatusBar() {
 		// Both keys are remappable, so the hint reads them back rather than
 		// stating the defaults at a user who has moved them.
 		tabs := fmt.Sprintf("%c%c", a.actionKey("tab_prev", '{'), a.actionKey("tab_next", '}'))
-		zoom := a.commandShortcutLabel("zoom_details")
 		if a.detailsZoomed {
 			// Below the wide breakpoint the zoom leaves no nav tree to step
 			// onto, so offering the key there would be a lie.
@@ -44,10 +54,12 @@ func (a *App) updateStatusBar() {
 			if a.layoutMode == layoutWide && !a.navigationHidden {
 				toNav = "←/h: navigation | "
 			}
-			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s%s: unzoom | Esc: back to list | :: palette | /: search | q: quit[-]", keyColor, tabs, toNav, zoom)
+			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s%sEsc: back to list | :: palette | /: search | q: quit[-]",
+				keyColor, tabs, toNav, a.zoomHint("unzoom"))
 			break
 		}
-		helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s: zoom | →/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor, tabs, zoom)
+		helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s→/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]",
+			keyColor, tabs, a.zoomHint("zoom"))
 	case FocusPalette:
 		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: execute | Esc: close[-]", keyColor)
 	default:

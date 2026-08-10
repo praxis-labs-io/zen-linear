@@ -186,11 +186,14 @@ func (a *App) onNavigationSelected(node *NavigationNode, issueID ...string) {
 	a.sortOverridden = false
 
 	// Picking a list is asking to see it, so the zoom covering it gives way.
-	// The refresh below does not move focus, so nothing else would put the
-	// issues column back on screen.
-	if a.detailsZoomed {
+	// A favorited issue is the opposite request, so the zoom survives that one
+	// and the issue lands in the pane already open to read it. The refresh
+	// below does not move focus, so releasing has to carry focus itself: it
+	// can close the details pane, and whoever is in it cannot stay there.
+	if a.detailsZoomed && !node.IsIssue {
 		a.releaseDetailsZoom()
 		a.rebuildContentLayout()
+		a.updateFocus()
 	}
 
 	// A favorited issue is not a filter of its own: scope to its team and ask

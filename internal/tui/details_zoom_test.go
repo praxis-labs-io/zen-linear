@@ -495,3 +495,43 @@ func TestZoomedStatusBarHelpMatchesTheKeysThatWork(t *testing.T) {
 		}
 	}
 }
+
+// Releasing the zoom can close the details pane, so whoever was reading in it
+// has to be moved. Without this the keys keep routing to a pane that is no
+// longer mounted.
+func TestReleasingTheZoomFromTheNavSpineMovesFocusOffTheClosedPane(t *testing.T) {
+	app := newZoomTestApp(t)
+	app.layoutMode = layoutWide
+	app.focusedPane = FocusIssues
+	zoomKey(app)
+	app.focusedPane = FocusDetails
+
+	app.onNavigationSelected(&NavigationNode{ID: "team-1", Text: "Engineering", TeamID: "team-1", IsTeam: true})
+
+	if !app.detailsHidden {
+		t.Fatal("the zoom did not restore the closed details pane")
+	}
+	if app.focusedPane == FocusDetails {
+		t.Error("focus is still on the details pane after it left the screen")
+	}
+}
+
+// Picking a favorited issue is a request to read it, the opposite of picking a
+// list, so the zoom it would be read in survives.
+func TestSelectingAFavoritedIssueKeepsTheZoom(t *testing.T) {
+	app := newZoomTestApp(t)
+	app.layoutMode = layoutWide
+	app.focusedPane = FocusIssues
+	zoomKey(app)
+
+	app.onNavigationSelected(&NavigationNode{
+		ID: "issue-9", Text: "ZNL-9", TeamID: "team-1", IssueID: "issue-9", IsIssue: true,
+	})
+
+	if !app.detailsZoomed {
+		t.Error("selecting a favorited issue released the zoom it was going to be read in")
+	}
+	if app.detailsHidden {
+		t.Error("selecting a favorited issue closed the details pane")
+	}
+}
