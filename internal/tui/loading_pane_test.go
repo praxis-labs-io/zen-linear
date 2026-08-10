@@ -17,8 +17,7 @@ import (
 func newLoadingPaneTestApp(t *testing.T, page linearapi.IssuePage, fetchErr error) (*App, chan struct{}) {
 	t.Helper()
 
-	app := newDefaultNavTestApp(config.Config{})
-	stopBackgroundWorkOnCleanup(t, app)
+	app := newDefaultNavTestApp(t, config.Config{})
 	t.Cleanup(func() { app.setIssuesLoading(false) })
 
 	release := make(chan struct{})
@@ -137,8 +136,7 @@ func TestIssuesPaneFocusFollowsTheSwap(t *testing.T) {
 // built and the first fetch starting, which flashed "No issues" at every
 // launch.
 func TestIssuesPaneStartsAsLoading(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{})
-	stopBackgroundWorkOnCleanup(t, app)
+	app := newDefaultNavTestApp(t, config.Config{})
 
 	if text := placeholderText(app); !strings.Contains(text, "Loading issues") {
 		t.Fatalf("placeholder = %q, want it to read as loading before the first fetch", text)
@@ -204,8 +202,7 @@ func TestDetailsPaneSaysLoadingWhileTheListLoads(t *testing.T) {
 // TestLoadingIndicatorStopsWithTheLastFetch verifies the frame loop is not left
 // spinning over panes that already have their answer.
 func TestLoadingIndicatorStopsWithTheLastFetch(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{})
-	stopBackgroundWorkOnCleanup(t, app)
+	app := newDefaultNavTestApp(t, config.Config{})
 
 	app.setNavLoading(true)
 	if !app.loading.running() {
@@ -228,8 +225,7 @@ func TestLoadingIndicatorStopsWithTheLastFetch(t *testing.T) {
 // after a newer one took over: clearing the flag there stops the spinner and
 // drops the pane to "No issues" while a page is still on its way.
 func TestSupersededRefreshLeavesTheLoadingFlagAlone(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{})
-	stopBackgroundWorkOnCleanup(t, app)
+	app := newDefaultNavTestApp(t, config.Config{})
 
 	app.loadingGeneration = 7
 	app.setIssuesLoading(true)
@@ -278,8 +274,7 @@ func TestFocusLandsOnThePlaceholderWhenMounted(t *testing.T) {
 // TestNavigationFailureAnswersTheWaitingNode covers an offline cold launch: a
 // spinner frozen over "Loading teams" reads as still working.
 func TestNavigationFailureAnswersTheWaitingNode(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{})
-	stopBackgroundWorkOnCleanup(t, app)
+	app := newDefaultNavTestApp(t, config.Config{})
 
 	app.reportNavigationFailure(errors.New("no route to host"))
 

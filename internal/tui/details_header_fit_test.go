@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -246,5 +247,215 @@ func TestDetailsPaneSurvivesAPaneNarrowerThanItsBorder(t *testing.T) {
 		if innerWidth < 0 || innerHeight < 0 {
 			t.Errorf("width %d gave a content rect of %dx%d", width, innerWidth, innerHeight)
 		}
+	}
+}
+
+// TestDetailsCapsTheReadingMeasure covers a details pane wider than a line of
+// prose should be: the text holds its measure and centers, and the border still
+// spans the pane.
+func TestDetailsCapsTheReadingMeasure(t *testing.T) {
+	const width = 180
+	app := newDetailsTestApp(t)
+	lines := drawDetails(t, app, width)
+
+	title := findLine(t, lines, "M3: comment infrastructure")
+	left := len(title) - len(strings.TrimLeft(title, " "))
+	if wantGutter := (width - 2 - detailsMeasure) / 2; left != wantGutter {
+		t.Errorf("content starts at column %d, want %d to center the measure", left, wantGutter)
+	}
+
+	// The first and last rows are the pane's own border, which is meant to span
+	// the full width; the cap is on what is set inside it.
+	for i, line := range lines[1 : len(lines)-1] {
+		if got := len([]rune(line)); got > left+detailsMeasure {
+			t.Errorf("line %d runs to %d cells, past the %d measure: %q", i+1, got, detailsMeasure, line)
+		}
+	}
+}
+
+// TestDetailsBelowTheMeasureUsesTheWholePane guards against the cap stealing
+// width a narrow pane does not have to give.
+func TestDetailsBelowTheMeasureUsesTheWholePane(t *testing.T) {
+	app := newDetailsTestApp(t)
+	lines := drawDetails(t, app, 60)
+
+	title := findLine(t, lines, "M3: comment infrastructure")
+	if left := len(title) - len(strings.TrimLeft(title, " ")); left != app.density.DetailsPadding.Left {
+		t.Errorf("content starts at column %d, want the padding alone at %d", left, app.density.DetailsPadding.Left)
+	}
+}
+
+// tableFixture is an issue whose description holds a markdown table wide enough
+// that glamour has to size its columns to something.
+func tableFixture() *linearapi.Issue {
+	return &linearapi.Issue{
+		ID: "issue-2", Identifier: "ZNO-6", Title: "Table", State: "Todo",
+		Description: "Intro paragraph.\n\n" +
+			"| Object | Paths to create |\n" +
+			"| --- | --- |\n" +
+			"| Workspace | the picker's add affordance (WindowController.swift:923), and Settings (:1121) |\n" +
+			"| Tool | Settings only (SettingsToolsSection then onEditFloat then ToolFloatFormOverlay) |\n",
+	}
+}
+
+// Glamour sizes table columns to its wrap width. Given none it laid the table
+// out at its natural width and the text view re-wrapped it, which broke every
+// row onto a continuation line with no column gutter.
+func TestDescriptionTablesFitTheReadingMeasure(t *testing.T) {
+	for _, width := range []int{180, 70} {
+		app := newDetailsTestApp(t)
+		app.selectedIssue = tableFixture()
+		app.updateDetailsView()
+		lines := drawDetails(t, app, width)
+
+		// The table spans from its first gutter line to its last. A cell that
+		// spilled past the width lands in that span as a line with no gutter
+		// at all, which is exactly what the broken render looks like.
+		first, last := -1, -1
+		for i, line := range lines {
+			if strings.Contains(line, "│") || strings.Contains(line, "┼") {
+				if first < 0 {
+					first = i
+				}
+				last = i
+			}
+		}
+		if first < 0 {
+			t.Fatalf("at %d: no table drawn at all", width)
+		}
+		for i := first; i <= last; i++ {
+			line := strings.TrimSpace(lines[i])
+			if line == "" {
+				continue
+			}
+			if !strings.Contains(line, "│") && !strings.Contains(line, "┼") {
+				t.Errorf("at %d: line %d sits inside the table but carries no column gutter: %q", width, i, lines[i])
+			}
+		}
+	}
+}
+
+// The rule closing the metadata header spans the measure. Baked into the header
+// lines at render time it stayed at whatever width the pane first drew at, so
+// zooming left a short stub under a full-width header.
+func TestTheHeaderDividerFollowsTheWidth(t *testing.T) {
+	app := newDetailsTestApp(t)
+
+	dividerWidth := func(width int) int {
+		widest := 0
+		lines := drawDetails(t, app, width)
+		// The first and last rows are the pane's own border, which is drawn
+		// from the same rune and spans the full width by design.
+		for _, line := range lines[1 : len(lines)-1] {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.Trim(trimmed, "─") != "" {
+				continue
+			}
+			if n := len([]rune(trimmed)); n > widest {
+				widest = n
+			}
+		}
+		return widest
+	}
+
+	narrow := dividerWidth(50)
+	wide := dividerWidth(180)
+
+	if narrow == 0 || wide == 0 {
+		t.Fatalf("no divider drawn: narrow %d, wide %d", narrow, wide)
+	}
+	if wide <= narrow {
+		t.Errorf("divider is %d cells at width 180 and %d at width 50, want it to follow the measure", wide, narrow)
+	}
+	if wide != detailsMeasure {
+		t.Errorf("divider is %d cells at width 180, want the %d measure", wide, detailsMeasure)
+	}
+}
+
+// The agent output modal renders unwrapped from its own goroutine while the
+// details pane renders at its measure on the event loop. A single cached
+// renderer both raced and handed each caller the other's wrap width.
+func TestMarkdownRenderersAreSafeAcrossGoroutines(t *testing.T) {
+	initMarkdownRenderer(LinearTheme)
+	const doc = "| a | b |\n| --- | --- |\n| one | two |\n"
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			width := 0
+			if i%2 == 0 {
+				width = detailsMeasure
+			}
+			for range 20 {
+				if out := renderMarkdownAt(doc, width); out == "" {
+					t.Errorf("empty render at width %d", width)
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+// The centered measure leaves gutters either side of the text. tview fills the
+// inner rect with the text style whenever it disagrees with the box
+// background, which painted those gutters a different color from the pane.
+func TestTheReadingGutterMatchesThePaneBackground(t *testing.T) {
+	themes := []struct {
+		name    string
+		id      string
+		theme   Theme
+		reapply bool
+	}{
+		// Both paths set the background, and they used to disagree: at build
+		// it was hardcoded transparent, on a theme change it came from the
+		// theme. A fresh launch takes the first, so it needs its own case.
+		{"transparent at build", config.ThemeRosePineMoon, RosePineMoonTheme, false},
+		{"opaque at build", config.ThemeLinear, LinearTheme, false},
+		{"transparent after a theme change", config.ThemeRosePineMoon, RosePineMoonTheme, true},
+		{"opaque after a theme change", config.ThemeLinear, LinearTheme, true},
+	}
+
+	for _, tc := range themes {
+		t.Run(tc.name, func(t *testing.T) {
+			app := NewApp(linearapi.ClientConfig{}, config.Config{CacheTTL: time.Minute, Theme: tc.id}, nil)
+			stopBackgroundWorkOnCleanup(t, app)
+			app.queueUpdateDraw = func(f func()) { f() }
+			if tc.reapply {
+				app.applyThemeToComponents()
+			}
+			app.selectedIssue = detailsFixture()
+			app.updateDetailsView()
+
+			const width = 180
+			screen := tcell.NewSimulationScreen("UTF-8")
+			if err := screen.Init(); err != nil {
+				t.Fatalf("init simulation screen: %v", err)
+			}
+			t.Cleanup(screen.Fini)
+			screen.SetSize(width, 40)
+			app.detailsDescriptionView.SetRect(0, 0, width, 40)
+			app.detailsDescriptionView.Draw(screen)
+			screen.Show()
+
+			cells, screenWidth, _ := screen.GetContents()
+			// Row 10 is inside the content, past the title row.
+			const row = 10
+			backgrounds := map[tcell.Color]int{}
+			for x := 1; x < screenWidth-1; x++ {
+				_, bg, _ := cells[row*screenWidth+x].Style.Decompose()
+				backgrounds[bg]++
+			}
+			if len(backgrounds) > 1 {
+				t.Errorf("row %d paints %d different backgrounds across the pane, want one: %v", row, len(backgrounds), backgrounds)
+			}
+			// One color is not enough: agreeing on the terminal default would
+			// also be uniform, and wrong for a theme that paints its own.
+			if _, ok := backgrounds[tc.theme.Background]; !ok {
+				t.Errorf("pane paints %v, want the theme background %v", backgrounds, tc.theme.Background)
+			}
+		})
 	}
 }

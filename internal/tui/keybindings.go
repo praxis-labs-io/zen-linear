@@ -29,7 +29,31 @@ func applyCommandKeybindings(commands []Command, bindings map[string]string) {
 	}
 }
 
+// commandShortcutLabel returns the key a palette command answers to, for help
+// text that would otherwise state a default the user has remapped. It renders
+// the key the same way the palette does. A command left without one has no key
+// to name, so the caller is told to leave it out rather than print a stand-in.
+func (a *App) commandShortcutLabel(id string) (label string, ok bool) {
+	if a.paletteCtrl == nil {
+		return "", false
+	}
+	for _, cmd := range a.paletteCtrl.commands {
+		if cmd.ID != id {
+			continue
+		}
+		if cmd.ShortcutDisplay != "" {
+			return cmd.ShortcutDisplay, true
+		}
+		if shortcut := FormatShortcut(cmd.ShortcutRune); shortcut != "" {
+			return shortcut, true
+		}
+		return "", false
+	}
+	return "", false
+}
+
 // actionKey returns the configured key for a UI action id, or the fallback.
+
 func (a *App) actionKey(action string, fallback rune) rune {
 	if key, ok := a.config.Keybindings[action]; ok {
 		if runes := []rune(key); len(runes) == 1 {

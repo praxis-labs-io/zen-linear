@@ -59,7 +59,7 @@ func TestSwitchWorkspaceMissingKeyKeepsCurrent(t *testing.T) {
 
 	cfg := config.Config{Workspaces: switcherTestWorkspaces()}
 	cfg.LinearAPIKey = "k-acme"
-	app := newDefaultNavTestApp(cfg)
+	app := newDefaultNavTestApp(t, cfg)
 	app.activeWorkspaceName = "Acme"
 
 	app.switchWorkspace("Side")
@@ -75,7 +75,7 @@ func TestSwitchWorkspaceMissingKeyKeepsCurrent(t *testing.T) {
 // TestSwitchWorkspaceUnknownNameKeepsCurrent verifies an unknown workspace
 // name is rejected.
 func TestSwitchWorkspaceUnknownNameKeepsCurrent(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{Workspaces: switcherTestWorkspaces()})
+	app := newDefaultNavTestApp(t, config.Config{Workspaces: switcherTestWorkspaces()})
 	app.activeWorkspaceName = "Acme"
 
 	app.switchWorkspace("Nonexistent")
@@ -101,7 +101,7 @@ func newSwitcherFlowTestApp(t *testing.T) *App {
 
 	cfg := config.Config{Workspaces: switcherTestWorkspaces(), APIEndpoint: server.URL}
 	cfg.LinearAPIKey = "k-acme"
-	app := newDefaultNavTestApp(cfg)
+	app := newDefaultNavTestApp(t, cfg)
 	// The reload runs off the event loop, which no test app runs. Dropping its
 	// queued updates keeps them off the state under assertion.
 	app.queueUpdateDraw = func(func()) {}
@@ -188,7 +188,7 @@ func newSwitcherReloadTestApp(t *testing.T) *App {
 
 	cfg := config.Config{Workspaces: switcherTestWorkspaces(), APIEndpoint: server.URL}
 	cfg.LinearAPIKey = "k-acme"
-	app := newDefaultNavTestApp(cfg)
+	app := newDefaultNavTestApp(t, cfg)
 	app.fetchIssuesPage = nil
 	app.app.SetRoot(app.pages, true)
 	app.activeWorkspaceName = "Acme"

@@ -58,11 +58,16 @@ func defaultNavTeams() []linearapi.Team {
 	}
 }
 
-// newDefaultNavTestApp builds an App with seams stubbed for default-navigation tests.
-func newDefaultNavTestApp(cfg config.Config) *App {
+// newDefaultNavTestApp builds an App with seams stubbed for default-navigation
+// tests. It registers its own cleanup: every caller starts background work, and
+// a caller that forgets leaks a goroutine into whatever test runs next.
+func newDefaultNavTestApp(t testing.TB, cfg config.Config) *App {
+	t.Helper()
+
 	cfg.CacheTTL = time.Minute
 	cfg.PageSize = 10
 	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
+	stopBackgroundWorkOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.preloadTeamMetadataFunc = func(string) {}
 	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
@@ -98,7 +103,7 @@ func currentNavigationNode(t *testing.T, app *App) *NavigationNode {
 }
 
 func TestApplyDefaultNavigationSelectsTeam(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{DefaultTeam: "nex"})
+	app := newDefaultNavTestApp(t, config.Config{DefaultTeam: "nex"})
 	refreshDone := installRefreshCompletionHook(app)
 	teams := defaultNavTeams()
 	app.rebuildNavigationTree(teams, nil)
@@ -123,7 +128,7 @@ func TestApplyDefaultNavigationSelectsTeam(t *testing.T) {
 }
 
 func TestApplyDefaultNavigationSelectsProject(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{DefaultTeam: "NEX", DefaultProject: "website"})
+	app := newDefaultNavTestApp(t, config.Config{DefaultTeam: "NEX", DefaultProject: "website"})
 	refreshDone := installRefreshCompletionHook(app)
 	teams := defaultNavTeams()
 	app.rebuildNavigationTree(teams, nil)
@@ -141,7 +146,7 @@ func TestApplyDefaultNavigationSelectsProject(t *testing.T) {
 }
 
 func TestApplyDefaultNavigationUnknownTeamKeepsAllIssues(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{DefaultTeam: "MISSING"})
+	app := newDefaultNavTestApp(t, config.Config{DefaultTeam: "MISSING"})
 	teams := defaultNavTeams()
 	app.rebuildNavigationTree(teams, nil)
 
@@ -157,7 +162,7 @@ func TestApplyDefaultNavigationUnknownTeamKeepsAllIssues(t *testing.T) {
 }
 
 func TestApplyDefaultNavigationUnknownProjectSelectsTeam(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{DefaultTeam: "NEX", DefaultProject: "Missing"})
+	app := newDefaultNavTestApp(t, config.Config{DefaultTeam: "NEX", DefaultProject: "Missing"})
 	refreshDone := installRefreshCompletionHook(app)
 	teams := defaultNavTeams()
 	app.rebuildNavigationTree(teams, nil)
@@ -175,7 +180,7 @@ func TestApplyDefaultNavigationUnknownProjectSelectsTeam(t *testing.T) {
 }
 
 func TestApplyDefaultNavigationProjectFetchFailureIsNotReportedAsMissing(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{DefaultTeam: "NEX", DefaultProject: "Website"})
+	app := newDefaultNavTestApp(t, config.Config{DefaultTeam: "NEX", DefaultProject: "Website"})
 	app.fetchProjectsFunc = func(context.Context, string) ([]linearapi.Project, error) {
 		return nil, errors.New("temporary projects failure")
 	}
@@ -195,7 +200,7 @@ func TestApplyDefaultNavigationProjectFetchFailureIsNotReportedAsMissing(t *test
 }
 
 func TestApplyDefaultNavigationWarnsWhenProjectCannotBeAppliedAfterPartialLoadFailure(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{DefaultTeam: "NEX", DefaultProject: "Website"})
+	app := newDefaultNavTestApp(t, config.Config{DefaultTeam: "NEX", DefaultProject: "Website"})
 	app.fetchWorkflowStatesFunc = func(context.Context, string) ([]linearapi.WorkflowState, error) {
 		return nil, errors.New("temporary states failure")
 	}
@@ -217,7 +222,7 @@ func TestApplyDefaultNavigationWarnsWhenProjectCannotBeAppliedAfterPartialLoadFa
 }
 
 func TestApplyDefaultNavigationNoDefaultsIsNoop(t *testing.T) {
-	app := newDefaultNavTestApp(config.Config{})
+	app := newDefaultNavTestApp(t, config.Config{})
 	teams := defaultNavTeams()
 	app.rebuildNavigationTree(teams, nil)
 
@@ -296,7 +301,7 @@ func TestCurrentFetchParamsScopesNavigationSelection(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			app := newDefaultNavTestApp(config.Config{})
+			app := newDefaultNavTestApp(t, config.Config{})
 			app.selectedNavigation = tc.node
 
 			params := app.currentFetchParams("updatedAt")

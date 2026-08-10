@@ -49,6 +49,9 @@ type App struct {
 	contentFlex            *tview.Flex
 	navigationHidden       bool
 	detailsHidden          bool
+	detailsZoomed          bool
+	zoomPreviousPane       FocusTarget
+	zoomPreviousHidden     bool
 	layoutMode             layoutMode
 	palettePreviousPane    FocusTarget
 	navigationTree         *tview.TreeView
@@ -68,34 +71,38 @@ type App struct {
 	issuesColumn           *tview.Flex     // Vertical flex holding the active issues tab
 	detailsView            *tview.Flex     // Flex container for details (description + comments)
 	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
-	// detailsHeaderLines is the metadata block untruncated, kept so a resize
-	// can refit it, and detailsBody is the description already rendered so the
-	// refit does not re-run the markdown renderer. detailsFittedWidth is the
-	// pane width the two were last joined at.
-	detailsHeaderLines   []string
-	detailsBody          string
-	detailsFittedWidth   int
-	detailsCommentsView  *tview.TextView // Scrollable comments view
-	statusBar            *tview.TextView
-	paletteModal         *tview.Flex
-	paletteInput         *tview.InputField
-	paletteList          *tview.List
-	paletteModalContent  *tview.Flex
-	paletteCtrl          *PaletteController
-	pickerModal          *PickerModal
-	issueFormModal       *IssueFormModal
-	createCommentModal   *CreateCommentModal
-	editDescriptionModal *EditDescriptionModal
-	editLabelsModal      *EditLabelsModal
-	textInputModal       *TextInputModal
-	multiSelectModal     *MultiSelectModal
-	settingsModal        *SettingsModal
-	promptTemplatesModal *AgentPromptTemplatesModal
-	agentPromptModal     *AgentPromptModal
-	agentOutputModal     *AgentOutputModal
-	confirmationModal    *ConfirmationModal
-	agentRunner          *agents.Runner
-	agentPromptTemplates []config.AgentPromptTemplate
+	// detailsHeaderLines is the metadata block untruncated and detailsBody the
+	// description already rendered, so a refit re-joins them without rebuilding
+	// the header. detailsFittedWidth is the width the two were last laid out
+	// at. The raw markdown is kept alongside because a width change has to
+	// re-run the renderer: glamour sizes tables to the width it is given.
+	detailsHeaderLines         []string
+	detailsBody                string
+	detailsDescriptionMarkdown string
+	detailsFittedWidth         int
+	detailsCommentsView        *tview.TextView // Scrollable comments view
+	detailsCommentsSource      []linearapi.Comment
+	detailsCommentsFittedWidth int
+	statusBar                  *tview.TextView
+	paletteModal               *tview.Flex
+	paletteInput               *tview.InputField
+	paletteList                *tview.List
+	paletteModalContent        *tview.Flex
+	paletteCtrl                *PaletteController
+	pickerModal                *PickerModal
+	issueFormModal             *IssueFormModal
+	createCommentModal         *CreateCommentModal
+	editDescriptionModal       *EditDescriptionModal
+	editLabelsModal            *EditLabelsModal
+	textInputModal             *TextInputModal
+	multiSelectModal           *MultiSelectModal
+	settingsModal              *SettingsModal
+	promptTemplatesModal       *AgentPromptTemplatesModal
+	agentPromptModal           *AgentPromptModal
+	agentOutputModal           *AgentOutputModal
+	confirmationModal          *ConfirmationModal
+	agentRunner                *agents.Runner
+	agentPromptTemplates       []config.AgentPromptTemplate
 
 	// App state (protected by issuesMu)
 	issuesMu            sync.RWMutex
@@ -559,6 +566,12 @@ func (a *App) resetCachedState() {
 
 	a.selectedNavigation = nil
 	a.resetNavigationTree()
+	// The selection this zoom was opened on is going away, so the reading
+	// view would be left holding the empty state with the list still hidden.
+	if a.detailsZoomed {
+		a.releaseDetailsZoom()
+		a.rebuildContentLayout()
+	}
 	a.currentUser = nil
 	a.teamUsers = nil
 	a.teamProjects = nil

@@ -111,3 +111,48 @@ func TestNarrowLayoutGivesTheFocusedPaneEverything(t *testing.T) {
 		t.Errorf("issues width = %d, want the pane left out", issues)
 	}
 }
+
+// TestZoomedLayoutDropsTheIssuesColumn covers the zoomed reading view: the
+// issues list goes, the nav tree stays as a spine.
+func TestZoomedLayoutDropsTheIssuesColumn(t *testing.T) {
+	app := &App{detailsZoomed: true, focusedPane: FocusDetails}
+	nav, issues, details := paneWidths(t, app, 180)
+
+	if issues != 0 {
+		t.Errorf("issues width = %d, want the pane left out", issues)
+	}
+	if nav != 41 || details != 139 {
+		t.Errorf("split = %d | %d; want 41 | 139", nav, details)
+	}
+}
+
+// TestZoomedLayoutDropsTheNavBelowWide covers the narrower terminals, where a
+// nav tree beside the reading measure does not fit.
+func TestZoomedLayoutDropsTheNavBelowWide(t *testing.T) {
+	for _, width := range []int{90, 60} {
+		app := &App{detailsZoomed: true, focusedPane: FocusDetails}
+		nav, issues, details := paneWidths(t, app, width)
+
+		if nav != 0 || issues != 0 {
+			t.Errorf("at %d: nav = %d, issues = %d; want both left out", width, nav, issues)
+		}
+		if details != width {
+			t.Errorf("at %d: details width = %d, want the full width", width, details)
+		}
+	}
+}
+
+// TestZoomIsReleasedWhenTheDetailsPaneIsHidden guards the arrangement that
+// would otherwise mount nothing at all.
+func TestZoomIsReleasedWhenTheDetailsPaneIsHidden(t *testing.T) {
+	app := newUXTestApp(t)
+	app.detailsHidden = false
+	app.detailsZoomed = true
+	app.focusedPane = FocusDetails
+
+	app.toggleDetailsPane()
+
+	if app.detailsZoomed {
+		t.Error("hiding the details pane left the zoom on")
+	}
+}
