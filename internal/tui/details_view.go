@@ -51,12 +51,19 @@ func markdownRendererFor(width int) *markdownWriter {
 	if writer, ok := markdownRenderers[width]; ok {
 		return writer
 	}
+	// Linear treats a single newline as a hard break; CommonMark folds one into
+	// the paragraph, which runs a line-per-thought comment together.
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStyles(themeMarkdownStyle(markdownTheme)),
 		glamour.WithWordWrap(width),
+		glamour.WithPreservedNewLines(),
 	)
 	if err != nil {
-		renderer, err = glamour.NewTermRenderer(glamour.WithAutoStyle(), glamour.WithWordWrap(width))
+		renderer, err = glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(width),
+			glamour.WithPreservedNewLines(),
+		)
 		if err != nil {
 			return nil
 		}
@@ -503,43 +510,4 @@ func (a *App) updateDetailsView() {
 	// Comments arrive with the async full-issue fetch; refresh the tab strip
 	// so its count tracks what just rendered.
 	a.updateAllPaneTitles()
-}
-
-// renderDetailsComments writes the comments tab at its fitted width.
-func (a *App) renderDetailsComments() {
-	keyColor := a.themeTags.SecondaryText
-	accentColor := a.themeTags.Accent
-	dividerColor := a.themeTags.Border
-	width := a.detailsCommentsFittedWidth
-
-	a.detailsCommentsView.Clear()
-	writer := tview.ANSIWriter(a.detailsCommentsView)
-
-	if len(a.detailsCommentsSource) == 0 {
-		_, _ = fmt.Fprintf(writer, "%sNo comments yet.[-]", keyColor)
-		return
-	}
-
-	_, _ = fmt.Fprintf(writer, "%sComments:[-] (%d)\n\n", keyColor, len(a.detailsCommentsSource))
-	for i, comment := range a.detailsCommentsSource {
-		authorDisplay := comment.Author.DisplayName
-		if authorDisplay == "" {
-			authorDisplay = comment.Author.Name
-		}
-		if comment.Author.IsMe {
-			authorDisplay = fmt.Sprintf("%s (me)", authorDisplay)
-		}
-
-		timeStr := comment.CreatedAt.Format("Jan 2, 2006 3:04 PM")
-		if !comment.UpdatedAt.Equal(comment.CreatedAt) {
-			timeStr += " (edited)"
-		}
-
-		_, _ = fmt.Fprintf(writer, "%s%s[-] %s%s[-]\n\n", accentColor, authorDisplay, keyColor, timeStr)
-		_, _ = fmt.Fprint(writer, renderMarkdownAt(comment.Body, width))
-
-		if i < len(a.detailsCommentsSource)-1 {
-			_, _ = fmt.Fprintf(writer, "\n\n%s%s[-]\n\n", dividerColor, detailsDivider(width))
-		}
-	}
 }
