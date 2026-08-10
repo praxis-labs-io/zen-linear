@@ -288,6 +288,51 @@ func TestCommentsEmptyState(t *testing.T) {
 	}
 }
 
+// TestIsCommentEdited covers the marker that used to sit on every card. Linear
+// stamps updatedAt before createdAt on a new comment, so comparing them for
+// inequality called a comment edited the moment it was written.
+func TestIsCommentEdited(t *testing.T) {
+	created := time.Date(2026, 8, 10, 19, 5, 4, 762_000_000, time.UTC)
+	tests := []struct {
+		name    string
+		updated time.Time
+		want    bool
+	}{
+		{name: "stamped before creation", updated: created.Add(-18 * time.Millisecond)},
+		{name: "identical", updated: created},
+		{name: "a moment after creation", updated: created.Add(200 * time.Millisecond)},
+		{name: "edited minutes later", updated: created.Add(4 * time.Minute), want: true},
+		{name: "edited hours later", updated: created.Add(3 * time.Hour), want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comment := linearapi.Comment{CreatedAt: created, UpdatedAt: tt.updated}
+			if got := isCommentEdited(comment); got != tt.want {
+				t.Errorf("isCommentEdited(%v) = %v, want %v", tt.updated.Sub(created), got, tt.want)
+			}
+		})
+	}
+}
+
+// TestBylineDoesNotCallANewCommentEdited drives the marker through the pane, on
+// the timestamps Linear actually returns.
+func TestBylineDoesNotCallANewCommentEdited(t *testing.T) {
+	app := newDetailsTestApp(t)
+	issue := detailsFixture()
+	created := time.Now().Add(-3 * time.Hour)
+	issue.Comments = []linearapi.Comment{{
+		ID: "comment-1", CreatedAt: created, UpdatedAt: created.Add(-18 * time.Millisecond),
+		Author: linearapi.User{ID: "u1", DisplayName: "drew"},
+		Body:   "Just written.",
+	}}
+	app.selectedIssue = issue
+	app.updateDetailsView()
+
+	if byline := commentCards(drawComments(t, app, 80))[0][1]; strings.Contains(byline, "edited") {
+		t.Errorf("byline = %q, want no edited marker on a comment nobody edited", byline)
+	}
+}
+
 func TestFormatRelativeTime(t *testing.T) {
 	tests := []struct {
 		name string

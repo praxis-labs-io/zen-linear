@@ -91,10 +91,19 @@ func (a *App) commentByline(comment linearapi.Comment) string {
 	if at := formatRelativeTime(comment.CreatedAt); at != "" {
 		parts = append(parts, at)
 	}
-	if !comment.UpdatedAt.Equal(comment.CreatedAt) {
+	if isCommentEdited(comment) {
 		parts = append(parts, "edited")
 	}
 	return a.themeTags.SecondaryText + strings.Join(parts, " · ") + "[-]"
+}
+
+// commentEditGrace is the gap below which an update is the comment's own
+// creation rather than an edit. Linear stamps updatedAt a few milliseconds
+// before createdAt on a new comment, so inequality marks every one of them.
+const commentEditGrace = time.Second
+
+func isCommentEdited(comment linearapi.Comment) bool {
+	return comment.UpdatedAt.Sub(comment.CreatedAt) > commentEditGrace
 }
 
 // commentBodyLines renders a comment body to card-width rows, already in tview
@@ -129,9 +138,8 @@ func cardRow(line string, inner int, borderTag string) string {
 }
 
 // fitTagged clips a tagged line to width and pads it back out, so the border
-// after it lands in the same column on every row. The reset closes whatever
-// glamour left open: a bare [-] would clear the foreground and leave a bold or
-// a background to bleed onto the padding and the border.
+// after it lands in the same column on every row. The full reset is what keeps
+// a bold or a background glamour left open off the padding and the border.
 func fitTagged(line string, width int) string {
 	line = truncateTagged(line, width)
 	// Re-measured rather than assumed: truncateTagged breaks on a word, so
@@ -141,9 +149,9 @@ func fitTagged(line string, width int) string {
 }
 
 // renderedLinePadding matches glamour's trailing line padding, which is styled
-// rather than plain: an escape sequence around each space, so it survives a
-// TrimRight on the text. Matched on the ANSI side, where an escape byte is
-// unambiguous and a bracket from someone's comment cannot be mistaken for one.
+// rather than plain: an escape sequence around each space, so a TrimRight on
+// the text misses it. Matched before translation, where an escape byte is
+// unambiguous and a bracket from a comment cannot be mistaken for one.
 var renderedLinePadding = regexp.MustCompile(`(?:\x1b\[[0-9;]*m|[ \t])+$`)
 
 // trimRenderedPadding strips the padding glamour lays out to its wrap width.
