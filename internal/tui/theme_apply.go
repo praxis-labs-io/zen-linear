@@ -87,15 +87,19 @@ func (a *App) applyThemeToComponents() {
 		a.updateIssuesColumnLayout()
 	}
 
+	// The background goes through TextView's own setter rather than the Box
+	// one the chain would reach, so the text style tracks it. Left behind, the
+	// two disagree and tview fills the inner rect, which the centered reading
+	// measure shows as a block narrower than the pane.
 	if a.detailsDescriptionView != nil {
 		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground).
-			SetBorderColor(a.theme.Border).
-			SetBackgroundColor(a.theme.Background)
+			SetBorderColor(a.theme.Border)
+		a.detailsDescriptionView.SetBackgroundColor(a.theme.Background)
 	}
 	if a.detailsCommentsView != nil {
 		a.detailsCommentsView.SetTitleColor(a.theme.Foreground).
-			SetBorderColor(a.theme.Border).
-			SetBackgroundColor(a.theme.Background)
+			SetBorderColor(a.theme.Border)
+		a.detailsCommentsView.SetBackgroundColor(a.theme.Background)
 	}
 
 	if a.statusBar != nil {

@@ -151,8 +151,13 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetTitle(" Details ").
 		SetTitleAlign(tview.AlignLeft).
 		SetTitleColor(a.theme.Foreground).
-		SetBorderColor(a.theme.Border).
-		SetBackgroundColor(tcell.ColorDefault)
+		SetBorderColor(a.theme.Border)
+	// Not chained: SetBorder returns the Box, whose SetBackgroundColor leaves
+	// the text style behind. tview fills the inner rect whenever the two
+	// disagree, which the centered measure shows as a block of the wrong color.
+	// The theme owns the value, the same as every other pane; a transparent
+	// theme is transparent because its Background says so.
+	a.detailsDescriptionView.SetBackgroundColor(a.theme.Background)
 	padding := a.density.DetailsPadding
 	a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 	a.detailsDescriptionView.SetDrawFunc(a.detailsDrawFunc(a.refitDetailsHeader))
@@ -166,8 +171,8 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetTitle(" Comments ").
 		SetTitleAlign(tview.AlignLeft).
 		SetTitleColor(a.theme.Foreground).
-		SetBorderColor(a.theme.Border).
-		SetBackgroundColor(tcell.ColorDefault)
+		SetBorderColor(a.theme.Border)
+	a.detailsCommentsView.SetBackgroundColor(a.theme.Background)
 	a.detailsCommentsView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 	a.detailsCommentsView.SetDrawFunc(a.detailsDrawFunc(a.refitDetailsComments))
 

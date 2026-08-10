@@ -398,3 +398,64 @@ func TestMarkdownRenderersAreSafeAcrossGoroutines(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// The centered measure leaves gutters either side of the text. tview fills the
+// inner rect with the text style whenever it disagrees with the box
+// background, which painted those gutters a different color from the pane.
+func TestTheReadingGutterMatchesThePaneBackground(t *testing.T) {
+	themes := []struct {
+		name    string
+		id      string
+		theme   Theme
+		reapply bool
+	}{
+		// Both paths set the background, and they used to disagree: at build
+		// it was hardcoded transparent, on a theme change it came from the
+		// theme. A fresh launch takes the first, so it needs its own case.
+		{"transparent at build", config.ThemeRosePineMoon, RosePineMoonTheme, false},
+		{"opaque at build", config.ThemeLinear, LinearTheme, false},
+		{"transparent after a theme change", config.ThemeRosePineMoon, RosePineMoonTheme, true},
+		{"opaque after a theme change", config.ThemeLinear, LinearTheme, true},
+	}
+
+	for _, tc := range themes {
+		t.Run(tc.name, func(t *testing.T) {
+			app := NewApp(linearapi.ClientConfig{}, config.Config{CacheTTL: time.Minute, Theme: tc.id}, nil)
+			stopBackgroundWorkOnCleanup(t, app)
+			app.queueUpdateDraw = func(f func()) { f() }
+			if tc.reapply {
+				app.applyThemeToComponents()
+			}
+			app.selectedIssue = detailsFixture()
+			app.updateDetailsView()
+
+			const width = 180
+			screen := tcell.NewSimulationScreen("UTF-8")
+			if err := screen.Init(); err != nil {
+				t.Fatalf("init simulation screen: %v", err)
+			}
+			t.Cleanup(screen.Fini)
+			screen.SetSize(width, 40)
+			app.detailsDescriptionView.SetRect(0, 0, width, 40)
+			app.detailsDescriptionView.Draw(screen)
+			screen.Show()
+
+			cells, screenWidth, _ := screen.GetContents()
+			// Row 10 is inside the content, past the title row.
+			const row = 10
+			backgrounds := map[tcell.Color]int{}
+			for x := 1; x < screenWidth-1; x++ {
+				_, bg, _ := cells[row*screenWidth+x].Style.Decompose()
+				backgrounds[bg]++
+			}
+			if len(backgrounds) > 1 {
+				t.Errorf("row %d paints %d different backgrounds across the pane, want one: %v", row, len(backgrounds), backgrounds)
+			}
+			// One color is not enough: agreeing on the terminal default would
+			// also be uniform, and wrong for a theme that paints its own.
+			if _, ok := backgrounds[tc.theme.Background]; !ok {
+				t.Errorf("pane paints %v, want the theme background %v", backgrounds, tc.theme.Background)
+			}
+		})
+	}
+}
