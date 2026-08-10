@@ -30,6 +30,27 @@ func applyCommandKeybindings(commands []Command, bindings map[string]string) {
 }
 
 // actionKey returns the configured key for a UI action id, or the fallback.
+// commandShortcutLabel returns the key a palette command answers to, for help
+// text that would otherwise state a default the user has remapped. A command
+// left without a shortcut is named by its palette entry instead.
+func (a *App) commandShortcutLabel(id string) string {
+	if a.paletteCtrl != nil {
+		for _, cmd := range a.paletteCtrl.commands {
+			if cmd.ID != id {
+				continue
+			}
+			if cmd.ShortcutDisplay != "" {
+				return cmd.ShortcutDisplay
+			}
+			if cmd.ShortcutRune != 0 {
+				return string(cmd.ShortcutRune)
+			}
+			return ":" + cmd.Title
+		}
+	}
+	return ":" + id
+}
+
 func (a *App) actionKey(action string, fallback rune) rune {
 	if key, ok := a.config.Keybindings[action]; ok {
 		if runes := []rune(key); len(runes) == 1 {

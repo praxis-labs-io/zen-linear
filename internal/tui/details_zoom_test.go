@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -83,6 +84,50 @@ func TestUnzoomReturnsToThePaneTheZoomCameFrom(t *testing.T) {
 	}
 }
 
+// The zoom forces the details pane open. Every way back out has to put that
+// right, not just the one that pairs with the zoom key, or the rail is left
+// on screen for someone who never opened it.
+func TestEveryExitFromTheZoomRestoresAClosedDetailsPane(t *testing.T) {
+	exits := map[string]func(*App){
+		"v again":       zoomKey,
+		"pane number 2": func(a *App) { a.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '2', tcell.ModNone)) },
+		"escape":        func(a *App) { a.handleGlobalKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)) },
+		"navigation selection": func(a *App) {
+			a.onNavigationSelected(&NavigationNode{ID: "team-1", Text: "Engineering", TeamID: "team-1", IsTeam: true})
+		},
+		"workspace reset": (*App).resetCachedState,
+	}
+
+	for name, exit := range exits {
+		t.Run(name, func(t *testing.T) {
+			app := newZoomTestApp(t)
+			app.layoutMode = layoutWide
+			app.focusedPane = FocusIssues
+			if !app.detailsHidden {
+				t.Fatal("details pane starts open; this test covers the closed case")
+			}
+
+			zoomKey(app)
+			if !app.detailsZoomed || app.detailsHidden {
+				t.Fatal("the zoom did not open the details pane")
+			}
+
+			exit(app)
+
+			if app.detailsZoomed {
+				t.Errorf("%s left the zoom on", name)
+			}
+			if !app.detailsHidden {
+				t.Errorf("%s left the details rail on screen, when it was closed before the zoom", name)
+			}
+			// The flag is bookkeeping; what is mounted is what the user sees.
+			if !mountsIssuesColumn(app) {
+				t.Errorf("%s left the issues column off screen", name)
+			}
+		})
+	}
+}
+
 // The details pane opens on demand, so zooming from a layout that had it
 // closed must not leave it open afterwards.
 func TestUnzoomRestoresAClosedDetailsPane(t *testing.T) {
@@ -106,17 +151,44 @@ func TestUnzoomRestoresAClosedDetailsPane(t *testing.T) {
 	}
 }
 
+// contentPanes lists the panes currently mounted in the content flex, which is
+// what is actually on screen. Clearing the zoom flag without a rebuild leaves
+// the old arrangement up, so the flag alone proves nothing.
+func contentPanes(app *App) []tview.Primitive {
+	panes := make([]tview.Primitive, 0, app.contentFlex.GetItemCount())
+	for i := 0; i < app.contentFlex.GetItemCount(); i++ {
+		panes = append(panes, app.contentFlex.GetItem(i))
+	}
+	return panes
+}
+
+func mountsIssuesColumn(app *App) bool {
+	for _, pane := range contentPanes(app) {
+		if pane == app.issuesColumn {
+			return true
+		}
+	}
+	return false
+}
+
 // Picking a list is asking to see it, so the zoom covering it gives way.
-func TestSelectingANavigationNodeReleasesTheZoom(t *testing.T) {
+func TestSelectingANavigationNodeBringsTheIssuesListBack(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
-	app.detailsZoomed = true
-	app.focusedPane = FocusDetails
+	app.layoutMode = layoutWide
+	app.focusedPane = FocusNavigation
+	zoomKey(app)
+	if mountsIssuesColumn(app) {
+		t.Fatal("the zoom did not take the issues column off screen")
+	}
 
 	app.onNavigationSelected(&NavigationNode{ID: "team-1", Text: "Engineering", TeamID: "team-1", IsTeam: true})
 
 	if app.detailsZoomed {
-		t.Error("selecting a navigation node left the issues list hidden behind the zoom")
+		t.Error("selecting a navigation node left the zoom on")
+	}
+	if !mountsIssuesColumn(app) {
+		t.Error("the issues column is still off screen after selecting a list")
 	}
 }
 

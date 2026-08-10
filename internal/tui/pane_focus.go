@@ -75,7 +75,7 @@ func (a *App) focusPane(pane FocusTarget) {
 		// asking for it by number releases the zoom the way 2 does. Wide, the
 		// tree is already there and the zoom can stay.
 		if a.layoutMode != layoutWide {
-			a.detailsZoomed = false
+			a.releaseDetailsZoom()
 		}
 	case FocusDetails:
 		a.detailsHidden = false
@@ -84,7 +84,7 @@ func (a *App) focusPane(pane FocusTarget) {
 	case FocusIssues:
 		// The issues list is not on screen while zoomed, so asking for it by
 		// number is also how the zoom is released.
-		a.detailsZoomed = false
+		a.releaseDetailsZoom()
 	case FocusPalette:
 	}
 	a.focusedPane = pane

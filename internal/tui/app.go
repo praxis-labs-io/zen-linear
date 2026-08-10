@@ -568,7 +568,10 @@ func (a *App) resetCachedState() {
 	a.resetNavigationTree()
 	// The selection this zoom was opened on is going away, so the reading
 	// view would be left holding the empty state with the list still hidden.
-	a.detailsZoomed = false
+	if a.detailsZoomed {
+		a.releaseDetailsZoom()
+		a.rebuildContentLayout()
+	}
 	a.currentUser = nil
 	a.teamUsers = nil
 	a.teamProjects = nil

@@ -178,7 +178,7 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 // leaveDetailsForIssues moves focus back to the issues list, releasing the zoom
 // that was covering it.
 func (a *App) leaveDetailsForIssues() {
-	a.detailsZoomed = false
+	a.releaseDetailsZoom()
 	a.focusedPane = FocusIssues
 	a.rebuildContentLayout()
 	a.updateFocus()

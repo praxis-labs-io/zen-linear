@@ -135,6 +135,18 @@ func (a *App) toggleDetailsPane() {
 	}
 }
 
+// releaseDetailsZoom undoes what the zoom changed: the flag, and the details
+// pane it forced open. Every way out of a zoom goes through here, so the
+// layout lands the same whichever key ended it. Restoring focus is the
+// caller's, since that is the one thing they disagree on.
+func (a *App) releaseDetailsZoom() {
+	if !a.detailsZoomed {
+		return
+	}
+	a.detailsZoomed = false
+	a.detailsHidden = a.zoomPreviousHidden
+}
+
 // toggleDetailsZoom widens the details pane over the issues list, for reading a
 // whole issue rather than glancing at one.
 func (a *App) toggleDetailsZoom() {
@@ -147,8 +159,7 @@ func (a *App) toggleDetailsZoom() {
 	// already in leaves you in it, and a details pane that was closed before
 	// the zoom closes again after it.
 	if a.detailsZoomed {
-		a.detailsZoomed = false
-		a.detailsHidden = a.zoomPreviousHidden
+		a.releaseDetailsZoom()
 		a.focusedPane = a.zoomPreviousPane
 	} else {
 		a.zoomPreviousPane = a.focusedPane

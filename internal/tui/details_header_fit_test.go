@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -332,4 +333,68 @@ func TestDescriptionTablesFitTheReadingMeasure(t *testing.T) {
 			}
 		}
 	}
+}
+
+// The rule closing the metadata header spans the measure. Baked into the header
+// lines at render time it stayed at whatever width the pane first drew at, so
+// zooming left a short stub under a full-width header.
+func TestTheHeaderDividerFollowsTheWidth(t *testing.T) {
+	app := newDetailsTestApp(t)
+
+	dividerWidth := func(width int) int {
+		widest := 0
+		lines := drawDetails(t, app, width)
+		// The first and last rows are the pane's own border, which is drawn
+		// from the same rune and spans the full width by design.
+		for _, line := range lines[1 : len(lines)-1] {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.Trim(trimmed, "─") != "" {
+				continue
+			}
+			if n := len([]rune(trimmed)); n > widest {
+				widest = n
+			}
+		}
+		return widest
+	}
+
+	narrow := dividerWidth(50)
+	wide := dividerWidth(180)
+
+	if narrow == 0 || wide == 0 {
+		t.Fatalf("no divider drawn: narrow %d, wide %d", narrow, wide)
+	}
+	if wide <= narrow {
+		t.Errorf("divider is %d cells at width 180 and %d at width 50, want it to follow the measure", wide, narrow)
+	}
+	if wide != detailsMeasure {
+		t.Errorf("divider is %d cells at width 180, want the %d measure", wide, detailsMeasure)
+	}
+}
+
+// The agent output modal renders unwrapped from its own goroutine while the
+// details pane renders at its measure on the event loop. A single cached
+// renderer both raced and handed each caller the other's wrap width.
+func TestMarkdownRenderersAreSafeAcrossGoroutines(t *testing.T) {
+	initMarkdownRenderer(LinearTheme)
+	const doc = "| a | b |\n| --- | --- |\n| one | two |\n"
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			width := 0
+			if i%2 == 0 {
+				width = detailsMeasure
+			}
+			for range 20 {
+				if out := renderMarkdownAt(doc, width); out == "" {
+					t.Errorf("empty render at width %d", width)
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
 }

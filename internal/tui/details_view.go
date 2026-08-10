@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/gdamore/tcell/v2"
@@ -10,28 +11,32 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
-// The shared glamour renderer, plus the theme and wrap width it was built for.
-// Rebuilding is only needed when one of those two moves.
+// Renderers are cached per wrap width and rebuilt when the theme changes.
+// A single slot is not enough: the agent output modal renders unwrapped from
+// its own goroutine while the details pane renders at its measure on the event
+// loop, so one slot both races and hands each caller the other's width. The
+// mutex covers rendering too, since a TermRenderer is not safe to share.
 var (
-	markdownRenderer  *glamour.TermRenderer
+	markdownMu        sync.Mutex
+	markdownRenderers = map[int]*glamour.TermRenderer{}
 	markdownTheme     = LinearTheme
-	markdownWrapWidth = -1
 )
 
 // initMarkdownRenderer records the theme markdown is rendered in and drops the
-// renderer built for the previous one.
+// renderers built for the previous one.
 func initMarkdownRenderer(theme Theme) {
+	markdownMu.Lock()
+	defer markdownMu.Unlock()
 	markdownTheme = theme
-	markdownRenderer = nil
-	markdownWrapWidth = -1
+	clear(markdownRenderers)
 }
 
-// markdownRendererFor returns a renderer wrapping at width, building one when
-// the width or the theme has moved. Width 0 leaves glamour's wrapping off, for
-// callers whose view does its own.
+// markdownRendererFor returns a renderer wrapping at width, building one the
+// first time that width is asked for. Width 0 leaves glamour's wrapping off,
+// for callers whose view does its own. Callers hold markdownMu.
 func markdownRendererFor(width int) *glamour.TermRenderer {
-	if markdownRenderer != nil && markdownWrapWidth == width {
-		return markdownRenderer
+	if renderer, ok := markdownRenderers[width]; ok {
+		return renderer
 	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStyles(themeMarkdownStyle(markdownTheme)),
@@ -43,8 +48,7 @@ func markdownRendererFor(width int) *glamour.TermRenderer {
 			return nil
 		}
 	}
-	markdownRenderer = renderer
-	markdownWrapWidth = width
+	markdownRenderers[width] = renderer
 	return renderer
 }
 
@@ -53,6 +57,9 @@ func markdownRendererFor(width int) *glamour.TermRenderer {
 // out at its natural width, which the text view then re-wraps into a heap.
 // Falls back to plain text if rendering fails.
 func renderMarkdownAt(content string, width int) string {
+	markdownMu.Lock()
+	defer markdownMu.Unlock()
+
 	renderer := markdownRendererFor(max(0, width))
 	if renderer == nil {
 		return content
@@ -239,9 +246,19 @@ func (a *App) renderDetailsDescription() {
 		return
 	}
 
-	fitted := make([]string, len(a.detailsHeaderLines))
-	for i, line := range a.detailsHeaderLines {
-		fitted[i] = truncateTagged(line, a.detailsFittedWidth)
+	fitted := make([]string, 0, len(a.detailsHeaderLines)+3)
+	for _, line := range a.detailsHeaderLines {
+		fitted = append(fitted, truncateTagged(line, a.detailsFittedWidth))
+	}
+	if len(fitted) > 0 {
+		gap := a.density.DetailsSectionGap
+		for i := 0; i < gap; i++ {
+			fitted = append(fitted, "")
+		}
+		fitted = append(fitted, fmt.Sprintf("%s%s[-]", a.themeTags.Border, detailsDivider(a.detailsFittedWidth)))
+		for i := 0; i < gap; i++ {
+			fitted = append(fitted, "")
+		}
 	}
 
 	// The compact density ends the header on the divider with no trailing gap
@@ -330,7 +347,6 @@ func (a *App) updateDetailsView() {
 	keyColor := a.themeTags.SecondaryText
 	valColor := a.themeTags.Foreground
 	accentColor := a.themeTags.Accent
-	dividerColor := a.themeTags.Border
 	sectionGap := a.density.DetailsSectionGap
 
 	// ===== Update Description/Metadata View =====
@@ -453,14 +469,8 @@ func (a *App) updateDetailsView() {
 		}
 	}
 
-	for i := 0; i < sectionGap; i++ {
-		headerLines = append(headerLines, "")
-	}
-	headerLines = append(headerLines, fmt.Sprintf("%s%s[-]", dividerColor, detailsDivider(a.detailsFittedWidth)))
-	for i := 0; i < sectionGap; i++ {
-		headerLines = append(headerLines, "")
-	}
-
+	// The rule closing the header is drawn at render time, not baked in here:
+	// it spans the measure, and a refit only re-truncates these lines.
 	a.detailsHeaderLines = headerLines
 	// The raw markdown is kept, not just its rendering, because the width it
 	// is laid out at can change without the issue changing.

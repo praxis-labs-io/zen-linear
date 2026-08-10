@@ -186,7 +186,12 @@ func (a *App) onNavigationSelected(node *NavigationNode, issueID ...string) {
 	a.sortOverridden = false
 
 	// Picking a list is asking to see it, so the zoom covering it gives way.
-	a.detailsZoomed = false
+	// The refresh below does not move focus, so nothing else would put the
+	// issues column back on screen.
+	if a.detailsZoomed {
+		a.releaseDetailsZoom()
+		a.rebuildContentLayout()
+	}
 
 	// A favorited issue is not a filter of its own: scope to its team and ask
 	// the refresh to land on the issue via the target-issue plumbing.

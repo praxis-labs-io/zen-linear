@@ -33,6 +33,10 @@ func (a *App) updateStatusBar() {
 	case FocusIssues:
 		helpText = fmt.Sprintf("%sj/k: navigate | Enter: select | Tab/→/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
 	case FocusDetails:
+		// Both keys are remappable, so the hint reads them back rather than
+		// stating the defaults at a user who has moved them.
+		tabs := fmt.Sprintf("%c%c", a.actionKey("tab_prev", '{'), a.actionKey("tab_next", '}'))
+		zoom := a.commandShortcutLabel("zoom_details")
 		if a.detailsZoomed {
 			// Below the wide breakpoint the zoom leaves no nav tree to step
 			// onto, so offering the key there would be a lie.
@@ -40,10 +44,10 @@ func (a *App) updateStatusBar() {
 			if a.layoutMode == layoutWide && !a.navigationHidden {
 				toNav = "←/h: navigation | "
 			}
-			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | {}: switch description/comments | %sv: unzoom | Esc: back to list | :: palette | /: search | q: quit[-]", keyColor, toNav)
+			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s%s: unzoom | Esc: back to list | :: palette | /: search | q: quit[-]", keyColor, tabs, toNav, zoom)
 			break
 		}
-		helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | {}: switch description/comments | v: zoom | →/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s: zoom | →/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor, tabs, zoom)
 	case FocusPalette:
 		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: execute | Esc: close[-]", keyColor)
 	default:
