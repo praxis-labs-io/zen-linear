@@ -215,13 +215,57 @@ func TestSingleNewlinesAreHardBreaks(t *testing.T) {
 func TestNarrowCommentsPaneDoesNotPanic(t *testing.T) {
 	app := newCommentsTestApp(t)
 
-	for _, width := range []int{0, 1, 3, 5, 11, 12, 16} {
-		lines := drawComments(t, app, width)
-		for i, line := range lines {
-			if got := len([]rune(line)); got > width {
-				t.Errorf("width %d: row %d runs to %d cells: %q", width, i, got, line)
+	for _, width := range []int{0, 1, 3, 5, 11, 12, 16, 20} {
+		// A card wider than the pane is wrapped by the text view, which shows
+		// up as rows of uneven width rather than as an over-long row: the
+		// harness only ever reads back what fits on screen.
+		for i, card := range commentCards(drawComments(t, app, width)) {
+			for row, line := range card {
+				if got, want := len([]rune(line)), len([]rune(card[0])); got != want {
+					t.Errorf("width %d: card %d row %d is %d cells, want %d: %q", width, i, row, got, want, line)
+				}
 			}
 		}
+	}
+}
+
+// TestCommentCardKeepsAnUnbreakableLine covers what glamour cannot wrap: a bare
+// URL, a code block, a table. Clipped to the card, their tails were lost.
+func TestCommentCardKeepsAnUnbreakableLine(t *testing.T) {
+	app := newDetailsTestApp(t)
+	issue := detailsFixture()
+	now := time.Now()
+	const url = "https://example.com/a/very/long/path/that/cannot/be/broken/on/a/space/at/all/ever"
+	issue.Comments = []linearapi.Comment{{
+		ID: "comment-1", CreatedAt: now, UpdatedAt: now,
+		Author: linearapi.User{ID: "u1", DisplayName: "drew"},
+		Body:   "See " + url + " for details.",
+	}}
+	app.selectedIssue = issue
+	app.updateDetailsView()
+
+	card := commentCards(drawComments(t, app, 60))[0]
+	body := strings.Join(strings.Fields(strings.ReplaceAll(strings.Join(card, ""), "│", "")), "")
+	if !strings.Contains(body, url) {
+		t.Errorf("the URL did not survive the card:\n%s", strings.Join(card, "\n"))
+	}
+	if strings.Contains(strings.Join(card, ""), "…") {
+		t.Errorf("the body was clipped rather than wrapped:\n%s", strings.Join(card, "\n"))
+	}
+}
+
+// TestUnwrappedMarkdownIsUntouchedByHardBreaks covers the renderer the agent
+// output modal uses. Glamour joins soft breaks while wrapping, so at width 0,
+// where wrapping is off, hard breaks change nothing: the modal reads the same
+// before and after, and it needs no renderer of its own.
+func TestUnwrappedMarkdownIsUntouchedByHardBreaks(t *testing.T) {
+	initMarkdownRenderer(LinearTheme)
+
+	if got := strings.Count(strings.TrimSpace(renderMarkdown("one\ntwo\nthree")), "\n"); got != 2 {
+		t.Errorf("unwrapped render kept %d breaks, want the source's 2", got)
+	}
+	if got := strings.Count(strings.TrimSpace(renderMarkdownAt("one\ntwo\nthree", 40)), "\n"); got != 2 {
+		t.Errorf("render at width 40 kept %d breaks, want Linear's hard breaks", got)
 	}
 }
 

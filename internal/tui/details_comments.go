@@ -63,19 +63,19 @@ func (a *App) commentCard(comment linearapi.Comment, width int) []string {
 		cardEdge("├", "┤", width, border),
 	}
 	for _, line := range commentBodyLines(comment.Body, inner) {
-		lines = append(lines, cardRow(line, inner, border))
+		for _, row := range wrapTagged(line, inner) {
+			lines = append(lines, cardRow(row, inner, border))
+		}
 	}
 	return append(lines, cardEdge("╰", "╯", width, border))
 }
 
 // commentPlain drops the frame on a pane too narrow to hold one, where the box
-// would take a third of every line.
+// would take a third of every line. The body goes out unfitted for the text
+// view to wrap, since there is no border here for a long line to break.
 func (a *App) commentPlain(comment linearapi.Comment, width int) []string {
 	lines := []string{truncateTagged(a.commentByline(comment), width)}
-	for _, line := range commentBodyLines(comment.Body, width) {
-		lines = append(lines, truncateTagged(line, width))
-	}
-	return lines
+	return append(lines, commentBodyLines(comment.Body, width)...)
 }
 
 // commentByline is the line above a comment: who, what they did, and when.
@@ -106,6 +106,16 @@ func commentBodyLines(body string, width int) []string {
 		lines = append(lines, tview.TranslateANSI(trimRenderedPadding(line)))
 	}
 	return lines
+}
+
+// wrapTagged breaks a line that overruns the card. Glamour wraps prose to the
+// measure but cannot break a bare URL and does not wrap code blocks or tables,
+// and a card that clipped those would lose the tail for good.
+func wrapTagged(line string, width int) []string {
+	if wrapped := tview.WordWrap(line, width); len(wrapped) > 0 {
+		return wrapped
+	}
+	return []string{line}
 }
 
 // cardEdge draws one of the card's horizontal runs, corners included.
