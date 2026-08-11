@@ -163,9 +163,9 @@ Zoom widens the details pane over the issues list, keeping the navigation
 tree. Text caps at 90 columns so a wide terminal stays readable.
 
 A command bound under `keybindings` takes the key from whatever held it,
-including a default like `[`. Movement keys are the exception: `h`, `j`, `k`,
-`l`, `g`, and `G` stay with the list. An id matching neither a command nor an
-action is ignored, and says so in the log.
+including a default like `[`. A binding is ignored, and says so in the log,
+when it names a movement key (`h`, `j`, `k`, `l`, `g`, `G`, which stay with
+the list) or an id matching neither a command nor an action.
 
 ## Credits
 

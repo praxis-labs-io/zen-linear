@@ -101,10 +101,22 @@ func TestBindingForAUIActionTakesTheRune(t *testing.T) {
 	}
 }
 
-// TestUIActionIDsCoverEveryActionKeyCallSite keeps the action list in step with
-// the handlers. An id missing from it is treated as unknown, so a binding on it
-// would be dropped instead of taking the key the action answers to.
-func TestUIActionIDsCoverEveryActionKeyCallSite(t *testing.T) {
+// TestActionStealRespectsItsScope covers an action that answers from one pane.
+// The favorite keys reach the navigation tree only, so binding one to an issue
+// command's rune takes nothing: the two can never both answer.
+func TestActionStealRespectsItsScope(t *testing.T) {
+	commands := []Command{{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'}}
+	applyCommandKeybindings(commands, map[string]string{"favorite_move_up": "x"})
+
+	if commands[0].ShortcutRune != 'x' {
+		t.Errorf("archive lost x to a navigation action, want it kept")
+	}
+}
+
+// TestUIActionScopesCoverEveryActionKeyCallSite keeps the action list in step
+// with the handlers. An id missing from it is treated as unknown, so a binding
+// on it would be dropped instead of taking the key the action answers to.
+func TestUIActionScopesCoverEveryActionKeyCallSite(t *testing.T) {
 	sources, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatalf("globbing the package sources: %v", err)
@@ -119,8 +131,8 @@ func TestUIActionIDsCoverEveryActionKeyCallSite(t *testing.T) {
 		}
 		for _, match := range callSite.FindAllStringSubmatch(string(body), -1) {
 			found++
-			if !uiActionIDs[match[1]] {
-				t.Errorf("%s calls actionKey(%q), which is missing from uiActionIDs", source, match[1])
+			if _, ok := uiActionScopes[match[1]]; !ok {
+				t.Errorf("%s calls actionKey(%q), which is missing from uiActionScopes", source, match[1])
 			}
 		}
 	}
@@ -175,18 +187,43 @@ func TestActionKeyStandsWhenTheBoundCommandIsOutOfScope(t *testing.T) {
 	}
 }
 
-// TestMovementRunesStayWithTheWidgets verifies a binding cannot take one. j
-// bound to a command would strand the cursor in the list.
+// TestMovementRunesStayWithTheWidgets verifies a binding cannot take one, from
+// either side. A command on j would strand the cursor in the list, and g is the
+// sharper case: nothing else claims it, so only this rule keeps go-to-top.
 func TestMovementRunesStayWithTheWidgets(t *testing.T) {
-	app := bindingApp(t, map[string]string{"archive": "j"})
-	app.focusedPane = FocusIssues
+	for _, tt := range []struct {
+		name    string
+		binding map[string]string
+		key     rune
+	}{
+		{"command on j", map[string]string{"archive": "j"}, 'j'},
+		{"command on g", map[string]string{"archive": "g"}, 'g'},
+		{"action on j", map[string]string{"quit": "j"}, 'j'},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			app := bindingApp(t, tt.binding)
+			app.focusedPane = FocusIssues
 
-	event := tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone)
-	if got := app.handleGlobalKey(event); got != event {
-		t.Error("j was claimed by a keybinding instead of reaching the table")
+			event := tcell.NewEventKey(tcell.KeyRune, tt.key, tcell.ModNone)
+			if got := app.handleGlobalKey(event); got != event {
+				t.Errorf("%q was claimed by a keybinding instead of reaching the table", tt.key)
+			}
+			if app.pages.HasPage("confirmation") {
+				t.Errorf("%q opened the archive confirmation", tt.key)
+			}
+		})
 	}
-	if app.pages.HasPage("confirmation") {
-		t.Error("j opened the archive confirmation")
+}
+
+// TestAMovementBindingLeavesTheDefaultAlone pins what a rejected binding does
+// to the command that asked for it: nothing. Clearing the rune instead would
+// answer one unusable key with a second one.
+func TestAMovementBindingLeavesTheDefaultAlone(t *testing.T) {
+	commands := []Command{{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'}}
+	applyCommandKeybindings(commands, map[string]string{"archive": "j"})
+
+	if commands[0].ShortcutRune != 'x' {
+		t.Errorf("archive = %q, want its default x kept", commands[0].ShortcutRune)
 	}
 }
 

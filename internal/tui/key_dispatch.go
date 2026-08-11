@@ -54,7 +54,7 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyRune:
 		// A command bound by id beats the action holding that rune by default.
 		// Out of scope for this pane it does not run, and the action answers.
-		if r := event.Rune(); !isMovementRune(r) && a.commandBoundTo(r) && a.runCommandShortcut(r) {
+		if r := event.Rune(); a.commandBoundTo(r) && a.runCommandShortcut(r) {
 			return nil
 		}
 		switch event.Rune() {

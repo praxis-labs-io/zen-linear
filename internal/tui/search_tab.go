@@ -234,7 +234,10 @@ func (a *App) handleSearchInputKey(event *tcell.EventKey) *tcell.EventKey {
 		a.searchInputFocused = false
 		a.jumpToSection(a.searchReturnSection, 1)
 		return nil
-	case tcell.KeyEnter, tcell.KeyDown:
+	case tcell.KeyEnter, tcell.KeyDown, tcell.KeyTab:
+		// Tab walks the pane's own controls, and the results are the only other
+		// one here. Without it the query box has no key that leaves it: h and l
+		// type, and Esc empties the query before it lets go.
 		if len(a.searchIssueRows) == 0 {
 			return nil
 		}
