@@ -63,8 +63,10 @@ func (a *App) buildDetailsCommentsPanel() {
 	// and disappear as you type.
 	a.detailsComposeArea.SetChangedFunc(a.applyPostButtonTheme)
 
+	// No Box of its own: a fill set here is baked at construction and a theme
+	// change would leave it as a stripe across the compose box. Left unpainted,
+	// the box beneath shows through and tracks the theme.
 	buttonRow := tview.NewFlex()
-	buttonRow.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
 	buttonRow.
 		AddItem(nil, 0, 1, false).
 		AddItem(a.detailsComposePost, len([]rune(postLabel)), 0, false)
@@ -88,8 +90,11 @@ func (a *App) buildDetailsCommentsPanel() {
 		SetBackgroundColor(a.theme.Background)
 	padding := a.density.DetailsPadding
 	a.detailsCommentsPanel.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	// The card stack is the panel's focus item. With none flagged, Flex.Focus
+	// falls through to the panel's own Box, whose InputHandler is nil, and any
+	// focus tview delegates on its own leaves the tab dead to the keyboard.
 	a.detailsCommentsPanel.
-		AddItem(a.detailsCommentsView, 0, 1, false).
+		AddItem(a.detailsCommentsView, 0, 1, true).
 		// The cards are separated by a blank line; the box gets the same gap.
 		AddItem(nil, 1, 0, false).
 		AddItem(a.detailsComposeBox, composeBoxRows, 0, false)
@@ -289,9 +294,14 @@ func (a *App) stepCommentsFocus(backward bool) bool {
 // reporting whether it got there. It sets the fields itself rather than calling
 // focusPane, which enters the details pane on the description.
 func (a *App) openComposeBox() bool {
-	if a.detailsCommentsPanel == nil || a.GetSelectedIssue() == nil {
+	issue := a.GetSelectedIssue()
+	if a.detailsCommentsPanel == nil || issue == nil {
 		return false
 	}
+	// The selection moves at once but the draft sync rides the detail debounce,
+	// so opening inside that window would show the previous issue's words and
+	// swap them out mid-sentence when the debounce fired.
+	a.syncComposeDraft(issue.ID)
 	a.detailsHidden = false
 	a.focusedPane = FocusDetails
 	a.focusedDetailsView = true
@@ -357,12 +367,15 @@ func (a *App) postComment() {
 	if body == "" {
 		return
 	}
-	issue := a.GetSelectedIssue()
-	if issue == nil {
+	// The draft's own issue, not whatever is selected this instant. A selection
+	// move writes selectedIssue immediately but defers syncComposeDraft behind
+	// the detail debounce, so reading the selection here can send one issue's
+	// words to another — the swap the draft map exists to prevent.
+	issueID := a.composeDraftIssueID
+	if issueID == "" {
 		a.flashStatus("No issue selected")
 		return
 	}
-	issueID := issue.ID
 
 	a.detailsComposeArea.SetText("", false)
 	// The keyboard goes with the comment. The box is empty and no longer taking
@@ -377,8 +390,12 @@ func (a *App) postComment() {
 		a.QueueUpdateDraw(func() {
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.details_compose: create comment failed issue=%s", issueID)
-				a.updateStatusBarWithError(err)
+				// Restore first: it moves focus, and the status bar rebuilt on
+				// the way paints statusMessage, which is still the posting
+				// flash. Clearing that is what leaves the error on screen.
 				a.restoreComposeDraft(issueID, body)
+				a.statusMessage = ""
+				a.updateStatusBarWithError(err)
 				return
 			}
 			logger.Info("tui.details_compose: comment posted issue=%s", issueID)
@@ -398,7 +415,7 @@ func (a *App) appendComment(issueID string, comment linearapi.Comment) {
 		a.issuesMu.Unlock()
 		return
 	}
-	selected.Comments = append(selected.Comments, comment)
+	selected.Comments = insertCommentInOrder(selected.Comments, comment)
 	comments := selected.Comments
 	a.issuesMu.Unlock()
 
@@ -407,6 +424,23 @@ func (a *App) appendComment(issueID string, comment linearapi.Comment) {
 	a.detailsCommentsView.ScrollToEnd()
 	// The tab strip carries the count.
 	a.updateAllPaneTitles()
+}
+
+// insertCommentInOrder places a comment by its timestamp. Two posts can be in
+// flight at once and answer out of order, and the card stack reads oldest
+// first, so arrival order is not the order to render in.
+func insertCommentInOrder(comments []linearapi.Comment, comment linearapi.Comment) []linearapi.Comment {
+	at := len(comments)
+	for i, held := range comments {
+		if held.CreatedAt.After(comment.CreatedAt) {
+			at = i
+			break
+		}
+	}
+	comments = append(comments, linearapi.Comment{})
+	copy(comments[at+1:], comments[at:])
+	comments[at] = comment
+	return comments
 }
 
 // restoreComposeDraft puts a failed comment back where it was written.

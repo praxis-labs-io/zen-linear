@@ -51,11 +51,11 @@ func (a *App) updateStatusBar() {
 			// Every other key in the box is a character in the comment, so the
 			// hint names only the ones that are not. Read off the field, not
 			// live focus: a focus callback can reach here from inside a draw.
-			post := "Ctrl+Enter: post"
+			post, tab := "Ctrl+Enter: post", "Tab: Post button"
 			if a.commentsFocus == commentsFocusPost {
-				post = "Enter: post"
+				post, tab = "Enter: post", "Tab: next pane"
 			}
-			helpText = fmt.Sprintf("%s%s | Tab: Post button | Esc: back to comments[-]", keyColor, post)
+			helpText = fmt.Sprintf("%s%s | %s | Esc: back to comments[-]", keyColor, post, tab)
 			break
 		}
 		if a.detailsZoomed {

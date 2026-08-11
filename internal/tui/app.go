@@ -596,7 +596,6 @@ func (a *App) resetCachedState() {
 	a.sortOverridden = false
 	a.searchQuery = ""
 	a.clearSearchResults()
-	a.clearComposeDrafts()
 	if a.searchInput != nil {
 		a.searchInput.SetText("")
 	}

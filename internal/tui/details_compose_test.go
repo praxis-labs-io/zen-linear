@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -513,4 +514,187 @@ func TestClickingThePostButtonSends(t *testing.T) {
 		t.Errorf("posted %q, want the buffer", body)
 	}
 	waitForDraw(t, drawn)
+}
+
+// TestPostGoesToTheDraftsOwnIssue covers the window a selection move opens: it
+// writes selectedIssue at once but defers the draft sync behind the detail
+// debounce, so reading the selection at post time sends one issue's words to
+// another.
+func TestPostGoesToTheDraftsOwnIssue(t *testing.T) {
+	posted := make(chan string, 1)
+	app, drawn := newComposeTestApp(t)
+	app.createCommentFunc = func(_ context.Context, input linearapi.CreateCommentInput) (linearapi.Comment, error) {
+		posted <- input.IssueID
+		return linearapi.Comment{ID: "new", Body: input.Body}, nil
+	}
+	first := app.selectedIssue.ID
+
+	typeRunes(t, app, "written for the first issue")
+
+	// The selection moves; the draft sync has not run yet.
+	second := commentedIssueFixture()
+	second.ID = "issue-2"
+	app.issuesMu.Lock()
+	app.selectedIssue = second
+	app.issuesMu.Unlock()
+
+	app.postComment()
+
+	if got := <-posted; got != first {
+		t.Errorf("posted to issue %q, want %q, the issue the words were written for", got, first)
+	}
+	waitForDraw(t, drawn)
+}
+
+// TestSavingSettingsKeepsTheDraft covers a settings save running through
+// resetCachedState. It empties the pane, so the draft is held against its issue
+// rather than shown, and it comes back when the issue does. Saving settings is
+// no reason to lose what someone wrote.
+func TestSavingSettingsKeepsTheDraft(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	issue := app.selectedIssue
+	typeRunes(t, app, "still being written")
+
+	app.resetCachedState()
+
+	if got := app.composeDrafts[issue.ID]; got != "still being written" {
+		t.Fatalf("held draft for %s is %q, want it kept across the save", issue.Identifier, got)
+	}
+
+	app.issuesMu.Lock()
+	app.selectedIssue = issue
+	app.issuesMu.Unlock()
+	app.updateDetailsView()
+
+	if got := app.detailsComposeArea.GetText(); got != "still being written" {
+		t.Errorf("box holds %q with the issue back, want the draft", got)
+	}
+}
+
+// TestSwitchingWorkspaceDropsDrafts covers the case that does clear them: the
+// issues they belong to are not in the new workspace.
+func TestSwitchingWorkspaceDropsDrafts(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	typeRunes(t, app, "for the old workspace")
+
+	app.clearComposeDrafts()
+
+	if got := app.detailsComposeArea.GetText(); got != "" {
+		t.Errorf("box holds %q after a workspace switch, want it emptied", got)
+	}
+	if len(app.composeDrafts) != 0 {
+		t.Errorf("%d drafts held after a workspace switch, want none", len(app.composeDrafts))
+	}
+}
+
+// TestCommentsPanelDelegatesFocusToTheCards covers tview handing the panel
+// focus on its own. With no item flagged, Flex.Focus falls through to the
+// panel's own Box, whose InputHandler is nil, and the tab goes dead.
+func TestCommentsPanelDelegatesFocusToTheCards(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+
+	app.app.SetFocus(app.detailsCommentsPanel)
+
+	if got := app.app.GetFocus(); got != app.detailsCommentsView {
+		t.Errorf("focusing the panel landed on %T, want the card stack", got)
+	}
+}
+
+// TestOpeningTheBoxSyncsToTheSelection covers opening inside the detail
+// debounce window. The selection moves at once but the draft sync rides the
+// debounce, so the box would open on the previous issue's words and swap them
+// out mid-sentence when the debounce fired.
+func TestOpeningTheBoxSyncsToTheSelection(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	typeRunes(t, app, "for the first issue")
+	app.leaveComposeBox()
+
+	// A selection move writes selectedIssue and defers updateDetailsView.
+	second := commentedIssueFixture()
+	second.ID = "issue-2"
+	app.issuesMu.Lock()
+	app.selectedIssue = second
+	app.issuesMu.Unlock()
+
+	app.openComposeBox()
+
+	if got := app.detailsComposeArea.GetText(); got != "" {
+		t.Errorf("box opened holding %q, want the new issue's empty draft", got)
+	}
+	if app.composeDraftIssueID != "issue-2" {
+		t.Errorf("draft is keyed to %q, want the issue just selected", app.composeDraftIssueID)
+	}
+}
+
+// TestPostedCommentSurvivesAnInFlightRefetch covers a detail fetch started
+// before the post and answering after it. The id guard cannot catch this:
+// posting does not move the selection.
+func TestPostedCommentSurvivesAnInFlightRefetch(t *testing.T) {
+	app, drawn := newComposeTestApp(t)
+	issue := app.selectedIssue
+	stale := *issue
+	stale.Comments = append([]linearapi.Comment(nil), issue.Comments...)
+
+	app.createCommentFunc = func(_ context.Context, input linearapi.CreateCommentInput) (linearapi.Comment, error) {
+		return linearapi.Comment{ID: "comment-3", Body: input.Body, CreatedAt: time.Now()}, nil
+	}
+	app.fetchIssueByID = func(context.Context, string) (linearapi.Issue, error) { return stale, nil }
+
+	typeRunes(t, app, "must not vanish")
+	postAndWait(t, app, drawn)
+
+	// The fetch that was already out answers now, with pre-post comments.
+	app.loadIssueDetailsByID(issue.ID)
+	waitForDraw(t, drawn)
+
+	if got := app.selectedIssueCommentCount(); got != 3 {
+		t.Errorf("issue has %d comments after the refetch, want the posted one kept", got)
+	}
+	if !strings.Contains(strings.Join(drawComments(t, app, 90), "\n"), "must not vanish") {
+		t.Error("the refetch took the posted card off the stack")
+	}
+}
+
+// TestCommentsLandInTimestampOrder covers two posts in flight answering out of
+// order. The card stack reads oldest first, so arrival order is not the order
+// to render in.
+func TestCommentsLandInTimestampOrder(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	issue := app.selectedIssue
+	base := time.Now()
+
+	app.appendComment(issue.ID, linearapi.Comment{ID: "second", Body: "written second", CreatedAt: base.Add(time.Second)})
+	app.appendComment(issue.ID, linearapi.Comment{ID: "first", Body: "written first", CreatedAt: base})
+
+	app.issuesMu.RLock()
+	got := []string{}
+	for _, c := range app.selectedIssue.Comments[len(app.selectedIssue.Comments)-2:] {
+		got = append(got, c.ID)
+	}
+	app.issuesMu.RUnlock()
+
+	if got[0] != "first" || got[1] != "second" {
+		t.Errorf("cards ordered %v, want first then second", got)
+	}
+}
+
+// TestFailedPostLeavesTheErrorOnScreen covers the restore rebuilding the status
+// bar on its way through updateFocus, which would repaint the posting flash
+// over the error the writer needs to see.
+func TestFailedPostLeavesTheErrorOnScreen(t *testing.T) {
+	app, drawn := newComposeTestApp(t)
+	app.createCommentFunc = func(context.Context, linearapi.CreateCommentInput) (linearapi.Comment, error) {
+		return linearapi.Comment{}, errors.New("connection reset")
+	}
+
+	typeRunes(t, app, "words worth keeping")
+	postAndWait(t, app, drawn)
+
+	text := app.statusBar.GetText(true)
+	if !strings.Contains(text, "connection reset") {
+		t.Errorf("status bar reads %q, want the failure", text)
+	}
+	if strings.Contains(text, "Posting comment") {
+		t.Errorf("status bar reads %q, want the posting flash gone", text)
+	}
 }
