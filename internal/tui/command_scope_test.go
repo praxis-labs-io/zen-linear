@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/zen-linear/zen-linear/internal/agents"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
@@ -108,7 +109,15 @@ func TestCommandScopes(t *testing.T) {
 		{"toggle_favorite", ScopeNavigation},
 	}
 
-	commands := DefaultCommands(nil)
+	// ask_agent is gated out when no agent CLI is on PATH, so the registry
+	// would be short one row on a machine without one. Stub the lookup rather
+	// than let the host decide which commands this table can see.
+	app := newUXTestApp(t)
+	app.agentRunner = &agents.Runner{
+		LookPath: func(string) (string, error) { return "agent", nil },
+	}
+
+	commands := DefaultCommands(app)
 	for _, tt := range tests {
 		cmd := findCommandByID(commands, tt.id)
 		if cmd == nil {
