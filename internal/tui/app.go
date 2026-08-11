@@ -83,26 +83,35 @@ type App struct {
 	detailsCommentsView        *tview.TextView // Scrollable comments view
 	detailsCommentsSource      []linearapi.Comment
 	detailsCommentsFittedWidth int
-	statusBar                  *tview.TextView
-	paletteModal               *tview.Flex
-	paletteInput               *tview.InputField
-	paletteList                *tview.List
-	paletteModalContent        *tview.Flex
-	paletteCtrl                *PaletteController
-	pickerModal                *PickerModal
-	issueFormModal             *IssueFormModal
-	createCommentModal         *CreateCommentModal
-	editDescriptionModal       *EditDescriptionModal
-	editLabelsModal            *EditLabelsModal
-	textInputModal             *TextInputModal
-	multiSelectModal           *MultiSelectModal
-	settingsModal              *SettingsModal
-	promptTemplatesModal       *AgentPromptTemplatesModal
-	agentPromptModal           *AgentPromptModal
-	agentOutputModal           *AgentOutputModal
-	confirmationModal          *ConfirmationModal
-	agentRunner                *agents.Runner
-	agentPromptTemplates       []config.AgentPromptTemplate
+	detailsCommentsPanel       *tview.Flex     // Comments tab shell: card stack + compose box
+	detailsComposeBox          *tview.Flex     // Hand-drawn frame around the compose area
+	detailsComposeArea         *tview.TextArea // Where a comment gets written
+	detailsComposePost         *tview.Button   // Sends what is in the box
+	// composeDrafts holds what has been written and not posted, keyed by issue.
+	// The box is one widget over a changing selection, so a draft has to follow
+	// the issue it was written for; left in the box it would be posted to
+	// whichever issue is on screen when the chord lands.
+	composeDrafts        map[string]string
+	composeDraftIssueID  string
+	statusBar            *tview.TextView
+	paletteModal         *tview.Flex
+	paletteInput         *tview.InputField
+	paletteList          *tview.List
+	paletteModalContent  *tview.Flex
+	paletteCtrl          *PaletteController
+	pickerModal          *PickerModal
+	issueFormModal       *IssueFormModal
+	editDescriptionModal *EditDescriptionModal
+	editLabelsModal      *EditLabelsModal
+	textInputModal       *TextInputModal
+	multiSelectModal     *MultiSelectModal
+	settingsModal        *SettingsModal
+	promptTemplatesModal *AgentPromptTemplatesModal
+	agentPromptModal     *AgentPromptModal
+	agentOutputModal     *AgentOutputModal
+	confirmationModal    *ConfirmationModal
+	agentRunner          *agents.Runner
+	agentPromptTemplates []config.AgentPromptTemplate
 
 	// App state (protected by issuesMu)
 	issuesMu            sync.RWMutex
@@ -223,8 +232,9 @@ type App struct {
 	uiUpdateMu sync.Mutex
 
 	// Details pane sub-view focus
-	focusedDetailsView     bool // false = description, true = comments
-	detailsCommentsVisible bool // Tracks whether comments view is shown
+	focusedDetailsView     bool          // false = description, true = comments
+	detailsCommentsVisible bool          // Tracks whether comments view is shown
+	commentsFocus          commentsFocus // sub-focus within the Comments tab: cards, text, or button
 }
 
 // FocusTarget indicates which pane has focus.
@@ -586,6 +596,7 @@ func (a *App) resetCachedState() {
 	a.sortOverridden = false
 	a.searchQuery = ""
 	a.clearSearchResults()
+	a.clearComposeDrafts()
 	if a.searchInput != nil {
 		a.searchInput.SetText("")
 	}
@@ -675,7 +686,6 @@ func (a *App) buildLayout() {
 	// Build picker and create issue modals
 	a.pickerModal = NewPickerModal(a)
 	a.issueFormModal = NewIssueFormModal(a)
-	a.createCommentModal = NewCreateCommentModal(a)
 	a.editDescriptionModal = NewEditDescriptionModal(a)
 	a.editLabelsModal = NewEditLabelsModal(a)
 	a.textInputModal = NewTextInputModal(a)

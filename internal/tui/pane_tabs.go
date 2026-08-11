@@ -198,12 +198,12 @@ func (a *App) tabSegment(label string, active bool, focused bool) string {
 
 // updateDetailsLayout shows the active details tab at full height.
 func (a *App) updateDetailsLayout() {
-	if a.detailsView == nil || a.detailsDescriptionView == nil || a.detailsCommentsView == nil {
+	if a.detailsView == nil || a.detailsDescriptionView == nil || a.detailsCommentsPanel == nil {
 		return
 	}
 	a.detailsView.Clear()
 	if a.detailsCommentsVisible && a.focusedDetailsView {
-		a.detailsView.AddItem(a.detailsCommentsView, 0, 1, true)
+		a.detailsView.AddItem(a.detailsCommentsPanel, 0, 1, true)
 	} else {
 		a.detailsView.AddItem(a.detailsDescriptionView, 0, 1, true)
 	}
