@@ -103,9 +103,10 @@ func TestTabLeavesTheSearchInputForTheResults(t *testing.T) {
 			Issues: []linearapi.Issue{{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me", State: "Todo"}},
 		}, nil
 	}
-	app.fetchIssueByID = func(context.Context, string) (linearapi.Issue, error) {
-		return linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me"}, nil
-	}
+	// Tab selects the first result, and the detail fetch that follows repaints
+	// the pane titles from its own goroutine. Park it, or it races updateFocus
+	// on the way out of the input.
+	holdDetailFetches(t, app)
 
 	app.openSearchTab()
 	app.performIssueSearch("found")
