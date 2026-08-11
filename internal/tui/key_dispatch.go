@@ -95,10 +95,30 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// runCommandShortcut fires the palette command bound to the rune, if any.
+// paneScope returns the command scope the focused pane answers for. The
+// palette borrows the scope of the pane it was opened from, which is the pane
+// its commands will act on.
+func (a *App) paneScope() CommandScope {
+	pane := a.focusedPane
+	if pane == FocusPalette {
+		pane = a.palettePreviousPane
+	}
+	switch pane {
+	case FocusNavigation:
+		return ScopeNavigation
+	case FocusIssues, FocusDetails:
+		return ScopeIssue
+	}
+	return ScopeGlobal
+}
+
+// runCommandShortcut fires the palette command bound to the rune, if any. A
+// command out of scope for the focused pane never fires: a key that acts on the
+// selected issue has no business answering from the navigation tree.
 func (a *App) runCommandShortcut(r rune) bool {
+	scope := a.paneScope()
 	for _, cmd := range a.paletteCtrl.commands {
-		if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r {
+		if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r && cmd.appliesIn(scope) {
 			cmd.Run(a)
 			return true
 		}

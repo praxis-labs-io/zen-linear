@@ -121,10 +121,14 @@ The options beyond the original linear-tui set:
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.
 
+Commands act on the pane they belong to. A key that acts on the selected issue
+answers from the issues and details panes, favorites from the navigation tree,
+and the palette lists only what applies where you opened it.
+
 In the Comments tab, Tab steps through the card stack, the compose box, and
 the Post button before it moves to the next pane:
 
-    t           write a comment, from any pane
+    t           write a comment
     Ctrl+Enter  post it          Enter       new line, or post from the button
     Esc         stop writing, keeping what is in the box
 

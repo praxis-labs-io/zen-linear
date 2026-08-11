@@ -2,26 +2,70 @@ package tui
 
 import "testing"
 
-// TestPaletteIssueContextRanking verifies issue-scoped commands rank first
-// when opened from an issue pane and last otherwise.
-func TestPaletteIssueContextRanking(t *testing.T) {
+// TestPaletteScopeFiltersCommands verifies the palette lists only what applies
+// where it was opened: global commands everywhere, issue commands from an issue
+// pane, navigation commands from the tree.
+func TestPaletteScopeFiltersCommands(t *testing.T) {
 	commands := []Command{
 		{ID: "refresh", Title: "Refresh issues"},
-		{ID: "copy_id", Title: "Copy issue ID"},
-		{ID: "settings", Title: "Settings"},
-		{ID: "archive", Title: "Archive issue"},
-	}
-	pc := NewPaletteController(commands)
-
-	pc.SetIssueContext(true)
-	filtered := pc.Filtered()
-	if filtered[0].ID != "copy_id" || filtered[1].ID != "archive" {
-		t.Errorf("issue context order = %v", []string{filtered[0].ID, filtered[1].ID})
+		{ID: "copy_id", Title: "Copy issue ID", Scope: ScopeIssue},
+		{ID: "archive", Title: "Archive issue", Scope: ScopeIssue},
+		{ID: "toggle_favorite", Title: "Favorite", Scope: ScopeNavigation},
 	}
 
-	pc.SetIssueContext(false)
-	filtered = pc.Filtered()
-	if filtered[0].ID != "refresh" || filtered[1].ID != "settings" {
-		t.Errorf("view context order = %v", []string{filtered[0].ID, filtered[1].ID})
+	tests := []struct {
+		name  string
+		scope CommandScope
+		want  []string
+	}{
+		{"issue pane", ScopeIssue, []string{"refresh", "copy_id", "archive"}},
+		{"navigation pane", ScopeNavigation, []string{"refresh", "toggle_favorite"}},
+		{"no pane", ScopeGlobal, []string{"refresh"}},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pc := NewPaletteController(commands)
+			pc.SetScope(tt.scope)
+			if got := commandIDs(pc.Filtered()); !equalIDs(got, tt.want) {
+				t.Errorf("listed %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPaletteScopeSurvivesAQuery pins the filtered path to the same rule as the
+// empty-query path. A search that reached out-of-scope commands would put the
+// keyboard back where the scope took it away.
+func TestPaletteScopeSurvivesAQuery(t *testing.T) {
+	pc := NewPaletteController([]Command{
+		{ID: "archive", Title: "Archive issue", Scope: ScopeIssue},
+		{ID: "toggle_favorite", Title: "Favorite navigation item", Scope: ScopeNavigation},
+	})
+	pc.SetScope(ScopeNavigation)
+	pc.SetQuery("i")
+
+	if got := commandIDs(pc.Filtered()); !equalIDs(got, []string{"toggle_favorite"}) {
+		t.Errorf("query listed %v, want only toggle_favorite", got)
+	}
+}
+
+func commandIDs(commands []Command) []string {
+	ids := make([]string, 0, len(commands))
+	for _, cmd := range commands {
+		ids = append(ids, cmd.ID)
+	}
+	return ids
+}
+
+func equalIDs(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }

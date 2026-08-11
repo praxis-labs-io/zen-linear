@@ -22,6 +22,22 @@ func FormatShortcut(r rune) string {
 	return string(r)
 }
 
+// CommandScope is where a command applies. A command reaches the keyboard and
+// the palette only from a pane its scope covers, so a key cannot act on
+// something the pane it was pressed in has no bearing on.
+type CommandScope int
+
+const (
+	// ScopeGlobal commands apply everywhere. It is the zero value, so a
+	// command that names no scope keeps working from every pane.
+	ScopeGlobal CommandScope = iota
+	// ScopeIssue commands act on the selected issue: the issues and details
+	// panes.
+	ScopeIssue
+	// ScopeNavigation commands act on the navigation tree.
+	ScopeNavigation
+)
+
 // Command represents a command that can be executed from the palette.
 type Command struct {
 	ID              string
@@ -29,7 +45,14 @@ type Command struct {
 	Keywords        []string
 	ShortcutRune    rune   // The rune for the keyboard shortcut (e.g., 'r' for refresh)
 	ShortcutDisplay string // Custom display text for shortcut (e.g., "/" or "Esc"), overrides ShortcutRune display
+	Scope           CommandScope
 	Run             func(a *App)
+}
+
+// appliesIn reports whether the command is reachable from a pane of the given
+// scope.
+func (c Command) appliesIn(scope CommandScope) bool {
+	return c.Scope == ScopeGlobal || c.Scope == scope
 }
 
 // CommandContext provides context for command execution.
@@ -259,6 +282,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "toggle_favorite",
+			Scope:        ScopeNavigation,
 			Title:        "Favorite / unfavorite navigation item",
 			Keywords:     []string{"favorite", "unfavorite", "star", "pin", "bookmark"},
 			ShortcutRune: 'f',
@@ -357,6 +381,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "open_browser",
+			Scope:        ScopeIssue,
 			Title:        "Open in browser",
 			Keywords:     []string{"open", "browser", "o", "web"},
 			ShortcutRune: 'o',
@@ -364,6 +389,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "copy_id",
+			Scope:        ScopeIssue,
 			Title:        "Copy issue ID",
 			Keywords:     []string{"copy", "id", "c", "identifier"},
 			ShortcutRune: 'y',
@@ -371,6 +397,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "open_github",
+			Scope:    ScopeIssue,
 			Title:    "Open GitHub link",
 			Keywords: []string{"open", "github", "pull", "pr"},
 			Run: func(a *App) {
@@ -379,6 +406,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "copy_branch",
+			Scope:    ScopeIssue,
 			Title:    "Copy branch name",
 			Keywords: []string{"copy", "branch", "git", "checkout"},
 			Run: func(a *App) {
@@ -387,6 +415,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "copy_url",
+			Scope:        ScopeIssue,
 			Title:        "Copy issue URL",
 			Keywords:     []string{"copy", "url", "link"},
 			ShortcutRune: 'w', // 'w' for web URL
@@ -394,12 +423,14 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "ask_agent",
+			Scope:    ScopeIssue,
 			Title:    "Ask agent about selected issue",
 			Keywords: []string{"agent", "ai", "claude", "cursor", "assistant"},
 			Run:      handleAskAgent,
 		},
 		{
 			ID:       "set_due_date",
+			Scope:    ScopeIssue,
 			Title:    "Set due date",
 			Keywords: []string{"due", "date", "deadline", "set"},
 			Run: func(a *App) {
@@ -408,6 +439,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_due_date",
+			Scope:    ScopeIssue,
 			Title:    "Clear due date",
 			Keywords: []string{"due", "date", "deadline", "clear", "remove"},
 			Run: func(a *App) {
@@ -416,6 +448,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "set_priority",
+			Scope:    ScopeIssue,
 			Title:    "Set priority",
 			Keywords: []string{"priority", "urgent", "high", "normal", "low", "set"},
 			Run: func(a *App) {
@@ -424,6 +457,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "edit_estimate",
+			Scope:    ScopeIssue,
 			Title:    "Edit estimate",
 			Keywords: []string{"estimate", "points", "edit"},
 			Run: func(a *App) {
@@ -432,6 +466,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_estimate",
+			Scope:    ScopeIssue,
 			Title:    "Clear estimate",
 			Keywords: []string{"estimate", "points", "clear", "remove"},
 			Run: func(a *App) {
@@ -440,6 +475,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "set_project",
+			Scope:    ScopeIssue,
 			Title:    "Set project",
 			Keywords: []string{"project", "set", "move"},
 			Run: func(a *App) {
@@ -448,6 +484,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_project",
+			Scope:    ScopeIssue,
 			Title:    "Clear project",
 			Keywords: []string{"project", "clear", "remove"},
 			Run: func(a *App) {
@@ -456,6 +493,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "list_project_milestones",
+			Scope:    ScopeIssue,
 			Title:    "List project milestones",
 			Keywords: []string{"project", "milestone", "list"},
 			Run: func(a *App) {
@@ -464,6 +502,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "set_milestone",
+			Scope:    ScopeIssue,
 			Title:    "Set milestone",
 			Keywords: []string{"project", "milestone", "set"},
 			Run: func(a *App) {
@@ -472,6 +511,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_milestone",
+			Scope:    ScopeIssue,
 			Title:    "Clear milestone",
 			Keywords: []string{"project", "milestone", "clear", "remove"},
 			Run: func(a *App) {
@@ -552,6 +592,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "add_issue_relation",
+			Scope:    ScopeIssue,
 			Title:    "Add issue relation",
 			Keywords: []string{"relation", "dependency", "blocking", "blocked", "related", "duplicate", "similar"},
 			Run: func(a *App) {
@@ -560,6 +601,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "remove_issue_relation",
+			Scope:    ScopeIssue,
 			Title:    "Remove issue relation",
 			Keywords: []string{"relation", "dependency", "remove", "unlink"},
 			Run: func(a *App) {
@@ -568,6 +610,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "subscribe_issue",
+			Scope:    ScopeIssue,
 			Title:    "Subscribe",
 			Keywords: []string{"subscribe", "watch", "subscriber"},
 			Run: func(a *App) {
@@ -576,6 +619,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "unsubscribe_issue",
+			Scope:    ScopeIssue,
 			Title:    "Unsubscribe",
 			Keywords: []string{"unsubscribe", "watch", "subscriber"},
 			Run: func(a *App) {
@@ -584,6 +628,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "open_attachment",
+			Scope:    ScopeIssue,
 			Title:    "Open attachment",
 			Keywords: []string{"attachment", "link", "open", "github", "jira", "slack", "url"},
 			Run: func(a *App) {
@@ -592,6 +637,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "copy_attachment_url",
+			Scope:    ScopeIssue,
 			Title:    "Copy attachment URL",
 			Keywords: []string{"attachment", "link", "copy", "url"},
 			Run: func(a *App) {
@@ -600,6 +646,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "assign_me",
+			Scope:        ScopeIssue,
 			Title:        "Assign to me",
 			Keywords:     []string{"assign", "me", "self", "take"},
 			ShortcutRune: 'm',
@@ -618,6 +665,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "unassign",
+			Scope:        ScopeIssue,
 			Title:        "Unassign issue",
 			Keywords:     []string{"unassign", "remove", "clear assignee"},
 			ShortcutRune: 'u',
@@ -636,6 +684,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "archive",
+			Scope:        ScopeIssue,
 			Title:        "Archive issue",
 			Keywords:     []string{"archive", "delete", "remove"},
 			ShortcutRune: 'x',
@@ -676,6 +725,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "change_status",
+			Scope:        ScopeIssue,
 			Title:        "Change status",
 			Keywords:     []string{"status", "state", "workflow", "todo", "progress", "done"},
 			ShortcutRune: 's',
@@ -695,6 +745,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "set_cycle",
+			Scope:        ScopeIssue,
 			Title:        "Set cycle",
 			Keywords:     []string{"cycle", "sprint", "iteration", "set"},
 			ShortcutRune: 'c',
@@ -711,6 +762,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_cycle",
+			Scope:    ScopeIssue,
 			Title:    "Clear cycle",
 			Keywords: []string{"cycle", "clear", "remove", "unset"},
 			Run: func(a *App) {
@@ -732,6 +784,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "assign_user",
+			Scope:        ScopeIssue,
 			Title:        "Assign to user",
 			Keywords:     []string{"assign", "user", "team", "member"},
 			ShortcutRune: 'a',
@@ -748,6 +801,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "change_team",
+			Scope:        ScopeIssue,
 			Title:        "Change team",
 			Keywords:     []string{"team", "move", "change", "transfer"},
 			ShortcutRune: 'M',
@@ -771,6 +825,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "edit_issue",
+			Scope:        ScopeIssue,
 			Title:        "Edit issue",
 			Keywords:     []string{"edit", "issue", "form", "properties", "update"},
 			ShortcutRune: 'e',
@@ -785,6 +840,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "edit_title",
+			Scope:    ScopeIssue,
 			Title:    "Edit issue title",
 			Keywords: []string{"edit", "title", "rename"},
 			Run: func(a *App) {
@@ -798,6 +854,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "edit_description",
+			Scope:        ScopeIssue,
 			Title:        "Edit issue description",
 			Keywords:     []string{"edit", "description", "body", "details"},
 			ShortcutRune: 'D',
@@ -812,6 +869,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "edit_labels",
+			Scope:        ScopeIssue,
 			Title:        "Edit issue labels",
 			Keywords:     []string{"labels", "label", "tag", "tags"},
 			ShortcutRune: 'g', // 'g' for tags (since 'l' is used for vim navigation)
@@ -826,6 +884,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "toggle_sub_issues",
+			Scope:    ScopeIssue,
 			Title:    "Toggle sub-issues",
 			Keywords: []string{"toggle", "expand", "collapse", "sub", "children"},
 			// No shortcut - ⌘+T conflicts with new tab. Use Space key in table instead.
@@ -840,6 +899,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "view_parent",
+			Scope:        ScopeIssue,
 			Title:        "View parent issue",
 			Keywords:     []string{"parent", "up", "back"},
 			ShortcutRune: 'p',
@@ -900,6 +960,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "create_sub_issue",
+			Scope:        ScopeIssue,
 			Title:        "Create sub-issue",
 			Keywords:     []string{"create", "sub", "child", "new"},
 			ShortcutRune: 'b',
@@ -915,6 +976,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "set_parent",
+			Scope:        ScopeIssue,
 			Title:        "Set parent issue",
 			Keywords:     []string{"set", "parent", "link"},
 			ShortcutRune: 'i',
@@ -940,6 +1002,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "remove_parent",
+			Scope:        ScopeIssue,
 			Title:        "Remove parent",
 			Keywords:     []string{"remove", "parent", "unlink", "top"},
 			ShortcutRune: 'd',
@@ -969,6 +1032,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "add_comment",
+			Scope:        ScopeIssue,
 			Title:        "Add comment",
 			Keywords:     []string{"add", "comment", "reply", "t"},
 			ShortcutRune: 't',
