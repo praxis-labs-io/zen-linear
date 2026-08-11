@@ -30,6 +30,19 @@ func pressKey(app *App, r rune) {
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 }
 
+// runPaletteCommand runs a command by id off the same registry the palette
+// lists, which is the only way to reach one that carries no default key.
+func runPaletteCommand(t *testing.T, app *App, id string) {
+	t.Helper()
+	for _, cmd := range app.paletteCtrl.commands {
+		if cmd.ID == id {
+			cmd.Run(app)
+			return
+		}
+	}
+	t.Fatalf("command %q not registered", id)
+}
+
 // holdDetailFetches parks every background detail fetch until the test ends, so
 // its queueUpdateDraw stub cannot repaint the UI alongside the assertions.
 func holdDetailFetches(t *testing.T, app *App) {
@@ -139,7 +152,7 @@ func TestJumpToParent_SelectsTheParentInTheTabOnScreen(t *testing.T) {
 	app.issuesMu.Unlock()
 	app.focusedPane = FocusIssues
 
-	pressKey(app, 'p')
+	runPaletteCommand(t, app, "view_parent")
 
 	if app.activeIssuesSection != IssuesSectionAll {
 		t.Fatalf("view_parent switched to %v, want to stay on All", app.activeIssuesSection)
@@ -165,16 +178,16 @@ func TestViewParent_SaysSoWhenTheParentIsNotLoaded(t *testing.T) {
 	holdDetailFetches(t, app)
 	app.focusedPane = FocusIssues
 
-	pressKey(app, 'p')
+	runPaletteCommand(t, app, "view_parent")
 
 	if got := app.statusBar.GetText(true); !strings.Contains(got, "Parent issue not loaded") {
 		t.Fatalf("status after view_parent with an unfetched parent = %q, want the parent-not-loaded feedback", got)
 	}
 }
 
-// A child assigned to the user whose parent is not is an orphan in My. p there
-// has to fall back to All rather than sit on a parent My cannot show.
-func TestParentKeyFallsBackToAllWhenMyHasNoParent(t *testing.T) {
+// A child assigned to the user whose parent is not is an orphan in My. The jump
+// there has to fall back to All rather than sit on a parent My cannot show.
+func TestViewParentFallsBackToAllWhenMyHasNoParent(t *testing.T) {
 	parentRef := &linearapi.IssueRef{ID: "parent-1", Identifier: "LIN-1", Title: "Parent"}
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "parent-1", Identifier: "LIN-1", Title: "Parent", AssigneeID: "user-2"},
@@ -193,10 +206,10 @@ func TestParentKeyFallsBackToAllWhenMyHasNoParent(t *testing.T) {
 	app.selectedIssue = app.myIDToIssue["child-1"]
 	app.issuesMu.Unlock()
 
-	pressKey(app, 'p')
+	runPaletteCommand(t, app, "view_parent")
 
 	if app.activeIssuesSection != IssuesSectionAll {
-		t.Fatalf("p from My landed on %v, want All, which holds the parent", app.activeIssuesSection)
+		t.Fatalf("view_parent from My landed on %v, want All, which holds the parent", app.activeIssuesSection)
 	}
 	allTable := app.tableForSection(IssuesSectionAll)
 	wantRow := app.getRowForIssueInSection("parent-1", IssuesSectionAll)

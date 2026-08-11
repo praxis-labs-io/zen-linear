@@ -132,30 +132,88 @@ func TestEditDescriptionModalShowResetsFocusToTextArea(t *testing.T) {
 	}
 }
 
-// TestEditIssueOwnsEAndShortcutsAreUnique pins the rune reassignment. e opens
-// the full form, edit_title survives in the palette without one, and no two
-// commands share a rune: runCommandShortcut silently takes the first match.
-func TestEditIssueOwnsEAndShortcutsAreUnique(t *testing.T) {
+// TestDefaultShortcutsMatchTheShippedSet pins the keys the app opens with.
+// Every entry here moved at least once, and a rune drifting back onto a command
+// that gave it up is the kind of change nothing else fails on.
+func TestDefaultShortcutsMatchTheShippedSet(t *testing.T) {
+	app := newUXTestApp(t)
+	byID := make(map[string]rune, len(app.paletteCtrl.commands))
+	for _, cmd := range app.paletteCtrl.commands {
+		byID[cmd.ID] = cmd.ShortcutRune
+	}
+
+	// A zero rune is palette-only: the key it used to hold now belongs
+	// elsewhere, and the command answers by name.
+	want := map[string]rune{
+		"switch_workspace":       'w',
+		"toggle_navigation_pane": '{',
+		"toggle_details_pane":    '}',
+		"edit_labels":            't',
+		"change_team":            'T',
+		"add_comment":            'c',
+		"set_cycle":              'C',
+		"set_priority":           'p',
+		"set_project":            'P',
+		"create_sub_issue":       'N',
+		"open_github":            'O',
+		"copy_id":                'i',
+		"copy_url":               'y',
+		"copy_branch":            'Y',
+		"view_parent":            0,
+		"set_parent":             0,
+		"remove_parent":          0,
+		"edit_description":       0,
+		"expand_all":             0,
+		"collapse_all":           0,
+	}
+	for id, key := range want {
+		got, registered := byID[id]
+		if !registered {
+			t.Errorf("command %q is not registered", id)
+			continue
+		}
+		if got != key {
+			t.Errorf("%s binds %q, want %q", id, string(got), string(key))
+		}
+	}
+
+	// Both were dropped: the toggle for an unpredictable heuristic the explicit
+	// pair covers, the title editor for a field the edit form already has.
+	for _, id := range []string{"toggle_expand_all", "edit_title"} {
+		if _, registered := byID[id]; registered {
+			t.Errorf("command %q is still registered, want it removed", id)
+		}
+	}
+}
+
+// TestEditIssueOwnsEAndShortcutsAreUniquePerScope pins the rune assignment. e
+// opens the full form, and no two commands reachable from the same pane share a
+// rune: runCommandShortcut silently takes the first match. Two scopes that
+// never answer together may share one.
+func TestEditIssueOwnsEAndShortcutsAreUniquePerScope(t *testing.T) {
 	app := newUXTestApp(t)
 
-	byRune := make(map[rune]string)
+	byScope := map[CommandScope]map[rune]string{
+		ScopeIssue:      {},
+		ScopeNavigation: {},
+	}
 	for _, cmd := range app.paletteCtrl.commands {
 		if cmd.ShortcutRune == 0 {
 			continue
 		}
-		if other, taken := byRune[cmd.ShortcutRune]; taken {
-			t.Fatalf("commands %q and %q both bind %q", other, cmd.ID, string(cmd.ShortcutRune))
+		for scope, byRune := range byScope {
+			if !cmd.appliesIn(scope) {
+				continue
+			}
+			if other, taken := byRune[cmd.ShortcutRune]; taken {
+				t.Fatalf("commands %q and %q both bind %q in scope %d", other, cmd.ID, string(cmd.ShortcutRune), scope)
+			}
+			byRune[cmd.ShortcutRune] = cmd.ID
 		}
-		byRune[cmd.ShortcutRune] = cmd.ID
 	}
 
-	if got := byRune['e']; got != "edit_issue" {
+	if got := byScope[ScopeIssue]['e']; got != "edit_issue" {
 		t.Fatalf("e runs %q, want edit_issue", got)
-	}
-	for _, cmd := range app.paletteCtrl.commands {
-		if cmd.ID == "edit_title" && cmd.ShortcutRune != 0 {
-			t.Fatalf("edit_title still binds %q, want palette only", string(cmd.ShortcutRune))
-		}
 	}
 }
 
@@ -215,8 +273,8 @@ func TestChangeTeamCommandMovesTheIssue(t *testing.T) {
 	// dispatcher runs it.
 	app.focusedPane = FocusIssues
 
-	if !app.runCommandShortcut('M') {
-		t.Fatal("M did not run a command")
+	if !app.runCommandShortcut('T') {
+		t.Fatal("T did not run a command")
 	}
 
 	// The selection moves out from under an open picker on a background
@@ -261,8 +319,8 @@ func TestChangeTeamCommandSkipsTheCurrentTeam(t *testing.T) {
 	// dispatcher runs it.
 	app.focusedPane = FocusIssues
 
-	if !app.runCommandShortcut('M') {
-		t.Fatal("M did not run a command")
+	if !app.runCommandShortcut('T') {
+		t.Fatal("T did not run a command")
 	}
 	selectPickerItem(t, app, "Linear (LIN)")
 

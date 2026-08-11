@@ -2,10 +2,14 @@ package tui
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
@@ -29,6 +33,160 @@ func TestApplyCommandKeybindings(t *testing.T) {
 	}
 	if commands[2].ShortcutRune != 0 {
 		t.Errorf("set_parent kept %q, want cleared (key claimed)", commands[2].ShortcutRune)
+	}
+}
+
+// TestKeybindingStealSparesACommandInAnotherScope verifies the steal reads
+// scope. Two commands that never answer from the same pane can hold one rune.
+func TestKeybindingStealSparesACommandInAnotherScope(t *testing.T) {
+	commands := []Command{
+		{ID: "toggle_favorite", Scope: ScopeNavigation, ShortcutRune: 'f'},
+		{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'},
+		{ID: "refresh", ShortcutRune: 'r'},
+	}
+	applyCommandKeybindings(commands, map[string]string{"toggle_favorite": "x"})
+
+	if commands[0].ShortcutRune != 'x' {
+		t.Errorf("toggle_favorite = %q, want x", commands[0].ShortcutRune)
+	}
+	if commands[1].ShortcutRune != 'x' {
+		t.Errorf("archive lost x to a navigation command, want it kept")
+	}
+	if commands[2].ShortcutRune != 'r' {
+		t.Errorf("refresh = %q, want r", commands[2].ShortcutRune)
+	}
+}
+
+// TestKeybindingStealTakesTheRuneFromAnOverlappingScope verifies the other
+// half: a global command reaches every pane, so it does collide.
+func TestKeybindingStealTakesTheRuneFromAnOverlappingScope(t *testing.T) {
+	commands := []Command{
+		{ID: "refresh", ShortcutRune: 'r'},
+		{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'},
+	}
+	applyCommandKeybindings(commands, map[string]string{"refresh": "x"})
+
+	if commands[1].ShortcutRune != 0 {
+		t.Errorf("archive kept %q, want cleared by the global command", commands[1].ShortcutRune)
+	}
+}
+
+// TestBindingForAnUnknownIDTakesNoRune covers the upgrade case. A config
+// naming a command a release removed used to leave two dead keys: the one it
+// named, and the one it quietly took from a command that still exists.
+func TestBindingForAnUnknownIDTakesNoRune(t *testing.T) {
+	commands := []Command{
+		{ID: "edit_issue", Scope: ScopeIssue, ShortcutRune: 'e'},
+		{ID: "refresh", ShortcutRune: 'r'},
+	}
+	applyCommandKeybindings(commands, map[string]string{"toggle_expand_all": "e"})
+
+	if commands[0].ShortcutRune != 'e' {
+		t.Errorf("edit_issue lost e to a command that no longer exists, want it kept")
+	}
+	if commands[1].ShortcutRune != 'r' {
+		t.Errorf("refresh = %q, want r", commands[1].ShortcutRune)
+	}
+}
+
+// TestBindingForAUIActionTakesTheRune pins the other half. An action is matched
+// before the pane dispatch, so the command it shadows must stop advertising the
+// key rather than print one that does nothing.
+func TestBindingForAUIActionTakesTheRune(t *testing.T) {
+	commands := []Command{{ID: "edit_issue", Scope: ScopeIssue, ShortcutRune: 'e'}}
+	applyCommandKeybindings(commands, map[string]string{"quit": "e"})
+
+	if commands[0].ShortcutRune != 0 {
+		t.Errorf("edit_issue kept %q, want it cleared by the action binding", commands[0].ShortcutRune)
+	}
+}
+
+// TestUIActionIDsCoverEveryActionKeyCallSite keeps the action list in step with
+// the handlers. An id missing from it is treated as unknown, so a binding on it
+// would be dropped instead of taking the key the action answers to.
+func TestUIActionIDsCoverEveryActionKeyCallSite(t *testing.T) {
+	sources, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("globbing the package sources: %v", err)
+	}
+	callSite := regexp.MustCompile(`actionKey\("([a-z_]+)"`)
+
+	found := 0
+	for _, source := range sources {
+		body, err := os.ReadFile(source)
+		if err != nil {
+			t.Fatalf("reading %s: %v", source, err)
+		}
+		for _, match := range callSite.FindAllStringSubmatch(string(body), -1) {
+			found++
+			if !uiActionIDs[match[1]] {
+				t.Errorf("%s calls actionKey(%q), which is missing from uiActionIDs", source, match[1])
+			}
+		}
+	}
+	if found == 0 {
+		t.Fatal("found no actionKey call sites, the pattern has drifted from the code")
+	}
+}
+
+// bindingApp returns an app whose commands were built from the given
+// keybindings, so the config path under test is the one NewApp runs.
+func bindingApp(t *testing.T, bindings map[string]string) *App {
+	t.Helper()
+	app := NewApp(linearapi.ClientConfig{}, config.Config{
+		PageSize:    1,
+		CacheTTL:    time.Minute,
+		Keybindings: bindings,
+	}, nil)
+	stopBackgroundWorkOnCleanup(t, app)
+	app.queueUpdateDraw = func(f func()) { f() }
+	return app
+}
+
+// TestCommandBindingBeatsADefaultActionKey covers ZNL-31: a command bound to a
+// rune an action holds by default never fired, with nothing said about it.
+func TestCommandBindingBeatsADefaultActionKey(t *testing.T) {
+	app := bindingApp(t, map[string]string{"toggle_navigation_pane": "]"})
+	app.focusedPane = FocusIssues
+	section := app.activeIssuesSection
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, ']', tcell.ModNone))
+
+	if !app.navigationHidden {
+		t.Error("] did not run the command bound to it")
+	}
+	if app.activeIssuesSection != section {
+		t.Errorf("] also cycled to %v, want the command to own the key", app.activeIssuesSection)
+	}
+}
+
+// TestActionKeyStandsWhenTheBoundCommandIsOutOfScope pins the limit of that
+// precedence. A navigation command holds the rune nowhere else, so the action
+// still answers in the issues pane.
+func TestActionKeyStandsWhenTheBoundCommandIsOutOfScope(t *testing.T) {
+	app := bindingApp(t, map[string]string{"toggle_favorite": "]"})
+	app.focusedPane = FocusIssues
+	section := app.activeIssuesSection
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, ']', tcell.ModNone))
+
+	if app.activeIssuesSection == section {
+		t.Error("] did not cycle the tabs, want the action to answer out of the command's scope")
+	}
+}
+
+// TestMovementRunesStayWithTheWidgets verifies a binding cannot take one. j
+// bound to a command would strand the cursor in the list.
+func TestMovementRunesStayWithTheWidgets(t *testing.T) {
+	app := bindingApp(t, map[string]string{"archive": "j"})
+	app.focusedPane = FocusIssues
+
+	event := tcell.NewEventKey(tcell.KeyRune, 'j', tcell.ModNone)
+	if got := app.handleGlobalKey(event); got != event {
+		t.Error("j was claimed by a keybinding instead of reaching the table")
+	}
+	if app.pages.HasPage("confirmation") {
+		t.Error("j opened the archive confirmation")
 	}
 }
 

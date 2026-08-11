@@ -40,22 +40,22 @@ func (a *App) updateStatusBar() {
 
 	switch a.focusedPane {
 	case FocusNavigation:
-		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: select | Tab/→/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: select | →/l: next pane | ←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
 	case FocusIssues:
-		helpText = fmt.Sprintf("%sj/k: navigate | Enter: select | Tab/→/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		helpText = fmt.Sprintf("%sj/k: navigate | Enter: select | →/l: next pane | ←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
 	case FocusDetails:
 		// Both keys are remappable, so the hint reads them back rather than
 		// stating the defaults at a user who has moved them.
-		tabs := fmt.Sprintf("%c%c", a.actionKey("tab_prev", '{'), a.actionKey("tab_next", '}'))
+		tabs := fmt.Sprintf("%c%c", a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']'))
 		if a.commentsFocus != commentsFocusCards && a.detailsCommentsVisible && a.focusedDetailsView {
 			// Every other key in the box is a character in the comment, so the
 			// hint names only the ones that are not. Read off the field, not
 			// live focus: a focus callback can reach here from inside a draw.
-			post, tab := "Ctrl+Enter: post", "Tab: Post button"
 			if a.commentsFocus == commentsFocusPost {
-				post, tab = "Enter: post", "Tab: next pane"
+				helpText = fmt.Sprintf("%sEnter: post | Esc: back to comments[-]", keyColor)
+				break
 			}
-			helpText = fmt.Sprintf("%s%s | %s | Esc: back to comments[-]", keyColor, post, tab)
+			helpText = fmt.Sprintf("%sCtrl+Enter: post | Tab: Post button | Esc: back to comments[-]", keyColor)
 			break
 		}
 		if a.detailsZoomed {
@@ -69,12 +69,12 @@ func (a *App) updateStatusBar() {
 				keyColor, tabs, toNav, a.zoomHint("unzoom"))
 			break
 		}
-		helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s→/l: next pane | Shift+Tab/←/h: prev pane | :: palette | /: search | q: quit[-]",
+		helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s←/h: prev pane | :: palette | /: search | q: quit[-]",
 			keyColor, tabs, a.zoomHint("zoom"))
 	case FocusPalette:
 		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: execute | Esc: close[-]", keyColor)
 	default:
-		helpText = fmt.Sprintf("%sj/k: navigate | Tab: next pane | Shift+Tab: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		helpText = fmt.Sprintf("%sj/k: navigate | l: next pane | h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
 	}
 
 	navText := ""

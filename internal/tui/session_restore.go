@@ -165,13 +165,13 @@ func (a *App) beginSessionRestore(state session.State) {
 	a.activeIssuesSection = sectionFromSession(state.Section)
 	a.updateIssuesColumnLayout()
 
-	// Only the Search tab restores its query. The query outlives a Tab away
-	// from the tab, so restoring it unconditionally would fire a workspace-wide
-	// search on every launch for a tab the user is not even on.
+	// Only the Search tab restores its query. The query outlives a move off the
+	// tab, so restoring it unconditionally would fire a workspace-wide search on
+	// every launch for a tab the user is not even on.
 	if a.activeIssuesSection != IssuesSectionSearch {
 		return
 	}
-	// Focus stays on the navigation pane; this only decides where a Tab into
+	// Focus stays on the navigation pane; this only decides where a step into
 	// the issues pane lands.
 	a.searchInputFocused = true
 	if state.Search != "" && a.searchInput != nil {

@@ -104,7 +104,11 @@ Drew's live config is a symlink chain: `~/.zen-linear/config.json` → dotfiles 
 
 ### Keybindings
 
-Commands carry a single-rune shortcut; the `keybindings` config map (command id → rune) remaps them with steal semantics: an explicit mapping clears the colliding default (`applyCommandKeybindings` in `internal/tui/keybindings.go`). UI actions that aren't palette commands (tab_next/tab_prev, columns_left/right, quit, open_palette, search, focus_navigation/focus_issues/focus_details) resolve through `actionKey(action, fallback)`. **Never compare against a hardcoded rune in a key handler** — that's how the details pane's tab keys broke when tabs were rebound.
+Commands carry a single-rune shortcut; the `keybindings` config map (command id → rune) remaps them with steal semantics: an explicit mapping clears the colliding default (`applyCommandKeybindings` in `internal/tui/keybindings.go`). The steal reads scope, so a navigation command and an issue command may share a rune, and an id naming neither a command nor a UI action is ignored and logged rather than taking a live command's key. That last one is why deleting a command is a breaking change for anyone who bound it: without the check, the dead id keeps stealing.
+
+UI actions that aren't palette commands resolve through `actionKey(action, fallback)`, and their ids live in `uiActionIDs`, which `TestUIActionIDsCoverEveryActionKeyCallSite` greps the package to keep honest. A command explicitly bound to a rune an action holds by default wins, checked once at the top of `handleGlobalKey`; movement runes (`h`, `l`, `j`, `k`, `g`, `G`) are excluded there and stay with the widgets. **Never compare against a hardcoded rune in a key handler** — that's how the details pane's tab keys broke when tabs were rebound.
+
+Tab is not pane navigation. It walks the Comments tab's focus ring and nothing else; `h`/`l` and the pane numbers move between panes.
 
 ### Modal dispatch
 

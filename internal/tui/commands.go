@@ -300,23 +300,25 @@ func DefaultCommands(app *App) []Command {
 			ID:           "switch_workspace",
 			Title:        "Switch workspace",
 			Keywords:     []string{"workspace", "switch", "account", "organization"},
-			ShortcutRune: 'W',
+			ShortcutRune: 'w',
 			Run: func(a *App) {
 				a.showWorkspacePicker()
 			},
 		},
 		{
-			ID:       "toggle_navigation_pane",
-			Title:    "Toggle navigation pane",
-			Keywords: []string{"navigation", "sidebar", "pane", "hide", "show", "toggle"},
+			ID:           "toggle_navigation_pane",
+			Title:        "Toggle navigation pane",
+			Keywords:     []string{"navigation", "sidebar", "pane", "hide", "show", "toggle"},
+			ShortcutRune: '{',
 			Run: func(a *App) {
 				a.toggleNavigationPane()
 			},
 		},
 		{
-			ID:       "toggle_details_pane",
-			Title:    "Toggle details pane",
-			Keywords: []string{"details", "pane", "hide", "show", "toggle"},
+			ID:           "toggle_details_pane",
+			Title:        "Toggle details pane",
+			Keywords:     []string{"details", "pane", "hide", "show", "toggle"},
+			ShortcutRune: '}',
 			Run: func(a *App) {
 				a.toggleDetailsPane()
 			},
@@ -336,23 +338,6 @@ func DefaultCommands(app *App) []Command {
 			Keywords: []string{"agent", "prompt", "prompts", "template", "templates"},
 			Run: func(a *App) {
 				a.ShowPromptTemplatesModal()
-			},
-		},
-		{
-			ID:       "toggle_expand_all",
-			Title:    "Toggle expand/collapse all sub-issues",
-			Keywords: []string{"toggle", "expand", "collapse", "all", "sub-issues"},
-			Run: func(a *App) {
-				a.issuesMu.RLock()
-				issues := a.issues
-				a.issuesMu.RUnlock()
-				if len(a.expandedState) > 0 {
-					CollapseAll(a.expandedState)
-					a.regroupIssues("Collapsed all sub-issues")
-					return
-				}
-				ExpandAll(a.expandedState, issues)
-				a.regroupIssues("Expanded all sub-issues")
 			},
 		},
 		{
@@ -391,24 +376,26 @@ func DefaultCommands(app *App) []Command {
 			ID:           "copy_id",
 			Scope:        ScopeIssue,
 			Title:        "Copy issue ID",
-			Keywords:     []string{"copy", "id", "c", "identifier"},
-			ShortcutRune: 'y',
+			Keywords:     []string{"copy", "id", "identifier"},
+			ShortcutRune: 'i',
 			Run:          handleCopyIssueIDCommand,
 		},
 		{
-			ID:       "open_github",
-			Scope:    ScopeIssue,
-			Title:    "Open GitHub link",
-			Keywords: []string{"open", "github", "pull", "pr"},
+			ID:           "open_github",
+			Scope:        ScopeIssue,
+			Title:        "Open GitHub link",
+			Keywords:     []string{"open", "github", "pull", "pr"},
+			ShortcutRune: 'O',
 			Run: func(a *App) {
 				handleOpenGitHubCommand(a)
 			},
 		},
 		{
-			ID:       "copy_branch",
-			Scope:    ScopeIssue,
-			Title:    "Copy branch name",
-			Keywords: []string{"copy", "branch", "git", "checkout"},
+			ID:           "copy_branch",
+			Scope:        ScopeIssue,
+			Title:        "Copy branch name",
+			Keywords:     []string{"copy", "branch", "git", "checkout"},
+			ShortcutRune: 'Y',
 			Run: func(a *App) {
 				handleCopyBranchCommand(a)
 			},
@@ -418,7 +405,7 @@ func DefaultCommands(app *App) []Command {
 			Scope:        ScopeIssue,
 			Title:        "Copy issue URL",
 			Keywords:     []string{"copy", "url", "link"},
-			ShortcutRune: 'w', // 'w' for web URL
+			ShortcutRune: 'y',
 			Run:          handleCopyIssueURLCommand,
 		},
 		{
@@ -447,10 +434,11 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:       "set_priority",
-			Scope:    ScopeIssue,
-			Title:    "Set priority",
-			Keywords: []string{"priority", "urgent", "high", "normal", "low", "set"},
+			ID:           "set_priority",
+			Scope:        ScopeIssue,
+			Title:        "Set priority",
+			Keywords:     []string{"priority", "urgent", "high", "normal", "low", "set"},
+			ShortcutRune: 'p',
 			Run: func(a *App) {
 				a.showSetPriorityPicker()
 			},
@@ -474,10 +462,11 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:       "set_project",
-			Scope:    ScopeIssue,
-			Title:    "Set project",
-			Keywords: []string{"project", "set", "move"},
+			ID:           "set_project",
+			Scope:        ScopeIssue,
+			Title:        "Set project",
+			Keywords:     []string{"project", "set", "move"},
+			ShortcutRune: 'P',
 			Run: func(a *App) {
 				a.showSetProjectPicker()
 			},
@@ -748,7 +737,7 @@ func DefaultCommands(app *App) []Command {
 			Scope:        ScopeIssue,
 			Title:        "Set cycle",
 			Keywords:     []string{"cycle", "sprint", "iteration", "set"},
-			ShortcutRune: 'c',
+			ShortcutRune: 'C',
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
@@ -804,7 +793,7 @@ func DefaultCommands(app *App) []Command {
 			Scope:        ScopeIssue,
 			Title:        "Change team",
 			Keywords:     []string{"team", "move", "change", "transfer"},
-			ShortcutRune: 'M',
+			ShortcutRune: 'T',
 			Run: func(a *App) {
 				a.showChangeTeamPicker()
 			},
@@ -839,25 +828,10 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:       "edit_title",
+			ID:       "edit_description",
 			Scope:    ScopeIssue,
-			Title:    "Edit issue title",
-			Keywords: []string{"edit", "title", "rename"},
-			Run: func(a *App) {
-				issue := a.GetSelectedIssue()
-				if issue == nil {
-					a.flashStatus("No issue selected")
-					return
-				}
-				a.ShowEditTitleModal()
-			},
-		},
-		{
-			ID:           "edit_description",
-			Scope:        ScopeIssue,
-			Title:        "Edit issue description",
-			Keywords:     []string{"edit", "description", "body", "details"},
-			ShortcutRune: 'D',
+			Title:    "Edit issue description",
+			Keywords: []string{"edit", "description", "body", "details"},
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
@@ -872,7 +846,7 @@ func DefaultCommands(app *App) []Command {
 			Scope:        ScopeIssue,
 			Title:        "Edit issue labels",
 			Keywords:     []string{"labels", "label", "tag", "tags"},
-			ShortcutRune: 'g', // 'g' for tags (since 'l' is used for vim navigation)
+			ShortcutRune: 't', // 't' for tags: 'l' is vim navigation and 'L' scrolls columns
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
@@ -898,11 +872,10 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "view_parent",
-			Scope:        ScopeIssue,
-			Title:        "View parent issue",
-			Keywords:     []string{"parent", "up", "back"},
-			ShortcutRune: 'p',
+			ID:       "view_parent",
+			Scope:    ScopeIssue,
+			Title:    "View parent issue",
+			Keywords: []string{"parent", "up", "back"},
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
@@ -926,10 +899,9 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "expand_all",
-			Title:        "Expand all sub-issues",
-			Keywords:     []string{"expand", "all", "open"},
-			ShortcutRune: ']',
+			ID:       "expand_all",
+			Title:    "Expand all sub-issues",
+			Keywords: []string{"expand", "all", "open"},
 			Run: func(a *App) {
 				a.issuesMu.RLock()
 				issues := a.issues
@@ -943,10 +915,9 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "collapse_all",
-			Title:        "Collapse all sub-issues",
-			Keywords:     []string{"collapse", "all", "close"},
-			ShortcutRune: '[',
+			ID:       "collapse_all",
+			Title:    "Collapse all sub-issues",
+			Keywords: []string{"collapse", "all", "close"},
 			Run: func(a *App) {
 				CollapseAll(a.expandedState)
 				a.issuesMu.RLock()
@@ -963,7 +934,7 @@ func DefaultCommands(app *App) []Command {
 			Scope:        ScopeIssue,
 			Title:        "Create sub-issue",
 			Keywords:     []string{"create", "sub", "child", "new"},
-			ShortcutRune: 'b',
+			ShortcutRune: 'N',
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
@@ -975,11 +946,10 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "set_parent",
-			Scope:        ScopeIssue,
-			Title:        "Set parent issue",
-			Keywords:     []string{"set", "parent", "link"},
-			ShortcutRune: 'i',
+			ID:       "set_parent",
+			Scope:    ScopeIssue,
+			Title:    "Set parent issue",
+			Keywords: []string{"set", "parent", "link"},
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
@@ -1001,11 +971,10 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "remove_parent",
-			Scope:        ScopeIssue,
-			Title:        "Remove parent",
-			Keywords:     []string{"remove", "parent", "unlink", "top"},
-			ShortcutRune: 'd',
+			ID:       "remove_parent",
+			Scope:    ScopeIssue,
+			Title:    "Remove parent",
+			Keywords: []string{"remove", "parent", "unlink", "top"},
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
@@ -1034,8 +1003,8 @@ func DefaultCommands(app *App) []Command {
 			ID:           "add_comment",
 			Scope:        ScopeIssue,
 			Title:        "Add comment",
-			Keywords:     []string{"add", "comment", "reply", "t"},
-			ShortcutRune: 't',
+			Keywords:     []string{"add", "comment", "reply"},
+			ShortcutRune: 'c',
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {

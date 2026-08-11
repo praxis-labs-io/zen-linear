@@ -249,23 +249,15 @@ func (a *App) handleSearchInputKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		a.updateFocus()
 		return nil
-	case tcell.KeyTab, tcell.KeyBacktab:
-		a.searchInputFocused = false
-		if event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0 {
-			a.cyclePanesBackward()
-		} else {
-			a.cyclePanesForward()
-		}
-		return nil
 	case tcell.KeyRune:
 		// Tab-cycling keys leave the Search tab instead of typing into the
 		// query.
 		switch event.Rune() {
-		case a.actionKey("tab_prev", '{'):
+		case a.actionKey("tab_prev", '['):
 			a.searchInputFocused = false
 			a.cycleIssuesSection(-1)
 			return nil
-		case a.actionKey("tab_next", '}'):
+		case a.actionKey("tab_next", ']'):
 			a.searchInputFocused = false
 			a.cycleIssuesSection(1)
 			return nil

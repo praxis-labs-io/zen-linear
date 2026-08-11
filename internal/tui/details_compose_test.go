@@ -63,7 +63,7 @@ func postAndWait(t *testing.T, app *App, drawn <-chan struct{}) {
 	waitForDraw(t, drawn)
 }
 
-// TestCommentShortcutOpensTheBoxFromAnIssuePane covers t reaching the box from
+// TestCommentShortcutOpensTheBoxFromAnIssuePane covers c reaching the box from
 // the list as well as the details pane. It writes on the selected issue, so it
 // answers where an issue is selected and nowhere else.
 func TestCommentShortcutOpensTheBoxFromAnIssuePane(t *testing.T) {
@@ -80,13 +80,13 @@ func TestCommentShortcutOpensTheBoxFromAnIssuePane(t *testing.T) {
 			app.focusedDetailsView = false
 			app.updateFocus()
 
-			app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone))
+			app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
 
 			if app.focusedPane != FocusDetails || !app.focusedDetailsView {
-				t.Errorf("t left focus on pane %v tab %v, want the Comments tab", app.focusedPane, app.focusedDetailsView)
+				t.Errorf("c left focus on pane %v tab %v, want the Comments tab", app.focusedPane, app.focusedDetailsView)
 			}
 			if !app.composeBoxActive() {
-				t.Error("t did not put the keyboard in the compose box")
+				t.Error("c did not put the keyboard in the compose box")
 			}
 			if got := app.app.GetFocus(); got != app.detailsComposeArea {
 				t.Errorf("focus is on %T, want the compose area", got)
@@ -104,28 +104,32 @@ func TestCommentShortcutIsDeadInTheNavigationPane(t *testing.T) {
 	app.focusedDetailsView = false
 	app.updateFocus()
 
-	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone))
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
 
 	if app.focusedPane != FocusNavigation {
-		t.Errorf("t moved focus to pane %v, want to stay in the tree", app.focusedPane)
+		t.Errorf("c moved focus to pane %v, want to stay in the tree", app.focusedPane)
 	}
 	if app.composeBoxActive() {
-		t.Error("t opened the compose box from the navigation pane")
+		t.Error("c opened the compose box from the navigation pane")
 	}
 }
 
 // TestComposeBoxTakesLettersTheAppWouldOtherwiseClaim is the one that matters
-// for a prose field: q quits and braces cycle tabs everywhere else.
+// for a prose field: q quits, brackets cycle tabs, and braces toggle panes
+// everywhere else.
 func TestComposeBoxTakesLettersTheAppWouldOtherwiseClaim(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 
-	typeRunes(t, app, "q{}/:")
+	typeRunes(t, app, "q[]{}/:")
 
-	if got := app.detailsComposeArea.GetText(); got != "q{}/:" {
+	if got := app.detailsComposeArea.GetText(); got != "q[]{}/:" {
 		t.Errorf("box holds %q, want every key typed into it", got)
 	}
 	if !app.focusedDetailsView {
-		t.Error("a brace cycled the details tabs instead of typing")
+		t.Error("a bracket cycled the details tabs instead of typing")
+	}
+	if app.navigationHidden || app.detailsHidden {
+		t.Error("a brace toggled a pane instead of typing")
 	}
 }
 
@@ -178,7 +182,7 @@ func TestEscapeLeavesTheBoxAndKeepsTheWords(t *testing.T) {
 		t.Errorf("box holds %q, want the words kept", got)
 	}
 
-	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone))
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 'c', tcell.ModNone))
 	if got := app.detailsComposeArea.GetText(); got != "half a thought" {
 		t.Errorf("reopening the box holds %q, want the draft back", got)
 	}
@@ -441,9 +445,10 @@ func TestClickingTheBoxTakesTheKeyboard(t *testing.T) {
 	}
 }
 
-// TestTabWalksTheCommentsTabThenLeaves covers the focus ring: the cards, the
-// box, the button, and only then the next pane.
-func TestTabWalksTheCommentsTabThenLeaves(t *testing.T) {
+// TestTabWalksTheCommentsTabAndStopsAtTheEnd covers the focus ring: the cards,
+// the box, the button. Tab is not pane navigation, so the end of the ring is
+// the end of the walk.
+func TestTabWalksTheCommentsTabAndStopsAtTheEnd(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	app.leaveComposeBox()
 
@@ -458,13 +463,16 @@ func TestTabWalksTheCommentsTabThenLeaves(t *testing.T) {
 		t.Fatalf("two Tabs focused %T, want the Post button", got)
 	}
 	tab()
-	if app.focusedPane == FocusDetails {
-		t.Error("three Tabs stayed in the details pane, want it to leave")
+	if got := app.app.GetFocus(); got != app.detailsComposePost {
+		t.Fatalf("three Tabs focused %T, want to stay on the Post button", got)
+	}
+	if app.focusedPane != FocusDetails {
+		t.Errorf("Tab left the details pane for %v", app.focusedPane)
 	}
 }
 
-// TestBacktabWalksTheRingBackwards covers the ring in reverse, ending outside
-// the pane rather than wrapping inside it.
+// TestBacktabWalksTheRingBackwards covers the ring in reverse, stopping on the
+// cards rather than wrapping or leaving the pane.
 func TestBacktabWalksTheRingBackwards(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	app.commentsFocus = commentsFocusPost
@@ -481,8 +489,11 @@ func TestBacktabWalksTheRingBackwards(t *testing.T) {
 		t.Fatalf("two Backtabs focused %T, want the card stack", got)
 	}
 	backtab()
-	if app.focusedPane == FocusDetails {
-		t.Error("three Backtabs stayed in the details pane, want it to leave")
+	if got := app.app.GetFocus(); got != app.detailsCommentsView {
+		t.Fatalf("three Backtabs focused %T, want to stay on the card stack", got)
+	}
+	if app.focusedPane != FocusDetails {
+		t.Errorf("Backtab left the details pane for %v", app.focusedPane)
 	}
 }
 
