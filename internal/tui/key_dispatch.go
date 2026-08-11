@@ -16,6 +16,11 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return modal.HandleKey(event)
 	}
 
+	// A layout change can unmount the Comments tab while the compose box still
+	// holds the keyboard. Recover before routing, or every key from then on
+	// disappears into a box that is not on the screen.
+	a.releaseStrandedCompose()
+
 	// Handle palette first if it's open
 	if a.focusedPane == FocusPalette {
 		return a.handlePaletteKey(event)
@@ -27,16 +32,27 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return a.handleSearchInputKey(event)
 	}
 
+	// The compose box owns keys for the same reason: a comment is prose, and q
+	// in the middle of one is a letter, not a quit.
+	if a.composeBoxActive() {
+		return a.handleComposeKey(event)
+	}
+
 	// Global shortcuts (only when not in palette)
 	switch event.Key() {
 	case tcell.KeyCtrlC:
 		a.app.Stop()
 		return nil
 	case tcell.KeyTab, tcell.KeyBacktab:
-		// Tab moves between panes and nothing else. The Details/Comments
-		// tabs inside the details pane belong to that pane's tab keys.
+		// Tab moves between panes, stopping at the compose box on the way
+		// through the Comments tab. The Details/Comments tabs themselves
+		// belong to that pane's tab keys.
 		if a.focusedPane != FocusPalette {
-			if event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0 {
+			backward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
+			if a.stepCommentsFocus(backward) {
+				return nil
+			}
+			if backward {
 				a.cyclePanesBackward()
 			} else {
 				a.cyclePanesForward()

@@ -136,11 +136,38 @@ func (a *App) loadIssueDetailsByID(issueID string) {
 				return
 			}
 			a.issuesMu.Lock()
+			// A comment posted while this fetch was out is not in what came
+			// back, and the id guard above cannot see it: posting does not move
+			// the selection. Assigning wholesale would take the card off screen
+			// again a moment after it landed.
+			if a.selectedIssue != nil {
+				fullIssue.Comments = mergeComments(fullIssue.Comments, a.selectedIssue.Comments)
+			}
 			a.selectedIssue = &fullIssue
 			a.issuesMu.Unlock()
 			a.updateDetailsView()
 		})
 	}()
+}
+
+// mergeComments folds any comment the fetch did not return back into its
+// result, in timestamp order. Held comments the server already knows about are
+// matched by id and the fetched copy wins, so an edit made elsewhere still
+// lands.
+func mergeComments(fetched, held []linearapi.Comment) []linearapi.Comment {
+	if len(held) == 0 {
+		return fetched
+	}
+	known := make(map[string]struct{}, len(fetched))
+	for _, comment := range fetched {
+		known[comment.ID] = struct{}{}
+	}
+	for _, comment := range held {
+		if _, ok := known[comment.ID]; !ok {
+			fetched = insertCommentInOrder(fetched, comment)
+		}
+	}
+	return fetched
 }
 
 // cancelDetailFetch stops the in-flight detail request and invalidates it in one

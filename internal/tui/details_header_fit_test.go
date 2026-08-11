@@ -35,9 +35,27 @@ func drawDetails(t *testing.T, app *App, width int) []string {
 	return drawTextView(t, app.detailsDescriptionView, width)
 }
 
-// drawTextView renders a text view at a width and returns what landed on the
-// screen, one string per row.
+// drawTextView renders a bordered text view at a width and returns what landed
+// on the screen, one string per row, with the border columns taken off.
 func drawTextView(t *testing.T, view *tview.TextView, width int) []string {
+	t.Helper()
+	lines := drawPrimitive(t, view, width)
+	// Columns 0 and width-1 are the pane border, which would otherwise sit on
+	// the end of every line and hide what the content does there.
+	for i, line := range lines {
+		runes := []rune(line)
+		if len(runes) < 2 {
+			lines[i] = ""
+			continue
+		}
+		lines[i] = strings.TrimRight(string(runes[1:len(runes)-1]), " ")
+	}
+	return lines
+}
+
+// drawPrimitive renders any primitive at a width and returns every column of
+// what landed on the screen, one string per row.
+func drawPrimitive(t *testing.T, primitive tview.Primitive, width int) []string {
 	t.Helper()
 
 	screen := tcell.NewSimulationScreen("UTF-8")
@@ -48,17 +66,15 @@ func drawTextView(t *testing.T, view *tview.TextView, width int) []string {
 
 	const height = 40
 	screen.SetSize(width, height)
-	view.SetRect(0, 0, width, height)
-	view.Draw(screen)
+	primitive.SetRect(0, 0, width, height)
+	primitive.Draw(screen)
 	screen.Show()
 
-	// Columns 0 and width-1 are the pane border, which would otherwise sit on
-	// the end of every line and hide what the content does there.
 	cells, screenWidth, screenHeight := screen.GetContents()
 	lines := make([]string, 0, screenHeight)
 	for y := 0; y < screenHeight; y++ {
 		row := make([]rune, 0, screenWidth)
-		for x := 1; x < screenWidth-1; x++ {
+		for x := 0; x < screenWidth; x++ {
 			runes := cells[y*screenWidth+x].Runes
 			if len(runes) == 0 || runes[0] == 0 {
 				row = append(row, ' ')

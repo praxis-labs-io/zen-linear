@@ -121,6 +121,16 @@ The options beyond the original linear-tui set:
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.
 
+In the Comments tab, Tab steps through the card stack, the compose box, and
+the Post button before it moves to the next pane:
+
+    t           write a comment, from any pane
+    Ctrl+Enter  post it          Enter       new line, or post from the button
+    Esc         stop writing, keeping what is in the box
+
+The `add_comment` keybinding moves that first key; the box itself is always on
+the page.
+
 In the navigation pane:
 
     f           favorite or unfavorite the item under the cursor

@@ -42,10 +42,12 @@ func newCommentsTestApp(t *testing.T) *App {
 	return app
 }
 
-// drawComments renders the comments tab at a width and returns its rows.
+// drawComments renders the card stack at a width and returns its rows. The
+// width is the stack's own: the panel around it has already spent the border
+// and the padding, and the compose box under it is not a card.
 func drawComments(t *testing.T, app *App, width int) []string {
 	t.Helper()
-	return drawTextView(t, app.detailsCommentsView, width)
+	return drawPrimitive(t, app.detailsCommentsView, width)
 }
 
 // commentCards groups the drawn rows into cards, each running from its top
@@ -110,27 +112,26 @@ func TestCommentsRenderAsCards(t *testing.T) {
 	}
 }
 
-// TestCommentCardsFillTheMeasure covers the card taking the pane's measure: the
-// reading cap on a wide pane, the whole pane on a narrow one.
+// TestCommentCardsFillTheMeasure covers the card taking the stack's measure:
+// the reading cap where there is room for it, the whole width where there is
+// not.
 func TestCommentCardsFillTheMeasure(t *testing.T) {
 	app := newCommentsTestApp(t)
 
-	cardWidth := func(paneWidth int) int {
+	cardWidth := func(stackWidth int) int {
 		t.Helper()
-		cards := commentCards(drawComments(t, app, paneWidth))
+		cards := commentCards(drawComments(t, app, stackWidth))
 		if len(cards) == 0 {
-			t.Fatalf("width %d drew no cards", paneWidth)
+			t.Fatalf("width %d drew no cards", stackWidth)
 		}
 		return len([]rune(cards[0][0]))
 	}
 
 	if got := cardWidth(180); got != detailsMeasure {
-		t.Errorf("card is %d cells at pane width 180, want the %d measure", got, detailsMeasure)
+		t.Errorf("card is %d cells at stack width 180, want the %d measure", got, detailsMeasure)
 	}
-
-	padding := app.density.DetailsPadding
-	if want := 60 - 2 - padding.Left - padding.Right; cardWidth(60) != want {
-		t.Errorf("card is %d cells at pane width 60, want %d to fill the pane", cardWidth(60), want)
+	if got := cardWidth(60); got != 60 {
+		t.Errorf("card is %d cells at stack width 60, want 60 to fill it", got)
 	}
 }
 

@@ -97,9 +97,14 @@ func (a *App) applyThemeToComponents() {
 		a.detailsDescriptionView.SetBackgroundColor(a.theme.Background)
 	}
 	if a.detailsCommentsView != nil {
-		a.detailsCommentsView.SetTitleColor(a.theme.Foreground).
-			SetBorderColor(a.theme.Border)
 		a.detailsCommentsView.SetBackgroundColor(a.theme.Background)
+	}
+	if a.detailsCommentsPanel != nil {
+		a.detailsCommentsPanel.SetTitleColor(a.theme.Foreground).
+			SetBorderColor(a.theme.Border).
+			SetBackgroundColor(a.theme.Background)
+		a.detailsComposeBox.SetBackgroundColor(a.theme.Background)
+		a.applyComposeTheme()
 	}
 
 	if a.statusBar != nil {
@@ -112,9 +117,9 @@ func (a *App) applyDensityToComponents() {
 		padding := a.density.DetailsPadding
 		a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 	}
-	if a.detailsCommentsView != nil {
+	if a.detailsCommentsPanel != nil {
 		padding := a.density.DetailsPadding
-		a.detailsCommentsView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+		a.detailsCommentsPanel.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 	}
 	if a.statusBar != nil {
 		padding := a.density.StatusBarPadding
@@ -136,7 +141,6 @@ func (a *App) rebuildModals() {
 
 	a.pickerModal = NewPickerModal(a)
 	a.issueFormModal = NewIssueFormModal(a)
-	a.createCommentModal = NewCreateCommentModal(a)
 	a.editDescriptionModal = NewEditDescriptionModal(a)
 	a.editLabelsModal = NewEditLabelsModal(a)
 	a.textInputModal = NewTextInputModal(a)

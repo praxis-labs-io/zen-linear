@@ -144,6 +144,17 @@ func (a *App) detailsDrawFunc(refit func(int)) func(tcell.Screen, int, int, int,
 	}
 }
 
+// detailsPanelDrawFunc is detailsDrawFunc for a tab that sits inside a panel:
+// the panel already spent the border and the padding, so the whole width is
+// content and only the reading measure is taken out of it.
+func (a *App) detailsPanelDrawFunc(refit func(int)) func(tcell.Screen, int, int, int, int) (int, int, int, int) {
+	return func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		measure, gutter := readingMeasure(max(0, width))
+		refit(measure)
+		return x + gutter, y, measure, max(0, height)
+	}
+}
+
 // detailsDivider draws the rule between sections at the width the text is set
 // at, falling back to a short one before the first draw fixes that width.
 func detailsDivider(width int) string {
@@ -182,19 +193,15 @@ func (a *App) buildDetailsView() *tview.Flex {
 	a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 	a.detailsDescriptionView.SetDrawFunc(a.detailsDrawFunc(a.refitDetailsHeader))
 
-	// Create comments view (bottom section, scrollable, fixed height)
+	// Create the comments card stack. The panel around it owns the border, the
+	// tab title, and the padding, so this one goes bare.
 	a.detailsCommentsView = tview.NewTextView()
 	a.detailsCommentsView.SetDynamicColors(true).
 		SetWrap(true).
-		SetWordWrap(true).
-		SetBorder(true).
-		SetTitle(" Comments ").
-		SetTitleAlign(tview.AlignLeft).
-		SetTitleColor(a.theme.Foreground).
-		SetBorderColor(a.theme.Border)
+		SetWordWrap(true)
 	a.detailsCommentsView.SetBackgroundColor(a.theme.Background)
-	a.detailsCommentsView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-	a.detailsCommentsView.SetDrawFunc(a.detailsDrawFunc(a.refitDetailsComments))
+	a.detailsCommentsView.SetDrawFunc(a.detailsPanelDrawFunc(a.refitDetailsComments))
+	a.buildDetailsCommentsPanel()
 
 	// Create flex layout; comments are added conditionally after issue selection.
 	detailsFlex := tview.NewFlex().SetDirection(tview.FlexRow)
@@ -237,12 +244,13 @@ func (a *App) scrollDetailsHalfPage(direction int) {
 // setDetailsCommentsVisibility records whether the Comments tab exists and
 // re-renders the tabbed details layout.
 func (a *App) setDetailsCommentsVisibility(showComments bool) {
-	if a.detailsView == nil || a.detailsDescriptionView == nil || a.detailsCommentsView == nil {
+	if a.detailsView == nil || a.detailsDescriptionView == nil || a.detailsCommentsPanel == nil {
 		return
 	}
 	a.detailsCommentsVisible = showComments
 	if !showComments {
 		a.focusedDetailsView = false
+		a.commentsFocus = commentsFocusCards
 	}
 	a.updateDetailsLayout()
 }
@@ -352,6 +360,13 @@ func (a *App) updateDetailsView() {
 	// The Comments tab is always reachable for a selected issue; an issue
 	// without comments shows the empty state.
 	a.setDetailsCommentsVisibility(selectedIssue != nil)
+	// A half-written comment belongs to the issue it was written for, not to
+	// the box, which stays put while the selection moves.
+	if selectedIssue == nil {
+		a.syncComposeDraft("")
+	} else {
+		a.syncComposeDraft(selectedIssue.ID)
+	}
 	if selectedIssue == nil {
 		a.detailsHeaderLines = nil
 		a.detailsBody = ""

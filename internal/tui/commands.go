@@ -978,7 +978,9 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				a.createCommentModal.Show(issue.ID, a.issueContextLine(*issue), a.handleCreateComment)
+				if !a.openComposeBox() {
+					a.flashStatus("No comments pane to write in")
+				}
 			},
 		},
 	}

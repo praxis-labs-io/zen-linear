@@ -151,7 +151,7 @@ func (a *App) updateFocus() {
 		a.searchPanel.SetBorderColor(a.theme.Border)
 		a.setIssuesPlaceholderBorder(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
-		a.detailsCommentsView.SetBorderColor(a.theme.Border)
+		a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusIssues:
@@ -181,21 +181,35 @@ func (a *App) updateFocus() {
 		a.updateAllPaneTitles()
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
-		a.detailsCommentsView.SetBorderColor(a.theme.Border)
+		a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
 	case FocusDetails:
 		// Focus the appropriate sub-view based on state
 		if !a.detailsCommentsVisible {
 			a.focusedDetailsView = false
 		}
+		if !a.focusedDetailsView {
+			// Every way out of the Comments tab drops the sub-focus, so coming
+			// back lands on the cards rather than mid-sentence.
+			a.commentsFocus = commentsFocusCards
+		}
 		a.updateDetailsLayout()
 		if a.focusedDetailsView && a.detailsCommentsVisible {
-			a.app.SetFocus(a.detailsCommentsView)
+			// The tab has three targets: the cards read, the box writes, the
+			// button sends.
+			switch a.commentsFocus {
+			case commentsFocusText:
+				a.app.SetFocus(a.detailsComposeArea)
+			case commentsFocusPost:
+				a.app.SetFocus(a.detailsComposePost)
+			default:
+				a.app.SetFocus(a.detailsCommentsView)
+			}
 			a.detailsDescriptionView.SetBorderColor(a.theme.Border)
-			a.detailsCommentsView.SetBorderColor(a.theme.BorderFocus)
+			a.detailsCommentsPanel.SetBorderColor(a.theme.BorderFocus)
 		} else {
 			a.app.SetFocus(a.detailsDescriptionView)
 			a.detailsDescriptionView.SetBorderColor(a.theme.BorderFocus)
-			a.detailsCommentsView.SetBorderColor(a.theme.Border)
+			a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
 		}
 		a.navigationTree.SetBorderColor(a.theme.Border)
 		a.myIssuesTable.SetBorderColor(a.theme.Border)
@@ -212,7 +226,7 @@ func (a *App) updateFocus() {
 		a.searchPanel.SetBorderColor(a.theme.Border)
 		a.setIssuesPlaceholderBorder(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
-		a.detailsCommentsView.SetBorderColor(a.theme.Border)
+		a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	}
@@ -249,9 +263,9 @@ func (a *App) updateAllPaneTitles() {
 		detailsTitle := a.paneTitle(paneNumberDetails, a.detailsTabsTitle(isDetailsFocused), isDetailsFocused)
 		a.detailsDescriptionView.SetTitle(detailsTitle)
 		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
-		if a.detailsCommentsView != nil {
-			a.detailsCommentsView.SetTitle(detailsTitle)
-			a.detailsCommentsView.SetTitleColor(a.theme.Foreground)
+		if a.detailsCommentsPanel != nil {
+			a.detailsCommentsPanel.SetTitle(detailsTitle)
+			a.detailsCommentsPanel.SetTitleColor(a.theme.Foreground)
 		}
 	}
 }

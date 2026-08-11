@@ -78,6 +78,10 @@ func (a *App) switchWorkspace(name string) {
 	// The switch clears every field the snapshot reads, so the outgoing
 	// workspace's place has to go to disk before applySettings runs.
 	a.persistSession()
+	// Unposted comments belong to issues this workspace is leaving behind.
+	// Dropped here rather than in resetCachedState, which a settings save also
+	// runs: saving settings is no reason to lose what someone has written.
+	a.clearComposeDrafts()
 	a.activeWorkspaceName = workspace.Name
 	a.markSessionWorkspace()
 	// A workspace key is a personal API key, not an OAuth token, so drop any
