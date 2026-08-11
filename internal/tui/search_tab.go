@@ -70,6 +70,62 @@ func (a *App) buildSearchPanel() {
 		AddItem(a.searchBody, 0, 1, false)
 
 	a.updateSearchBody()
+	a.applySearchFocusStyles()
+}
+
+// searchPaneStyle is how the Search tab's two halves paint for one focus state.
+// The query box and the result list sit in one bordered pane, so the border
+// says nothing about which of them holds the keyboard; these colors do.
+type searchPaneStyle struct {
+	LabelColor    tcell.Color
+	FieldText     tcell.Color
+	SelectedStyle tcell.Style
+}
+
+// searchPaneStyles returns the colors for a focus state. The muted list keeps a
+// marker on its row rather than dropping it: the row is still where Tab comes
+// back to. It is an underline and not a background, because HeaderBg equals
+// Background in the high contrast theme and Background is transparent in
+// rose_pine_moon, so neither can carry a marker in every theme.
+func searchPaneStyles(theme Theme, paneFocused, inputFocused bool) searchPaneStyle {
+	style := searchPaneStyle{
+		LabelColor: theme.SecondaryText,
+		FieldText:  theme.SecondaryText,
+		SelectedStyle: tcell.StyleDefault.
+			Foreground(theme.SecondaryText).
+			Background(theme.Background).
+			Underline(true),
+	}
+	if !paneFocused {
+		return style
+	}
+	if inputFocused {
+		style.LabelColor = theme.Accent
+		style.FieldText = theme.Foreground
+		return style
+	}
+	style.SelectedStyle = tcell.StyleDefault.
+		Foreground(theme.SelectionText).
+		Background(theme.SelectionBg).
+		Bold(true)
+	return style
+}
+
+// applySearchFocusStyles lights the half of the Search tab holding the keyboard
+// and mutes the other. Without it a fresh search shows a lit row nobody chose,
+// and the query box reads as live while the cursor is down in the results.
+func (a *App) applySearchFocusStyles() {
+	if a.searchInput == nil || a.searchResultsTable == nil {
+		return
+	}
+	paneFocused := a.focusedPane == FocusIssues && a.activeIssuesSection == IssuesSectionSearch
+	style := searchPaneStyles(a.theme, paneFocused, a.searchInputFocused)
+
+	a.searchInput.SetLabelColor(style.LabelColor)
+	a.searchInput.SetFieldStyle(tcell.StyleDefault.
+		Foreground(style.FieldText).
+		Background(a.theme.InputBg))
+	a.searchResultsTable.SetSelectedStyle(style.SelectedStyle)
 }
 
 // updateSearchBody mounts the results table when there are rows, or a

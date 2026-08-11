@@ -201,6 +201,9 @@ func (a *App) updateFocus() {
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	}
+	// The Search tab's two halves share one border, so which of them is live
+	// has to be said in their own colors, from every branch above.
+	a.applySearchFocusStyles()
 	a.updateStatusBar()
 }
 

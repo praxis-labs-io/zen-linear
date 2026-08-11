@@ -85,6 +85,52 @@ func TestPerformIssueSearch_RendersResults(t *testing.T) {
 	}
 }
 
+// TestSearchPaneStylesLightOneHalfAtATime covers the cue the tab had none of:
+// the query box and the result list share a border, so a lit row and a live
+// field read the same whichever holds the keyboard.
+func TestSearchPaneStylesLightOneHalfAtATime(t *testing.T) {
+	for _, theme := range []Theme{RosePineMoonTheme, HighContrastTheme, LinearTheme} {
+		input := searchPaneStyles(theme, true, true)
+		results := searchPaneStyles(theme, true, false)
+		away := searchPaneStyles(theme, false, false)
+
+		if input.LabelColor != theme.Accent || input.FieldText != theme.Foreground {
+			t.Errorf("typing in the query box left it muted: label %v text %v", input.LabelColor, input.FieldText)
+		}
+		if _, _, attr := input.SelectedStyle.Decompose(); attr&tcell.AttrBold != 0 {
+			t.Error("the list kept its live selection while the query box had the keyboard")
+		}
+
+		if results.LabelColor != theme.SecondaryText || results.FieldText != theme.SecondaryText {
+			t.Errorf("the query box stayed lit while the list had the keyboard: label %v", results.LabelColor)
+		}
+		fg, bg, attr := results.SelectedStyle.Decompose()
+		if fg != theme.SelectionText || bg != theme.SelectionBg || attr&tcell.AttrBold == 0 {
+			t.Errorf("the live list selection = %v on %v attr %v, want the theme's selection", fg, bg, attr)
+		}
+
+		// Off the tab entirely, neither half claims the keyboard.
+		if away.LabelColor != theme.SecondaryText {
+			t.Error("the query box stayed lit with the pane unfocused")
+		}
+		if _, _, attr := away.SelectedStyle.Decompose(); attr&tcell.AttrBold != 0 {
+			t.Error("the list stayed lit with the pane unfocused")
+		}
+	}
+}
+
+// TestTheMutedSelectionStaysFindable pins why the marker is an underline. Two
+// shipped themes cannot carry it as a background: HighContrast sets HeaderBg to
+// its Background, and rose_pine_moon's Background is the terminal's.
+func TestTheMutedSelectionStaysFindable(t *testing.T) {
+	for _, theme := range []Theme{RosePineMoonTheme, HighContrastTheme, LinearTheme} {
+		muted := searchPaneStyles(theme, true, true).SelectedStyle
+		if _, _, attr := muted.Decompose(); attr&tcell.AttrUnderline == 0 {
+			t.Error("the muted selection has no marker, so Tab comes back to a row nobody can see")
+		}
+	}
+}
+
 // TestTabLeavesTheSearchInputForTheResults covers the query box's only exit
 // that keeps the query. h and l type into it, and Esc empties it before it lets
 // go, so without Tab there is no way out with the words still there.
