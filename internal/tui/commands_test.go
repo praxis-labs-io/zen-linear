@@ -170,6 +170,10 @@ func TestEditIssueCommandOpensThePrefilledForm(t *testing.T) {
 		TeamID:     "team-1",
 	}
 
+	// The shortcut only answers from an issue pane, which is where the key
+	// dispatcher runs it.
+	app.focusedPane = FocusIssues
+
 	if !app.runCommandShortcut('e') {
 		t.Fatal("e did not run a command")
 	}
@@ -206,6 +210,10 @@ func TestChangeTeamCommandMovesTheIssue(t *testing.T) {
 		called <- input
 		return linearapi.Issue{ID: input.ID}, nil
 	}
+
+	// The shortcut only answers from an issue pane, which is where the key
+	// dispatcher runs it.
+	app.focusedPane = FocusIssues
 
 	if !app.runCommandShortcut('M') {
 		t.Fatal("M did not run a command")
@@ -248,6 +256,10 @@ func TestChangeTeamCommandSkipsTheCurrentTeam(t *testing.T) {
 		called <- input
 		return linearapi.Issue{ID: input.ID}, nil
 	}
+
+	// The shortcut only answers from an issue pane, which is where the key
+	// dispatcher runs it.
+	app.focusedPane = FocusIssues
 
 	if !app.runCommandShortcut('M') {
 		t.Fatal("M did not run a command")

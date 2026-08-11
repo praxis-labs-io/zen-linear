@@ -10,50 +10,26 @@ type PaletteController struct {
 	query    string
 	cursor   int
 	filtered []Command
-	// issueContext ranks issue-scoped commands first when the palette was
-	// opened from an issue-focused pane, and last otherwise.
-	issueContext bool
+	// scope is the pane the palette was opened from. Commands outside it are
+	// left out of the list rather than ranked down.
+	scope CommandScope
 }
 
-// issueScopedCommands lists command ids that act on the selected issue.
-var issueScopedCommands = map[string]bool{
-	"open_browser": true, "open_github": true, "copy_id": true,
-	"copy_url": true, "copy_branch": true, "ask_agent": true,
-	"set_due_date": true, "clear_due_date": true, "edit_estimate": true,
-	"clear_estimate": true, "set_project": true, "clear_project": true,
-	"set_milestone": true, "clear_milestone": true,
-	"add_issue_relation": true, "remove_issue_relation": true,
-	"subscribe_issue": true, "unsubscribe_issue": true,
-	"open_attachment": true, "copy_attachment_url": true,
-	"assign_me": true, "unassign": true, "archive": true,
-	"change_status": true, "set_cycle": true, "clear_cycle": true,
-	"assign_user": true, "edit_issue": true, "edit_title": true, "edit_description": true,
-	"edit_labels":       true,
-	"toggle_sub_issues": true, "view_parent": true,
-	"create_sub_issue": true, "set_parent": true, "remove_parent": true,
-	"add_comment": true, "zoom_details": true,
-}
-
-// SetIssueContext records whether the palette was opened from an
-// issue-focused pane, reordering results accordingly.
-func (p *PaletteController) SetIssueContext(issueContext bool) {
-	p.issueContext = issueContext
+// SetScope records the scope the palette was opened in and re-filters.
+func (p *PaletteController) SetScope(scope CommandScope) {
+	p.scope = scope
 	p.filterCommands()
 }
 
-// rankByContext stable-partitions commands so the contextually relevant scope
-// comes first.
-func (p *PaletteController) rankByContext(commands []Command) []Command {
-	ranked := make([]Command, 0, len(commands))
-	var deferred []Command
+// inScope drops commands that do not apply where the palette was opened.
+func (p *PaletteController) inScope(commands []Command) []Command {
+	kept := make([]Command, 0, len(commands))
 	for _, cmd := range commands {
-		if issueScopedCommands[cmd.ID] == p.issueContext {
-			ranked = append(ranked, cmd)
-		} else {
-			deferred = append(deferred, cmd)
+		if cmd.appliesIn(p.scope) {
+			kept = append(kept, cmd)
 		}
 	}
-	return append(ranked, deferred...)
+	return kept
 }
 
 // NewPaletteController creates a new palette controller with the given commands.
@@ -128,13 +104,13 @@ func (p *PaletteController) MoveCursorDown() {
 func (p *PaletteController) Reset() {
 	p.query = ""
 	p.cursor = 0
-	p.filtered = p.rankByContext(p.commands)
+	p.filtered = p.inScope(p.commands)
 }
 
 // filterCommands filters commands based on the query.
 func (p *PaletteController) filterCommands() {
 	if p.query == "" {
-		p.filtered = p.rankByContext(p.commands)
+		p.filtered = p.inScope(p.commands)
 		return
 	}
 
@@ -155,5 +131,5 @@ func (p *PaletteController) filterCommands() {
 		}
 	}
 
-	p.filtered = p.rankByContext(filtered)
+	p.filtered = p.inScope(filtered)
 }

@@ -63,14 +63,14 @@ func postAndWait(t *testing.T, app *App, drawn <-chan struct{}) {
 	waitForDraw(t, drawn)
 }
 
-// TestCommentShortcutOpensTheBoxFromEveryPane covers t reaching the box from
-// wherever the reader is standing, not only from the details pane.
-func TestCommentShortcutOpensTheBoxFromEveryPane(t *testing.T) {
+// TestCommentShortcutOpensTheBoxFromAnIssuePane covers t reaching the box from
+// the list as well as the details pane. It writes on the selected issue, so it
+// answers where an issue is selected and nowhere else.
+func TestCommentShortcutOpensTheBoxFromAnIssuePane(t *testing.T) {
 	for _, pane := range []struct {
 		name string
 		from FocusTarget
 	}{
-		{"navigation", FocusNavigation},
 		{"issues", FocusIssues},
 		{"details", FocusDetails},
 	} {
@@ -92,6 +92,25 @@ func TestCommentShortcutOpensTheBoxFromEveryPane(t *testing.T) {
 				t.Errorf("focus is on %T, want the compose area", got)
 			}
 		})
+	}
+}
+
+// TestCommentShortcutIsDeadInTheNavigationPane pins the other half. A comment
+// goes on the selected issue, and the navigation tree is not where that is
+// chosen.
+func TestCommentShortcutIsDeadInTheNavigationPane(t *testing.T) {
+	app := newCommentsTestApp(t)
+	app.focusedPane = FocusNavigation
+	app.focusedDetailsView = false
+	app.updateFocus()
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone))
+
+	if app.focusedPane != FocusNavigation {
+		t.Errorf("t moved focus to pane %v, want to stay in the tree", app.focusedPane)
+	}
+	if app.composeBoxActive() {
+		t.Error("t opened the compose box from the navigation pane")
 	}
 }
 
