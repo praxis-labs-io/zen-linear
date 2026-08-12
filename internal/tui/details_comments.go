@@ -27,7 +27,7 @@ const (
 // where each card landed, which is what the ring moves and scrolls by.
 func (a *App) renderDetailsComments() {
 	a.commentSpans = nil
-	a.commentRingPainted = a.commentsHaveFocus()
+	a.commentPainted = a.commentRing()
 	if len(a.detailsCommentsSource) == 0 {
 		// Unframed, because refitDetailsComments skips an empty source: an
 		// empty state laid out to a width would never see the real one.
@@ -92,13 +92,13 @@ func (a *App) blockCard(block commentBlock, width int) ([]string, []pageSlot) {
 		area, post = a.detailsReplyArea, a.detailsReplyPost
 		heading = "write a reply"
 	}
-	return a.writingCard(width, heading, a.commentBorderTag(block.id), area, post)
+	return a.writingCard(width, heading, a.commentBorderTag(block.id), block.focus, area, post)
 }
 
 // writingCard frames a box the way a comment is framed, so what is being
 // written sits among what has been said rather than beside it. The interior
 // rows are left blank for the text area drawn over them.
-func (a *App) writingCard(width int, heading, border string, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
+func (a *App) writingCard(width int, heading, border string, focus commentsFocus, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
 	inner := width - commentCardChrome
 	lines := []string{
 		cardEdge("╭", "╮", width, border),
@@ -108,15 +108,51 @@ func (a *App) writingCard(width int, heading, border string, area *tview.TextAre
 	for i := 0; i < composeRows; i++ {
 		lines = append(lines, cardRow("", inner, border))
 	}
-	lines = append(lines, cardRow("", inner, border), cardEdge("╰", "╯", width, border))
+	// The hint rides beside the button rather than in the border below it: it
+	// names what sends the words, and it belongs on the row with the control
+	// that does the sending.
+	label := len([]rune(postLabel))
+	lines = append(lines,
+		cardRow(a.writingHints(focus, max(inner-label-1, 0)), inner, border),
+		cardEdge("╰", "╯", width, border))
 
 	// The chrome is a border cell and a pad cell, so the writing starts two in.
 	const cardInset = commentCardChrome / 2
-	label := len([]rune(postLabel))
 	return lines, []pageSlot{
 		{primitive: area, row: 3, height: composeRows, column: cardInset, width: max(inner, 0)},
 		{primitive: post, row: 3 + composeRows, height: 1, column: cardInset + max(inner-label, 0), width: min(label, max(inner, 0))},
 	}
+}
+
+// writingHints names what a box answers to, for as long as the keys are going
+// to it. A box nobody is writing in says nothing: the keys named there would be
+// the reader's, and they are not.
+func (a *App) writingHints(focus commentsFocus, width int) string {
+	button, _ := postFocusFor(focus)
+	if !a.commentsHaveFocus() || (a.commentsFocus != focus && a.commentsFocus != button) {
+		return ""
+	}
+	done := "esc done"
+	if focus == commentsFocusReply {
+		done = "esc close"
+	}
+	post := "ctrl+enter post"
+	if a.commentsFocus == button {
+		post = "enter post"
+	}
+	return a.themeTags.SecondaryText + cardHintLine(width, post, "tab post button", done) + "[-]"
+}
+
+// cardHintLine joins hints for a card, dropping them from the right until what
+// is left fits. A hint that overran would push the border out of true.
+func cardHintLine(width int, parts ...string) string {
+	for len(parts) > 0 {
+		if line := strings.Join(parts, " · "); len(line) <= width {
+			return line
+		}
+		parts = parts[:len(parts)-1]
+	}
+	return ""
 }
 
 // writingByline heads a box with who is writing and what they are writing,
@@ -197,7 +233,26 @@ func (a *App) commentCard(comment linearapi.Comment, width int) []string {
 			lines = append(lines, cardRow(row, inner, border))
 		}
 	}
-	return append(lines, cardEdge("╰", "╯", width, border))
+	return append(lines, a.cardFooter(comment.ID, width, border))
+}
+
+// cardFooter closes a card, carrying the keys it answers to when the ring is on
+// it. The hints ride in the border rather than above it: they are chrome, and a
+// row of them inside the card would be a line of the comment's own space spent
+// on the reader's keys.
+func (a *App) cardFooter(id string, width int, border string) string {
+	hints := ""
+	if id != "" && id == a.focusedCommentID && a.cardsHaveFocus() {
+		// One cell in from each corner, and one more so the run to the right of
+		// the hints is a border rather than a gap.
+		hints = cardHintLine(width-4, a.commentActionHints()...)
+	}
+	if hints == "" {
+		return cardEdge("╰", "╯", width, border)
+	}
+	fill := max(0, width-2-len([]rune(hints))-1)
+	return border + "╰" + strings.Repeat("─", fill) + "[-:-:-]" +
+		a.themeTags.SecondaryText + hints + "[-:-:-]" + border + "─╯[-:-:-]"
 }
 
 // commentBorderTag colors one card's frame: the ring's card in the focus color

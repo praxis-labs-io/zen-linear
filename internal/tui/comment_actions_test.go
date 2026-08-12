@@ -168,6 +168,53 @@ func showComments(t *testing.T, app *App, width, height int) {
 	app.detailsCommentsPage.Draw(screen)
 }
 
+// TestAPickedCardCarriesItsKeysInItsBorder covers the hints: they name what the
+// card answers to, they sit in the bottom border, and they belong to the picked
+// card alone.
+func TestAPickedCardCarriesItsKeysInItsBorder(t *testing.T) {
+	app := newThreadedTestApp(t)
+	if picked := cardTextFor(t, app, "root-1"); strings.Contains(picked, "reply") {
+		t.Errorf("a card nobody picked names keys in its border:\n%s", picked)
+	}
+
+	tabComments(t, app, false)
+
+	card := cardTextFor(t, app, "root-1")
+	footer := strings.Split(card, "\n")
+	last := footer[len(footer)-1]
+	for _, want := range []string{"r reply", "Q quote", "y copy link", "o open"} {
+		if !strings.Contains(last, want) {
+			t.Errorf("the border under the card = %q, want it to name %q", last, want)
+		}
+	}
+	if !strings.HasSuffix(strings.TrimRight(last, " "), "─╯[-:-:-]") {
+		t.Errorf("the border under the card = %q, want the hints inside it", last)
+	}
+}
+
+// TestABoxNamesItsKeysBesideThePostButton covers the same for a box, where the
+// hints ride on the button's own row rather than in the border.
+func TestABoxNamesItsKeysBesideThePostButton(t *testing.T) {
+	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
+	pressInComments(t, app, 'r')
+
+	rows := strings.Split(cardTextFor(t, app, blockIDReply), "\n")
+	// The row above the bottom border is the button's.
+	button := rows[len(rows)-2]
+	for _, want := range []string{"ctrl+enter post", "tab post button", "esc close"} {
+		if !strings.Contains(button, want) {
+			t.Errorf("the button row = %q, want it to name %q", button, want)
+		}
+	}
+
+	// The compose card at the end says nothing while the keys are elsewhere.
+	compose := strings.Split(cardTextFor(t, app, blockIDCompose), "\n")
+	if got := compose[len(compose)-2]; strings.Contains(got, "post") {
+		t.Errorf("the compose card names keys nobody is pressing: %q", got)
+	}
+}
+
 // TestTheComposeCardScrollsWithThePage covers the box being in the flow rather
 // than pinned to the foot of the pane. Scrolled to the top of a long thread it
 // is not on screen at all, and the rows it would have covered are conversation.
@@ -334,12 +381,12 @@ func TestReplyOpensABoxInsideTheThread(t *testing.T) {
 	if !app.composeBoxActive() || app.commentsFocus != commentsFocusReply {
 		t.Error("r left the keyboard off the reply box")
 	}
-	if got := composeCue(t, app.detailsReplyArea); got != "Reply to drew" {
-		t.Errorf("the box reads %q, want it to name who is being answered", got)
+	if got := composeCue(t, app.detailsReplyArea); got != replyPlaceholder {
+		t.Errorf("the box reads %q, want %q", got, replyPlaceholder)
 	}
 
-	// The box goes at the end of the thread, before the next root, so the
-	// answer is written where it is going to appear.
+	// Who is being answered is the thread the box is drawn in, not a line of
+	// text in it: the box goes at the end of that thread, before the next root.
 	at := app.commentSpanIndex(blockIDReply)
 	if at < 0 {
 		t.Fatal("no reply box on the page")

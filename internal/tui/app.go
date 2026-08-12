@@ -88,9 +88,9 @@ type App struct {
 	// by index so a refetch that reorders the stack keeps it on the same card.
 	focusedCommentID string
 	commentSpans     []commentSpan
-	// commentRingPainted is whether the last render drew the ring's card in the
-	// focus color, so a focus change repaints only when it changes something.
-	commentRingPainted   bool
+	// commentPainted is the ring the last render drew, so a focus change
+	// repaints only when it changes something on the page.
+	commentPainted       commentPaint
 	detailsCommentsPanel *tview.Flex     // Comments tab shell: the bordered panel
 	detailsCommentsPage  *commentsPage   // Cards, the reply box, the compose card
 	detailsComposeArea   *tview.TextArea // Where a comment gets written

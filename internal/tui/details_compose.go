@@ -23,8 +23,11 @@ import (
 // you type, so a long draft does not push the thread it answers off the page.
 const composeRows = 4
 
-// composePlaceholder is what the empty box says.
-const composePlaceholder = "Leave a comment"
+// composePlaceholder and replyPlaceholder are what each empty box says.
+const (
+	composePlaceholder = "Leave a comment"
+	replyPlaceholder   = "Leave a reply"
+)
 
 // replyParentID is the thread the reply box is open on, empty when no box is
 // open. One box at a time per issue: a second one open elsewhere on the page
@@ -94,34 +97,17 @@ func (a *App) holdReplyDraft() {
 	a.replyDrafts[parent] = body
 }
 
-// applyComposePlaceholder says what each box is for while it is empty: the
-// compose card takes a comment, and the reply box names who it is answering.
+// applyComposePlaceholder says what each box is for while it is empty. Neither
+// names who is being answered: the reply box is drawn inside the thread it
+// answers, and the card above it is the answer to that already.
 func (a *App) applyComposePlaceholder() {
 	if a.detailsComposeArea == nil {
 		return
 	}
 	a.detailsComposeArea.SetPlaceholder(composePlaceholder)
-	if a.detailsReplyArea == nil {
-		return
+	if a.detailsReplyArea != nil {
+		a.detailsReplyArea.SetPlaceholder(replyPlaceholder)
 	}
-	a.detailsReplyArea.SetPlaceholder("Reply" + replyTo(a.detailsCommentsSource, a.replyParentID()))
-}
-
-// replyTo names the author of a comment for the reply box, or nothing at all
-// when the page has moved on from the comment being answered.
-func replyTo(comments []linearapi.Comment, parentID string) string {
-	if parentID == "" {
-		return ""
-	}
-	for _, comment := range comments {
-		if comment.ID == parentID {
-			if name := formatUserDisplayName(comment.Author); name != "" {
-				return " to " + name
-			}
-			break
-		}
-	}
-	return ""
 }
 
 // postLabel is what the button says, padded out either side: a filled surface

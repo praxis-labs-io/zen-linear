@@ -34,10 +34,10 @@ func keyPairLabel(first, second rune) string {
 	return label
 }
 
-// commentActionHint names what the focused card answers to, each key read back
-// from the bindings and dropped when a binding took its rune. The whole hint
-// disappears when every one of them has been taken, separator included.
-func (a *App) commentActionHint() string {
+// commentActionHints names what a picked card answers to, in the order a reader
+// reaches for them. Each key is read back from the bindings and dropped when a
+// binding took its rune, so the hint never states a default the user has moved.
+func (a *App) commentActionHints() []string {
 	labels := make([]string, 0, 4)
 	for _, action := range []struct {
 		id       string
@@ -50,13 +50,10 @@ func (a *App) commentActionHint() string {
 		{"comment_open", 'o', "open"},
 	} {
 		if key := a.actionKey(action.id, action.fallback); key != 0 {
-			labels = append(labels, fmt.Sprintf("%c: %s", key, action.verb))
+			labels = append(labels, fmt.Sprintf("%c %s", key, action.verb))
 		}
 	}
-	if len(labels) == 0 {
-		return ""
-	}
-	return strings.Join(labels, " | ") + " | "
+	return labels
 }
 
 // zoomHint names the zoom key and the verb it performs, or nothing at all when
@@ -87,25 +84,22 @@ func (a *App) updateStatusBar() {
 		// stating the defaults at a user who has moved them. A key another
 		// binding has taken resolves to 0 and is left out rather than printed.
 		tabs := keyPairLabel(a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']'))
+		// The keys a box or a picked card answers to are named on the card
+		// itself, in the row with the Post button and in the border under the
+		// comment. Saying them again here is the same fact twice, so the bar
+		// names only what the card cannot: where the reader is on the page.
+		// Read off the field, not live focus: a focus callback can reach here
+		// from inside a draw.
 		if a.commentsFocus != commentsFocusCards && a.detailsCommentsVisible && a.focusedDetailsView {
-			// Every other key in the box is a character in the comment, so the
-			// hint names only the ones that are not. Read off the field, not
-			// live focus: a focus callback can reach here from inside a draw.
-			back := "Esc: back to comments"
-			if a.replyParentID() != "" && (a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost) {
-				back = "Esc: close the reply"
+			writing := "a comment"
+			if a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost {
+				writing = "a reply"
 			}
-			if a.commentsFocus == commentsFocusPost || a.commentsFocus == commentsFocusReplyPost {
-				helpText = fmt.Sprintf("%sEnter: post | %s[-]", keyColor, back)
-				break
-			}
-			helpText = fmt.Sprintf("%sCtrl+Enter: post | Tab: Post button | %s[-]", keyColor, back)
+			helpText = fmt.Sprintf("%sWriting %s | %s: switch description/comments[-]", keyColor, writing, tabs)
 			break
 		}
 		if a.cardsHaveFocus() && a.focusedCommentID != "" {
-			// A lit card owns these keys, and the issue keys they shadow are
-			// not worth naming while it does.
-			helpText = fmt.Sprintf("%s%sTab: next comment | Esc: let go[-]", keyColor, a.commentActionHint())
+			helpText = fmt.Sprintf("%sTab: next comment | Esc: let go | %s: switch description/comments[-]", keyColor, tabs)
 			break
 		}
 		if len(a.commentSpans) > 0 && a.cardsHaveFocus() {

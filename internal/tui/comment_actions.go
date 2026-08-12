@@ -176,15 +176,29 @@ func (a *App) anchorComment(step int) int {
 	return 0
 }
 
-// refreshCommentRing repaints the stack when the ring has gained or lost the
-// keyboard. The border lives in the card text, so a focus change shows nothing
-// until the stack is written again, and rewriting it on every focus change
-// would redraw a hundred cards to change none of them.
+// commentPaint is the ring as one render drew it: whether the page held the
+// keyboard, and which stop was lit.
+type commentPaint struct {
+	active bool
+	focus  commentsFocus
+	id     string
+}
+
+// commentRing is the ring as it stands now, to be compared against what the
+// page is currently showing.
+func (a *App) commentRing() commentPaint {
+	return commentPaint{active: a.commentsHaveFocus(), focus: a.commentsFocus, id: a.focusedCommentID}
+}
+
+// refreshCommentRing repaints the page when the ring has moved or has gained or
+// lost the keyboard. The border and the hints live in the card text, so a focus
+// change shows nothing until the page is written again, and rewriting it on
+// every focus change would redraw a hundred cards to change none of them.
 func (a *App) refreshCommentRing() {
 	if a.detailsCommentsView == nil || len(a.detailsCommentsSource) == 0 {
 		return
 	}
-	if a.commentsHaveFocus() == a.commentRingPainted {
+	if a.commentRing() == a.commentPainted {
 		return
 	}
 	a.renderDetailsComments()
