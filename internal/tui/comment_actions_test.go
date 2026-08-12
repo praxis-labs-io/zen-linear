@@ -155,7 +155,7 @@ func TestEscapeLetsGoOfTheCard(t *testing.T) {
 // showComments draws the card stack in a pane too short for the thread, which
 // is where the ring has to scroll to stay visible. drawComments cannot: it
 // draws forty rows, and everything fits in forty rows.
-func showComments(t *testing.T, app *App, width, height int) {
+func showComments(t *testing.T, app *App, width, height int) []string {
 	t.Helper()
 
 	screen := tcell.NewSimulationScreen("UTF-8")
@@ -166,6 +166,23 @@ func showComments(t *testing.T, app *App, width, height int) {
 	screen.SetSize(width, height)
 	app.detailsCommentsPage.SetRect(0, 0, width, height)
 	app.detailsCommentsPage.Draw(screen)
+	screen.Show()
+
+	cells, screenWidth, screenHeight := screen.GetContents()
+	lines := make([]string, 0, screenHeight)
+	for y := 0; y < screenHeight; y++ {
+		row := make([]rune, 0, screenWidth)
+		for x := 0; x < screenWidth; x++ {
+			runes := cells[y*screenWidth+x].Runes
+			if len(runes) == 0 || runes[0] == 0 {
+				row = append(row, ' ')
+				continue
+			}
+			row = append(row, runes[0])
+		}
+		lines = append(lines, strings.TrimRight(string(row), " "))
+	}
+	return lines
 }
 
 // TestAPickedCardCarriesItsKeysInItsBorder covers the hints: they name what the
@@ -215,6 +232,32 @@ func TestABoxNamesItsKeysBesideThePostButton(t *testing.T) {
 	}
 }
 
+// TestThePaddingIsTheEndOfTheScroll covers the row under the content: a pane
+// that held one back would spend a line of every screen on a gap under the last
+// one. Mid-scroll the conversation runs to the border, and the gap arrives with
+// the end of it.
+func TestThePaddingIsTheEndOfTheScroll(t *testing.T) {
+	app := newThreadedTestApp(t)
+	if app.density.DetailsPadding.Bottom == 0 {
+		t.Skip("this density has no bottom padding to place")
+	}
+
+	bottomRow := func() string {
+		t.Helper()
+		lines := showComments(t, app, 60, 12)
+		return strings.TrimSpace(lines[len(lines)-1])
+	}
+
+	app.detailsCommentsView.ScrollToBeginning()
+	if bottomRow() == "" {
+		t.Error("the pane's last row is blank mid-scroll, want the conversation running to it")
+	}
+	app.detailsCommentsView.ScrollToEnd()
+	if got := bottomRow(); got != "" {
+		t.Errorf("the last row at the end of the scroll = %q, want the padding", got)
+	}
+}
+
 // TestTheComposeCardScrollsWithThePage covers the box being in the flow rather
 // than pinned to the foot of the pane. Scrolled to the top of a long thread it
 // is not on screen at all, and the rows it would have covered are conversation.
@@ -231,10 +274,10 @@ func TestTheComposeCardScrollsWithThePage(t *testing.T) {
 
 	// The last row of the pane belongs to a comment, not to a box sitting over
 	// it.
-	lines := drawComments(t, app, 80)
-	if last := strings.TrimSpace(lines[11]); last == "" {
+	lines := showComments(t, app, 80, 12)
+	if last := strings.TrimSpace(lines[len(lines)-1]); last == "" {
 		t.Errorf("the pane's last row is empty, want the conversation running to the bottom:\n%s",
-			strings.Join(lines[:12], "\n"))
+			strings.Join(lines, "\n"))
 	}
 }
 

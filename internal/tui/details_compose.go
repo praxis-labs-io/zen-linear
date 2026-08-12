@@ -165,7 +165,9 @@ func (a *App) buildDetailsCommentsPanel() {
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)
 	padding := a.density.DetailsPadding
-	a.detailsCommentsPanel.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	// No bottom padding: the page writes its own at the end of the text, so the
+	// gap is the end of the conversation rather than a row the pane never uses.
+	a.detailsCommentsPanel.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
 	// The page is the panel's focus item. With none flagged, Flex.Focus falls
 	// through to the panel's own Box, whose InputHandler is nil, and any focus
 	// tview delegates on its own leaves the tab dead to the keyboard.

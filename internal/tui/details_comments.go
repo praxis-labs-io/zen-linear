@@ -73,7 +73,7 @@ func (a *App) renderDetailsComments() {
 			a.commentSpans = append(a.commentSpans, span)
 		}
 	}
-	a.detailsCommentsView.SetText(strings.Join(lines, "\n"))
+	a.detailsCommentsView.SetText(strings.Join(lines, "\n") + a.trailingPad())
 	if a.detailsCommentsPage != nil {
 		a.detailsCommentsPage.setSlots(slots)
 	}

@@ -118,7 +118,7 @@ func (a *App) applyDensityToComponents() {
 	}
 	if a.detailsCommentsPanel != nil {
 		padding := a.density.DetailsPadding
-		a.detailsCommentsPanel.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+		a.detailsCommentsPanel.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
 	}
 	if a.statusBar != nil {
 		padding := a.density.StatusBarPadding

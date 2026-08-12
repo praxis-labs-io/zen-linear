@@ -133,15 +133,25 @@ const detailsMeasure = 90
 // The draw func is the only place the live width is known, and a pane narrower
 // than its own border and padding would otherwise hand tview a negative
 // content rect, which it draws from without checking.
+// The bottom padding is not held back from the content rect: it is written as
+// blank lines at the end of the text instead, so it is the end of the scroll
+// rather than a row of the pane. Reserved, it costs a line of reading on every
+// screen of a long description to leave a gap under the last one.
 func (a *App) detailsDrawFunc(refit func(int)) func(tcell.Screen, int, int, int, int) (int, int, int, int) {
 	return func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		inner := a.density.DetailsPadding
 		innerWidth := max(0, width-2-inner.Left-inner.Right)
-		innerHeight := max(0, height-2-inner.Top-inner.Bottom)
+		innerHeight := max(0, height-2-inner.Top)
 		measure, gutter := readingMeasure(innerWidth)
 		refit(measure)
 		return x + 1 + inner.Left + gutter, y + 1 + inner.Top, measure, innerHeight
 	}
+}
+
+// trailingPad is the bottom padding written as text: the blank lines that close
+// a scrolling pane, seen only once the reader reaches the end of it.
+func (a *App) trailingPad() string {
+	return strings.Repeat("\n", a.density.DetailsPadding.Bottom)
 }
 
 // detailsDivider draws the rule between sections at the width the text is set
@@ -289,7 +299,7 @@ func (a *App) renderDetailsDescription() {
 	if text != "" && a.detailsBody != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	a.detailsDescriptionView.SetText(text + a.detailsBody)
+	a.detailsDescriptionView.SetText(text + a.detailsBody + a.trailingPad())
 }
 
 // renderDetailsBody renders the description markdown at the fitted width. The
