@@ -330,7 +330,7 @@ func TestChangeTeamCommandSkipsTheCurrentTeam(t *testing.T) {
 		t.Fatalf("update sent for a no-op move: %#v", input)
 	case <-time.After(100 * time.Millisecond):
 	}
-	if got := app.statusBar.GetText(true); !strings.Contains(got, "Already in that team") {
+	if got := statusText(app); !strings.Contains(got, "Already in that team") {
 		t.Fatalf("status bar = %q, want it to say the issue is already in that team", got)
 	}
 }

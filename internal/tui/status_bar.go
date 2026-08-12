@@ -3,28 +3,71 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/mattn/go-runewidth"
 	"github.com/rivo/tview"
 )
 
-// buildStatusBar builds the strip of hints under the panes. The text style
-// carries the background as well: tview repaints a TextView's inner rect in its
-// text style whenever that differs from the box, which left the padding columns
-// as blocks in a second color.
+// flashDuration is how long a one-off message holds its place beside the hints.
+// A var so a test does not have to wait it out.
+var flashDuration = 4 * time.Second
+
+// statusToastGap is the space kept between the hints and a message, so the two
+// halves of the strip never run together.
+const statusToastGap = 2
+
+// buildStatusBar builds the strip under the panes: pane hints on the left, a
+// flashed message on the right. They are two views rather than one line of text
+// so a message lands in the same place whatever the hints are saying.
 func (a *App) buildStatusBar() {
-	a.statusBar = tview.NewTextView()
-	a.statusBar.SetDynamicColors(true).
-		SetWrap(false).
-		SetTextStyle(tcell.StyleDefault.Background(a.theme.Background).Foreground(a.theme.SecondaryText))
-	a.statusBar.SetBorder(false).SetBackgroundColor(a.theme.Background)
+	a.statusBar = a.newStatusView(tview.AlignLeft)
+	a.statusToast = a.newStatusView(tview.AlignRight)
+
+	a.statusRow = tview.NewFlex()
+	// Flex sets dontClear and never paints its own background; restore the fill
+	// so the layer beneath cannot bleed through.
+	a.statusRow.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
+	a.statusRow.
+		AddItem(a.statusBar, 0, 1, false).
+		AddItem(a.statusToast, 0, 0, false)
 
 	a.applyStatusBarPadding()
 }
 
+// newStatusView returns one half of the strip. The text style carries the
+// background as well: tview repaints a TextView's inner rect in its text style
+// whenever that differs from the box, which left the padding columns as blocks
+// in a second color.
+func (a *App) newStatusView(align int) *tview.TextView {
+	view := tview.NewTextView()
+	view.SetDynamicColors(true).
+		SetWrap(false).
+		SetTextAlign(align).
+		SetTextStyle(tcell.StyleDefault.Background(a.theme.Background).Foreground(a.theme.SecondaryText))
+	view.SetBorder(false).SetBackgroundColor(a.theme.Background)
+	return view
+}
+
+// applyStatusBarPadding keeps the strip's gaps at its outer edges, so the two
+// views sit flush against each other in the middle.
 func (a *App) applyStatusBarPadding() {
 	padding := a.density.StatusBarPadding
-	a.statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	a.statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, 0)
+	a.statusToast.SetBorderPadding(padding.Top, padding.Bottom, 0, padding.Right)
+}
+
+// setStatusToast puts the flashed message at the right of the strip, sizing its
+// half to the words and closing it up when there is nothing to say.
+func (a *App) setStatusToast() {
+	a.statusToast.SetText(a.themeTags.Accent + tview.Escape(a.statusMessage) + "[-]")
+
+	width := 0
+	if a.statusMessage != "" {
+		width = runewidth.StringWidth(a.statusMessage) + a.density.StatusBarPadding.Right + statusToastGap
+	}
+	a.statusRow.ResizeItem(a.statusToast, width, 0)
 }
 
 // keyPairLabel renders two action keys as one hint, dropping either one that
@@ -69,13 +112,15 @@ type hint struct {
 
 // hintLine joins hints in reading order, dropping any left keyless because a
 // binding took the rune. The hint never states a default the user has moved.
+// The key is lit and the verb is not, so the keys read as a column of their own
+// down the line.
 func (a *App) hintLine(hints ...hint) string {
 	labels := make([]string, 0, len(hints))
 	for _, item := range hints {
 		if item.key == "" {
 			continue
 		}
-		labels = append(labels, item.key+" "+item.verb)
+		labels = append(labels, a.themeTags.Accent+tview.Escape(item.key)+"[-]"+a.themeTags.SecondaryText+" "+item.verb)
 	}
 	if len(labels) == 0 {
 		return ""
@@ -172,23 +217,70 @@ func (a *App) updateStatusBar() {
 	if note != "" {
 		text += fmt.Sprintf("%s%s[-]", a.themeTags.SecondaryText, note)
 	}
-	if a.statusMessage != "" {
-		text += fmt.Sprintf("%s · [-]%s%s[-]", a.themeTags.Border, a.themeTags.Accent, a.statusMessage)
-	}
 
 	a.statusBar.SetText(text)
+	a.setStatusToast()
 }
 
-// updateStatusBarWithError updates the status bar with an error message.
+// updateStatusBarWithError leaves a failure on the bar until something else
+// takes the bar. It sits with the hints rather than in the message's corner,
+// which is sized to a few words. The text is escaped: the view reads color
+// tags, and a Linear error carrying a bracketed fragment would lose the part
+// naming what failed. A flash still counting down is dropped, or its clear
+// would repaint over this on its own clock.
 func (a *App) updateStatusBarWithError(err error) {
-	a.statusBar.SetText(fmt.Sprintf("%sError: %v[-]", a.themeTags.Error, err))
+	a.cancelStatusFlash()
+	a.statusMessage = ""
+	a.setStatusToast()
+	a.statusBar.SetText(fmt.Sprintf("%sError: %s[-]", a.themeTags.Error, tview.Escape(err.Error())))
 }
 
+// flashStatus says what just happened, in the strip's right corner, until it
+// expires.
 func (a *App) flashStatus(message string) {
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return
 	}
 	a.statusMessage = message
-	a.statusBar.SetText(fmt.Sprintf("%s%s[-]", a.themeTags.Accent, message))
+	a.updateStatusBar()
+	a.scheduleStatusFlashClear()
+}
+
+// scheduleStatusFlashClear takes the message back down after flashDuration. The
+// generation is what keeps a stale timer from clearing a newer message.
+func (a *App) scheduleStatusFlashClear() {
+	generation := a.statusFlashGeneration.Add(1)
+
+	a.statusFlashMu.Lock()
+	defer a.statusFlashMu.Unlock()
+	if a.statusFlashTimer != nil {
+		a.statusFlashTimer.Stop()
+	}
+	a.statusFlashTimer = time.AfterFunc(flashDuration, func() {
+		if generation != a.statusFlashGeneration.Load() {
+			return
+		}
+		a.QueueUpdateDraw(func() {
+			if generation != a.statusFlashGeneration.Load() {
+				return
+			}
+			a.statusMessage = ""
+			a.updateStatusBar()
+		})
+	})
+}
+
+// cancelStatusFlash drops a clear still pending. The timer only: the message
+// itself is UI state, written on the event loop, and this is also called from
+// teardown after that loop has stopped.
+func (a *App) cancelStatusFlash() {
+	a.statusFlashGeneration.Add(1)
+
+	a.statusFlashMu.Lock()
+	defer a.statusFlashMu.Unlock()
+	if a.statusFlashTimer != nil {
+		a.statusFlashTimer.Stop()
+		a.statusFlashTimer = nil
+	}
 }

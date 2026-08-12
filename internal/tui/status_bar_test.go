@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestPaneHintsNameWhatTheKeyboardDoesHere pins each pane's hints. The bar is
@@ -108,17 +110,118 @@ func TestWritingDropsTheKeyHints(t *testing.T) {
 	}
 }
 
-// A flashed message shares the strip rather than replacing the hints, so the
-// keys stay readable while it is up.
-func TestFlashedMessageJoinsTheHints(t *testing.T) {
+// A flashed message takes the strip's right corner rather than the hints, so
+// the keys stay readable while it is up.
+func TestFlashedMessageTakesTheCorner(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
-	app.statusMessage = "Copied ZNL-1"
 
-	app.updateStatusBar()
+	app.flashStatus("Copied ZNL-1")
 
-	got := app.statusBar.GetText(true)
-	if !strings.Contains(got, "Copied ZNL-1") || !strings.Contains(got, "j/k move") {
-		t.Errorf("hints = %q, want the message beside the keys", got)
+	if got := app.statusToast.GetText(true); got != "Copied ZNL-1" {
+		t.Errorf("toast = %q, want the message", got)
+	}
+	if got := app.statusBar.GetText(true); !strings.Contains(got, "j/k move") {
+		t.Errorf("hints = %q, want the keys still named", got)
+	}
+}
+
+// A one-off message used to sit in the bar for the rest of the session.
+func TestFlashedMessageClearsItself(t *testing.T) {
+	app := newUXTestApp(t)
+	app.focusedPane = FocusIssues
+	shortenFlash(t)
+	queued := watchQueuedUpdates(app)
+
+	app.flashStatus("Copied ZNL-1")
+	waitForQueuedUpdate(t, queued)
+
+	if got := app.statusToast.GetText(true); got != "" {
+		t.Errorf("toast = %q after the flash expired, want it empty", got)
+	}
+}
+
+// The last message wins: an older clear must not take a newer one down with it.
+func TestASecondFlashKeepsItsOwnClock(t *testing.T) {
+	app := newUXTestApp(t)
+	app.focusedPane = FocusIssues
+	shortenFlash(t)
+	queued := watchQueuedUpdates(app)
+
+	app.flashStatus("Copied ZNL-1")
+	app.flashStatus("Copied ZNL-2")
+
+	waitForQueuedUpdate(t, queued)
+	if got := app.statusToast.GetText(true); got != "" {
+		t.Errorf("toast = %q, want the second message cleared on its own timer", got)
+	}
+}
+
+// An error holds the bar: a flash counting down behind it must not repaint over
+// the failure a moment later.
+func TestErrorSurvivesAPendingFlash(t *testing.T) {
+	app := newUXTestApp(t)
+	app.focusedPane = FocusIssues
+	shortenFlash(t)
+
+	app.flashStatus("Posting comment...")
+	app.updateStatusBarWithError(errors.New("connection reset"))
+	time.Sleep(20 * flashTestDuration)
+
+	if got := app.statusBar.GetText(true); !strings.Contains(got, "connection reset") {
+		t.Errorf("bar = %q, want the failure still on screen", got)
+	}
+	if got := app.statusToast.GetText(true); got != "" {
+		t.Errorf("toast = %q, want the flash dropped for the failure", got)
+	}
+}
+
+// Linear errors carry bracketed fragments, which a view reading color tags eats
+// along with whatever names the failure.
+func TestErrorTextIsNotReadAsColorTags(t *testing.T) {
+	app := newUXTestApp(t)
+
+	app.updateStatusBarWithError(errors.New("field [teamId] is required"))
+
+	if got := app.statusBar.GetText(true); !strings.Contains(got, "[teamId]") {
+		t.Errorf("error reads %q, want the bracketed field kept", got)
+	}
+}
+
+// statusText is the whole strip, the hints and the message corner both, so a
+// test asserting on what the app said does not have to know which half said it.
+func statusText(app *App) string {
+	return app.statusBar.GetText(true) + " " + app.statusToast.GetText(true)
+}
+
+const flashTestDuration = 5 * time.Millisecond
+
+func shortenFlash(t *testing.T) {
+	t.Helper()
+	previous := flashDuration
+	flashDuration = flashTestDuration
+	t.Cleanup(func() { flashDuration = previous })
+}
+
+// watchQueuedUpdates reports every update the app queues, which for a flash is
+// the clear firing off its timer.
+func watchQueuedUpdates(app *App) <-chan struct{} {
+	ran := make(chan struct{}, 1)
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		select {
+		case ran <- struct{}{}:
+		default:
+		}
+	}
+	return ran
+}
+
+func waitForQueuedUpdate(t *testing.T, queued <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-queued:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the flash never cleared")
 	}
 }

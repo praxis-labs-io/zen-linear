@@ -180,7 +180,7 @@ func TestViewParent_SaysSoWhenTheParentIsNotLoaded(t *testing.T) {
 
 	runPaletteCommand(t, app, "view_parent")
 
-	if got := app.statusBar.GetText(true); !strings.Contains(got, "Parent issue not loaded") {
+	if got := statusText(app); !strings.Contains(got, "Parent issue not loaded") {
 		t.Fatalf("status after view_parent with an unfetched parent = %q, want the parent-not-loaded feedback", got)
 	}
 }

@@ -340,7 +340,7 @@ func TestShowProjectFilterReportsMissingTeamContext(t *testing.T) {
 
 	app.showProjectFilter()
 
-	if text := app.statusBar.GetText(true); !strings.Contains(text, "team context is required") {
+	if text := statusText(app); !strings.Contains(text, "team context is required") {
 		t.Fatalf("status bar = %q, want the team-context error, not a silent no-op", text)
 	}
 	if app.pages.HasPage("picker") {

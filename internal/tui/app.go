@@ -111,8 +111,11 @@ type App struct {
 	// keyed by the comment being answered. Closing the box is not losing the
 	// words, and reopening on the same thread finds them.
 	replyDrafts map[string]string
-	// statusBar holds the pane hints and whatever was last flashed.
+	// statusBar holds the pane hints; statusToast is the message corner it
+	// shares the statusRow strip with.
 	statusBar           *tview.TextView
+	statusToast         *tview.TextView
+	statusRow           *tview.Flex
 	paletteModal        *tview.Flex
 	paletteInput        *tview.InputField
 	paletteList         *tview.List
@@ -183,6 +186,12 @@ type App struct {
 	// pendingSearchIssueID is the restored session's issue, selected once when
 	// the first search results land.
 	pendingSearchIssueID string
+
+	// statusFlashTimer takes a one-off message back off the bar. Each flash
+	// owns a generation so a later one is never cleared on an older clock.
+	statusFlashTimer      *time.Timer
+	statusFlashMu         sync.Mutex
+	statusFlashGeneration atomic.Int64
 
 	searchDebounceTimer      *time.Timer
 	searchDebounceMu         sync.Mutex
@@ -328,11 +337,12 @@ func (a *App) Run() error {
 
 	// Start the application event loop
 	err := a.app.Run()
-	// The frame loop would otherwise outlive the event loop, queueing draws
-	// nothing is left to run.
+	// The frame loop and a flash still counting down would otherwise outlive
+	// the event loop, queueing draws nothing is left to run.
 	if a.loading != nil {
 		a.loading.stop()
 	}
+	a.cancelStatusFlash()
 	// Every quit path ends here with the event loop stopped, so the snapshot
 	// is settled and no queued update can move it. Recorded on a loop error
 	// too: the user's place is worth keeping whichever way the app came down.
@@ -699,7 +709,7 @@ func (a *App) buildLayout() {
 	a.mainLayout = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(a.contentFlex, 0, 1, true).
-		AddItem(a.statusBar, 1, 1, false)
+		AddItem(a.statusRow, 1, 1, false)
 
 	// Apply initial pane visibility (details is hidden by default).
 	a.rebuildContentLayout()
