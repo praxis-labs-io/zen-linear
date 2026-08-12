@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -127,17 +128,61 @@ func TestRepliesIndentUnderTheirParent(t *testing.T) {
 	}
 }
 
-// cardEdgeColumn returns the column the nth card's top border starts at.
+// TestTheThreadRailJoinsRepliesToTheirParent covers the connector: a rail down
+// the gutter, an elbow into each reply's byline, and a corner on the last one so
+// the run stops rather than trailing into the next thread.
+func TestTheThreadRailJoinsRepliesToTheirParent(t *testing.T) {
+	app := newThreadedTestApp(t)
+	lines := drawComments(t, app, 80)
+
+	// The elbow and the corner carry a space the card's own rule and bottom
+	// border do not, which is what tells ├─ the connector from ├─── the rule.
+	rail := 0
+	elbows, corners := 0, 0
+	for _, line := range lines {
+		trimmed := strings.TrimLeft(line, " ")
+		switch {
+		case strings.HasPrefix(trimmed, "├─ "):
+			elbows++
+		case strings.HasPrefix(trimmed, "╰─ "):
+			corners++
+		case trimmed == "│":
+			rail++
+		}
+	}
+
+	// One elbow for the first reply of the thread, one corner for the last.
+	if elbows != 1 || corners != 1 {
+		t.Errorf("drew %d elbows and %d corners, want one of each:\n%s", elbows, corners, strings.Join(lines, "\n"))
+	}
+	if rail == 0 {
+		t.Errorf("the replies hang off no rail:\n%s", strings.Join(lines, "\n"))
+	}
+
+	// The elbow meets the byline, one row under the reply's top border.
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimLeft(line, " "), "├─ ") {
+			if !strings.Contains(lines[i-1], "╭") {
+				t.Errorf("the elbow is on row %d, want it against the card's byline:\n%s", i, strings.Join(lines[i-2:i+2], "\n"))
+			}
+			break
+		}
+	}
+}
+
+// cardEdgeColumn returns the column the nth card's top border starts at,
+// counted in cells rather than bytes: the rail drawn in a reply's gutter is
+// three bytes to the cell.
 func cardEdgeColumn(t *testing.T, lines []string, what string, n int) int {
 	t.Helper()
 	seen := 0
 	for _, line := range lines {
-		column := strings.Index(line, "╭")
-		if column < 0 {
+		at := strings.Index(line, "╭")
+		if at < 0 {
 			continue
 		}
 		if seen == n {
-			return column
+			return utf8.RuneCountInString(line[:at])
 		}
 		seen++
 	}

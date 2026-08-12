@@ -524,10 +524,9 @@ func (a *App) updateDetailsView() {
 	a.detailsCommentsView.ScrollToBeginning()
 	// The ring keeps its card across the async fetch that fills the tab in, and
 	// drops it on an issue whose comments it is not on: ids do not survive a
-	// change of issue.
+	// change of issue, and nothing is lit until Tab says so.
 	if a.commentSpanIndex(a.focusedCommentID) < 0 {
 		a.focusedCommentID = ""
-		a.anchorCommentFocus()
 	}
 	// Comments arrive with the async full-issue fetch; refresh the tab strip
 	// so its count tracks what just rendered.

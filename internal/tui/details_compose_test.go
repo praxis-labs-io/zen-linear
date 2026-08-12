@@ -445,18 +445,25 @@ func TestClickingTheBoxTakesTheKeyboard(t *testing.T) {
 	}
 }
 
-// TestTabWalksTheCommentsTabAndStopsAtTheEnd covers the focus ring: the cards,
-// the box, the button. Tab is not pane navigation, so the end of the ring is
-// the end of the walk.
+// TestTabWalksTheCommentsTabAndStopsAtTheEnd covers the focus ring: each card
+// in turn, then the box, then the button. Tab is not pane navigation, so the
+// end of the ring is the end of the walk.
 func TestTabWalksTheCommentsTabAndStopsAtTheEnd(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	app.leaveComposeBox()
 
 	tab := func() { app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)) }
 
+	// One Tab per comment before the ring reaches the box.
+	for range app.detailsCommentsSource {
+		tab()
+		if got := app.app.GetFocus(); got != app.detailsCommentsView {
+			t.Fatalf("Tab through the cards focused %T, want the card stack", got)
+		}
+	}
 	tab()
 	if got := app.app.GetFocus(); got != app.detailsComposeArea {
-		t.Fatalf("one Tab from the cards focused %T, want the compose area", got)
+		t.Fatalf("Tab past the last card focused %T, want the compose area", got)
 	}
 	tab()
 	if got := app.app.GetFocus(); got != app.detailsComposePost {
@@ -488,9 +495,15 @@ func TestBacktabWalksTheRingBackwards(t *testing.T) {
 	if got := app.app.GetFocus(); got != app.detailsCommentsView {
 		t.Fatalf("two Backtabs focused %T, want the card stack", got)
 	}
-	backtab()
+	// One per card, and then the ring is out of cards to give.
+	for range app.detailsCommentsSource {
+		backtab()
+	}
 	if got := app.app.GetFocus(); got != app.detailsCommentsView {
-		t.Fatalf("three Backtabs focused %T, want to stay on the card stack", got)
+		t.Fatalf("Backtab off the top of the stack focused %T, want to stay", got)
+	}
+	if got := app.focusedCommentID; got != app.detailsCommentsSource[0].ID {
+		t.Errorf("Backtab stopped on %q, want the first card", got)
 	}
 	if app.focusedPane != FocusDetails {
 		t.Errorf("Backtab left the details pane for %v", app.focusedPane)

@@ -17,6 +17,9 @@ func newThreadedTestApp(t *testing.T) *App {
 	app := newDetailsTestApp(t)
 	issue := detailsFixture()
 	issue.Comments = threadedComments()
+	// The issue's own URL is what the comment keys fall back to when no card is
+	// picked, so it has to be there for that fallback to be visible.
+	issue.URL = "https://linear.app/praxis-labs/issue/ZNO-1"
 	app.selectedIssue = issue
 	app.updateDetailsView()
 	focusCommentCards(app)
@@ -42,50 +45,109 @@ func pressInComments(t *testing.T, app *App, r rune) {
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 }
 
-// TestTheRingStartsOnTheFirstCard covers the stack taking the keyboard with
-// nothing focused: an action key needs a card to act on before j is ever
-// pressed.
-func TestTheRingStartsOnTheFirstCard(t *testing.T) {
+// tabComments sends Tab, or Shift+Tab backwards, the way the running app does.
+func tabComments(t *testing.T, app *App, backward bool) {
+	t.Helper()
+	key := tcell.KeyTab
+	if backward {
+		key = tcell.KeyBacktab
+	}
+	app.handleGlobalKey(tcell.NewEventKey(key, 0, tcell.ModNone))
+}
+
+// TestTheCommentsTabOpensWithNothingPicked covers the stack taking the keyboard
+// without lighting a card. Nothing is picked until Tab says so, and until then
+// the pane's own keys are the issue's.
+func TestTheCommentsTabOpensWithNothingPicked(t *testing.T) {
 	app := newThreadedTestApp(t)
 
-	if got := app.focusedCommentID; got != "root-1" {
-		t.Errorf("the ring is on %q, want the first card", got)
+	if got := app.focusedCommentID; got != "" {
+		t.Errorf("the tab opened with %q picked, want nothing", got)
 	}
 }
 
-// TestTheRingStepsThroughTheThread covers j, k, g and G walking the cards in
-// the order they are drawn, replies included, and stopping at either end.
-func TestTheRingStepsThroughTheThread(t *testing.T) {
+// TestTabStepsThroughTheThreadIntoTheBox covers the ring: every card in the
+// order it is drawn, replies included, then the compose box and its button.
+func TestTabStepsThroughTheThreadIntoTheBox(t *testing.T) {
 	app := newThreadedTestApp(t)
-	order := []string{"root-1", "reply-1", "reply-2", "root-2", "orphan"}
 
-	for _, want := range order[1:] {
-		pressInComments(t, app, 'j')
+	for _, want := range []string{"root-1", "reply-1", "reply-2", "root-2", "orphan"} {
+		tabComments(t, app, false)
 		if got := app.focusedCommentID; got != want {
-			t.Fatalf("j moved the ring to %q, want %q", got, want)
+			t.Fatalf("Tab picked %q, want %q", got, want)
+		}
+		if a := app.commentsFocus; a != commentsFocusCards {
+			t.Fatalf("Tab left the stack at %q", want)
 		}
 	}
+
+	tabComments(t, app, false)
+	if !app.composeBoxActive() {
+		t.Fatal("Tab past the last card did not reach the compose box")
+	}
+	tabComments(t, app, false)
+	if app.commentsFocus != commentsFocusPost {
+		t.Errorf("Tab from the box went to %v, want the Post button", app.commentsFocus)
+	}
+}
+
+// TestBacktabWalksTheRingTheOtherWay covers coming back: out of the box onto
+// the card Tab left, and up the stack to the first, where it stops.
+func TestBacktabWalksTheRingTheOtherWay(t *testing.T) {
+	app := newThreadedTestApp(t)
+	for i := 0; i < 6; i++ {
+		tabComments(t, app, false)
+	}
+	if !app.composeBoxActive() {
+		t.Fatal("six tabs did not reach the compose box")
+	}
+
+	tabComments(t, app, true)
+	if got := app.focusedCommentID; got != "orphan" {
+		t.Errorf("Shift+Tab out of the box picked %q, want the card it left", got)
+	}
+	for _, want := range []string{"root-2", "reply-2", "reply-1", "root-1"} {
+		tabComments(t, app, true)
+		if got := app.focusedCommentID; got != want {
+			t.Fatalf("Shift+Tab picked %q, want %q", got, want)
+		}
+	}
+	tabComments(t, app, true)
+	if got := app.focusedCommentID; got != "root-1" {
+		t.Errorf("Shift+Tab before the first card picked %q, want it to stay", got)
+	}
+}
+
+// TestScrollKeysStayWithTheStack covers j and k keeping their job. The ring is
+// Tab's, so a reader scrolling a long thread never has to think about it.
+func TestScrollKeysStayWithTheStack(t *testing.T) {
+	app := newThreadedTestApp(t)
+	showComments(t, app, 80, 12)
+	tabComments(t, app, false)
+
 	pressInComments(t, app, 'j')
-	if got := app.focusedCommentID; got != "orphan" {
-		t.Errorf("j past the last card moved the ring to %q, want it to stay", got)
+
+	if got := app.focusedCommentID; got != "root-1" {
+		t.Errorf("j moved the ring to %q, want the ring left alone", got)
+	}
+}
+
+// TestEscapeLetsGoOfTheCard covers backing out of the ring without closing the
+// pane, which is the other half of nothing being picked by default.
+func TestEscapeLetsGoOfTheCard(t *testing.T) {
+	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
+	if app.focusedCommentID == "" {
+		t.Fatal("Tab picked nothing")
 	}
 
-	pressInComments(t, app, 'k')
-	if got := app.focusedCommentID; got != "root-2" {
-		t.Errorf("k moved the ring to %q, want %q", got, "root-2")
-	}
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 
-	pressInComments(t, app, 'g')
-	if got := app.focusedCommentID; got != "root-1" {
-		t.Errorf("g moved the ring to %q, want the first card", got)
+	if got := app.focusedCommentID; got != "" {
+		t.Errorf("Esc left %q picked", got)
 	}
-	pressInComments(t, app, 'k')
-	if got := app.focusedCommentID; got != "root-1" {
-		t.Errorf("k before the first card moved the ring to %q, want it to stay", got)
-	}
-	pressInComments(t, app, 'G')
-	if got := app.focusedCommentID; got != "orphan" {
-		t.Errorf("G moved the ring to %q, want the last card", got)
+	if app.focusedPane != FocusDetails || !app.focusedDetailsView {
+		t.Error("Esc left the Comments tab as well as the card")
 	}
 }
 
@@ -105,19 +167,19 @@ func showComments(t *testing.T, app *App, width, height int) {
 	app.detailsCommentsView.Draw(screen)
 }
 
-// TestTheRingScrollsTheCardIntoView covers the half of the ring a full-height
-// draw cannot show: stepping past the bottom of the pane has to bring the card
-// down, or the ring moves onto something off screen.
-func TestTheRingScrollsTheCardIntoView(t *testing.T) {
+// TestTabScrollsTheCardIntoView covers the half of the ring a full-height draw
+// cannot show: stepping past the bottom of the pane has to bring the card down,
+// or Tab picks something off screen.
+func TestTabScrollsTheCardIntoView(t *testing.T) {
 	app := newThreadedTestApp(t)
 	// Two cards' worth of rows, against five cards of thread.
 	showComments(t, app, 80, 12)
 
-	for i := 0; i < 4; i++ {
-		pressInComments(t, app, 'j')
+	for i := 0; i < 5; i++ {
+		tabComments(t, app, false)
 	}
 	if got := app.focusedCommentID; got != "orphan" {
-		t.Fatalf("the ring is on %q, want the last card", got)
+		t.Fatalf("Tab picked %q, want the last card", got)
 	}
 
 	span := app.commentSpans[app.commentSpanIndex("orphan")]
@@ -125,19 +187,15 @@ func TestTheRingScrollsTheCardIntoView(t *testing.T) {
 	if span.start < row || span.end >= row+12 {
 		t.Errorf("card at rows %d..%d is off a pane showing %d..%d", span.start, span.end, row, row+11)
 	}
-
-	pressInComments(t, app, 'g')
-	if row, _ := app.detailsCommentsView.GetScrollOffset(); row != 0 {
-		t.Errorf("g left the pane scrolled to row %d, want the top", row)
-	}
 }
 
 // TestTheRingReanchorsAfterAFreeScroll covers Ctrl+D leaving the ring behind:
-// the next j takes the ring to what is on screen rather than jumping the pane
-// back to where it was left.
+// the next Tab picks up on screen rather than hauling the pane back to the card
+// the reader scrolled away from.
 func TestTheRingReanchorsAfterAFreeScroll(t *testing.T) {
 	app := newThreadedTestApp(t)
 	showComments(t, app, 80, 12)
+	tabComments(t, app, false)
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlD, 0, tcell.ModCtrl))
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlD, 0, tcell.ModCtrl))
@@ -146,13 +204,35 @@ func TestTheRingReanchorsAfterAFreeScroll(t *testing.T) {
 		t.Fatal("Ctrl+D did not scroll the stack")
 	}
 
-	pressInComments(t, app, 'j')
+	tabComments(t, app, false)
 
 	if got := app.focusedCommentID; got == "root-1" {
-		t.Error("j took the ring back to the card it was left on, want the one on screen")
+		t.Error("Tab went back to the card it was left on, want the one on screen")
 	}
 	if row, _ := app.detailsCommentsView.GetScrollOffset(); row != scrolled {
-		t.Errorf("j scrolled the pane to row %d, want it left at %d", row, scrolled)
+		t.Errorf("Tab scrolled the pane to row %d, want it left at %d", row, scrolled)
+	}
+}
+
+// TestAnActionNeedsAPickedCard covers the keys the ring owns falling back to
+// the issue's own the moment no card is picked: nothing lit, nothing shadowed.
+func TestAnActionNeedsAPickedCard(t *testing.T) {
+	app := newThreadedTestApp(t)
+	copied := make(chan string, 1)
+	app.copyToClipboardFunc = func(text string) error { copied <- text; return nil }
+
+	pressInComments(t, app, 'y')
+
+	select {
+	case got := <-copied:
+		if got != "https://linear.app/praxis-labs/issue/ZNO-1" {
+			t.Errorf("y copied %q, want the issue URL it falls back to", got)
+		}
+	default:
+		t.Error("y copied nothing at all, want the issue URL it falls back to")
+	}
+	if got := app.replyParentID(); got != "" {
+		t.Errorf("something aimed the box at %q with no card picked", got)
 	}
 }
 
@@ -161,6 +241,7 @@ func TestTheRingReanchorsAfterAFreeScroll(t *testing.T) {
 // screen, where the harness has already dropped the styling.
 func TestTheFocusedCardWearsTheFocusBorder(t *testing.T) {
 	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
 
 	focused := cardTextFor(t, app, "root-1")
 	if !strings.Contains(focused, app.themeTags.BorderFocus) {
@@ -176,6 +257,7 @@ func TestTheFocusedCardWearsTheFocusBorder(t *testing.T) {
 // ring left painted says the keys are somewhere they are not.
 func TestTheRingGivesUpTheBorderWithTheKeyboard(t *testing.T) {
 	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
 
 	app.focusPane(FocusIssues)
 
@@ -216,8 +298,9 @@ func composeCue(t *testing.T, app *App) string {
 // rather than the reply the ring happened to be on.
 func TestReplyAimsTheBoxAtTheThread(t *testing.T) {
 	app := newThreadedTestApp(t)
-	pressInComments(t, app, 'j')
-	pressInComments(t, app, 'j') // reply-2, a reply to a reply
+	for i := 0; i < 3; i++ {
+		tabComments(t, app, false) // reply-2, a reply to a reply
+	}
 
 	pressInComments(t, app, 'r')
 
@@ -256,7 +339,8 @@ func TestReplyPostsWithItsParent(t *testing.T) {
 		}, nil
 	}
 
-	pressInComments(t, app, 'j')
+	tabComments(t, app, false)
+	tabComments(t, app, false) // reply-1
 	pressInComments(t, app, 'r')
 	typeRunes(t, app, "the debounce")
 	postAndWait(t, app, drawn)
@@ -283,6 +367,7 @@ func TestReplyPostsWithItsParent(t *testing.T) {
 // quote, and the reply is aimed at the same thread.
 func TestQuoteFillsTheBoxWithTheComment(t *testing.T) {
 	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
 
 	pressInComments(t, app, 'Q')
 
@@ -323,6 +408,7 @@ func TestQuoteBody(t *testing.T) {
 // losing the words or the box in one keystroke.
 func TestEscapeDropsTheAimBeforeTheBox(t *testing.T) {
 	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
 	pressInComments(t, app, 'r')
 	typeRunes(t, app, "half a thought")
 
@@ -353,7 +439,8 @@ func TestCopyAndOpenActOnTheFocusedCard(t *testing.T) {
 	app.copyToClipboardFunc = func(text string) error { copied <- text; return nil }
 	app.openURLFunc = func(url string) error { opened <- url; return nil }
 
-	pressInComments(t, app, 'j')
+	tabComments(t, app, false)
+	tabComments(t, app, false) // reply-1
 	pressInComments(t, app, 'y')
 	if got := <-copied; got != "https://linear.app/c/reply-1" {
 		t.Errorf("copied %q, want the focused comment's link", got)
@@ -369,6 +456,7 @@ func TestCopyAndOpenActOnTheFocusedCard(t *testing.T) {
 // refreshes everywhere the ring is not.
 func TestCommentKeysStayOutOfTheDescriptionTab(t *testing.T) {
 	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
 	app.focusedDetailsView = false
 	app.updateFocus()
 
@@ -388,7 +476,8 @@ func TestCommentKeysDoNothingWithoutComments(t *testing.T) {
 	focusCommentCards(app)
 	drawComments(t, app, 80)
 
-	for _, key := range []rune{'j', 'r', 'Q', 'y', 'o'} {
+	tabComments(t, app, false)
+	for _, key := range []rune{'r', 'Q', 'y', 'o'} {
 		pressInComments(t, app, key)
 	}
 

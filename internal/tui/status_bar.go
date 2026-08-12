@@ -98,12 +98,15 @@ func (a *App) updateStatusBar() {
 			helpText = fmt.Sprintf("%sCtrl+Enter: post | Tab: Post button | Esc: back to comments[-]", keyColor)
 			break
 		}
+		if a.commentsHaveFocus() && a.focusedCommentID != "" {
+			// A lit card owns these keys, and the issue keys they shadow are
+			// not worth naming while it does.
+			helpText = fmt.Sprintf("%s%sTab: next comment | Esc: let go[-]", keyColor, a.commentActionHint())
+			break
+		}
 		if len(a.commentSpans) > 0 && a.commentsHaveFocus() {
-			// The card keys are what the pane answers to here, and the ones
-			// they shadow are not worth naming: j/k move the ring rather than
-			// scroll, and r is a reply rather than a refresh.
-			helpText = fmt.Sprintf("%sj/k: comments | %s%s: switch description/comments | Tab: write a comment[-]",
-				keyColor, a.commentActionHint(), tabs)
+			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | Tab: pick a comment | %s: switch description/comments[-]",
+				keyColor, tabs)
 			break
 		}
 		if a.detailsZoomed {

@@ -44,13 +44,17 @@ func (a *App) renderDetailsComments() {
 	var lines []string
 	for i, row := range rows {
 		if i > 0 {
-			lines = append(lines, "")
+			// The rail runs through the gap above a reply, which is what joins
+			// it to the card it answers rather than leaving it floating.
+			lines = append(lines, a.threadGapLine(rows, i))
 		}
 		inset := row.Depth * commentThreadIndent
-		indent := strings.Repeat(" ", inset)
 		start := len(lines)
-		for _, line := range a.commentCard(row.Comment, width-inset) {
-			lines = append(lines, indent+line)
+		card := a.commentCard(row.Comment, width-inset)
+		if row.Depth == 0 {
+			lines = append(lines, card...)
+		} else {
+			lines = append(lines, a.threadBranch(card, isLastReply(rows, i))...)
 		}
 		a.commentSpans = append(a.commentSpans, commentSpan{
 			id:    row.Comment.ID,
@@ -59,6 +63,49 @@ func (a *App) renderDetailsComments() {
 		})
 	}
 	a.detailsCommentsView.SetText(strings.Join(lines, "\n"))
+}
+
+// threadBranch hangs a reply off the card above it, drawing the rail down its
+// gutter. The last reply closes the run so the rail stops rather than trailing
+// into whatever comes next.
+func (a *App) threadBranch(card []string, last bool) []string {
+	rail := a.themeTags.Border + "│[-:-:-]  "
+	elbow, under := a.themeTags.Border+"├─[-:-:-] ", rail
+	if last {
+		elbow, under = a.themeTags.Border+"╰─[-:-:-] ", strings.Repeat(" ", commentThreadIndent)
+	}
+
+	// The elbow meets the byline rather than the top border, which is where a
+	// reader's eye goes and where the card's own name sits. A card too narrow
+	// to frame starts on that byline, so the elbow moves up with it.
+	elbowRow := min(1, len(card)-1)
+
+	out := make([]string, 0, len(card))
+	for i, line := range card {
+		switch {
+		case i == elbowRow:
+			out = append(out, elbow+line)
+		case i < elbowRow:
+			out = append(out, rail+line)
+		default:
+			out = append(out, under+line)
+		}
+	}
+	return out
+}
+
+// threadGapLine is the blank row above the card at index, carrying the rail
+// when a reply hangs below it.
+func (a *App) threadGapLine(rows []commentRow, index int) string {
+	if rows[index].Depth == 0 {
+		return ""
+	}
+	return a.themeTags.Border + "│[-:-:-]"
+}
+
+// isLastReply reports whether the reply at index closes its thread.
+func isLastReply(rows []commentRow, index int) bool {
+	return index == len(rows)-1 || rows[index+1].Depth < rows[index].Depth
 }
 
 // commentCard frames one comment: a byline, a rule under it, and the body

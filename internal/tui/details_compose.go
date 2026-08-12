@@ -315,9 +315,6 @@ func (a *App) enterCommentsFocus(target commentsFocus) {
 	a.focusedPane = FocusDetails
 	a.focusedDetailsView = true
 	a.commentsFocus = target
-	if target == commentsFocusCards {
-		a.anchorCommentFocus()
-	}
 	if a.detailsCommentsPanel != nil {
 		a.detailsCommentsPanel.SetBorderColor(a.theme.BorderFocus)
 	}
@@ -325,9 +322,13 @@ func (a *App) enterCommentsFocus(target commentsFocus) {
 	a.updateStatusBar()
 }
 
-// stepCommentsFocus walks the Comments tab's own focus ring. The ring does not
-// wrap and Tab does not leave the pane, so off either end the focus stays where
-// it is.
+// stepCommentsFocus walks the Comments tab's own focus ring: every comment
+// card in turn, then the box, then the button. The ring does not wrap and Tab
+// does not leave the pane, so off either end the focus stays where it is.
+//
+// The cards are one entry in commentsFocusOrder and many stops inside it. Tab
+// only leaves the stack once the ring has run out of cards, and coming back
+// lands on a card rather than on the stack in general.
 func (a *App) stepCommentsFocus(backward bool) {
 	if a.focusedPane != FocusDetails || !a.detailsCommentsVisible || !a.focusedDetailsView {
 		return
@@ -336,6 +337,10 @@ func (a *App) stepCommentsFocus(backward bool) {
 	if backward {
 		step = -1
 	}
+	if a.commentsFocus == commentsFocusCards && a.stepCommentRing(step) {
+		return
+	}
+
 	current := 0
 	for i, target := range commentsFocusOrder {
 		if target == a.commentsFocus {
@@ -348,6 +353,13 @@ func (a *App) stepCommentsFocus(backward bool) {
 		return
 	}
 	a.commentsFocus = commentsFocusOrder[next]
+	if a.commentsFocus == commentsFocusCards {
+		// Backing out of the box keeps the card the ring was on, or lands on the
+		// last one on screen when that card has been scrolled away from.
+		if _, ok := a.focusedComment(); !ok {
+			a.focusCommentAt(a.anchorComment(-1))
+		}
+	}
 	a.updateFocus()
 }
 

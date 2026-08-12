@@ -31,8 +31,17 @@ func (a *App) commentsHaveFocus() bool {
 		a.focusedDetailsView && a.commentsFocus == commentsFocusCards
 }
 
-// focusedComment returns the comment the ring is on.
+// focusedComment returns the comment the ring is on, and whether there is one
+// to act on.
+//
+// A card scrolled out of the pane is not one: the reader cannot see it, so a
+// key that acted on it would answer about something off screen. That is the
+// same rule the ring re-anchors by.
 func (a *App) focusedComment() (linearapi.Comment, bool) {
+	index := a.commentSpanIndex(a.focusedCommentID)
+	if index < 0 || !a.commentSpanVisible(a.commentSpans[index]) {
+		return linearapi.Comment{}, false
+	}
 	for _, comment := range a.detailsCommentsSource {
 		if comment.ID == a.focusedCommentID {
 			return comment, true
@@ -54,21 +63,41 @@ func (a *App) commentSpanIndex(id string) int {
 	return -1
 }
 
-// stepCommentFocus moves the ring by step, stopping at either end.
+// stepCommentRing moves the ring one card and reports whether it took the step.
+// It answers false off either end, which is what hands Tab on to the compose
+// box below the cards.
 //
-// A ring that has scrolled off screen re-anchors instead of stepping: after a
-// half-page scroll the reader is looking somewhere else, and jumping back to
-// the card they left would undo the scroll they just made.
-func (a *App) stepCommentFocus(step int) {
+// A ring with no card, or one that has been scrolled off screen, anchors to
+// what is on screen instead of stepping. A reader who scrolled away has moved
+// on, and hauling them back to the card they left is the one thing the ring
+// must not do.
+func (a *App) stepCommentRing(step int) bool {
 	if len(a.commentSpans) == 0 {
-		return
+		return false
 	}
 	index := a.commentSpanIndex(a.focusedCommentID)
 	if index < 0 || !a.commentSpanVisible(a.commentSpans[index]) {
-		a.focusCommentAt(a.topmostVisibleComment())
-		return
+		a.focusCommentAt(a.anchorComment(step))
+		return true
 	}
-	a.focusCommentAt(min(max(index+step, 0), len(a.commentSpans)-1))
+	next := index + step
+	if next < 0 || next >= len(a.commentSpans) {
+		return false
+	}
+	a.focusCommentAt(next)
+	return true
+}
+
+// clearCommentFocus takes the ring off every card, reporting whether one was
+// lit. Nothing is lit until Tab says so, and Escape puts it back that way.
+func (a *App) clearCommentFocus() bool {
+	if a.focusedCommentID == "" {
+		return false
+	}
+	a.focusedCommentID = ""
+	a.renderDetailsComments()
+	a.updateStatusBar()
+	return true
 }
 
 // focusCommentAt puts the ring on the card at index and brings it into view.
@@ -113,13 +142,25 @@ func (a *App) refreshCommentRing() {
 	a.renderDetailsComments()
 }
 
-// anchorCommentFocus gives the ring a card when it has none, so the stack taking
-// the keyboard is enough for an action key to have something to act on.
-func (a *App) anchorCommentFocus() {
-	if len(a.commentSpans) == 0 || a.commentSpanIndex(a.focusedCommentID) >= 0 {
-		return
+// anchorComment is where the ring lands when it has no card to move from: the
+// first card on screen going forward, the last going back. Any part of a card
+// showing counts, so one taller than the pane is the card it lands on rather
+// than a card it skips.
+func (a *App) anchorComment(step int) int {
+	if step < 0 {
+		for i := len(a.commentSpans) - 1; i >= 0; i-- {
+			if a.commentSpanVisible(a.commentSpans[i]) {
+				return i
+			}
+		}
+		return len(a.commentSpans) - 1
 	}
-	a.focusCommentAt(a.topmostVisibleComment())
+	for i, span := range a.commentSpans {
+		if a.commentSpanVisible(span) {
+			return i
+		}
+	}
+	return 0
 }
 
 // scrollCommentIntoView scrolls the stack the least it can to show a card,
@@ -153,17 +194,6 @@ func (a *App) commentSpanVisible(span commentSpan) bool {
 	return span.end >= row && span.start < row+height
 }
 
-// topmostVisibleComment is the card the reader is looking at: the first one
-// showing any row, or the first card of all when the pane has not been drawn.
-func (a *App) topmostVisibleComment() int {
-	for i, span := range a.commentSpans {
-		if a.commentSpanVisible(span) {
-			return i
-		}
-	}
-	return 0
-}
-
 // handleCommentKey answers the keys the focused card owns, returning whether it
 // took the event. It runs ahead of the pane's command shortcuts, which is what
 // lets r mean reply here and refresh everywhere else.
@@ -174,15 +204,12 @@ func (a *App) handleCommentKey(event *tcell.EventKey) bool {
 	if event.Key() != tcell.KeyRune {
 		return false
 	}
+	// With no card lit the pane is what it was before the ring: j and k scroll,
+	// and r, y and o are the issue's own keys.
+	if _, ok := a.focusedComment(); !ok {
+		return false
+	}
 	switch event.Rune() {
-	case 'j':
-		a.stepCommentFocus(1)
-	case 'k':
-		a.stepCommentFocus(-1)
-	case 'g':
-		a.focusCommentAt(0)
-	case 'G':
-		a.focusCommentAt(len(a.commentSpans) - 1)
 	case a.actionKey("comment_reply", 'r'):
 		a.replyToFocusedComment("")
 	case a.actionKey("comment_quote", 'Q'):

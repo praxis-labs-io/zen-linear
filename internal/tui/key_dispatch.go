@@ -231,6 +231,11 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 	switch event.Key() {
 	case tcell.KeyEnter, tcell.KeyEscape:
+		// Escape lets go of a card before it does anything larger, the way it
+		// drops a reply's aim before leaving the compose box.
+		if event.Key() == tcell.KeyEscape && a.commentsHaveFocus() && a.clearCommentFocus() {
+			return nil
+		}
 		// Zoomed, the way back is the issues list itself; unzoomed, Enter
 		// closes the pane to get there. Escape only has the first meaning.
 		if a.detailsZoomed {

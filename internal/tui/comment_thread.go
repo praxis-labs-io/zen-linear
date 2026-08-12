@@ -2,8 +2,8 @@ package tui
 
 import "github.com/zen-linear/zen-linear/internal/linearapi"
 
-// commentThreadIndent is what a reply is inset by, in cells. The card gives up
-// the same width, so the thread reads as a step in from its parent.
+// commentThreadIndent is the gutter a reply is inset by, in cells. The rail and
+// its elbow are drawn in it, and the card gives up the same width.
 const commentThreadIndent = 3
 
 // commentRow is one card in the Comments tab: a comment and how deep in a
