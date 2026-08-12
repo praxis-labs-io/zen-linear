@@ -111,10 +111,48 @@ func (p *commentsPage) HasFocus() bool {
 	return false
 }
 
-// InputHandler sends keys the app did not claim to the text view, where they
-// scroll.
+// InputHandler hands a key to whichever widget on the page holds the keyboard,
+// and to the text underneath when none does, where it scrolls.
+//
+// The walk is the whole point. tview routes a key from the root down the focus
+// chain rather than to the focused primitive itself, so a container that
+// answers with one child's handler is a container the other children can never
+// be typed in: the box takes the focus, the border lights, and every keystroke
+// lands in the text view and is dropped.
 func (p *commentsPage) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
-	return p.view.InputHandler()
+	return p.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
+		if focused := p.focusedSlot(); focused != nil {
+			if handler := focused.InputHandler(); handler != nil {
+				handler(event, setFocus)
+			}
+			return
+		}
+		if handler := p.view.InputHandler(); handler != nil {
+			handler(event, setFocus)
+		}
+	})
+}
+
+// PasteHandler follows the same chain: a paste belongs to the box being written
+// in, not to the page under it.
+func (p *commentsPage) PasteHandler() func(string, func(tview.Primitive)) {
+	return p.WrapPasteHandler(func(text string, setFocus func(tview.Primitive)) {
+		if focused := p.focusedSlot(); focused != nil {
+			if handler := focused.PasteHandler(); handler != nil {
+				handler(text, setFocus)
+			}
+		}
+	})
+}
+
+// focusedSlot is the widget on the page holding the keyboard, or nil.
+func (p *commentsPage) focusedSlot() tview.Primitive {
+	for _, slot := range p.slots {
+		if slot.primitive.HasFocus() {
+			return slot.primitive
+		}
+	}
+	return nil
 }
 
 // MouseHandler offers the mouse to the widgets on the page before the text

@@ -38,6 +38,10 @@ func focusCommentCards(app *App) {
 	app.focusedPane = FocusDetails
 	app.focusedDetailsView = true
 	app.commentsFocus = commentsFocusCards
+	// Mounted, not just flagged: a key is delivered from the root down the
+	// focus chain, so a pane that is not in the layout is a pane no key can
+	// reach, and a test on an unmounted one proves nothing about the app.
+	app.rebuildContentLayout()
 	app.updateFocus()
 }
 

@@ -13,20 +13,26 @@ import (
 )
 
 // typeInCompose sends a key the way the running app does: the global capture
-// first, then whatever it hands back goes to the focused primitive. Driving
-// only the capture would prove the box was offered the key, not that it took
-// it.
+// first, then whatever it hands back goes to the root, which walks down the
+// focus chain to deliver it.
+//
+// The walk is not an implementation detail to shortcut. tview hands a key to
+// the root primitive, never to the focused one, so a container that answers for
+// the wrong child swallows every key while the focus, the border and the status
+// bar all say the box has the keyboard. Handing the event straight to
+// app.GetFocus() here proved only that the box was focused, and passed for a
+// whole branch against a box nothing could be typed into.
 func typeInCompose(t *testing.T, app *App, event *tcell.EventKey) {
 	t.Helper()
 	remaining := app.handleGlobalKey(event)
 	if remaining == nil {
 		return
 	}
-	focus := app.app.GetFocus()
-	if focus == nil {
-		t.Fatalf("no focus to take the key")
+	root := app.pages
+	if !root.HasFocus() {
+		t.Fatalf("the layout does not hold the focus, so no key can be delivered")
 	}
-	if handler := focus.InputHandler(); handler != nil {
+	if handler := root.InputHandler(); handler != nil {
 		handler(remaining, func(p tview.Primitive) { app.app.SetFocus(p) })
 	}
 }
@@ -745,5 +751,43 @@ func TestFailedPostLeavesTheErrorOnScreen(t *testing.T) {
 	}
 	if strings.Contains(text, "Posting comment") {
 		t.Errorf("status bar reads %q, want the posting flash gone", text)
+	}
+}
+
+// TestTypingWorksOnAnIssueWithNoComments is the one this branch shipped
+// without. The box took the focus, lit its border and said so in the status
+// bar, and every keystroke went into the page under it and was dropped: the
+// page answered for the wrong child, and a key is delivered from the root down
+// the focus chain rather than to the focused widget.
+func TestTypingWorksOnAnIssueWithNoComments(t *testing.T) {
+	posted := make(chan linearapi.CreateCommentInput, 1)
+	app := newDetailsTestApp(t)
+	app.selectedIssue = detailsFixture()
+	app.updateDetailsView()
+	drawn := make(chan struct{}, 4)
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		select {
+		case drawn <- struct{}{}:
+		default:
+		}
+	}
+	app.createCommentFunc = func(_ context.Context, input linearapi.CreateCommentInput) (linearapi.Comment, error) {
+		posted <- input
+		return linearapi.Comment{ID: "first", Body: input.Body}, nil
+	}
+
+	if !app.openComposeBox() {
+		t.Fatal("the box would not open on an issue with no comments")
+	}
+	typeRunes(t, app, "the first word on this issue")
+
+	if got := app.detailsComposeArea.GetText(); got != "the first word on this issue" {
+		t.Fatalf("the box holds %q, want what was typed into it", got)
+	}
+
+	postAndWait(t, app, drawn)
+	if got := (<-posted).Body; got != "the first word on this issue" {
+		t.Errorf("posted %q", got)
 	}
 }
