@@ -24,9 +24,9 @@ func (a *App) issuesPaneHasFocus() bool {
 	return false
 }
 
-// visiblePanes lists the panes Tab can reach, in screen order. A hidden pane
-// is not one of them: cycling onto it would land focus somewhere updateFocus
-// has to bounce back, which reads as Tab getting stuck.
+// visiblePanes lists the panes h and l can reach, in screen order. A hidden
+// pane is not one of them: stepping onto it would land focus somewhere
+// updateFocus has to bounce back, which reads as the key getting stuck.
 func (a *App) visiblePanes() []FocusTarget {
 	panes := make([]FocusTarget, 0, 3)
 	if !a.navigationHidden && (!a.detailsZoomed || a.layoutMode == layoutWide) {
@@ -39,29 +39,6 @@ func (a *App) visiblePanes() []FocusTarget {
 		panes = append(panes, FocusDetails)
 	}
 	return panes
-}
-
-// cyclePanes moves focus one pane in the given direction (+1 forward, -1
-// backward), wrapping. The issues tab and the details tab on screen are their
-// own panes' business, so both stay put.
-func (a *App) cyclePanes(direction int) {
-	panes := a.visiblePanes()
-	if len(panes) == 0 {
-		return
-	}
-	current := 0
-	for i, pane := range panes {
-		if pane == a.focusedPane {
-			current = i
-			break
-		}
-	}
-	a.focusedPane = panes[((current+direction)%len(panes)+len(panes))%len(panes)]
-	if a.focusedPane == FocusDetails {
-		// Enter on the description, the same way Right and l enter it.
-		a.focusedDetailsView = false
-	}
-	a.updateFocus()
 }
 
 // focusPane moves focus straight to a pane by its number, revealing it first
@@ -79,7 +56,7 @@ func (a *App) focusPane(pane FocusTarget) {
 		}
 	case FocusDetails:
 		a.detailsHidden = false
-		// Enter on the description, the same way Tab and l enter it.
+		// Enter on the description, the same way l enters it.
 		a.focusedDetailsView = false
 	case FocusIssues:
 		// The issues list is not on screen while zoomed, so asking for it by
@@ -111,17 +88,11 @@ func (a *App) stepPane(direction int) {
 	}
 	a.focusedPane = panes[next]
 	if a.focusedPane == FocusDetails {
-		// Enter on the description, the same way Tab does.
+		// Enter on the description, the same way the pane numbers do.
 		a.focusedDetailsView = false
 	}
 	a.updateFocus()
 }
-
-// cyclePanesForward cycles focus forward: Navigation, Issues, Details, wrap.
-func (a *App) cyclePanesForward() { a.cyclePanes(1) }
-
-// cyclePanesBackward cycles focus backward: Details, Issues, Navigation, wrap.
-func (a *App) cyclePanesBackward() { a.cyclePanes(-1) }
 
 // updateFocus updates the focus state of all panes.
 func (a *App) updateFocus() {
@@ -230,6 +201,9 @@ func (a *App) updateFocus() {
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	}
+	// The Search tab's two halves share one border, so which of them is live
+	// has to be said in their own colors, from every branch above.
+	a.applySearchFocusStyles()
 	a.updateStatusBar()
 }
 

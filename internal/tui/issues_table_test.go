@@ -339,3 +339,18 @@ func TestIssueColumnHeadersAlignWithCells(t *testing.T) {
 		})
 	}
 }
+
+// TestGoToTopReachesTheIssuesTable pins the collision the default set cleared.
+// edit_labels held g, so the key never got past the command dispatch and the
+// list had no way to jump to either end.
+func TestGoToTopReachesTheIssuesTable(t *testing.T) {
+	app := newUXTestApp(t)
+	app.focusedPane = FocusIssues
+
+	for _, r := range []rune{'g', 'G'} {
+		event := tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone)
+		if got := app.handleIssuesKey(event); got != event {
+			t.Errorf("%q was claimed before the table, want it to reach the list", r)
+		}
+	}
+}

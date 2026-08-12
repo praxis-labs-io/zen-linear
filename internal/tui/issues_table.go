@@ -330,10 +330,7 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 					SetBorderColor(a.theme.Border).
 					SetBackgroundColor(a.theme.Background)
 
-	table.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(a.theme.SelectionText).
-		Background(a.theme.SelectionBg).
-		Bold(true))
+	table.SetSelectedStyle(selectionStyle(a.theme))
 
 	setIssuesTableHeaders(table, a.theme, a.issueColumns())
 
@@ -564,9 +561,8 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 		}
 		return nil
 	// h and l never arrive here: handleIssuesKey claims them for pane movement,
-	// which is what the README documents. Space expands, p jumps to the parent.
-	// g only arrives when no command shortcut owns it, and edit_labels holds it
-	// by default, so go-to-top above is dead until ZNL-32 reworks the defaults.
+	// which is what the README documents. g and G do arrive, because no command
+	// holds a movement rune and no keybinding may take one.
 	case a.actionKey("columns_left", 'H'):
 		scrollIssueColumns(table, 'H')
 		return nil

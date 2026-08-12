@@ -10,102 +10,76 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
-// tabKey drives the real global handler rather than cyclePanes, so an
-// interception layer between the key and the cycle shows up here.
-func tabKey(app *App, backward bool) {
-	key := tcell.KeyTab
-	if backward {
-		key = tcell.KeyBacktab
-	}
-	app.handleGlobalKey(tcell.NewEventKey(key, 0, tcell.ModNone))
+// stepKey drives the real global handler rather than stepPane, so a handler
+// that claims h or l before the pane step shows up here.
+func stepKey(app *App, r rune) {
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 }
 
-func TestTabSkipsTheHiddenDetailsPane(t *testing.T) {
+func TestStepSkipsTheHiddenDetailsPane(t *testing.T) {
 	app := newUXTestApp(t)
 	if !app.detailsHidden {
 		t.Fatal("details pane starts open; this test covers the closed case")
 	}
 	app.focusedPane = FocusIssues
 
-	tabKey(app, false)
+	stepKey(app, 'l')
 
-	if app.focusedPane != FocusNavigation {
-		t.Fatalf("Tab from Issues with details closed landed on %v, want Navigation", app.focusedPane)
+	if app.focusedPane != FocusIssues {
+		t.Fatalf("l from Issues with details closed landed on %v, want to stay put", app.focusedPane)
 	}
 
-	tabKey(app, false)
-	if app.focusedPane != FocusIssues {
-		t.Fatalf("Tab from Navigation landed on %v, want Issues", app.focusedPane)
+	stepKey(app, 'h')
+	if app.focusedPane != FocusNavigation {
+		t.Fatalf("h from Issues landed on %v, want Navigation", app.focusedPane)
 	}
 }
 
-func TestTabSkipsTheHiddenNavigationPane(t *testing.T) {
+func TestStepSkipsTheHiddenNavigationPane(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
 	app.navigationHidden = true
 	app.focusedPane = FocusIssues
 
-	tabKey(app, false)
+	stepKey(app, 'l')
 	if app.focusedPane != FocusDetails {
-		t.Fatalf("Tab from Issues landed on %v, want Details", app.focusedPane)
+		t.Fatalf("l from Issues landed on %v, want Details", app.focusedPane)
 	}
-	tabKey(app, false)
+	stepKey(app, 'h')
 	if app.focusedPane != FocusIssues {
-		t.Fatalf("Tab wrapping past a hidden Navigation landed on %v, want Issues", app.focusedPane)
+		t.Fatalf("h from Details landed on %v, want Issues", app.focusedPane)
 	}
 }
 
-// Tab is pane navigation. Details and Comments are a tab strip inside one pane,
-// and Tab used to walk them, which made the pane cycle take two presses to leave.
-func TestTabLeavesTheDetailsPaneWithoutWalkingItsTabs(t *testing.T) {
+// Tab belongs to the Comments tab's own controls. It used to leave the pane
+// too, which made the tab strip and pane navigation fight over one key.
+func TestTabDoesNotMoveBetweenPanes(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
 	app.detailsCommentsVisible = true
 	app.focusedPane = FocusDetails
 	app.focusedDetailsView = false
 
-	tabKey(app, false)
-
-	if app.focusedPane != FocusNavigation {
-		t.Fatalf("Tab from Details landed on %v, want Navigation", app.focusedPane)
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+	if app.focusedPane != FocusDetails {
+		t.Fatalf("Tab from Details landed on %v, want to stay put", app.focusedPane)
 	}
 	if app.focusedDetailsView {
-		t.Fatal("Tab moved the Details/Comments tab on its way out of the pane")
+		t.Fatal("Tab moved the Details/Comments tab")
 	}
-}
 
-func TestShiftTabLeavesTheDetailsPaneWithoutWalkingItsTabs(t *testing.T) {
-	app := newUXTestApp(t)
-	app.detailsHidden = false
-	app.detailsCommentsVisible = true
-	app.focusedPane = FocusDetails
-	app.focusedDetailsView = true
-
-	tabKey(app, true)
-
-	if app.focusedPane != FocusIssues {
-		t.Fatalf("Shift+Tab from Details landed on %v, want Issues", app.focusedPane)
-	}
-	if !app.focusedDetailsView {
-		t.Fatal("Shift+Tab moved the Details/Comments tab on its way out of the pane")
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+	if app.focusedPane != FocusDetails {
+		t.Fatalf("Shift+Tab from Details landed on %v, want to stay put", app.focusedPane)
 	}
 }
 
 // The details pane never dispatched command shortcuts, so every palette rune
 // was dead there. { and } are how it showed up: the pane toggles did nothing.
-// Both toggles take their rune from config, so the binding is part of the setup.
 func TestPaneTogglesFireFromTheDetailsPane(t *testing.T) {
 	app := NewApp(linearapi.ClientConfig{}, config.Config{
 		PageSize: 1,
 		CacheTTL: time.Minute,
-		Keybindings: map[string]string{
-			// The tab keys own { and } by default, so reaching the toggles on
-			// those runes means moving the tab keys off them first.
-			"tab_prev":               "[",
-			"tab_next":               "]",
-			"toggle_navigation_pane": "{",
-			"toggle_details_pane":    "}",
-		},
 	}, nil)
 	stopBackgroundWorkOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
@@ -147,7 +121,7 @@ func TestDetailsTabKeysStillCycleItsTabs(t *testing.T) {
 	app.focusedPane = FocusDetails
 	app.focusedDetailsView = false
 
-	app.handleDetailsKey(tcell.NewEventKey(tcell.KeyRune, app.actionKey("tab_next", '}'), tcell.ModNone))
+	app.handleDetailsKey(tcell.NewEventKey(tcell.KeyRune, app.actionKey("tab_next", ']'), tcell.ModNone))
 	if !app.focusedDetailsView {
 		t.Fatal("the details tab key did not move to Comments")
 	}

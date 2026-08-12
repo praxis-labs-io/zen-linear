@@ -164,10 +164,7 @@ func (a *App) applyIssuesTableTheme(table *tview.Table) {
 	table.SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)
-	table.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(a.theme.SelectionText).
-		Background(a.theme.SelectionBg).
-		Bold(true))
+	table.SetSelectedStyle(selectionStyle(a.theme))
 }
 
 func (a *App) recolorNavigationTree() {
@@ -195,20 +192,21 @@ func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
 			node.SetColor(a.theme.Foreground)
 		}
 	}
-	node.SetSelectedTextStyle(a.selectionStyle())
+	node.SetSelectedTextStyle(selectionStyle(a.theme))
 	for _, child := range node.GetChildren() {
 		a.applyNavigationNodeColors(child)
 	}
 }
 
-// selectionStyle is the selected-row style shared by the tree and tables.
-// tview's default inverse-video selection paints text in the primitive
+// selectionStyle is the selected-row style shared by the tree and every issue
+// table. tview's default inverse-video selection paints text in the primitive
 // background color, which is unreadable for themes with a transparent
-// background.
-func (a *App) selectionStyle() tcell.Style {
+// background. Every list that marks a live selection composes with this, so
+// changing how a selected row paints is one edit.
+func selectionStyle(theme Theme) tcell.Style {
 	return tcell.StyleDefault.
-		Foreground(a.theme.SelectionText).
-		Background(a.theme.SelectionBg).
+		Foreground(theme.SelectionText).
+		Background(theme.SelectionBg).
 		Bold(true)
 }
 
@@ -228,7 +226,7 @@ func (a *App) applySelectionStyleToTree(node *tview.TreeNode) {
 	if node == nil {
 		return
 	}
-	node.SetSelectedTextStyle(a.selectionStyle())
+	node.SetSelectedTextStyle(selectionStyle(a.theme))
 	for _, child := range node.GetChildren() {
 		a.applySelectionStyleToTree(child)
 	}

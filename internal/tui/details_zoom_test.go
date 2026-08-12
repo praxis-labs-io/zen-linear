@@ -203,8 +203,8 @@ func TestZoomNeedsASelectedIssue(t *testing.T) {
 	}
 }
 
-// Tab must not offer a pane the zoom has taken off screen.
-func TestTabSkipsTheIssuesPaneWhileZoomed(t *testing.T) {
+// A pane step must not offer a pane the zoom has taken off screen.
+func TestStepSkipsTheIssuesPaneWhileZoomed(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails
@@ -217,22 +217,22 @@ func TestTabSkipsTheIssuesPaneWhileZoomed(t *testing.T) {
 		}
 	}
 
-	tabKey(app, false)
+	stepKey(app, 'h')
 	if app.focusedPane == FocusIssues {
-		t.Error("Tab landed on the issues pane while zoomed")
+		t.Error("h landed on the issues pane while zoomed")
 	}
 }
 
 // Below the wide breakpoint the nav tree is not mounted either, so it must not
 // be offered.
-func TestTabHoldsTheDetailsPaneWhileZoomedAndNarrow(t *testing.T) {
+func TestStepHoldsTheDetailsPaneWhileZoomedAndNarrow(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails
 	app.detailsZoomed = true
 	app.layoutMode = layoutNarrow
 
-	tabKey(app, false)
+	stepKey(app, 'h')
 	if app.focusedPane != FocusDetails {
 		t.Errorf("focusedPane = %v, want the zoom to hold FocusDetails", app.focusedPane)
 	}

@@ -84,8 +84,8 @@ The options beyond the original linear-tui set:
         { "name": "Personal", "api_key_env": "LINEAR_API_KEY_PERSONAL" }
       ],
       "keybindings": {
-        "switch_workspace": "w",
-        "copy_branch": "Y"
+        "edit_description": "D",
+        "archive": "X"
       }
     }
 
@@ -112,11 +112,13 @@ The options beyond the original linear-tui set:
 ## Keys
 
     j/k         move            Enter       toggle details
-    h/l, Tab    switch panes    Space       expand sub-issues
-    1/2/3       focus a pane    { }         cycle tabs
-    v           zoom details    [ ]         expand/collapse all
-    H/L         scroll columns  :           command palette
-    /           search          q           quit
+    h/l         switch panes    Space       expand sub-issues
+    1/2/3       focus a pane    [ ]         cycle tabs
+    {           hide/show nav   }           hide/show details
+    v           zoom details    H/L         scroll columns
+    :           palette         /           search
+    r           refresh         w           switch workspace
+    n           new issue       q           quit
 
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.
@@ -125,15 +127,17 @@ Commands act on the pane they belong to. A key that acts on the selected issue
 answers from the issues and details panes, favorites from the navigation tree,
 and the palette lists only what applies where you opened it.
 
-In the Comments tab, Tab steps through the card stack, the compose box, and
-the Post button before it moves to the next pane:
+On the selected issue, from the issues and details panes:
 
-    t           write a comment
-    Ctrl+Enter  post it          Enter       new line, or post from the button
-    Esc         stop writing, keeping what is in the box
-
-The `add_comment` keybinding moves that first key; the box itself is always on
-the page.
+    e           edit            t           labels
+    s           status          T           move to a team
+    p           priority        P           project
+    C           cycle           c           write a comment
+    a           assign          m           assign to me
+    u           unassign        x           archive
+    N           new sub-issue   o           open in Linear
+    O           open on GitHub  i           copy the id
+    y           copy the URL    Y           copy the branch
 
 In the navigation pane:
 
@@ -142,12 +146,26 @@ In the navigation pane:
     L           move a favorite into the folder above it
     H           move a favorite back out of its folder
 
+Everything else is in the palette: filters, grouping, sorting, expand and
+collapse all, parent issues, due dates, estimates, milestones, relations,
+attachments, and the agent.
+
+In the Comments tab, Tab steps through the card stack, the compose box, and
+the Post button:
+
+    Ctrl+Enter  post it         Enter       new line, or post from the button
+    Esc         stop writing, keeping what is in the box
+
+The box is always on the page. `c` is what puts the keyboard in it, and the
+`add_comment` keybinding moves that key.
+
 Zoom widens the details pane over the issues list, keeping the navigation
 tree. Text caps at 90 columns so a wide terminal stays readable.
 
-Hiding a pane outright is a palette command rather than a key, so bind
-`toggle_navigation_pane` or `toggle_details_pane` under `keybindings` to
-reach either from the keyboard.
+A command bound under `keybindings` takes the key from whatever held it,
+including a default like `[`. A binding is ignored, and says so in the log,
+when it names a reserved movement key (`j`, `k`, `g`, `G` move the cursor,
+`h` and `l` the panes) or an id matching neither a command nor an action.
 
 ## Credits
 

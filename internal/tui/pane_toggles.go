@@ -39,7 +39,7 @@ func layoutModeForWidth(width int) layoutMode {
 // rebuildContentLayout re-adds the visible panes to the content flex,
 // honoring both manual pane toggles and the responsive layout mode. The
 // issues column is the anchor; on narrow terminals only the focused pane
-// shows, and focus movement (h/l/Tab) walks between panes.
+// shows, and focus movement (h/l and the pane numbers) walks between panes.
 func (a *App) rebuildContentLayout() {
 	if a.contentFlex == nil {
 		return

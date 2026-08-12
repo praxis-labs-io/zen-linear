@@ -44,22 +44,24 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		a.app.Stop()
 		return nil
 	case tcell.KeyTab, tcell.KeyBacktab:
-		// Tab moves between panes, stopping at the compose box on the way
-		// through the Comments tab. The Details/Comments tabs themselves
-		// belong to that pane's tab keys.
-		if a.focusedPane != FocusPalette {
-			backward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
-			if a.stepCommentsFocus(backward) {
-				return nil
-			}
-			if backward {
-				a.cyclePanesBackward()
-			} else {
-				a.cyclePanesForward()
-			}
+		// Tab walks a pane's own controls and nothing else. Panes move on h/l
+		// and the pane numbers, so Tab is swallowed rather than handed to
+		// tview, whose focus delegation would land it on an arbitrary
+		// primitive. The palette never reaches here; it returned above.
+		backward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
+		if backward && a.searchResultsHaveFocus() {
+			// The way back into the query box, matching the Tab that left it.
+			a.focusSearchInput()
+			return nil
 		}
+		a.stepCommentsFocus(backward)
 		return nil
 	case tcell.KeyRune:
+		// A command bound by id beats the action holding that rune by default.
+		// Out of scope for this pane it does not run, and the action answers.
+		if r := event.Rune(); a.commandBoundTo(r) && a.runCommandShortcut(r) {
+			return nil
+		}
 		switch event.Rune() {
 		case a.actionKey("quit", 'q'):
 			a.app.Stop()
@@ -191,13 +193,12 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 			a.stepPane(1)
 			return nil
 		}
-		// { and } cycle the issues tabs, lazygit-style ([ and ] keep their
-		// original expand/collapse-all bindings).
+		// [ and ] cycle the issues tabs, lazygit-style.
 		switch r {
-		case a.actionKey("tab_prev", '{'):
+		case a.actionKey("tab_prev", '['):
 			a.cycleIssuesSection(-1)
 			return nil
-		case a.actionKey("tab_next", '}'):
+		case a.actionKey("tab_next", ']'):
 			a.cycleIssuesSection(1)
 			return nil
 		}
@@ -250,7 +251,7 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 		case 'h':
 			a.stepPane(-1)
 			return nil
-		case a.actionKey("tab_prev", '{'), a.actionKey("tab_next", '}'):
+		case a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']'):
 			// Cycle the Details/Comments tabs, lazygit-style.
 			if a.detailsCommentsVisible {
 				a.focusedDetailsView = !a.focusedDetailsView

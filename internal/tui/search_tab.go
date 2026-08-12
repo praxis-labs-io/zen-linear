@@ -70,6 +70,59 @@ func (a *App) buildSearchPanel() {
 		AddItem(a.searchBody, 0, 1, false)
 
 	a.updateSearchBody()
+	a.applySearchFocusStyles()
+}
+
+// searchPaneStyle is how the Search tab's two halves paint for one focus state.
+// The query box and the result list sit in one bordered pane, so the border
+// says nothing about which of them holds the keyboard; these colors do.
+type searchPaneStyle struct {
+	LabelColor    tcell.Color
+	FieldText     tcell.Color
+	SelectedStyle tcell.Style
+}
+
+// searchPaneStyles returns the colors for a focus state. Only the query box
+// holding the keyboard mutes the list: leaving the pane entirely leaves the
+// selection lit, the way My and All keep theirs, so the details pane still says
+// which row it belongs to.
+//
+// The muted list keeps a marker on its row rather than dropping it, since that
+// row is where the way back lands. It is an underline and not a background,
+// because HeaderBg equals Background in the high contrast theme and Background
+// is the terminal's in rose_pine_moon, so no background reads in every theme.
+func searchPaneStyles(theme Theme, inputFocused bool) searchPaneStyle {
+	if !inputFocused {
+		return searchPaneStyle{
+			LabelColor:    theme.SecondaryText,
+			FieldText:     theme.SecondaryText,
+			SelectedStyle: selectionStyle(theme),
+		}
+	}
+	return searchPaneStyle{
+		LabelColor: theme.Accent,
+		FieldText:  theme.Foreground,
+		SelectedStyle: tcell.StyleDefault.
+			Foreground(theme.SecondaryText).
+			Background(theme.Background).
+			Underline(true),
+	}
+}
+
+// applySearchFocusStyles lights the half of the Search tab holding the keyboard
+// and mutes the other. Without it a fresh search shows a lit row nobody chose,
+// and the query box reads as live while the cursor is down in the results.
+func (a *App) applySearchFocusStyles() {
+	if a.searchInput == nil || a.searchResultsTable == nil {
+		return
+	}
+	style := searchPaneStyles(a.theme, a.searchInputActive())
+
+	a.searchInput.SetLabelColor(style.LabelColor)
+	a.searchInput.SetFieldStyle(tcell.StyleDefault.
+		Foreground(style.FieldText).
+		Background(a.theme.InputBg))
+	a.searchResultsTable.SetSelectedStyle(style.SelectedStyle)
 }
 
 // updateSearchBody mounts the results table when there are rows, or a
@@ -216,6 +269,14 @@ func (a *App) searchInputActive() bool {
 		a.searchInputFocused
 }
 
+// searchResultsHaveFocus reports whether the keyboard is on the Search tab's
+// result list rather than its query box.
+func (a *App) searchResultsHaveFocus() bool {
+	return a.focusedPane == FocusIssues &&
+		a.activeIssuesSection == IssuesSectionSearch &&
+		!a.searchInputFocused
+}
+
 // handleSearchInputKey routes keys while the search input has focus. Anything
 // not handled here falls through to the InputField, so plain letters type
 // instead of firing global shortcuts.
@@ -234,7 +295,16 @@ func (a *App) handleSearchInputKey(event *tcell.EventKey) *tcell.EventKey {
 		a.searchInputFocused = false
 		a.jumpToSection(a.searchReturnSection, 1)
 		return nil
-	case tcell.KeyEnter, tcell.KeyDown:
+	case tcell.KeyEnter, tcell.KeyDown, tcell.KeyTab:
+		// Tab walks the pane's own controls, and the results are the only other
+		// one here; Shift+Tab there comes back. Without it the query box has no
+		// key that leaves it and keeps the query: h and l type, and Esc empties
+		// the query before it lets go.
+		//
+		// With no results the body mounts the placeholder instead of the table,
+		// so there is nothing to hand the keyboard to. Moving focus anyway would
+		// put it on an unmounted primitive and the pane would go dead. [ and ]
+		// still leave the tab from here.
 		if len(a.searchIssueRows) == 0 {
 			return nil
 		}
@@ -249,23 +319,15 @@ func (a *App) handleSearchInputKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		a.updateFocus()
 		return nil
-	case tcell.KeyTab, tcell.KeyBacktab:
-		a.searchInputFocused = false
-		if event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0 {
-			a.cyclePanesBackward()
-		} else {
-			a.cyclePanesForward()
-		}
-		return nil
 	case tcell.KeyRune:
 		// Tab-cycling keys leave the Search tab instead of typing into the
 		// query.
 		switch event.Rune() {
-		case a.actionKey("tab_prev", '{'):
+		case a.actionKey("tab_prev", '['):
 			a.searchInputFocused = false
 			a.cycleIssuesSection(-1)
 			return nil
-		case a.actionKey("tab_next", '}'):
+		case a.actionKey("tab_next", ']'):
 			a.searchInputFocused = false
 			a.cycleIssuesSection(1)
 			return nil

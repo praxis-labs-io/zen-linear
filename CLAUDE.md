@@ -104,7 +104,15 @@ Drew's live config is a symlink chain: `~/.zen-linear/config.json` → dotfiles 
 
 ### Keybindings
 
-Commands carry a single-rune shortcut; the `keybindings` config map (command id → rune) remaps them with steal semantics: an explicit mapping clears the colliding default (`applyCommandKeybindings` in `internal/tui/keybindings.go`). UI actions that aren't palette commands (tab_next/tab_prev, columns_left/right, quit, open_palette, search, focus_navigation/focus_issues/focus_details) resolve through `actionKey(action, fallback)`. **Never compare against a hardcoded rune in a key handler** — that's how the details pane's tab keys broke when tabs were rebound.
+`config.Keybindings` (id → key) is validated **once**, by `resolveKeybindings` in `internal/tui/keybindings.go`, into the `resolvedKeybindings` on `App.bindings`. A binding that names a movement rune (`h`, `l`, `j`, `k`, `g`, `G`), is not a single rune, or names neither a command nor a UI action is dropped there and logged. **Everything downstream reads the resolved set, never `config.Keybindings`.** Half-honoring a rejected binding is the bug this shape exists to prevent: it used to keep a command's default alive at one call site while taking a rune at another, so one dead key explained a second.
+
+Both a command and a UI action can hold a rune, and both give a default up to an id the user named explicitly (`takenFrom`). The check reads scope, so a navigation command and an issue command may share one. `actionKey(action, fallback)` returns **0** when something else took the fallback, which no key event carries, so that action's `case` stops matching and the claimant answers. Anything printing an action key has to drop a 0 rather than render it.
+
+Action ids and their scopes live in `uiActionScopes`; `TestUIActionScopesCoverEveryActionKeyCallSite` greps the package for `actionKey(` calls so the map cannot fall behind. **Never compare against a hardcoded rune in a key handler** — that's how the details pane's tab keys broke when tabs were rebound.
+
+Deleting a command is a breaking change for anyone who bound it: the id stops resolving, and the user gets a logged warning instead of a silent theft. Say so in the PR.
+
+Tab is not pane navigation. It walks a pane's own controls, the Comments focus ring and the Search tab's query box, and nothing else; `h`/`l` and the pane numbers move between panes.
 
 ### Modal dispatch
 

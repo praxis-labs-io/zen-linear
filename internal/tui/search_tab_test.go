@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
@@ -81,5 +82,90 @@ func TestPerformIssueSearch_RendersResults(t *testing.T) {
 	}
 	if got := app.searchResultsTable.GetCell(1, titleColumn).Text; got != "Found me" {
 		t.Fatalf("search result title = %q, want %q", got, "Found me")
+	}
+}
+
+// TestSearchPaneStylesLightOneHalfAtATime covers the cue the tab had none of:
+// the query box and the result list share a border, so a lit row and a live
+// field read the same whichever holds the keyboard.
+func TestSearchPaneStylesLightOneHalfAtATime(t *testing.T) {
+	for _, theme := range []Theme{RosePineMoonTheme, HighContrastTheme, LinearTheme} {
+		input := searchPaneStyles(theme, true)
+		results := searchPaneStyles(theme, false)
+
+		if input.LabelColor != theme.Accent || input.FieldText != theme.Foreground {
+			t.Errorf("typing in the query box left it muted: label %v text %v", input.LabelColor, input.FieldText)
+		}
+		if _, _, attr := input.SelectedStyle.Decompose(); attr&tcell.AttrBold != 0 {
+			t.Error("the list kept its live selection while the query box had the keyboard")
+		}
+
+		if results.LabelColor != theme.SecondaryText || results.FieldText != theme.SecondaryText {
+			t.Errorf("the query box stayed lit while the list had the keyboard: label %v", results.LabelColor)
+		}
+		// Only the query box mutes the list. Stepping off the pane leaves the
+		// selection lit, the way My and All leave theirs.
+		if results.SelectedStyle != selectionStyle(theme) {
+			t.Error("the list selection is not the one every other list uses")
+		}
+	}
+}
+
+// TestTheMutedSelectionStaysFindable pins why the marker is an underline. Two
+// shipped themes cannot carry it as a background: HighContrast sets HeaderBg to
+// its Background, and rose_pine_moon's Background is the terminal's.
+func TestTheMutedSelectionStaysFindable(t *testing.T) {
+	for _, theme := range []Theme{RosePineMoonTheme, HighContrastTheme, LinearTheme} {
+		muted := searchPaneStyles(theme, true).SelectedStyle
+		if _, _, attr := muted.Decompose(); attr&tcell.AttrUnderline == 0 {
+			t.Error("the muted selection has no marker, so Tab comes back to a row nobody can see")
+		}
+	}
+}
+
+// TestTabLeavesTheSearchInputForTheResults covers the query box's only exit
+// that keeps the query. h and l type into it, and Esc empties it before it lets
+// go, so without Tab there is no way out with the words still there.
+func TestTabLeavesTheSearchInputForTheResults(t *testing.T) {
+	app := newUXTestApp(t)
+	drawn := make(chan struct{}, 8)
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		select {
+		case drawn <- struct{}{}:
+		default:
+		}
+	}
+	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
+		return linearapi.IssuePage{
+			Issues: []linearapi.Issue{{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me", State: "Todo"}},
+		}, nil
+	}
+	// Tab selects the first result, and the detail fetch that follows repaints
+	// the pane titles from its own goroutine. Park it, or it races updateFocus
+	// on the way out of the input.
+	holdDetailFetches(t, app)
+
+	app.openSearchTab()
+	app.performIssueSearch("found")
+	waitForDraw(t, drawn)
+
+	if got := app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)); got != nil {
+		t.Fatal("Tab leaked past the search input")
+	}
+	if app.searchInputFocused {
+		t.Error("Tab left the keyboard in the query box")
+	}
+	if got := len(app.searchIssueRows); got != 1 {
+		t.Errorf("search rows = %d, want the results kept on the way out", got)
+	}
+	if app.activeIssuesSection != IssuesSectionSearch {
+		t.Errorf("Tab left the Search tab for %v, want the results inside it", app.activeIssuesSection)
+	}
+
+	// Shift+Tab is the way back, matching the Tab that left.
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+	if !app.searchInputFocused {
+		t.Error("Shift+Tab did not return the keyboard to the query box")
 	}
 }

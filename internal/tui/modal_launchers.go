@@ -113,25 +113,6 @@ func (a *App) issueRefForID(issueID string) *linearapi.IssueRef {
 	return nil
 }
 
-// ShowEditTitleModal shows the shared text-input modal for editing the selected
-// issue's title. An empty submission is a no-op rather than a blank-title write.
-func (a *App) ShowEditTitleModal() {
-	issue := a.GetSelectedIssue()
-	if issue == nil {
-		return
-	}
-
-	a.textInputModal.ShowWithContext("Edit Title", "Title: ", issue.Title, a.issueContextLine(*issue), func(title string) {
-		if title == "" {
-			return
-		}
-		a.runIssueUpdate(
-			linearapi.UpdateIssueInput{ID: issue.ID, Title: &title},
-			fmt.Sprintf("Updated title for %s", issue.Identifier),
-		)
-	})
-}
-
 // ShowEditDescriptionModal shows the edit description modal for the selected
 // issue. Submitting empty text clears the description.
 func (a *App) ShowEditDescriptionModal() {

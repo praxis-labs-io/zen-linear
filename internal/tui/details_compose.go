@@ -263,12 +263,12 @@ func (a *App) enterCommentsFocus(target commentsFocus) {
 	a.updateStatusBar()
 }
 
-// stepCommentsFocus walks the Comments tab's own focus ring, reporting whether
-// it moved. Off either end it reports false and the caller cycles panes, so Tab
-// still leaves the pane once there is nothing left inside it to reach.
-func (a *App) stepCommentsFocus(backward bool) bool {
+// stepCommentsFocus walks the Comments tab's own focus ring. The ring does not
+// wrap and Tab does not leave the pane, so off either end the focus stays where
+// it is.
+func (a *App) stepCommentsFocus(backward bool) {
 	if a.focusedPane != FocusDetails || !a.detailsCommentsVisible || !a.focusedDetailsView {
-		return false
+		return
 	}
 	step := 1
 	if backward {
@@ -283,11 +283,10 @@ func (a *App) stepCommentsFocus(backward bool) bool {
 	}
 	next := current + step
 	if next < 0 || next >= len(commentsFocusOrder) {
-		return false
+		return
 	}
 	a.commentsFocus = commentsFocusOrder[next]
 	a.updateFocus()
-	return true
 }
 
 // openComposeBox shows the Comments tab and puts the keyboard in the box,
@@ -345,16 +344,7 @@ func (a *App) handleComposeKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 	case tcell.KeyTab, tcell.KeyBacktab:
-		backward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
-		if a.stepCommentsFocus(backward) {
-			return nil
-		}
-		a.commentsFocus = commentsFocusCards
-		if backward {
-			a.cyclePanesBackward()
-		} else {
-			a.cyclePanesForward()
-		}
+		a.stepCommentsFocus(event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0)
 		return nil
 	}
 	return event
