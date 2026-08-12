@@ -49,7 +49,7 @@ func (a *App) openReplyBox(parentID string) {
 	// A box already open elsewhere keeps its words against its own thread.
 	a.holdReplyDraft()
 	a.composeReplyTo[issueID] = parentID
-	a.detailsReplyArea.SetText(a.replyDrafts[parentID], true)
+	fillWritingBox(a.detailsReplyArea, a.replyDrafts[parentID])
 	a.applyComposePlaceholder()
 
 	// Rendered before the focus moves: the box has no place on the page, and so
@@ -108,6 +108,21 @@ func (a *App) applyComposePlaceholder() {
 	if a.detailsReplyArea != nil {
 		a.detailsReplyArea.SetPlaceholder(replyPlaceholder)
 	}
+}
+
+// fillWritingBox puts text in a box and shows it from the top.
+//
+// A box that has not been drawn yet believes it is one row tall: tview's
+// TextArea starts that way so its measurements work before the first frame.
+// Filling it with the cursor at the end scrolls every line above the last one
+// out of view, so a quote reply opened on a box that had never been drawn read
+// as empty while holding every word of the quote.
+func fillWritingBox(area *tview.TextArea, text string) {
+	if area == nil {
+		return
+	}
+	area.SetText(text, true)
+	area.SetOffset(0, 0)
 }
 
 // postLabel is what the button says, padded out either side: a filled surface
@@ -588,7 +603,7 @@ func (a *App) restoreComposeDraft(issueID, body, parentID string) {
 		return
 	}
 
-	a.detailsComposeArea.SetText(joinDrafts(body, a.detailsComposeArea.GetText()), true)
+	fillWritingBox(a.detailsComposeArea, joinDrafts(body, a.detailsComposeArea.GetText()))
 	// The keyboard comes back only where the box is on screen. A reader who
 	// moved to the description keeps the tab they chose.
 	if a.focusedPane == FocusDetails && a.detailsCommentsVisible && a.focusedDetailsView {
@@ -635,8 +650,8 @@ func (a *App) syncComposeDraft(issueID string) {
 	a.holdReplyDraft()
 	a.setComposeDraft(a.composeDraftIssueID, a.detailsComposeArea.GetText())
 	a.composeDraftIssueID = issueID
-	a.detailsComposeArea.SetText(a.composeDrafts[issueID], true)
-	a.detailsReplyArea.SetText(a.replyDrafts[a.replyParentID()], true)
+	fillWritingBox(a.detailsComposeArea, a.composeDrafts[issueID])
+	fillWritingBox(a.detailsReplyArea, a.replyDrafts[a.replyParentID()])
 	// The new issue has no box open where the old one did. The fields alone are
 	// not enough: tview's focus is still on the reply area, so composeBoxActive
 	// would keep routing every keystroke into a box this page never drew, which

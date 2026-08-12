@@ -523,6 +523,15 @@ func TestQuoteFillsTheBoxWithTheComment(t *testing.T) {
 	if got := app.replyParentID(); got != "root-1" {
 		t.Errorf("the quote answers %q, want the quoted comment", got)
 	}
+
+	// Read off the screen, not out of the widget. A box that has never been
+	// drawn thinks it is one row tall, so a quote put in with the cursor at the
+	// end scrolled itself out of view: the words were all there and the box was
+	// blank, and an assertion on GetText alone called that a pass.
+	drawn := strings.Join(showComments(t, app, 80, 30), "\n")
+	if !strings.Contains(drawn, "> The debounce is the problem.") {
+		t.Errorf("the quote is in the box and not on the screen:\n%s", drawn)
+	}
 }
 
 func TestQuoteBody(t *testing.T) {

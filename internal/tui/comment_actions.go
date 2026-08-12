@@ -285,7 +285,7 @@ func (a *App) replyToFocusedComment(quoted string) {
 	}
 	a.openReplyBox(threadRootID(a.detailsCommentsSource, comment.ID))
 	if quoted != "" {
-		a.detailsReplyArea.SetText(joinDrafts(quoted, a.detailsReplyArea.GetText()), true)
+		fillWritingBox(a.detailsReplyArea, joinDrafts(quoted, a.detailsReplyArea.GetText()))
 	}
 }
 
