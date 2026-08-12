@@ -223,8 +223,19 @@ func (a *App) leaveDetailsForIssues() {
 
 // handleDetailsKey handles keyboard input when details pane is focused.
 func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
+	// The focused card answers first. That is what lets r reply here and
+	// refresh everywhere else; a command the user bound to r by id still beats
+	// both, one branch up in handleGlobalKey.
+	if a.handleCommentKey(event) {
+		return nil
+	}
 	switch event.Key() {
 	case tcell.KeyEnter, tcell.KeyEscape:
+		// Escape lets go of a card before it does anything larger, the way it
+		// drops a reply's aim before leaving the compose box.
+		if event.Key() == tcell.KeyEscape && a.commentsHaveFocus() && a.clearCommentFocus() {
+			return nil
+		}
 		// Zoomed, the way back is the issues list itself; unzoomed, Enter
 		// closes the pane to get there. Escape only has the first meaning.
 		if a.detailsZoomed {

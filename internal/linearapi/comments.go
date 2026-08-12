@@ -18,6 +18,8 @@ func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (C
 				Body      graphql.String
 				CreatedAt graphql.String
 				UpdatedAt graphql.String
+				ParentID  *graphql.String
+				URL       graphql.String
 				User      struct {
 					ID          graphql.String
 					Name        graphql.String
@@ -33,6 +35,9 @@ func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (C
 	commentInput := make(CommentCreateInput)
 	commentInput["issueId"] = graphql.ID(input.IssueID)
 	commentInput["body"] = graphql.String(input.Body)
+	if input.ParentID != "" {
+		commentInput["parentId"] = graphql.ID(input.ParentID)
+	}
 
 	variables := map[string]interface{}{
 		"input": commentInput,
@@ -52,12 +57,18 @@ func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (C
 	node := mutation.CommentCreate.Comment
 	createdAt := parseTime(string(node.CreatedAt))
 	updatedAt := parseTime(string(node.UpdatedAt))
+	parentID := ""
+	if node.ParentID != nil {
+		parentID = string(*node.ParentID)
+	}
 
 	return Comment{
 		ID:        string(node.ID),
 		Body:      string(node.Body),
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
+		ParentID:  parentID,
+		URL:       string(node.URL),
 		Author: User{
 			ID:          string(node.User.ID),
 			Name:        string(node.User.Name),

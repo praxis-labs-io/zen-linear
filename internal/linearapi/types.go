@@ -360,6 +360,11 @@ type Comment struct {
 	UpdatedAt time.Time
 	Author    User
 	IssueID   string
+	// ParentID is the comment this one replies to, empty on a top-level
+	// comment. Linear's threads are one level deep.
+	ParentID string
+	// URL is the comment's permalink, the anchor Linear opens the thread on.
+	URL string
 }
 
 // IssueRelation represents a Linear issue relation.
@@ -554,6 +559,8 @@ type UpdateIssueInput struct {
 type CreateCommentInput struct {
 	IssueID string
 	Body    string
+	// ParentID makes the comment a reply. Empty posts at top level.
+	ParentID string
 }
 
 // CreateIssueRelationInput contains input for creating an issue relation.

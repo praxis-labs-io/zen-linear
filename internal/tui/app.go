@@ -83,16 +83,34 @@ type App struct {
 	detailsCommentsView        *tview.TextView // Scrollable comments view
 	detailsCommentsSource      []linearapi.Comment
 	detailsCommentsFittedWidth int
-	detailsCommentsPanel       *tview.Flex     // Comments tab shell: card stack + compose box
-	detailsComposeBox          *tview.Flex     // Hand-drawn frame around the compose area
-	detailsComposeArea         *tview.TextArea // Where a comment gets written
-	detailsComposePost         *tview.Button   // Sends what is in the box
+	// focusedCommentID is the card the ring is on and commentSpans is where
+	// every card landed in the last render. The ring is held by id rather than
+	// by index so a refetch that reorders the stack keeps it on the same card.
+	focusedCommentID string
+	commentSpans     []commentSpan
+	// commentPainted is the ring the last render drew, so a focus change
+	// repaints only when it changes something on the page.
+	commentPainted       commentPaint
+	detailsCommentsPanel *tview.Flex     // Comments tab shell: the bordered panel
+	detailsCommentsPage  *commentsPage   // Cards, the reply box, the compose card
+	detailsComposeArea   *tview.TextArea // Where a comment gets written
+	detailsComposePost   *tview.Button   // Sends what is in the compose box
+	detailsReplyArea     *tview.TextArea // Where a reply gets written, inside its thread
+	detailsReplyPost     *tview.Button   // Sends what is in the reply box
 	// composeDrafts holds what has been written and not posted, keyed by issue.
 	// The box is one widget over a changing selection, so a draft has to follow
 	// the issue it was written for; left in the box it would be posted to
 	// whichever issue is on screen when the chord lands.
 	composeDrafts       map[string]string
 	composeDraftIssueID string
+	// composeReplyTo holds the thread the reply box is open on, keyed by issue
+	// the same way the draft is: an issue keeps the box it had open when the
+	// selection moves away and comes back.
+	composeReplyTo map[string]string
+	// replyDrafts holds what has been written into a reply box and not sent,
+	// keyed by the comment being answered. Closing the box is not losing the
+	// words, and reopening on the same thread finds them.
+	replyDrafts         map[string]string
 	statusBar           *tview.TextView
 	paletteModal        *tview.Flex
 	paletteInput        *tview.InputField

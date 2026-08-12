@@ -13,20 +13,26 @@ import (
 )
 
 // typeInCompose sends a key the way the running app does: the global capture
-// first, then whatever it hands back goes to the focused primitive. Driving
-// only the capture would prove the box was offered the key, not that it took
-// it.
+// first, then whatever it hands back goes to the root, which walks down the
+// focus chain to deliver it.
+//
+// The walk is not an implementation detail to shortcut. tview hands a key to
+// the root primitive, never to the focused one, so a container that answers for
+// the wrong child swallows every key while the focus, the border and the status
+// bar all say the box has the keyboard. Handing the event straight to
+// app.GetFocus() here proved only that the box was focused, and passed for a
+// whole branch against a box nothing could be typed into.
 func typeInCompose(t *testing.T, app *App, event *tcell.EventKey) {
 	t.Helper()
 	remaining := app.handleGlobalKey(event)
 	if remaining == nil {
 		return
 	}
-	focus := app.app.GetFocus()
-	if focus == nil {
-		t.Fatalf("no focus to take the key")
+	root := app.pages
+	if !root.HasFocus() {
+		t.Fatalf("the layout does not hold the focus, so no key can be delivered")
 	}
-	if handler := focus.InputHandler(); handler != nil {
+	if handler := root.InputHandler(); handler != nil {
 		handler(remaining, func(p tview.Primitive) { app.app.SetFocus(p) })
 	}
 }
@@ -348,9 +354,12 @@ func TestComposeBoxIsAFixedHeight(t *testing.T) {
 		return bottom - top + 1
 	}
 
+	// The writing, the button row under it, and the card's own frame and byline
+	// around both.
+	const composeCardRows = composeRows + 5
 	empty := frameRows()
-	if empty != composeBoxRows {
-		t.Errorf("box draws %d rows, want %d", empty, composeBoxRows)
+	if empty != composeCardRows {
+		t.Errorf("box draws %d rows, want %d", empty, composeCardRows)
 	}
 
 	typeRunes(t, app, "one")
@@ -445,18 +454,28 @@ func TestClickingTheBoxTakesTheKeyboard(t *testing.T) {
 	}
 }
 
-// TestTabWalksTheCommentsTabAndStopsAtTheEnd covers the focus ring: the cards,
-// the box, the button. Tab is not pane navigation, so the end of the ring is
-// the end of the walk.
+// TestTabWalksTheCommentsTabAndStopsAtTheEnd covers the focus ring: each card
+// in turn, then the box, then the button. Tab is not pane navigation, so the
+// end of the ring is the end of the walk.
 func TestTabWalksTheCommentsTabAndStopsAtTheEnd(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	app.leaveComposeBox()
+	// Opening the box scrolled the page to it, at the end. The ring picks up
+	// from what is on screen, so the walk starts where the reader is looking.
+	app.detailsCommentsView.ScrollToBeginning()
 
 	tab := func() { app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)) }
 
+	// One Tab per comment before the ring reaches the box.
+	for range app.detailsCommentsSource {
+		tab()
+		if got := app.app.GetFocus(); got != app.detailsCommentsView {
+			t.Fatalf("Tab through the cards focused %T, want the card stack", got)
+		}
+	}
 	tab()
 	if got := app.app.GetFocus(); got != app.detailsComposeArea {
-		t.Fatalf("one Tab from the cards focused %T, want the compose area", got)
+		t.Fatalf("Tab past the last card focused %T, want the compose area", got)
 	}
 	tab()
 	if got := app.app.GetFocus(); got != app.detailsComposePost {
@@ -488,9 +507,15 @@ func TestBacktabWalksTheRingBackwards(t *testing.T) {
 	if got := app.app.GetFocus(); got != app.detailsCommentsView {
 		t.Fatalf("two Backtabs focused %T, want the card stack", got)
 	}
-	backtab()
+	// One per card, and then the ring is out of cards to give.
+	for range app.detailsCommentsSource {
+		backtab()
+	}
 	if got := app.app.GetFocus(); got != app.detailsCommentsView {
-		t.Fatalf("three Backtabs focused %T, want to stay on the card stack", got)
+		t.Fatalf("Backtab off the top of the stack focused %T, want to stay", got)
+	}
+	if got := app.focusedCommentID; got != app.detailsCommentsSource[0].ID {
+		t.Errorf("Backtab stopped on %q, want the first card", got)
 	}
 	if app.focusedPane != FocusDetails {
 		t.Errorf("Backtab left the details pane for %v", app.focusedPane)
@@ -726,5 +751,97 @@ func TestFailedPostLeavesTheErrorOnScreen(t *testing.T) {
 	}
 	if strings.Contains(text, "Posting comment") {
 		t.Errorf("status bar reads %q, want the posting flash gone", text)
+	}
+}
+
+// TestTypingWorksOnAnIssueWithNoComments is the one this branch shipped
+// without. The box took the focus, lit its border and said so in the status
+// bar, and every keystroke went into the page under it and was dropped: the
+// page answered for the wrong child, and a key is delivered from the root down
+// the focus chain rather than to the focused widget.
+func TestTypingWorksOnAnIssueWithNoComments(t *testing.T) {
+	posted := make(chan linearapi.CreateCommentInput, 1)
+	app := newDetailsTestApp(t)
+	app.selectedIssue = detailsFixture()
+	app.updateDetailsView()
+	drawn := make(chan struct{}, 4)
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		select {
+		case drawn <- struct{}{}:
+		default:
+		}
+	}
+	app.createCommentFunc = func(_ context.Context, input linearapi.CreateCommentInput) (linearapi.Comment, error) {
+		posted <- input
+		return linearapi.Comment{ID: "first", Body: input.Body}, nil
+	}
+
+	if !app.openComposeBox() {
+		t.Fatal("the box would not open on an issue with no comments")
+	}
+	typeRunes(t, app, "the first word on this issue")
+
+	if got := app.detailsComposeArea.GetText(); got != "the first word on this issue" {
+		t.Fatalf("the box holds %q, want what was typed into it", got)
+	}
+
+	postAndWait(t, app, drawn)
+	if got := (<-posted).Body; got != "the first word on this issue" {
+		t.Errorf("posted %q", got)
+	}
+}
+
+// TestTypingBringsTheBoxBack covers a box scrolled off the page while it still
+// holds the keyboard. Words going into something off screen are words the
+// writer cannot read back, so the first key returns it to view.
+func TestTypingBringsTheBoxBack(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	showComments(t, app, 80, 12)
+	app.detailsCommentsView.ScrollToBeginning()
+	showComments(t, app, 80, 12)
+
+	compose := app.commentSpans[app.commentSpanIndex(blockIDCompose)]
+	if app.commentSpanVisible(compose) {
+		t.Fatal("the box is still on screen, so there is nothing to bring back")
+	}
+
+	typeRunes(t, app, "x")
+
+	if !app.commentSpanVisible(app.commentSpans[app.commentSpanIndex(blockIDCompose)]) {
+		t.Error("typing left the box off screen")
+	}
+	if got := app.detailsComposeArea.GetText(); got != "x" {
+		t.Errorf("the box holds %q", got)
+	}
+}
+
+// TestCtrlCCopiesRatherThanQuitting covers the reflex that used to end the
+// session: Ctrl+C in a box with a selection is a copy, and the words and the
+// app both survive it.
+func TestCtrlCCopiesRatherThanQuitting(t *testing.T) {
+	copied := make(chan string, 1)
+	app, _ := newComposeTestApp(t)
+	app.copyToClipboardFunc = func(text string) error { copied <- text; return nil }
+	typeRunes(t, app, "worth keeping")
+	// Select it all, the way the box's own key does.
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyCtrlL, 0, tcell.ModCtrl))
+	// Straight through the capture, because what matters is what it hands back:
+	// tview stops the app on a Ctrl+C it gets to see.
+	left := app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModCtrl))
+	if left != nil {
+		t.Error("Ctrl+C was handed back to tview, which stops the app on it")
+	}
+
+	select {
+	case got := <-copied:
+		if got != "worth keeping" {
+			t.Errorf("copied %q, want the selection", got)
+		}
+	default:
+		t.Error("Ctrl+C copied nothing")
+	}
+	if got := app.detailsComposeArea.GetText(); got != "worth keeping" {
+		t.Errorf("the box holds %q, want the words untouched", got)
 	}
 }

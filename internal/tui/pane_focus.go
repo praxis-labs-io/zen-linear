@@ -165,15 +165,16 @@ func (a *App) updateFocus() {
 		}
 		a.updateDetailsLayout()
 		if a.focusedDetailsView && a.detailsCommentsVisible {
-			// The tab has three targets: the cards read, the box writes, the
-			// button sends.
-			switch a.commentsFocus {
-			case commentsFocusText:
-				a.app.SetFocus(a.detailsComposeArea)
-			case commentsFocusPost:
-				a.app.SetFocus(a.detailsComposePost)
-			default:
-				a.app.SetFocus(a.detailsCommentsView)
+			// The page has two kinds of stop: a card reads, and a box writes
+			// with a button that sends.
+			if area, button, ok := a.writingBox(a.commentsFocus); ok {
+				if a.commentsFocus.isWriting() {
+					a.app.SetFocus(area)
+				} else {
+					a.app.SetFocus(button)
+				}
+			} else {
+				a.app.SetFocus(a.detailsCommentsPage)
 			}
 			a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 			a.detailsCommentsPanel.SetBorderColor(a.theme.BorderFocus)
@@ -204,6 +205,9 @@ func (a *App) updateFocus() {
 	// The Search tab's two halves share one border, so which of them is live
 	// has to be said in their own colors, from every branch above.
 	a.applySearchFocusStyles()
+	// The comment ring's border is in the card text, not on a primitive, so it
+	// takes a rewrite rather than a color set.
+	a.refreshCommentRing()
 	a.updateStatusBar()
 }
 
