@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
@@ -103,7 +104,10 @@ func TestThreadRootID(t *testing.T) {
 		{name: "a root is its own thread", id: "root-1", want: "root-1"},
 		{name: "a reply names its parent", id: "reply-1", want: "root-1"},
 		{name: "a deeper reply names the thread", id: "reply-2", want: "root-1"},
-		{name: "an orphan is a root", id: "orphan", want: "orphan"},
+		// Drawn as a root, because the page has nothing to nest it under, and
+		// still answered to its own parent: Linear refuses a reply whose parent
+		// is a reply, which is what posting against itself would be.
+		{name: "an orphan answers the parent it lost", id: "orphan", want: "off-the-page"},
 		{name: "an unknown comment is left alone", id: "gone", want: "gone"},
 	}
 	for _, tt := range tests {
@@ -188,4 +192,44 @@ func cardEdgeColumn(t *testing.T, lines []string, what string, n int) int {
 	}
 	t.Fatalf("no card %d to measure (%s):\n%s", n, what, strings.Join(lines, "\n"))
 	return 0
+}
+
+// TestEveryPageLineFitsThePane is the invariant the slots and the ring stand
+// on: one line of the page is one row on the screen. A line wider than the
+// pane would be wrapped by the view into two, and every box and every stop
+// below it would be a row out of place.
+func TestEveryPageLineFitsThePane(t *testing.T) {
+	now := time.Now()
+	unbreakable := linearapi.Comment{
+		ID: "wide", CreatedAt: now, UpdatedAt: now,
+		Author: linearapi.User{ID: "u1", DisplayName: "drew"},
+		Body:   "https://example.com/a/very/long/path/that/cannot/be/broken/anywhere",
+	}
+
+	for _, fixture := range []struct {
+		name     string
+		comments []linearapi.Comment
+	}{
+		{name: "a thread", comments: threadedComments()},
+		{name: "nothing written yet"},
+		{name: "a line nothing can break", comments: []linearapi.Comment{unbreakable}},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			app := newDetailsTestApp(t)
+			issue := detailsFixture()
+			issue.Comments = fixture.comments
+			app.selectedIssue = issue
+			app.updateDetailsView()
+
+			for _, width := range []int{8, 10, 14, 20, 40, 90, 140} {
+				drawComments(t, app, width)
+				measure, _ := readingMeasure(width)
+				for i, line := range strings.Split(app.detailsCommentsView.GetText(false), "\n") {
+					if got := tview.TaggedStringWidth(line); got > measure {
+						t.Errorf("width %d: line %d is %d cells in a %d pane: %q", width, i, got, measure, line)
+					}
+				}
+			}
+		})
+	}
 }

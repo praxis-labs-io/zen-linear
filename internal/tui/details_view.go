@@ -196,9 +196,12 @@ func (a *App) buildDetailsView() *tview.Flex {
 	// the refit, and the panel around that owns the border, the tab title and
 	// the padding, so this one goes bare and unfitted.
 	a.detailsCommentsView = tview.NewTextView()
+	// Wrapping off, because the page counts its own lines: a line the view
+	// wrapped would be one page line drawn as two screen rows, and every slot
+	// and span below it a row out. Everything written to it is fitted to the
+	// measure first, so there is nothing left to wrap.
 	a.detailsCommentsView.SetDynamicColors(true).
-		SetWrap(true).
-		SetWordWrap(true)
+		SetWrap(false)
 	a.detailsCommentsView.SetBackgroundColor(a.theme.Background)
 	a.buildDetailsCommentsPanel()
 

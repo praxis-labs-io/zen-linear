@@ -91,8 +91,20 @@ func buildCommentRows(comments []linearapi.Comment) []commentRow {
 // Linear rejects a parentId that is not top level ("Parent comment must be a
 // top level comment"), so answering the card under the cursor means posting
 // against its thread, not against the card.
+//
+// A reply whose parent fell off the fetched page still answers that parent.
+// The page draws it as a root because there is nothing on screen to nest it
+// under, but posting against itself is the one thing Linear will refuse.
 func threadRootID(comments []linearapi.Comment, id string) string {
-	return threadRoot(indexComments(comments), id)
+	byID := indexComments(comments)
+	for range byID {
+		comment, ok := byID[id]
+		if !ok || comment.ParentID == "" {
+			return id
+		}
+		id = comment.ParentID
+	}
+	return id
 }
 
 func indexComments(comments []linearapi.Comment) map[string]linearapi.Comment {
@@ -103,9 +115,10 @@ func indexComments(comments []linearapi.Comment) map[string]linearapi.Comment {
 	return byID
 }
 
-// threadRoot walks up from id to the top of its thread. It gives up after a
-// step per comment: a parent chain that cycles is a malformed response, and a
-// walk that trusted it would hang the pane rather than draw a wrong card.
+// threadRoot walks up from id to the top of its thread as the page can draw it,
+// stopping at a parent the page does not have. It gives up after a step per
+// comment: a parent chain that cycles is a malformed response, and a walk that
+// trusted it would hang the pane rather than draw a wrong card.
 func threadRoot(byID map[string]linearapi.Comment, id string) string {
 	for range byID {
 		comment, ok := byID[id]

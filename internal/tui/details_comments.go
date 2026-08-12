@@ -42,7 +42,8 @@ func (a *App) renderDetailsComments() {
 		// page: an issue nobody has written on is the one most likely to be
 		// written on, and a page with no card to write in leaves the keyboard
 		// in a box that was never drawn.
-		lines = append(lines, fmt.Sprintf("%sNo comments yet.[-]", a.themeTags.SecondaryText), "")
+		lines = append(lines, wrapTagged(fmt.Sprintf("%sNo comments yet.[-]", a.themeTags.SecondaryText), width)...)
+		lines = append(lines, "")
 	}
 	for i, block := range blocks {
 		if i > 0 {
@@ -271,11 +272,18 @@ func (a *App) commentBorderTag(id string) string {
 }
 
 // commentPlain drops the frame on a pane too narrow to hold one, where the box
-// would take a third of every line. The body goes out unfitted for the text
-// view to wrap, since there is no border here for a long line to break.
+// would take a third of every line.
+//
+// It wraps its own body rather than leaving that to the text view. A line the
+// view wraps is one page line drawn as two screen rows, and every slot and span
+// below it is then a row out: the boxes paint over the wrong cards and Tab
+// lands on them.
 func (a *App) commentPlain(comment linearapi.Comment, width int) []string {
 	lines := []string{truncateTagged(a.commentByline(comment), width)}
-	return append(lines, commentBodyLines(comment.Body, width)...)
+	for _, line := range commentBodyLines(comment.Body, width) {
+		lines = append(lines, wrapTagged(line, width)...)
+	}
+	return lines
 }
 
 // commentByline is the line above a comment: who, what they did, and when.
