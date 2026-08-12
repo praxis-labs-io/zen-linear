@@ -97,3 +97,16 @@ func TestIssuesFooterDrawsOnTheBottomBorder(t *testing.T) {
 		}
 	}
 }
+
+// A search is workspace-wide and takes neither the tree's scope, the filters,
+// nor the sort chain, so the context line would be false about its results.
+func TestSearchPanelCarriesNoContextLine(t *testing.T) {
+	app := footerTestApp(t)
+	app.richFilters = IssueFilters{AssigneeID: "user-1", AssigneeName: "drew"}
+
+	for _, line := range drawPrimitive(t, app.searchPanel, 80) {
+		if strings.Contains(line, "ZNL · Polish & Bugs") || strings.Contains(line, "Filters: ") {
+			t.Errorf("search panel drew the list context: %q", line)
+		}
+	}
+}

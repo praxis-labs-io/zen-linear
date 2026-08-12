@@ -176,7 +176,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 	if fetchPrefs == nil {
 		fetchPrefs = a.api.FetchCustomViewPreferences
 	}
-	a.statusBar.SetText(fmt.Sprintf("%sLoading...[-]", a.themeTags.Warning))
+	a.setLoadingMessage("Loading...")
 	go func() {
 		refreshStarted := time.Now()
 		ctx := context.Background()
@@ -241,7 +241,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 				a.updateFocus()
 			}
 			if page.HasNext {
-				a.statusBar.SetText(fmt.Sprintf("%sLoading more (page %d, fetched %d)...[-]", a.themeTags.Warning, pageCount, fetchedCount))
+				a.setLoadingMessage(fmt.Sprintf("Loading more (page %d, fetched %d)...", pageCount, fetchedCount))
 			}
 		})
 
@@ -287,7 +287,7 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 					lastPaint = time.Now()
 				}
 				if page.HasNext {
-					a.statusBar.SetText(fmt.Sprintf("%sLoading more (page %d, fetched %d)...[-]", a.themeTags.Warning, pageCount, fetchedCount))
+					a.setLoadingMessage(fmt.Sprintf("Loading more (page %d, fetched %d)...", pageCount, fetchedCount))
 				}
 			})
 		}

@@ -32,6 +32,13 @@ func (a *App) buildStatusBar() {
 	a.statusRow.
 		AddItem(a.statusBar, 0, 1, false).
 		AddItem(a.statusToast, 0, 0, false)
+	// The corner is sized against the live width here rather than where the
+	// message is set, which is the only place that width is known.
+	a.statusRow.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		a.statusRowWidth = width
+		a.fitStatusToast()
+		return x, y, width, height
+	})
 
 	a.applyStatusBarPadding()
 }
@@ -58,16 +65,37 @@ func (a *App) applyStatusBarPadding() {
 	a.statusToast.SetBorderPadding(padding.Top, padding.Bottom, 0, padding.Right)
 }
 
-// setStatusToast puts the flashed message at the right of the strip, sizing its
-// half to the words and closing it up when there is nothing to say.
-func (a *App) setStatusToast() {
-	a.statusToast.SetText(a.themeTags.Accent + tview.Escape(a.statusMessage) + "[-]")
+// fitStatusToast puts the flashed message in the right of the strip, sizing its
+// corner to the words and closing it up when there is nothing to say. Half the
+// row is the ceiling: a fixed half wider than the strip leaves the hints a
+// negative width, which tview draws from, and one long message would take the
+// whole line with it. Before the first draw the width is unknown and the
+// message is sized as it stands; the draw that follows corrects it.
+func (a *App) fitStatusToast() {
+	message := a.statusMessage
+	if message == "" {
+		message = a.loadingMessage
+	}
+	gap := a.density.StatusBarPadding.Right + statusToastGap
 
 	width := 0
-	if a.statusMessage != "" {
-		width = runewidth.StringWidth(a.statusMessage) + a.density.StatusBarPadding.Right + statusToastGap
+	if message != "" {
+		if a.statusRowWidth > 0 {
+			message = runewidth.Truncate(message, max(0, a.statusRowWidth/2-gap), "…")
+		}
+		width = runewidth.StringWidth(message) + gap
 	}
+	a.statusToast.SetText(a.themeTags.Accent + tview.Escape(message) + "[-]")
 	a.statusRow.ResizeItem(a.statusToast, width, 0)
+}
+
+// setLoadingMessage says what a fetch is doing, in the same corner and behind
+// anything flashed: progress repeats itself and a warning does not, so the
+// warning is the one that must not be pushed off. Empty clears it. UI thread
+// only, like everything else the bar reads.
+func (a *App) setLoadingMessage(message string) {
+	a.loadingMessage = message
+	a.fitStatusToast()
 }
 
 // keyPairLabel renders two action keys as one hint, dropping either one that
@@ -219,7 +247,7 @@ func (a *App) updateStatusBar() {
 	}
 
 	a.statusBar.SetText(text)
-	a.setStatusToast()
+	a.fitStatusToast()
 }
 
 // updateStatusBarWithError leaves a failure on the bar until something else
@@ -231,7 +259,7 @@ func (a *App) updateStatusBar() {
 func (a *App) updateStatusBarWithError(err error) {
 	a.cancelStatusFlash()
 	a.statusMessage = ""
-	a.setStatusToast()
+	a.fitStatusToast()
 	a.statusBar.SetText(fmt.Sprintf("%sError: %s[-]", a.themeTags.Error, tview.Escape(err.Error())))
 }
 

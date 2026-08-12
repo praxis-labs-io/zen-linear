@@ -225,3 +225,44 @@ func waitForQueuedUpdate(t *testing.T, queued <-chan struct{}) {
 		t.Fatal("the flash never cleared")
 	}
 }
+
+// A message longer than the strip used to take a fixed width wider than the
+// row, which left the hints a negative width and drew neither half properly.
+func TestALongFlashLeavesTheHintsRoom(t *testing.T) {
+	app := newUXTestApp(t)
+	app.focusedPane = FocusIssues
+	app.flashStatus("Opened GitHub: https://github.com/zen-linear/zen-linear/pull/1234 and then some")
+
+	lines := drawPrimitive(t, app.statusRow, 80)
+
+	strip := lines[0]
+	if !strings.Contains(strip, ": palette") {
+		t.Errorf("strip = %q, want the hints still on it", strip)
+	}
+	if !strings.Contains(strip, "…") {
+		t.Errorf("strip = %q, want the message truncated to its half", strip)
+	}
+	if width := runeCellWidth(strip); width > 80 {
+		t.Errorf("strip is %d cells wide, want it inside 80", width)
+	}
+}
+
+// Progress must not push a warning off the corner: a warning is said once, a
+// fetch says "Loading..." on every refresh.
+func TestLoadProgressWaitsBehindAWarning(t *testing.T) {
+	app := newUXTestApp(t)
+	app.focusedPane = FocusIssues
+
+	app.flashStatus("Default project Missing not found")
+	app.setLoadingMessage("Loading...")
+
+	if got := app.statusToast.GetText(true); got != "Default project Missing not found" {
+		t.Errorf("toast = %q, want the warning held", got)
+	}
+
+	app.statusMessage = ""
+	app.fitStatusToast()
+	if got := app.statusToast.GetText(true); got != "Loading..." {
+		t.Errorf("toast = %q once the warning expired, want the progress", got)
+	}
+}

@@ -112,10 +112,15 @@ type App struct {
 	// words, and reopening on the same thread finds them.
 	replyDrafts map[string]string
 	// statusBar holds the pane hints; statusToast is the message corner it
-	// shares the statusRow strip with.
-	statusBar           *tview.TextView
-	statusToast         *tview.TextView
-	statusRow           *tview.Flex
+	// shares the statusRow strip with, and statusRowWidth is what the last
+	// draw measured that strip at.
+	statusBar      *tview.TextView
+	statusToast    *tview.TextView
+	statusRow      *tview.Flex
+	statusRowWidth int
+	// loadingMessage is a fetch's progress, shown in the same corner when
+	// nothing has been flashed over it.
+	loadingMessage      string
 	paletteModal        *tview.Flex
 	paletteInput        *tview.InputField
 	paletteList         *tview.List

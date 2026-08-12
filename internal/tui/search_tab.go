@@ -65,7 +65,9 @@ func (a *App) buildSearchPanel() {
 		SetTitleAlign(tview.AlignLeft).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)
-	a.attachIssuesFooter(a.searchPanel.Box)
+	// No context line here: a search is workspace-wide and takes neither the
+	// tree's scope, the rich filters, nor the sort chain, so the line the other
+	// two tabs carry would be false about these results.
 	a.searchPanel.
 		AddItem(a.searchInput, 1, 0, true).
 		AddItem(a.searchBody, 0, 1, false)
