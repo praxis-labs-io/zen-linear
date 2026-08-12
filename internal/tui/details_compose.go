@@ -55,7 +55,10 @@ func (a *App) openReplyBox(parentID string) {
 	// Rendered before the focus moves: the box has no place on the page, and so
 	// no stop in the ring, until the page has been written with it in.
 	a.renderDetailsComments()
-	a.commentsFocus = commentsFocusReply
+	// The ring is a pair, the stop and what it names. Moving one and not the
+	// other left the card the reader came from lit while the keyboard was in
+	// the box, and the box itself unlit.
+	a.commentsFocus, a.focusedCommentID = commentsFocusReply, blockIDReply
 	a.updateFocus()
 	if index := a.commentSpanIndex(blockIDReply); index >= 0 {
 		a.scrollCommentIntoView(a.commentSpans[index])

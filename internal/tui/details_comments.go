@@ -256,19 +256,18 @@ func (a *App) cardFooter(id string, width int, border string) string {
 		a.themeTags.SecondaryText + hints + "[-:-:-]" + border + "─╯[-:-:-]"
 }
 
-// commentBorderTag colors one card's frame: the ring's card in the focus color
-// while the stack holds the keyboard, and the card a reply is aimed at in the
-// accent, which is what keeps the target on screen once the box's placeholder
-// has been typed over.
+// commentBorderTag colors one card's frame: the ring's own card in the focus
+// color while the page holds the keyboard, and every other card in the border.
+//
+// One lit border at a time. The card being answered took the accent for a
+// while, from when the box sat at the foot of the page and nothing else said
+// what it was for; the box is drawn inside the thread now, which says it
+// better than a second color on a second card.
 func (a *App) commentBorderTag(id string) string {
-	switch {
-	case id == a.focusedCommentID && a.commentsHaveFocus():
+	if id != "" && id == a.focusedCommentID && a.commentsHaveFocus() {
 		return a.themeTags.BorderFocus
-	case id != "" && id == a.replyParentID():
-		return a.themeTags.Accent
-	default:
-		return a.themeTags.Border
 	}
+	return a.themeTags.Border
 }
 
 // commentPlain drops the frame on a pane too narrow to hold one, where the box

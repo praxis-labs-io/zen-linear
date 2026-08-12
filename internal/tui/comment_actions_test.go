@@ -740,3 +740,63 @@ func TestABoxCutOffAtTheTopIsNotRedrawn(t *testing.T) {
 		t.Errorf("a box cut off at the top drew %dx%d, want it to wait until it fits", width, height)
 	}
 }
+
+// TestOnlyOneCardIsLitAtATime covers the ring being a pair, the stop and what
+// it names. Moving one and not the other left the card the reader came from
+// lit while the keyboard was in the box, so the page claimed two places at
+// once and neither was where the keys were going.
+func TestOnlyOneCardIsLitAtATime(t *testing.T) {
+	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
+	tabComments(t, app, false) // reply-1, inside root-1's thread
+
+	pressInComments(t, app, 'r')
+
+	if got := app.focusedCommentID; got != blockIDReply {
+		t.Errorf("the ring names %q, want the box it just opened", got)
+	}
+	lit := 0
+	for _, span := range app.commentSpans {
+		if strings.Contains(cardTextFor(t, app, span.id), app.themeTags.BorderFocus) {
+			lit++
+		}
+	}
+	// Two spans share the box's card, the writing and its button.
+	if lit != 2 {
+		t.Errorf("%d cards carry the focus color, want the box alone", lit)
+	}
+	if card := cardTextFor(t, app, "reply-1"); strings.Contains(card, app.themeTags.BorderFocus) {
+		t.Errorf("the card the reader came from is still lit:\n%s", card)
+	}
+	if card := cardTextFor(t, app, "root-1"); strings.Contains(card, app.themeTags.Accent) {
+		t.Errorf("the comment being answered took a second color:\n%s", card)
+	}
+}
+
+// TestQuotingTwiceKeepsBothQuotes covers the second quote landing under the
+// first rather than over the words between them.
+func TestQuotingTwiceKeepsBothQuotes(t *testing.T) {
+	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
+	pressInComments(t, app, 'Q')
+	typeRunes(t, app, "mine")
+
+	// Back to a card, then quote a second one into the same box.
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	tabComments(t, app, false)
+	tabComments(t, app, false)
+	pressInComments(t, app, 'Q')
+
+	got := app.detailsReplyArea.GetText()
+	first := strings.Index(got, "> The debounce is the problem.")
+	mine := strings.Index(got, "mine")
+	// Esc puts the ring on the comment being answered, so two steps from there
+	// is the thread's second reply.
+	second := strings.Index(got, "> The detail one.")
+	if first < 0 || mine < 0 || second < 0 {
+		t.Fatalf("the box holds %q, want both quotes and the words between them", got)
+	}
+	if first >= mine || mine >= second {
+		t.Errorf("the box holds %q, want the new quote under what was written", got)
+	}
+}

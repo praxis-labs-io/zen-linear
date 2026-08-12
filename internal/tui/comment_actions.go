@@ -284,9 +284,16 @@ func (a *App) replyToFocusedComment(quoted string) {
 		return
 	}
 	a.openReplyBox(threadRootID(a.detailsCommentsSource, comment.ID))
-	if quoted != "" {
-		fillWritingBox(a.detailsReplyArea, joinDrafts(quoted, a.detailsReplyArea.GetText()))
+	if quoted == "" {
+		return
 	}
+	// Under what is already written, not over it: the words in the box came
+	// first, and the quote is being added to them.
+	draft := quoted
+	if held := a.detailsReplyArea.GetText(); strings.TrimSpace(held) != "" {
+		draft = held + "\n\n" + quoted
+	}
+	fillWritingBox(a.detailsReplyArea, draft)
 }
 
 // quoteFocusedComment starts a reply with the comment quoted above it, the way
