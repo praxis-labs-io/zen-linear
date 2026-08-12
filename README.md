@@ -164,8 +164,8 @@ tree. Text caps at 90 columns so a wide terminal stays readable.
 
 A command bound under `keybindings` takes the key from whatever held it,
 including a default like `[`. A binding is ignored, and says so in the log,
-when it names a movement key (`h`, `j`, `k`, `l`, `g`, `G`, which stay with
-the list) or an id matching neither a command nor an action.
+when it names a reserved movement key (`j`, `k`, `g`, `G` move the cursor,
+`h` and `l` the panes) or an id matching neither a command nor an action.
 
 ## Credits
 

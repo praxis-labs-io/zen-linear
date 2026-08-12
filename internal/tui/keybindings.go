@@ -173,8 +173,9 @@ func (a *App) commandBoundTo(r rune) bool {
 	return false
 }
 
-// isMovementRune reports whether the rune belongs to a widget's own scrolling.
-// A keybinding never takes one: losing j to a command would strand the cursor.
+// isMovementRune reports whether the rune is reserved for moving: j, k, g and
+// G walk a list, h and l step between panes. A keybinding never takes one, or
+// the cursor loses a way to go.
 func isMovementRune(r rune) bool {
 	switch r {
 	case 'h', 'j', 'k', 'l', 'g', 'G':
