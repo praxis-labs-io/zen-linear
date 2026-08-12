@@ -114,6 +114,10 @@ func (a *App) setNavLoading(loading bool) {
 // setIssuesLoading records whether an issue fetch is out. UI thread only.
 func (a *App) setIssuesLoading(loading bool) {
 	a.isLoading = loading
+	if !loading {
+		// Nothing is in flight, so the progress the bar was carrying is over.
+		a.setLoadingMessage("")
+	}
 	a.syncLoadingIndicator()
 }
 
@@ -252,6 +256,7 @@ func (a *App) buildIssuesPlaceholder() {
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)
+	a.attachIssuesFooter(a.issuesPlaceholder.Box)
 
 	a.updateIssuesPlaceholder()
 }

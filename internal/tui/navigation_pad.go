@@ -37,7 +37,10 @@ func (a *App) padNavigationTree(width int) {
 	if root == nil {
 		return
 	}
-	a.padNavigationNode(root, 0, width)
+	// The root is hidden, so its children are the rows drawn at level 0.
+	for _, child := range root.GetChildren() {
+		a.padNavigationNode(child, 0, width)
+	}
 }
 
 func (a *App) padNavigationNode(node *tview.TreeNode, level int, width int) {

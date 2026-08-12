@@ -106,8 +106,12 @@ func (a *App) applyThemeToComponents() {
 		a.applyComposeTheme()
 	}
 
-	if a.statusBar != nil {
-		a.statusBar.SetBackgroundColor(a.theme.HeaderBg)
+	if a.statusRow != nil {
+		a.statusRow.SetBackgroundColor(a.theme.Background)
+		style := tcell.StyleDefault.Background(a.theme.Background).Foreground(a.theme.SecondaryText)
+		for _, view := range []*tview.TextView{a.statusBar, a.statusToast} {
+			view.SetTextStyle(style).SetBackgroundColor(a.theme.Background)
+		}
 	}
 }
 
@@ -120,9 +124,8 @@ func (a *App) applyDensityToComponents() {
 		padding := a.density.DetailsPadding
 		a.detailsCommentsPanel.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
 	}
-	if a.statusBar != nil {
-		padding := a.density.StatusBarPadding
-		a.statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+	if a.statusRow != nil {
+		a.applyStatusBarPadding()
 	}
 	if a.agentOutputModal != nil {
 		a.agentOutputModal.ApplyDensity(a.density)

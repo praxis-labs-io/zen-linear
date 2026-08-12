@@ -3,35 +3,111 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/gdamore/tcell/v2"
+	"github.com/mattn/go-runewidth"
 	"github.com/rivo/tview"
 )
 
-// buildStatusBar creates and configures the status bar widget.
-func (a *App) buildStatusBar() *tview.TextView {
-	statusBar := tview.NewTextView()
-	statusBar.SetDynamicColors(true).
-		SetWrap(false).
-		SetBorder(false).
-		SetBackgroundColor(a.theme.HeaderBg) // Use header bg for status bar
+// flashDuration is how long a one-off message holds its place beside the hints.
+// A var so a test does not have to wait it out.
+var flashDuration = 4 * time.Second
 
-	// Add padding
-	padding := a.density.StatusBarPadding
-	statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+// statusToastGap is the space kept between the hints and a message, so the two
+// halves of the strip never run together.
+const statusToastGap = 2
 
-	return statusBar
+// buildStatusBar builds the strip under the panes: pane hints on the left, a
+// flashed message on the right. They are two views rather than one line of text
+// so a message lands in the same place whatever the hints are saying.
+func (a *App) buildStatusBar() {
+	a.statusBar = a.newStatusView(tview.AlignLeft)
+	a.statusToast = a.newStatusView(tview.AlignRight)
+
+	a.statusRow = tview.NewFlex()
+	// Flex sets dontClear and never paints its own background; restore the fill
+	// so the layer beneath cannot bleed through.
+	a.statusRow.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
+	a.statusRow.
+		AddItem(a.statusBar, 0, 1, false).
+		AddItem(a.statusToast, 0, 0, false)
+	// The corner is sized against the live width here rather than where the
+	// message is set, which is the only place that width is known.
+	a.statusRow.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		a.statusRowWidth = width
+		a.fitStatusToast()
+		return x, y, width, height
+	})
+
+	a.applyStatusBarPadding()
 }
 
-// keyPairLabel renders two action keys side by side, dropping either one that
+// newStatusView returns one half of the strip. The text style carries the
+// background as well: tview repaints a TextView's inner rect in its text style
+// whenever that differs from the box, which left the padding columns as blocks
+// in a second color.
+func (a *App) newStatusView(align int) *tview.TextView {
+	view := tview.NewTextView()
+	view.SetDynamicColors(true).
+		SetWrap(false).
+		SetTextAlign(align).
+		SetTextStyle(tcell.StyleDefault.Background(a.theme.Background).Foreground(a.theme.SecondaryText))
+	view.SetBorder(false).SetBackgroundColor(a.theme.Background)
+	return view
+}
+
+// applyStatusBarPadding keeps the strip's gaps at its outer edges, so the two
+// views sit flush against each other in the middle.
+func (a *App) applyStatusBarPadding() {
+	padding := a.density.StatusBarPadding
+	a.statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, 0)
+	a.statusToast.SetBorderPadding(padding.Top, padding.Bottom, 0, padding.Right)
+}
+
+// fitStatusToast puts the flashed message in the right of the strip, sizing its
+// corner to the words and closing it up when there is nothing to say. Half the
+// row is the ceiling: a fixed half wider than the strip leaves the hints a
+// negative width, which tview draws from, and one long message would take the
+// whole line with it. Before the first draw the width is unknown and the
+// message is sized as it stands; the draw that follows corrects it.
+func (a *App) fitStatusToast() {
+	message := a.statusMessage
+	if message == "" {
+		message = a.loadingMessage
+	}
+	gap := a.density.StatusBarPadding.Right + statusToastGap
+
+	width := 0
+	if message != "" {
+		if a.statusRowWidth > 0 {
+			message = runewidth.Truncate(message, max(0, a.statusRowWidth/2-gap), "…")
+		}
+		width = runewidth.StringWidth(message) + gap
+	}
+	a.statusToast.SetText(a.themeTags.Accent + tview.Escape(message) + "[-]")
+	a.statusRow.ResizeItem(a.statusToast, width, 0)
+}
+
+// setLoadingMessage says what a fetch is doing, in the same corner and behind
+// anything flashed: progress repeats itself and a warning does not, so the
+// warning is the one that must not be pushed off. Empty clears it. UI thread
+// only, like everything else the bar reads.
+func (a *App) setLoadingMessage(message string) {
+	a.loadingMessage = message
+	a.fitStatusToast()
+}
+
+// keyPairLabel renders two action keys as one hint, dropping either one that
 // resolved to nothing because a binding took its rune.
 func keyPairLabel(first, second rune) string {
-	label := ""
+	keys := make([]string, 0, 2)
 	for _, key := range []rune{first, second} {
 		if key != 0 {
-			label += string(key)
+			keys = append(keys, string(key))
 		}
 	}
-	return label
+	return strings.Join(keys, "/")
 }
 
 // commentActionHints names what a picked card answers to, in the order a reader
@@ -56,143 +132,183 @@ func (a *App) commentActionHints() []string {
 	return labels
 }
 
-// zoomHint names the zoom key and the verb it performs, or nothing at all when
-// a keybinding has stolen the rune and left the command reachable only from the
-// palette. The trailing separator belongs to the hint so it disappears with it.
-func (a *App) zoomHint(verb string) string {
-	key, ok := a.commandShortcutLabel("zoom_details")
-	if !ok {
-		return ""
-	}
-	return fmt.Sprintf("%s: %s | ", key, verb)
+// hint is a key and the verb it performs, the unit the status bar prints.
+type hint struct {
+	key  string
+	verb string
 }
 
-// updateStatusBar updates the status bar with current information.
+// hintLine joins hints in reading order, dropping any left keyless because a
+// binding took the rune. The hint never states a default the user has moved.
+// The key is lit and the verb is not, so the keys read as a column of their own
+// down the line.
+func (a *App) hintLine(hints ...hint) string {
+	labels := make([]string, 0, len(hints))
+	for _, item := range hints {
+		if item.key == "" {
+			continue
+		}
+		labels = append(labels, a.themeTags.Accent+tview.Escape(item.key)+"[-]"+a.themeTags.SecondaryText+" "+item.verb)
+	}
+	if len(labels) == 0 {
+		return ""
+	}
+	return a.themeTags.SecondaryText + strings.Join(labels, " · ") + "[-]"
+}
+
+// actionHint names a UI action's key, or nothing when a binding took the rune.
+func (a *App) actionHint(id string, fallback rune, verb string) hint {
+	key := a.actionKey(id, fallback)
+	if key == 0 {
+		return hint{}
+	}
+	return hint{key: string(key), verb: verb}
+}
+
+// commandHint names a command's key, or nothing when the command is reachable
+// only from the palette because a binding took its rune.
+func (a *App) commandHint(id, verb string) hint {
+	key, ok := a.commandShortcutLabel(id)
+	if !ok {
+		return hint{}
+	}
+	return hint{key: key, verb: verb}
+}
+
+// tabsHint names the pair of keys that step a pane's tabs.
+func (a *App) tabsHint() hint {
+	return hint{
+		key:  keyPairLabel(a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']')),
+		verb: "tabs",
+	}
+}
+
+// updateStatusBar rewrites the pane hints and whatever was last flashed. The
+// palette leads every line, being the way to everything the bar has no room to
+// name. What list is on screen, how it is sorted and what it is filtered by are
+// the issues pane's own footer, not this bar's business.
 func (a *App) updateStatusBar() {
-	var helpText string
-	keyColor := a.themeTags.SecondaryText
+	tabs := a.tabsHint()
+	view := a.commandHint("zoom_details", "view")
+	hideDetails := a.commandHint("toggle_details_pane", "hide details")
+
+	hints := []hint{a.actionHint("open_palette", ':', "palette")}
+	note := ""
 
 	switch a.focusedPane {
 	case FocusNavigation:
 		// The tree is the leftmost pane and stepPane does not wrap, so there is
 		// no previous pane to name. h stays with the tree, where it collapses.
-		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: select | →/l: next pane | :: palette | /: search | q: quit[-]", keyColor)
+		hints = append(hints, hint{"↑↓", "move"}, hint{"⏎", "open"}, hint{"l", "issues"},
+			a.commandHint("toggle_navigation_pane", "hide nav"))
 	case FocusIssues:
-		helpText = fmt.Sprintf("%sj/k: navigate | Enter: select | →/l: next pane | ←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		hints = append(hints, hint{"j/k", "move"}, hint{"⏎", "preview"}, view, tabs, hint{"h/l", "panes"})
 	case FocusDetails:
-		// Both keys are remappable, so the hint reads them back rather than
-		// stating the defaults at a user who has moved them. A key another
-		// binding has taken resolves to 0 and is left out rather than printed.
-		tabs := keyPairLabel(a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']'))
 		// The keys a box or a picked card answers to are named on the card
 		// itself, in the row with the Post button and in the border under the
 		// comment. Saying them again here is the same fact twice, so the bar
 		// names only what the card cannot: where the reader is on the page.
 		// Read off the field, not live focus: a focus callback can reach here
 		// from inside a draw.
-		if a.commentsFocus != commentsFocusCards && a.detailsCommentsVisible && a.focusedDetailsView {
-			writing := "a comment"
+		switch {
+		case a.commentsFocus != commentsFocusCards && a.detailsCommentsVisible && a.focusedDetailsView:
+			// Every key in the box types, the palette's included, so the line
+			// names none of them.
+			hints = nil
+			note = "Writing a comment"
 			if a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost {
-				writing = "a reply"
+				note = "Writing a reply"
 			}
-			helpText = fmt.Sprintf("%sWriting %s | %s: switch description/comments[-]", keyColor, writing, tabs)
-			break
-		}
-		if a.cardsHaveFocus() && a.focusedCommentID != "" {
-			helpText = fmt.Sprintf("%sTab: next comment | Esc: let go | %s: switch description/comments[-]", keyColor, tabs)
-			break
-		}
-		if len(a.commentSpans) > 0 && a.cardsHaveFocus() {
-			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | Tab: pick a comment | %s: switch description/comments[-]",
-				keyColor, tabs)
-			break
-		}
-		if a.detailsZoomed {
+		case a.cardsHaveFocus() && a.focusedCommentID != "":
+			hints = append(hints, hint{"Tab", "next comment"}, hint{"Esc", "let go"}, tabs, view, hideDetails)
+		case len(a.commentSpans) > 0 && a.cardsHaveFocus():
+			hints = append(hints, hint{"j/k", "scroll"}, hint{"Tab", "pick a comment"}, tabs, view, hideDetails)
+		case a.detailsZoomed:
 			// Below the wide breakpoint the zoom leaves no nav tree to step
 			// onto, so offering the key there would be a lie.
-			toNav := ""
+			toNav := hint{}
 			if a.layoutMode == layoutWide && !a.navigationHidden {
-				toNav = "←/h: navigation | "
+				toNav = hint{"←/h", "navigation"}
 			}
-			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s%sEsc: back to list | :: palette | /: search | q: quit[-]",
-				keyColor, tabs, toNav, a.zoomHint("unzoom"))
-			break
+			hints = append(hints, hint{"j/k", "scroll"}, tabs, a.commandHint("zoom_details", "exit view"),
+				toNav, hint{"Esc", "back to list"})
+		default:
+			hints = append(hints, hint{"j/k", "scroll"}, tabs, view, hideDetails, hint{"h", "back"})
 		}
-		helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s←/h: prev pane | :: palette | /: search | q: quit[-]",
-			keyColor, tabs, a.zoomHint("zoom"))
 	case FocusPalette:
-		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: execute | Esc: close[-]", keyColor)
+		hints = []hint{{"↑↓", "move"}, {"⏎", "run"}, {"Esc", "close"}}
 	default:
-		helpText = fmt.Sprintf("%sj/k: navigate | l: next pane | h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		hints = append(hints, hint{"j/k", "move"}, hint{"h/l", "panes"})
 	}
 
-	navText := ""
-	if a.selectedNavigation != nil {
-		label := a.selectedNavigation.Text
-		if a.selectedNavigation.IsStatus {
-			if a.selectedNavigation.StateName != "" {
-				label = fmt.Sprintf("Status: %s", a.selectedNavigation.StateName)
-			} else {
-				label = "Status"
-			}
-		} else if a.selectedNavigation.IsCycle {
-			if a.selectedNavigation.CycleName != "" {
-				label = fmt.Sprintf("Cycle: %s", a.selectedNavigation.CycleName)
-			} else {
-				label = "Cycle"
-			}
-		}
-		navText = fmt.Sprintf("%s%s[-]", a.themeTags.Accent, label)
-	}
-
-	filterText := ""
-	if !a.richFilters.Empty() {
-		filterText = fmt.Sprintf("%sFilters: %s[-]", a.themeTags.Warning, a.richFilters.Summary())
-	}
-
-	a.issuesMu.RLock()
-	issuesLen := len(a.issues)
-	a.issuesMu.RUnlock()
-	statusText := fmt.Sprintf("%s%d issues[-]", a.themeTags.Accent, issuesLen)
-	if issuesLen == 0 {
-		statusText = fmt.Sprintf("%sNo issues[-]", a.themeTags.SecondaryText)
-	}
-
-	sep := fmt.Sprintf("%s | [-]", a.themeTags.Border)
-
-	sortText := fmt.Sprintf("%sSort: %s[-]", a.themeTags.SecondaryText, sortChainLabel(a.effectiveSortFields()))
-
-	parts := []string{helpText}
-	if navText != "" {
-		parts = append(parts, navText)
-	}
-	if filterText != "" {
-		parts = append(parts, filterText)
-	}
-	parts = append(parts, sortText)
-	if a.statusMessage != "" {
-		parts = append(parts, fmt.Sprintf("%s%s[-]", a.themeTags.Accent, a.statusMessage))
-	}
-	parts = append(parts, statusText)
-
-	text := parts[0]
-	for i := 1; i < len(parts); i++ {
-		text += sep + parts[i]
+	text := a.hintLine(hints...)
+	if note != "" {
+		text += fmt.Sprintf("%s%s[-]", a.themeTags.SecondaryText, note)
 	}
 
 	a.statusBar.SetText(text)
+	a.fitStatusToast()
 }
 
-// updateStatusBarWithError updates the status bar with an error message.
+// updateStatusBarWithError leaves a failure on the bar until something else
+// takes the bar. It sits with the hints rather than in the message's corner,
+// which is sized to a few words. The text is escaped: the view reads color
+// tags, and a Linear error carrying a bracketed fragment would lose the part
+// naming what failed. A flash still counting down is dropped, or its clear
+// would repaint over this on its own clock.
 func (a *App) updateStatusBarWithError(err error) {
-	a.statusBar.SetText(fmt.Sprintf("%sError: %v[-]", a.themeTags.Error, err))
+	a.cancelStatusFlash()
+	a.statusMessage = ""
+	a.fitStatusToast()
+	a.statusBar.SetText(fmt.Sprintf("%sError: %s[-]", a.themeTags.Error, tview.Escape(err.Error())))
 }
 
+// flashStatus says what just happened, in the strip's right corner, until it
+// expires.
 func (a *App) flashStatus(message string) {
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return
 	}
 	a.statusMessage = message
-	a.statusBar.SetText(fmt.Sprintf("%s%s[-]", a.themeTags.Accent, message))
+	a.updateStatusBar()
+	a.scheduleStatusFlashClear()
+}
+
+// scheduleStatusFlashClear takes the message back down after flashDuration. The
+// generation is what keeps a stale timer from clearing a newer message.
+func (a *App) scheduleStatusFlashClear() {
+	generation := a.statusFlashGeneration.Add(1)
+
+	a.statusFlashMu.Lock()
+	defer a.statusFlashMu.Unlock()
+	if a.statusFlashTimer != nil {
+		a.statusFlashTimer.Stop()
+	}
+	a.statusFlashTimer = time.AfterFunc(flashDuration, func() {
+		if generation != a.statusFlashGeneration.Load() {
+			return
+		}
+		a.QueueUpdateDraw(func() {
+			if generation != a.statusFlashGeneration.Load() {
+				return
+			}
+			a.statusMessage = ""
+			a.updateStatusBar()
+		})
+	})
+}
+
+// cancelStatusFlash drops a clear still pending. The timer only: the message
+// itself is UI state, written on the event loop, and this is also called from
+// teardown after that loop has stopped.
+func (a *App) cancelStatusFlash() {
+	a.statusFlashGeneration.Add(1)
+
+	a.statusFlashMu.Lock()
+	defer a.statusFlashMu.Unlock()
+	if a.statusFlashTimer != nil {
+		a.statusFlashTimer.Stop()
+		a.statusFlashTimer = nil
+	}
 }

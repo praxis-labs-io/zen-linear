@@ -69,19 +69,20 @@ func fetchNavigationData(ctx context.Context, fetchers navFetchers) fetchedNav {
 	return result
 }
 
-// navigationRootLabel names the tree's root for the workspace on screen.
-func (a *App) navigationRootLabel() string {
+// navigationPaneLabel names the navigation pane for the workspace on screen.
+// The pane border carries the workspace, so the tree needs no root row of its
+// own; the tree hides the root (`SetTopLevel(1)`) and it stays unlabelled.
+func (a *App) navigationPaneLabel() string {
 	if a.activeWorkspaceName == "" {
-		return "Linear"
+		return "Navigation"
 	}
-	return "Linear · " + a.activeWorkspaceName
+	return a.activeWorkspaceName
 }
 
 // buildWaitingNavigationRoot returns a root holding nothing but the waiting
 // node, for a tree that has no data to show yet.
 func (a *App) buildWaitingNavigationRoot() *tview.TreeNode {
-	root := tview.NewTreeNode(a.navigationRootLabel()).
-		SetColor(a.theme.Accent).
+	root := tview.NewTreeNode("").
 		SetSelectable(false)
 
 	loadingNode := tview.NewTreeNode(a.navLoadingText()).
@@ -119,8 +120,7 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearap
 	// Held for the disk cache, which a favorites change rewrites without a
 	// teams fetch of its own.
 	a.navTeams = teams
-	root := tview.NewTreeNode(a.navigationRootLabel()).
-		SetColor(a.theme.Accent).
+	root := tview.NewTreeNode("").
 		SetSelectable(false)
 
 	// Add "All Issues" at the top

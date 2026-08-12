@@ -159,3 +159,24 @@ func TestFocusedPaneNumberTakesTheAccent(t *testing.T) {
 		}
 	}
 }
+
+// TestNavigationTitleNamesTheWorkspace covers the workspace moving from a tree
+// row to the pane border.
+func TestNavigationTitleNamesTheWorkspace(t *testing.T) {
+	app := newUXTestApp(t)
+	app.activeWorkspaceName = "Praxis Labs"
+
+	if got := strings.TrimSpace(paneTitles(app)["navigation"]); got != "[1] Praxis Labs" {
+		t.Errorf("navigation title = %q, want %q", got, "[1] Praxis Labs")
+	}
+}
+
+// The workspace name is the user's, and the title is built from color tags.
+func TestNavigationTitleKeepsABracketedWorkspace(t *testing.T) {
+	app := newUXTestApp(t)
+	app.activeWorkspaceName = "[red] labs"
+
+	if got := paneTitles(app)["navigation"]; !strings.Contains(got, "[red] labs") {
+		t.Errorf("navigation title = %q, want the bracketed name kept", got)
+	}
+}

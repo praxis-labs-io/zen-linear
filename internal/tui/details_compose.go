@@ -591,9 +591,9 @@ func (a *App) postFrom(from commentsFocus) {
 				logger.ErrorWithErr(err, "tui.details_compose: create comment failed issue=%s", issueID)
 				// Restore first: it moves focus, and the status bar rebuilt on
 				// the way paints statusMessage, which is still the posting
-				// flash. Clearing that is what leaves the error on screen.
+				// flash. The error drops that flash, which is what leaves the
+				// failure on screen.
 				a.restoreComposeDraft(issueID, body, parentID)
-				a.statusMessage = ""
 				a.updateStatusBarWithError(err)
 				return
 			}

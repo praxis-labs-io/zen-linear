@@ -34,6 +34,7 @@ func stopBackgroundWorkOnCleanup(t testing.TB, app *App) {
 	t.Helper()
 	t.Cleanup(func() {
 		app.cancelDetailDebounce()
+		app.cancelStatusFlash()
 		// A test App never reaches Run, so the frame loop has no other way to
 		// stop. Left running with queueUpdateDraw stubbed inline, it keeps
 		// writing App fields while the next test reads them.
@@ -315,7 +316,7 @@ func TestNoOpCommandsShowStatusFeedback(t *testing.T) {
 		t.Fatal("open_browser command not found")
 	}
 	openBrowser.Run(app)
-	if got := app.statusBar.GetText(true); !strings.Contains(got, "No issue selected") {
+	if got := statusText(app); !strings.Contains(got, "No issue selected") {
 		t.Fatalf("status after open_browser without issue = %q, want no issue feedback", got)
 	}
 
@@ -327,7 +328,7 @@ func TestNoOpCommandsShowStatusFeedback(t *testing.T) {
 		t.Fatal("view_parent command not found")
 	}
 	viewParent.Run(app)
-	if got := app.statusBar.GetText(true); !strings.Contains(got, "No parent issue") {
+	if got := statusText(app); !strings.Contains(got, "No parent issue") {
 		t.Fatalf("status after view_parent without parent = %q, want no parent feedback", got)
 	}
 }

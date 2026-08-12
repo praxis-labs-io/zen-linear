@@ -745,7 +745,7 @@ func TestFailedPostLeavesTheErrorOnScreen(t *testing.T) {
 	typeRunes(t, app, "words worth keeping")
 	postAndWait(t, app, drawn)
 
-	text := app.statusBar.GetText(true)
+	text := statusText(app)
 	if !strings.Contains(text, "connection reset") {
 		t.Errorf("status bar reads %q, want the failure", text)
 	}

@@ -35,6 +35,13 @@ type NavigationNode struct {
 	FavoriteParentID string
 }
 
+// Inset of the tree's content from the pane border: one column of gutter, one
+// blank row under the title.
+const (
+	navTreeInsetX = 2
+	navTreeInsetY = 2
+)
+
 // buildNavigationTree creates and configures the navigation tree widget.
 func (a *App) buildNavigationTree() *tview.TreeView {
 	tree := tview.NewTreeView()
@@ -50,11 +57,16 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 	tree.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		// Re-fit node labels on every draw so they track pane resizes and
 		// lazily added nodes.
-		a.padNavigationTree(width - 2)
-		return x + 1, y + 1, width - 2, height - 2
+		a.padNavigationTree(width - navTreeInsetX - 1)
+		// The tree has no root row and no graphics on its top level, so the
+		// inset is what keeps the first column off the border.
+		return x + navTreeInsetX, y + navTreeInsetY, width - navTreeInsetX - 1, height - navTreeInsetY - 1
 	})
 	tree.SetRoot(root)
 	tree.SetCurrentNode(root)
+	// The pane border names the workspace, so the root row is hidden and its
+	// children are the top level.
+	tree.SetTopLevel(1)
 
 	// Handle selection for all nodes (teams, projects, and "All Issues")
 	tree.SetSelectedFunc(func(node *tview.TreeNode) {

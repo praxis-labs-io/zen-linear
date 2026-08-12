@@ -353,6 +353,13 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 	// Set up keyboard navigation with cross-section support
 	a.setupIssuesTableNavigation(table, section)
 
+	// The search results table is borderless inside the search panel, which
+	// owns the border. That panel carries no context line of its own: a search
+	// is workspace-wide, so the line would be false about its results.
+	if section != IssuesSectionSearch {
+		a.attachIssuesFooter(table.Box)
+	}
+
 	return table
 }
 
