@@ -144,17 +144,6 @@ func (a *App) detailsDrawFunc(refit func(int)) func(tcell.Screen, int, int, int,
 	}
 }
 
-// detailsPanelDrawFunc is detailsDrawFunc for a tab that sits inside a panel:
-// the panel already spent the border and the padding, so the whole width is
-// content and only the reading measure is taken out of it.
-func (a *App) detailsPanelDrawFunc(refit func(int)) func(tcell.Screen, int, int, int, int) (int, int, int, int) {
-	return func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
-		measure, gutter := readingMeasure(max(0, width))
-		refit(measure)
-		return x + gutter, y, measure, max(0, height)
-	}
-}
-
 // detailsDivider draws the rule between sections at the width the text is set
 // at, falling back to a short one before the first draw fixes that width.
 func detailsDivider(width int) string {
@@ -193,14 +182,14 @@ func (a *App) buildDetailsView() *tview.Flex {
 	a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 	a.detailsDescriptionView.SetDrawFunc(a.detailsDrawFunc(a.refitDetailsHeader))
 
-	// Create the comments card stack. The panel around it owns the border, the
-	// tab title, and the padding, so this one goes bare.
+	// Create the comments page's text. The page around it owns the measure and
+	// the refit, and the panel around that owns the border, the tab title and
+	// the padding, so this one goes bare and unfitted.
 	a.detailsCommentsView = tview.NewTextView()
 	a.detailsCommentsView.SetDynamicColors(true).
 		SetWrap(true).
 		SetWordWrap(true)
 	a.detailsCommentsView.SetBackgroundColor(a.theme.Background)
-	a.detailsCommentsView.SetDrawFunc(a.detailsPanelDrawFunc(a.refitDetailsComments))
 	a.buildDetailsCommentsPanel()
 
 	// Create flex layout; comments are added conditionally after issue selection.

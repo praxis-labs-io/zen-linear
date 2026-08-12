@@ -91,20 +91,24 @@ func (a *App) updateStatusBar() {
 			// Every other key in the box is a character in the comment, so the
 			// hint names only the ones that are not. Read off the field, not
 			// live focus: a focus callback can reach here from inside a draw.
-			if a.commentsFocus == commentsFocusPost {
-				helpText = fmt.Sprintf("%sEnter: post | Esc: back to comments[-]", keyColor)
+			back := "Esc: back to comments"
+			if a.replyParentID() != "" && (a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost) {
+				back = "Esc: close the reply"
+			}
+			if a.commentsFocus == commentsFocusPost || a.commentsFocus == commentsFocusReplyPost {
+				helpText = fmt.Sprintf("%sEnter: post | %s[-]", keyColor, back)
 				break
 			}
-			helpText = fmt.Sprintf("%sCtrl+Enter: post | Tab: Post button | Esc: back to comments[-]", keyColor)
+			helpText = fmt.Sprintf("%sCtrl+Enter: post | Tab: Post button | %s[-]", keyColor, back)
 			break
 		}
-		if a.commentsHaveFocus() && a.focusedCommentID != "" {
+		if a.cardsHaveFocus() && a.focusedCommentID != "" {
 			// A lit card owns these keys, and the issue keys they shadow are
 			// not worth naming while it does.
 			helpText = fmt.Sprintf("%s%sTab: next comment | Esc: let go[-]", keyColor, a.commentActionHint())
 			break
 		}
-		if len(a.commentSpans) > 0 && a.commentsHaveFocus() {
+		if len(a.commentSpans) > 0 && a.cardsHaveFocus() {
 			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | Tab: pick a comment | %s: switch description/comments[-]",
 				keyColor, tabs)
 			break

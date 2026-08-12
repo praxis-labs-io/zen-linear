@@ -91,20 +91,26 @@ type App struct {
 	// commentRingPainted is whether the last render drew the ring's card in the
 	// focus color, so a focus change repaints only when it changes something.
 	commentRingPainted   bool
-	detailsCommentsPanel *tview.Flex     // Comments tab shell: card stack + compose box
-	detailsComposeBox    *tview.Flex     // Hand-drawn frame around the compose area
+	detailsCommentsPanel *tview.Flex     // Comments tab shell: the bordered panel
+	detailsCommentsPage  *commentsPage   // Cards, the reply box, the compose card
 	detailsComposeArea   *tview.TextArea // Where a comment gets written
-	detailsComposePost   *tview.Button   // Sends what is in the box
+	detailsComposePost   *tview.Button   // Sends what is in the compose box
+	detailsReplyArea     *tview.TextArea // Where a reply gets written, inside its thread
+	detailsReplyPost     *tview.Button   // Sends what is in the reply box
 	// composeDrafts holds what has been written and not posted, keyed by issue.
 	// The box is one widget over a changing selection, so a draft has to follow
 	// the issue it was written for; left in the box it would be posted to
 	// whichever issue is on screen when the chord lands.
 	composeDrafts       map[string]string
 	composeDraftIssueID string
-	// composeReplyTo holds the comment a draft is answering, keyed by issue the
-	// same way the draft is: the target belongs to the words, and both have to
-	// survive a trip to another issue and back together.
-	composeReplyTo      map[string]string
+	// composeReplyTo holds the thread the reply box is open on, keyed by issue
+	// the same way the draft is: an issue keeps the box it had open when the
+	// selection moves away and comes back.
+	composeReplyTo map[string]string
+	// replyDrafts holds what has been written into a reply box and not sent,
+	// keyed by the comment being answered. Closing the box is not losing the
+	// words, and reopening on the same thread finds them.
+	replyDrafts         map[string]string
 	statusBar           *tview.TextView
 	paletteModal        *tview.Flex
 	paletteInput        *tview.InputField

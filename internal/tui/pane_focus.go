@@ -165,15 +165,16 @@ func (a *App) updateFocus() {
 		}
 		a.updateDetailsLayout()
 		if a.focusedDetailsView && a.detailsCommentsVisible {
-			// The tab has three targets: the cards read, the box writes, the
-			// button sends.
-			switch a.commentsFocus {
-			case commentsFocusText:
-				a.app.SetFocus(a.detailsComposeArea)
-			case commentsFocusPost:
-				a.app.SetFocus(a.detailsComposePost)
-			default:
-				a.app.SetFocus(a.detailsCommentsView)
+			// The page has two kinds of stop: a card reads, and a box writes
+			// with a button that sends.
+			if area, button, ok := a.writingBox(a.commentsFocus); ok {
+				if a.commentsFocus.isWriting() {
+					a.app.SetFocus(area)
+				} else {
+					a.app.SetFocus(button)
+				}
+			} else {
+				a.app.SetFocus(a.detailsCommentsPage)
 			}
 			a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 			a.detailsCommentsPanel.SetBorderColor(a.theme.BorderFocus)

@@ -348,9 +348,12 @@ func TestComposeBoxIsAFixedHeight(t *testing.T) {
 		return bottom - top + 1
 	}
 
+	// The writing, the button row under it, and the card's own frame and byline
+	// around both.
+	const composeCardRows = composeRows + 5
 	empty := frameRows()
-	if empty != composeBoxRows {
-		t.Errorf("box draws %d rows, want %d", empty, composeBoxRows)
+	if empty != composeCardRows {
+		t.Errorf("box draws %d rows, want %d", empty, composeCardRows)
 	}
 
 	typeRunes(t, app, "one")
@@ -451,6 +454,9 @@ func TestClickingTheBoxTakesTheKeyboard(t *testing.T) {
 func TestTabWalksTheCommentsTabAndStopsAtTheEnd(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	app.leaveComposeBox()
+	// Opening the box scrolled the page to it, at the end. The ring picks up
+	// from what is on screen, so the walk starts where the reader is looking.
+	app.detailsCommentsView.ScrollToBeginning()
 
 	tab := func() { app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)) }
 

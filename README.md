@@ -123,16 +123,18 @@ The options beyond the original linear-tui set:
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.
 
-In the Comments tab, Tab steps through the comment cards and on into the
-compose box; j/k keep scrolling. Nothing is picked out until Tab says so, and
-Esc lets go again. A picked card answers to four keys of its own, which shadow
-the issue keys on the same runes for as long as it holds them:
+The Comments tab is one page: the comments, then a box to write in at the end
+of them. Tab steps through the cards and on into that box; j/k keep scrolling.
+Nothing is picked out until Tab says so, and Esc lets go again. A picked card
+answers to four keys of its own, which shadow the issue keys on the same runes
+for as long as it holds them:
 
     r           reply           Q           quote and reply
     y           copy link       o           open in Linear
 
-Replies nest under the comment they answer. In the compose box, Esc drops the
-reply's aim before it leaves the box.
+Replies nest under the comment they answer, and replying opens a box inside
+that thread rather than at the foot of the page, so the answer is written where
+it is going to appear. Esc closes it and keeps the words for next time.
 
 Commands act on the pane they belong to. A key that acts on the selected issue
 answers from the issues and details panes, favorites from the navigation tree,

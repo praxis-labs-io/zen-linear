@@ -13,6 +13,47 @@ type commentRow struct {
 	Depth   int
 }
 
+// commentBlock is one card on the page, which is a comment or one of the two
+// boxes. The boxes are blocks like any other because they are cards like any
+// other: the compose card ends the page, and an open reply ends the thread it
+// answers, where the answer is going to appear.
+type commentBlock struct {
+	comment linearapi.Comment
+	depth   int
+	// focus is what the ring calls this block: a card, the reply box, or the
+	// compose box.
+	focus commentsFocus
+	// id names the block to the ring and to the border colors: a comment's own
+	// id, and a stable name for each box.
+	id string
+}
+
+// blockIDReply and blockIDCompose name the boxes wherever a comment id is what
+// is being asked for. Neither can collide with a Linear id.
+const (
+	blockIDReply   = "\x00reply"
+	blockIDCompose = "\x00compose"
+)
+
+// commentBlocks lays out the page: every comment in thread order, the reply box
+// at the end of the thread it answers, and the compose card last of all.
+func (a *App) commentBlocks() []commentBlock {
+	rows := buildCommentRows(a.detailsCommentsSource)
+	reply := a.replyParentID()
+
+	blocks := make([]commentBlock, 0, len(rows)+2)
+	for i, row := range rows {
+		blocks = append(blocks, commentBlock{comment: row.Comment, depth: row.Depth, id: row.Comment.ID})
+		// The box goes after the last comment of its thread, which is the row
+		// before the next root, and it takes the thread's own indent.
+		if reply != "" && threadRootID(a.detailsCommentsSource, row.Comment.ID) == reply &&
+			(i == len(rows)-1 || rows[i+1].Depth == 0) {
+			blocks = append(blocks, commentBlock{depth: 1, focus: commentsFocusReply, id: blockIDReply})
+		}
+	}
+	return append(blocks, commentBlock{focus: commentsFocusText, id: blockIDCompose})
+}
+
 // buildCommentRows orders comments into threads: every root in the order it
 // was given, each followed by its replies in that same order.
 //

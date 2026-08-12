@@ -42,12 +42,13 @@ func newCommentsTestApp(t *testing.T) *App {
 	return app
 }
 
-// drawComments renders the card stack at a width and returns its rows. The
-// width is the stack's own: the panel around it has already spent the border
-// and the padding, and the compose box under it is not a card.
+// drawComments renders the page at a width and returns its rows. The width is
+// the page's own: the panel around it has already spent the border and the
+// padding. The compose card is the last thing on it, so the rows carry one more
+// card than there are comments.
 func drawComments(t *testing.T, app *App, width int) []string {
 	t.Helper()
-	return drawPrimitive(t, app.detailsCommentsView, width)
+	return drawPrimitive(t, app.detailsCommentsPage, width)
 }
 
 // commentCards groups the drawn rows into cards, each running from its top
@@ -78,8 +79,9 @@ func TestCommentsRenderAsCards(t *testing.T) {
 	app := newCommentsTestApp(t)
 	cards := commentCards(drawComments(t, app, 80))
 
-	if len(cards) != 2 {
-		t.Fatalf("drew %d cards, want one per comment:\n%s", len(cards), strings.Join(drawComments(t, app, 80), "\n"))
+	// One per comment, and the compose card that ends the page.
+	if len(cards) != 3 {
+		t.Fatalf("drew %d cards, want one per comment and the compose card:\n%s", len(cards), strings.Join(drawComments(t, app, 80), "\n"))
 	}
 
 	for i, card := range cards {

@@ -40,29 +40,96 @@ func (a *App) renderDetailsComments() {
 		width = commentCardFallbackWidth
 	}
 
-	rows := buildCommentRows(a.detailsCommentsSource)
+	blocks := a.commentBlocks()
 	var lines []string
-	for i, row := range rows {
+	var slots []pageSlot
+	for i, block := range blocks {
 		if i > 0 {
 			// The rail runs through the gap above a reply, which is what joins
 			// it to the card it answers rather than leaving it floating.
-			lines = append(lines, a.threadGapLine(rows, i))
+			lines = append(lines, a.threadGapLine(blocks, i))
 		}
-		inset := row.Depth * commentThreadIndent
+		inset := block.depth * commentThreadIndent
 		start := len(lines)
-		card := a.commentCard(row.Comment, width-inset)
-		if row.Depth == 0 {
+
+		card, boxes := a.blockCard(block, width-inset)
+		if block.depth == 0 {
 			lines = append(lines, card...)
 		} else {
-			lines = append(lines, a.threadBranch(card, isLastReply(rows, i))...)
+			lines = append(lines, a.threadBranch(card, isLastReply(blocks, i))...)
 		}
-		a.commentSpans = append(a.commentSpans, commentSpan{
-			id:    row.Comment.ID,
-			start: start,
-			end:   len(lines) - 1,
-		})
+		for _, box := range boxes {
+			box.row += start
+			box.column += inset
+			slots = append(slots, box)
+		}
+
+		span := commentSpan{id: block.id, focus: block.focus, start: start, end: len(lines) - 1}
+		a.commentSpans = append(a.commentSpans, span)
+		// A box is two stops in the ring, the writing and the button, sharing
+		// the card they are drawn in.
+		if button, ok := postFocusFor(block.focus); ok {
+			span.focus = button
+			a.commentSpans = append(a.commentSpans, span)
+		}
 	}
 	a.detailsCommentsView.SetText(strings.Join(lines, "\n"))
+	if a.detailsCommentsPage != nil {
+		a.detailsCommentsPage.setSlots(slots)
+	}
+}
+
+// blockCard renders one block of the page and reports the widgets that go in
+// the holes it left: a comment's card has none, a box's card has its writing
+// area and its button.
+func (a *App) blockCard(block commentBlock, width int) ([]string, []pageSlot) {
+	if block.focus == commentsFocusCards {
+		return a.commentCard(block.comment, width), nil
+	}
+	area, post := a.detailsComposeArea, a.detailsComposePost
+	heading := "write a comment"
+	if block.focus == commentsFocusReply {
+		area, post = a.detailsReplyArea, a.detailsReplyPost
+		heading = "write a reply"
+	}
+	return a.writingCard(width, heading, a.commentBorderTag(block.id), area, post)
+}
+
+// writingCard frames a box the way a comment is framed, so what is being
+// written sits among what has been said rather than beside it. The interior
+// rows are left blank for the text area drawn over them.
+func (a *App) writingCard(width int, heading, border string, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
+	inner := width - commentCardChrome
+	lines := []string{
+		cardEdge("╭", "╮", width, border),
+		cardRow(a.writingByline(heading), inner, border),
+		cardEdge("├", "┤", width, border),
+	}
+	for i := 0; i < composeRows; i++ {
+		lines = append(lines, cardRow("", inner, border))
+	}
+	lines = append(lines, cardRow("", inner, border), cardEdge("╰", "╯", width, border))
+
+	// The chrome is a border cell and a pad cell, so the writing starts two in.
+	const cardInset = commentCardChrome / 2
+	label := len([]rune(postLabel))
+	return lines, []pageSlot{
+		{primitive: area, row: 3, height: composeRows, column: cardInset, width: max(inner, 0)},
+		{primitive: post, row: 3 + composeRows, height: 1, column: cardInset + max(inner-label, 0), width: min(label, max(inner, 0))},
+	}
+}
+
+// writingByline heads a box with who is writing and what they are writing,
+// matching the byline a comment card carries.
+func (a *App) writingByline(what string) string {
+	parts := make([]string, 0, 2)
+	if user := a.GetCurrentUser(); user != nil {
+		if name := formatUserDisplayName(*user); name != "" {
+			parts = append(parts, a.themeTags.AssigneeText+name+" (me)"+a.themeTags.SecondaryText)
+		}
+	}
+	parts = append(parts, what)
+	return a.themeTags.SecondaryText + strings.Join(parts, " · ") + "[-]"
 }
 
 // threadBranch hangs a reply off the card above it, drawing the rail down its
@@ -94,18 +161,20 @@ func (a *App) threadBranch(card []string, last bool) []string {
 	return out
 }
 
-// threadGapLine is the blank row above the card at index, carrying the rail
+// threadGapLine is the blank row above the block at index, carrying the rail
 // when a reply hangs below it.
-func (a *App) threadGapLine(rows []commentRow, index int) string {
-	if rows[index].Depth == 0 {
+func (a *App) threadGapLine(blocks []commentBlock, index int) string {
+	if blocks[index].depth == 0 {
 		return ""
 	}
 	return a.themeTags.Border + "│[-:-:-]"
 }
 
-// isLastReply reports whether the reply at index closes its thread.
-func isLastReply(rows []commentRow, index int) bool {
-	return index == len(rows)-1 || rows[index+1].Depth < rows[index].Depth
+// isLastReply reports whether the block at index closes its thread. An open
+// reply box is the last block of the thread it answers, so the rail's corner
+// lands on the box and the comment above it keeps its elbow.
+func isLastReply(blocks []commentBlock, index int) bool {
+	return index == len(blocks)-1 || blocks[index+1].depth < blocks[index].depth
 }
 
 // commentCard frames one comment: a byline, a rule under it, and the body

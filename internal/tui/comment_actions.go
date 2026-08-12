@@ -8,27 +8,36 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
-// The card stack carries a focus ring: one card at a time wears the focus
-// border, j and k step it, and the actions below act on whichever card it is
-// on. The ring is what gives a per-comment action something to aim at.
+// The page carries a focus ring: Tab steps it card by card, through the reply
+// box where one is open and on to the compose card at the end, and the actions
+// below act on whichever card it is on. The ring is what gives a per-comment
+// action something to aim at.
 
-// commentSpan is where one card landed in the rendered stack, in line numbers.
-// The ring moves by these and scrolls by them, so nothing has to re-measure a
-// card that has already been drawn.
+// commentSpan is one stop in the ring and where it landed on the page, in line
+// numbers. The ring moves by these and scrolls by them, so nothing has to
+// re-measure a card that has already been drawn.
 type commentSpan struct {
-	id    string
+	// id is the comment's own id, or one of the box names.
+	id string
+	// focus is what the ring hands the keyboard to on this stop.
+	focus commentsFocus
 	start int
 	end   int
 }
 
-// commentsHaveFocus reports whether the card stack holds the keyboard.
+// commentsHaveFocus reports whether the page holds the keyboard.
 //
 // It reads the focus fields rather than Application.GetFocus because the render
 // path runs from a draw func, where taking the app's lock again hangs the
 // process.
 func (a *App) commentsHaveFocus() bool {
-	return a.focusedPane == FocusDetails && a.detailsCommentsVisible &&
-		a.focusedDetailsView && a.commentsFocus == commentsFocusCards
+	return a.focusedPane == FocusDetails && a.detailsCommentsVisible && a.focusedDetailsView
+}
+
+// cardsHaveFocus reports whether the ring is on a comment card rather than in
+// one of the boxes, which is what the per-comment keys answer from.
+func (a *App) cardsHaveFocus() bool {
+	return a.commentsHaveFocus() && a.commentsFocus == commentsFocusCards
 }
 
 // focusedComment returns the comment the ring is on, and whether there is one
@@ -38,7 +47,10 @@ func (a *App) commentsHaveFocus() bool {
 // key that acted on it would answer about something off screen. That is the
 // same rule the ring re-anchors by.
 func (a *App) focusedComment() (linearapi.Comment, bool) {
-	index := a.commentSpanIndex(a.focusedCommentID)
+	if a.commentsFocus != commentsFocusCards {
+		return linearapi.Comment{}, false
+	}
+	index := a.commentStopIndex()
 	if index < 0 || !a.commentSpanVisible(a.commentSpans[index]) {
 		return linearapi.Comment{}, false
 	}
@@ -50,7 +62,18 @@ func (a *App) focusedComment() (linearapi.Comment, bool) {
 	return linearapi.Comment{}, false
 }
 
-// commentSpanIndex finds a comment in the drawn stack, -1 when it is not in it.
+// commentStopIndex is where the ring is sitting in the page just rendered, or
+// -1 when what it names is no longer on it.
+func (a *App) commentStopIndex() int {
+	for i, span := range a.commentSpans {
+		if span.focus == a.commentsFocus && (span.focus != commentsFocusCards || span.id == a.focusedCommentID) {
+			return i
+		}
+	}
+	return -1
+}
+
+// commentSpanIndex finds a block on the page by id, -1 when it is not on it.
 func (a *App) commentSpanIndex(id string) int {
 	if id == "" {
 		return -1
@@ -63,11 +86,11 @@ func (a *App) commentSpanIndex(id string) int {
 	return -1
 }
 
-// stepCommentRing moves the ring one card and reports whether it took the step.
-// It answers false off either end, which is what hands Tab on to the compose
-// box below the cards.
+// stepCommentRing moves the ring one stop and reports whether it took the step.
+// It answers false off either end, where Tab stays put rather than leaving the
+// pane.
 //
-// A ring with no card, or one that has been scrolled off screen, anchors to
+// A ring with no stop, or one that has been scrolled off screen, anchors to
 // what is on screen instead of stepping. A reader who scrolled away has moved
 // on, and hauling them back to the card they left is the one thing the ring
 // must not do.
@@ -75,8 +98,12 @@ func (a *App) stepCommentRing(step int) bool {
 	if len(a.commentSpans) == 0 {
 		return false
 	}
-	index := a.commentSpanIndex(a.focusedCommentID)
-	if index < 0 || !a.commentSpanVisible(a.commentSpans[index]) {
+	index := a.commentStopIndex()
+	// Only a card is given up for being off screen. A box holding the keyboard
+	// is where the reader is whatever the scroll says, and stepping off it to
+	// a card they happen to be looking at would take Tab away from the button
+	// that sends what they just wrote.
+	if index < 0 || (a.commentsFocus == commentsFocusCards && !a.commentSpanVisible(a.commentSpans[index])) {
 		a.focusCommentAt(a.anchorComment(step))
 		return true
 	}
@@ -100,20 +127,19 @@ func (a *App) clearCommentFocus() bool {
 	return true
 }
 
-// focusCommentAt puts the ring on the card at index and brings it into view.
+// focusCommentAt puts the ring on the stop at index and brings it into view.
 func (a *App) focusCommentAt(index int) {
 	if index < 0 || index >= len(a.commentSpans) {
 		return
 	}
 	span := a.commentSpans[index]
-	if a.focusedCommentID != span.id {
-		a.focusedCommentID = span.id
+	if a.focusedCommentID != span.id || a.commentsFocus != span.focus {
+		a.focusedCommentID, a.commentsFocus = span.id, span.focus
 		// Re-rendered rather than repainted: the border lives in the text, so
-		// the ring only moves when the stack is written again. The spans are
+		// the ring only moves when the page is written again. The spans are
 		// rebuilt by the same call, so the scroll below reads the new ones.
 		a.renderDetailsComments()
-		index = a.commentSpanIndex(span.id)
-		if index < 0 {
+		if index = a.commentStopIndex(); index < 0 {
 			return
 		}
 		span = a.commentSpans[index]
@@ -125,25 +151,12 @@ func (a *App) focusCommentAt(index int) {
 // focusComment puts the ring on a comment by id, for the paths that know the
 // comment rather than its place: a posted reply, a restored selection.
 func (a *App) focusComment(id string) {
+	a.commentsFocus = commentsFocusCards
 	a.focusCommentAt(a.commentSpanIndex(id))
 }
 
-// refreshCommentRing repaints the stack when the ring has gained or lost the
-// keyboard. The border lives in the card text, so a focus change shows nothing
-// until the stack is written again, and rewriting it on every focus change
-// would redraw a hundred cards to change none of them.
-func (a *App) refreshCommentRing() {
-	if a.detailsCommentsView == nil || len(a.detailsCommentsSource) == 0 {
-		return
-	}
-	if a.commentsHaveFocus() == a.commentRingPainted {
-		return
-	}
-	a.renderDetailsComments()
-}
-
-// anchorComment is where the ring lands when it has no card to move from: the
-// first card on screen going forward, the last going back. Any part of a card
+// anchorComment is where the ring lands when it has no stop to move from: the
+// first block on screen going forward, the last going back. Any part of a card
 // showing counts, so one taller than the pane is the card it lands on rather
 // than a card it skips.
 func (a *App) anchorComment(step int) int {
@@ -161,6 +174,20 @@ func (a *App) anchorComment(step int) int {
 		}
 	}
 	return 0
+}
+
+// refreshCommentRing repaints the stack when the ring has gained or lost the
+// keyboard. The border lives in the card text, so a focus change shows nothing
+// until the stack is written again, and rewriting it on every focus change
+// would redraw a hundred cards to change none of them.
+func (a *App) refreshCommentRing() {
+	if a.detailsCommentsView == nil || len(a.detailsCommentsSource) == 0 {
+		return
+	}
+	if a.commentsHaveFocus() == a.commentRingPainted {
+		return
+	}
+	a.renderDetailsComments()
 }
 
 // scrollCommentIntoView scrolls the stack the least it can to show a card,
@@ -224,27 +251,25 @@ func (a *App) handleCommentKey(event *tcell.EventKey) bool {
 	return true
 }
 
-// replyToFocusedComment aims the compose box at the focused card's thread and
+// replyToFocusedComment opens a box at the end of the focused card's thread and
 // hands it the keyboard. quoted is put in the box first when there is any.
+//
+// The box goes in the thread rather than at the foot of the page: an answer
+// written under the conversation it answers keeps the two on screen together,
+// which is the whole reason the thread is drawn as a thread.
 func (a *App) replyToFocusedComment(quoted string) {
 	comment, ok := a.focusedComment()
 	if !ok {
 		return
 	}
-	issueID := a.composeDraftIssueID
-	if issueID == "" {
+	if a.composeDraftIssueID == "" {
 		a.flashStatus("No issue selected")
 		return
 	}
-	a.setReplyTarget(issueID, threadRootID(a.detailsCommentsSource, comment.ID))
+	a.openReplyBox(threadRootID(a.detailsCommentsSource, comment.ID))
 	if quoted != "" {
-		a.detailsComposeArea.SetText(joinDrafts(quoted, a.detailsComposeArea.GetText()), true)
+		a.detailsReplyArea.SetText(joinDrafts(quoted, a.detailsReplyArea.GetText()), true)
 	}
-	a.commentsFocus = commentsFocusText
-	a.updateFocus()
-	// The target's card wears the accent border from here, and the ring's card
-	// gives up the focus one.
-	a.renderDetailsComments()
 }
 
 // quoteFocusedComment starts a reply with the comment quoted above it, the way

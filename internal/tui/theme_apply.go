@@ -103,7 +103,6 @@ func (a *App) applyThemeToComponents() {
 		a.detailsCommentsPanel.SetTitleColor(a.theme.Foreground).
 			SetBorderColor(a.theme.Border).
 			SetBackgroundColor(a.theme.Background)
-		a.detailsComposeBox.SetBackgroundColor(a.theme.Background)
 		a.applyComposeTheme()
 	}
 

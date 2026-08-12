@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
@@ -163,8 +164,31 @@ func showComments(t *testing.T, app *App, width, height int) {
 	}
 	t.Cleanup(screen.Fini)
 	screen.SetSize(width, height)
-	app.detailsCommentsView.SetRect(0, 0, width, height)
-	app.detailsCommentsView.Draw(screen)
+	app.detailsCommentsPage.SetRect(0, 0, width, height)
+	app.detailsCommentsPage.Draw(screen)
+}
+
+// TestTheComposeCardScrollsWithThePage covers the box being in the flow rather
+// than pinned to the foot of the pane. Scrolled to the top of a long thread it
+// is not on screen at all, and the rows it would have covered are conversation.
+func TestTheComposeCardScrollsWithThePage(t *testing.T) {
+	app := newThreadedTestApp(t)
+	showComments(t, app, 80, 12)
+	app.detailsCommentsView.ScrollToBeginning()
+	showComments(t, app, 80, 12)
+
+	compose := app.commentSpans[app.commentSpanIndex(blockIDCompose)]
+	if app.commentSpanVisible(compose) {
+		t.Errorf("the compose card at rows %d..%d is on screen at the top of the page", compose.start, compose.end)
+	}
+
+	// The last row of the pane belongs to a comment, not to a box sitting over
+	// it.
+	lines := drawComments(t, app, 80)
+	if last := strings.TrimSpace(lines[11]); last == "" {
+		t.Errorf("the pane's last row is empty, want the conversation running to the bottom:\n%s",
+			strings.Join(lines[:12], "\n"))
+	}
 }
 
 // TestTabScrollsTheCardIntoView covers the half of the ring a full-height draw
@@ -280,12 +304,12 @@ func cardTextFor(t *testing.T, app *App, id string) string {
 	return strings.Join(lines[span.start:span.end+1], "\n")
 }
 
-// composeCue reads the first row of the drawn compose box, which on an empty
-// box is the placeholder. tview takes a placeholder and never hands it back, so
-// the drawn box is the only place to read it.
-func composeCue(t *testing.T, app *App) string {
+// composeCue reads the first row of a drawn box, which while it is empty is the
+// placeholder. tview takes a placeholder and never hands it back, so the drawn
+// box is the only place to read it.
+func composeCue(t *testing.T, area *tview.TextArea) string {
 	t.Helper()
-	for _, line := range drawPrimitive(t, app.detailsComposeArea, 60) {
+	for _, line := range drawPrimitive(t, area, 60) {
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
 			return trimmed
 		}
@@ -293,10 +317,10 @@ func composeCue(t *testing.T, app *App) string {
 	return ""
 }
 
-// TestReplyAimsTheBoxAtTheThread covers r: the keyboard moves to the box, the
-// placeholder names who is being answered, and the aim is the thread's root
-// rather than the reply the ring happened to be on.
-func TestReplyAimsTheBoxAtTheThread(t *testing.T) {
+// TestReplyOpensABoxInsideTheThread covers r: a box appears at the end of the
+// thread, the keyboard is in it, and it answers the thread's root rather than
+// the reply the ring happened to be on.
+func TestReplyOpensABoxInsideTheThread(t *testing.T) {
 	app := newThreadedTestApp(t)
 	for i := 0; i < 3; i++ {
 		tabComments(t, app, false) // reply-2, a reply to a reply
@@ -305,16 +329,44 @@ func TestReplyAimsTheBoxAtTheThread(t *testing.T) {
 	pressInComments(t, app, 'r')
 
 	if got := app.replyParentID(); got != "root-1" {
-		t.Errorf("the box is aimed at %q, want the thread's root", got)
+		t.Errorf("the box answers %q, want the thread's root", got)
 	}
-	if !app.composeBoxActive() {
-		t.Error("r left the keyboard on the cards")
+	if !app.composeBoxActive() || app.commentsFocus != commentsFocusReply {
+		t.Error("r left the keyboard off the reply box")
 	}
-	if got := composeCue(t, app); got != "Reply to drew" {
+	if got := composeCue(t, app.detailsReplyArea); got != "Reply to drew" {
 		t.Errorf("the box reads %q, want it to name who is being answered", got)
 	}
-	if card := cardTextFor(t, app, "root-1"); !strings.Contains(card, app.themeTags.Accent) {
-		t.Errorf("the card being answered carries no accent border:\n%s", card)
+
+	// The box goes at the end of the thread, before the next root, so the
+	// answer is written where it is going to appear.
+	at := app.commentSpanIndex(blockIDReply)
+	if at < 0 {
+		t.Fatal("no reply box on the page")
+	}
+	if before := app.commentSpans[at-1].id; before != "reply-2" {
+		t.Errorf("the box follows %q, want the last comment of the thread", before)
+	}
+	if after := app.commentSpans[at+2].id; after != "root-2" {
+		t.Errorf("the block after the box is %q, want the next thread", after)
+	}
+}
+
+// TestTheComposeCardEndsThePage covers the box that is always there: it is the
+// last card on the page, and it scrolls with everything else rather than
+// sitting over the conversation.
+func TestTheComposeCardEndsThePage(t *testing.T) {
+	app := newThreadedTestApp(t)
+
+	spans := app.commentSpans
+	if len(spans) < 2 {
+		t.Fatal("the page drew no compose card")
+	}
+	if got := spans[len(spans)-1].id; got != blockIDCompose {
+		t.Errorf("the page ends on %q, want the compose card", got)
+	}
+	if got := spans[len(spans)-3].id; got != "orphan" {
+		t.Errorf("the block before the compose card is %q, want the last comment", got)
 	}
 }
 
@@ -355,27 +407,27 @@ func TestReplyPostsWithItsParent(t *testing.T) {
 	if got := app.replyParentID(); got != "" {
 		t.Errorf("the box is still aimed at %q after posting, want it cleared", got)
 	}
-	if got := composeCue(t, app); got != composePlaceholder {
-		t.Errorf("the box reads %q, want it back to a top-level comment", got)
+	if got := composeCue(t, app.detailsComposeArea); got != composePlaceholder {
+		t.Errorf("the compose card reads %q, want it ready for the next comment", got)
 	}
 	if got := app.focusedCommentID; got != "posted" {
 		t.Errorf("the ring is on %q, want the comment just posted", got)
 	}
 }
 
-// TestQuoteFillsTheBoxWithTheComment covers Q: the body goes in as markdown
-// quote, and the reply is aimed at the same thread.
+// TestQuoteFillsTheBoxWithTheComment covers Q: the body goes into the thread's
+// own box as markdown quote.
 func TestQuoteFillsTheBoxWithTheComment(t *testing.T) {
 	app := newThreadedTestApp(t)
 	tabComments(t, app, false)
 
 	pressInComments(t, app, 'Q')
 
-	if got, want := app.detailsComposeArea.GetText(), "> The debounce is the problem.\n"; got != want {
+	if got, want := app.detailsReplyArea.GetText(), "> The debounce is the problem.\n"; got != want {
 		t.Errorf("the box holds %q, want %q", got, want)
 	}
 	if got := app.replyParentID(); got != "root-1" {
-		t.Errorf("the quote is aimed at %q, want the quoted comment", got)
+		t.Errorf("the quote answers %q, want the quoted comment", got)
 	}
 }
 
@@ -404,9 +456,10 @@ func TestQuoteBody(t *testing.T) {
 	}
 }
 
-// TestEscapeDropsTheAimBeforeTheBox covers backing out of a reply without
-// losing the words or the box in one keystroke.
-func TestEscapeDropsTheAimBeforeTheBox(t *testing.T) {
+// TestEscapeClosesTheReplyBoxAndKeepsTheWords covers backing out of an answer.
+// The box goes, because an empty box left open in the middle of a conversation
+// is rows of nothing between two comments; the words stay against the thread.
+func TestEscapeClosesTheReplyBoxAndKeepsTheWords(t *testing.T) {
 	app := newThreadedTestApp(t)
 	tabComments(t, app, false)
 	pressInComments(t, app, 'r')
@@ -415,18 +468,19 @@ func TestEscapeDropsTheAimBeforeTheBox(t *testing.T) {
 	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 
 	if got := app.replyParentID(); got != "" {
-		t.Errorf("Esc left the box aimed at %q", got)
+		t.Errorf("Esc left a box open on %q", got)
 	}
-	if !app.composeBoxActive() {
-		t.Error("Esc left the box on the first press, want it to drop the aim first")
+	if app.commentSpanIndex(blockIDReply) >= 0 {
+		t.Error("Esc left the box on the page")
 	}
-	if got := app.detailsComposeArea.GetText(); got != "half a thought" {
-		t.Errorf("the box holds %q, want the words kept", got)
+	if got := app.focusedCommentID; got != "root-1" {
+		t.Errorf("Esc put the ring on %q, want the comment being answered", got)
 	}
 
-	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
-	if app.composeBoxActive() {
-		t.Error("the second Esc did not hand the keyboard back")
+	// Reopening on the same thread finds them again.
+	pressInComments(t, app, 'r')
+	if got := app.detailsReplyArea.GetText(); got != "half a thought" {
+		t.Errorf("the reopened box holds %q, want the words kept", got)
 	}
 }
 
