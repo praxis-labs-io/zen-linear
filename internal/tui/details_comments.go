@@ -23,8 +23,11 @@ const (
 )
 
 // renderDetailsComments writes the comments tab as a stack of cards at the
-// width of the pane's last draw.
+// width of the pane's last draw, threads nested under their parent. It records
+// where each card landed, which is what the ring moves and scrolls by.
 func (a *App) renderDetailsComments() {
+	a.commentSpans = nil
+	a.commentRingPainted = a.commentsHaveFocus()
 	if len(a.detailsCommentsSource) == 0 {
 		// Unframed, because refitDetailsComments skips an empty source: an
 		// empty state laid out to a width would never see the real one.
@@ -37,12 +40,23 @@ func (a *App) renderDetailsComments() {
 		width = commentCardFallbackWidth
 	}
 
+	rows := buildCommentRows(a.detailsCommentsSource)
 	var lines []string
-	for i, comment := range a.detailsCommentsSource {
+	for i, row := range rows {
 		if i > 0 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, a.commentCard(comment, width)...)
+		inset := row.Depth * commentThreadIndent
+		indent := strings.Repeat(" ", inset)
+		start := len(lines)
+		for _, line := range a.commentCard(row.Comment, width-inset) {
+			lines = append(lines, indent+line)
+		}
+		a.commentSpans = append(a.commentSpans, commentSpan{
+			id:    row.Comment.ID,
+			start: start,
+			end:   len(lines) - 1,
+		})
 	}
 	a.detailsCommentsView.SetText(strings.Join(lines, "\n"))
 }
@@ -54,7 +68,7 @@ func (a *App) commentCard(comment linearapi.Comment, width int) []string {
 		return a.commentPlain(comment, width)
 	}
 
-	border := a.themeTags.Border
+	border := a.commentBorderTag(comment.ID)
 	inner := width - commentCardChrome
 
 	lines := []string{
@@ -68,6 +82,21 @@ func (a *App) commentCard(comment linearapi.Comment, width int) []string {
 		}
 	}
 	return append(lines, cardEdge("╰", "╯", width, border))
+}
+
+// commentBorderTag colors one card's frame: the ring's card in the focus color
+// while the stack holds the keyboard, and the card a reply is aimed at in the
+// accent, which is what keeps the target on screen once the box's placeholder
+// has been typed over.
+func (a *App) commentBorderTag(id string) string {
+	switch {
+	case id == a.focusedCommentID && a.commentsHaveFocus():
+		return a.themeTags.BorderFocus
+	case id != "" && id == a.replyParentID():
+		return a.themeTags.Accent
+	default:
+		return a.themeTags.Border
+	}
 }
 
 // commentPlain drops the frame on a pane too narrow to hold one, where the box

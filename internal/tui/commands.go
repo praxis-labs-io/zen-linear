@@ -36,6 +36,11 @@ const (
 	ScopeIssue
 	// ScopeNavigation commands act on the navigation tree.
 	ScopeNavigation
+	// ScopeComment actions act on the comment the ring is on. No palette
+	// command holds it: the scope exists so a comment key and an issue key can
+	// share a rune, which is how r replies on a focused card and refreshes
+	// everywhere else.
+	ScopeComment
 )
 
 // Command represents a command that can be executed from the palette.

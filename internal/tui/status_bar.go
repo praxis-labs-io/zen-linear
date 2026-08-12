@@ -34,6 +34,31 @@ func keyPairLabel(first, second rune) string {
 	return label
 }
 
+// commentActionHint names what the focused card answers to, each key read back
+// from the bindings and dropped when a binding took its rune. The whole hint
+// disappears when every one of them has been taken, separator included.
+func (a *App) commentActionHint() string {
+	labels := make([]string, 0, 4)
+	for _, action := range []struct {
+		id       string
+		fallback rune
+		verb     string
+	}{
+		{"comment_reply", 'r', "reply"},
+		{"comment_quote", 'Q', "quote"},
+		{"comment_copy_link", 'y', "copy link"},
+		{"comment_open", 'o', "open"},
+	} {
+		if key := a.actionKey(action.id, action.fallback); key != 0 {
+			labels = append(labels, fmt.Sprintf("%c: %s", key, action.verb))
+		}
+	}
+	if len(labels) == 0 {
+		return ""
+	}
+	return strings.Join(labels, " | ") + " | "
+}
+
 // zoomHint names the zoom key and the verb it performs, or nothing at all when
 // a keybinding has stolen the rune and left the command reachable only from the
 // palette. The trailing separator belongs to the hint so it disappears with it.
@@ -71,6 +96,14 @@ func (a *App) updateStatusBar() {
 				break
 			}
 			helpText = fmt.Sprintf("%sCtrl+Enter: post | Tab: Post button | Esc: back to comments[-]", keyColor)
+			break
+		}
+		if len(a.commentSpans) > 0 && a.commentsHaveFocus() {
+			// The card keys are what the pane answers to here, and the ones
+			// they shadow are not worth naming: j/k move the ring rather than
+			// scroll, and r is a reply rather than a refresh.
+			helpText = fmt.Sprintf("%sj/k: comments | %s%s: switch description/comments | Tab: write a comment[-]",
+				keyColor, a.commentActionHint(), tabs)
 			break
 		}
 		if a.detailsZoomed {

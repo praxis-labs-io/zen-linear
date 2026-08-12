@@ -204,6 +204,9 @@ func (a *App) updateFocus() {
 	// The Search tab's two halves share one border, so which of them is live
 	// has to be said in their own colors, from every branch above.
 	a.applySearchFocusStyles()
+	// The comment ring's border is in the card text, not on a primitive, so it
+	// takes a rewrite rather than a color set.
+	a.refreshCommentRing()
 	a.updateStatusBar()
 }
 

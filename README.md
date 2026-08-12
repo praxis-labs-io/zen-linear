@@ -106,8 +106,8 @@ The options beyond the original linear-tui set:
 - `keybindings` remaps palette commands by id, the global quit, open_palette,
   and search actions, and the tab_next, tab_prev, columns_left,
   columns_right, focus_navigation, focus_issues, focus_details,
-  favorite_move_up, favorite_move_down, favorite_nest, and favorite_unnest
-  actions
+  favorite_move_up, favorite_move_down, favorite_nest, favorite_unnest,
+  comment_reply, comment_quote, comment_copy_link, and comment_open actions
 
 ## Keys
 
@@ -122,6 +122,16 @@ The options beyond the original linear-tui set:
 
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.
+
+In the Comments tab, j/k move between comment cards and the focused card
+answers to four keys of its own. They shadow the issue keys on the same runes
+for as long as a card holds the keyboard:
+
+    r           reply           Q           quote and reply
+    y           copy link       o           open in Linear
+
+Replies nest under the comment they answer. Tab moves from the cards to the
+compose box, where Esc drops the reply's aim before it leaves the box.
 
 Commands act on the pane they belong to. A key that acts on the selected issue
 answers from the issues and details panes, favorites from the navigation tree,

@@ -26,6 +26,65 @@ const composeBoxRows = composeRows + 3
 // composePlaceholder is what the empty box says.
 const composePlaceholder = "Leave a comment"
 
+// replyParentID is the comment the box is answering, empty when it is writing a
+// top-level comment.
+func (a *App) replyParentID() string {
+	return a.composeReplyTo[a.composeDraftIssueID]
+}
+
+// setReplyTarget aims an issue's draft at a comment, forgetting an empty aim so
+// the map does not grow a key per issue the reader has looked at.
+func (a *App) setReplyTarget(issueID, commentID string) {
+	if issueID == "" {
+		return
+	}
+	if commentID == "" {
+		delete(a.composeReplyTo, issueID)
+	} else {
+		if a.composeReplyTo == nil {
+			a.composeReplyTo = make(map[string]string)
+		}
+		a.composeReplyTo[issueID] = commentID
+	}
+	a.applyComposePlaceholder()
+}
+
+// clearReplyTarget puts the box back to writing a top-level comment.
+func (a *App) clearReplyTarget() {
+	if a.replyParentID() == "" {
+		return
+	}
+	a.setReplyTarget(a.composeDraftIssueID, "")
+	// The card that was wearing the accent border gives it up.
+	a.renderDetailsComments()
+}
+
+// applyComposePlaceholder says which comment the box is answering, for as long
+// as the box is empty. It is the only cue reply mode has once the first
+// character is typed, which is why the target's card keeps a border of its own.
+func (a *App) applyComposePlaceholder() {
+	if a.detailsComposeArea == nil {
+		return
+	}
+	parent := a.replyParentID()
+	if parent == "" {
+		a.detailsComposeArea.SetPlaceholder(composePlaceholder)
+		return
+	}
+	for _, comment := range a.detailsCommentsSource {
+		if comment.ID == parent {
+			if name := formatUserDisplayName(comment.Author); name != "" {
+				a.detailsComposeArea.SetPlaceholder("Reply to " + name)
+				return
+			}
+			break
+		}
+	}
+	// The stack has moved on from the comment being answered, so the box says
+	// what it is doing without naming who it is doing it to.
+	a.detailsComposeArea.SetPlaceholder("Reply")
+}
+
 // postLabel is what the button says, padded out either side: a filled surface
 // reads as something to press where a bare word reads as a caption.
 const postLabel = "  Post  "
@@ -116,7 +175,7 @@ func (a *App) applyComposeTheme() {
 	a.detailsComposeArea.SetSelectedStyle(tcell.StyleDefault.
 		Foreground(a.theme.InverseTextColor()).
 		Background(a.theme.Accent))
-	a.detailsComposeArea.SetPlaceholder(composePlaceholder)
+	a.applyComposePlaceholder()
 	a.detailsComposeArea.SetBackgroundColor(a.theme.Background)
 	a.applyPostButtonTheme()
 }
@@ -256,6 +315,9 @@ func (a *App) enterCommentsFocus(target commentsFocus) {
 	a.focusedPane = FocusDetails
 	a.focusedDetailsView = true
 	a.commentsFocus = target
+	if target == commentsFocusCards {
+		a.anchorCommentFocus()
+	}
 	if a.detailsCommentsPanel != nil {
 		a.detailsCommentsPanel.SetBorderColor(a.theme.BorderFocus)
 	}
@@ -333,6 +395,13 @@ func (a *App) handleComposeKey(event *tcell.EventKey) *tcell.EventKey {
 		a.app.Stop()
 		return nil
 	case tcell.KeyEscape:
+		// Escape backs out one thing at a time: the reply's aim first, the box
+		// second. Dropping both at once would leave a reader who only wanted a
+		// top-level comment retyping the one they had.
+		if a.replyParentID() != "" {
+			a.clearReplyTarget()
+			return nil
+		}
 		a.leaveComposeBox()
 		return nil
 	case tcell.KeyEnter:
@@ -366,8 +435,10 @@ func (a *App) postComment() {
 		a.flashStatus("No issue selected")
 		return
 	}
+	parentID := a.replyParentID()
 
 	a.detailsComposeArea.SetText("", false)
+	a.clearReplyTarget()
 	// The keyboard goes with the comment. The box is empty and no longer taking
 	// words, so a focus ring left on it says the keys are somewhere they are
 	// not. A failed post takes it back.
@@ -376,14 +447,18 @@ func (a *App) postComment() {
 
 	post := a.createCommentFunc
 	go func() {
-		comment, err := post(context.Background(), linearapi.CreateCommentInput{IssueID: issueID, Body: body})
+		comment, err := post(context.Background(), linearapi.CreateCommentInput{
+			IssueID:  issueID,
+			Body:     body,
+			ParentID: parentID,
+		})
 		a.QueueUpdateDraw(func() {
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.details_compose: create comment failed issue=%s", issueID)
 				// Restore first: it moves focus, and the status bar rebuilt on
 				// the way paints statusMessage, which is still the posting
 				// flash. Clearing that is what leaves the error on screen.
-				a.restoreComposeDraft(issueID, body)
+				a.restoreComposeDraft(issueID, body, parentID)
 				a.statusMessage = ""
 				a.updateStatusBarWithError(err)
 				return
@@ -412,6 +487,9 @@ func (a *App) appendComment(issueID string, comment linearapi.Comment) {
 	a.detailsCommentsSource = comments
 	a.renderDetailsComments()
 	a.detailsCommentsView.ScrollToEnd()
+	// The ring follows the comment that was just written, so the reply it is
+	// under is the card the next key acts on.
+	a.focusComment(comment.ID)
 	// The tab strip carries the count.
 	a.updateAllPaneTitles()
 }
@@ -439,16 +517,27 @@ func insertCommentInOrder(comments []linearapi.Comment, comment linearapi.Commen
 // the box emptied, and by then the writer may be part way into the next
 // comment; overwriting would destroy that one to rescue this one, which is the
 // same loss in the other direction. Two comments run together can be cut apart.
-func (a *App) restoreComposeDraft(issueID, body string) {
+//
+// The aim comes back with the words. A rescued reply that lost its parent would
+// post at top level on the second try, which is not what was written. A newer
+// aim wins: it belongs to the comment now in the box.
+func (a *App) restoreComposeDraft(issueID, body, parentID string) {
 	// The selection moved while the write was out, so the box on screen is
 	// about something else. The words go back to their own issue and are
 	// waiting there the next time it is opened.
 	if a.composeDraftIssueID != issueID {
 		a.setComposeDraft(issueID, joinDrafts(body, a.composeDrafts[issueID]))
+		if a.composeReplyTo[issueID] == "" {
+			a.setReplyTarget(issueID, parentID)
+		}
 		return
 	}
 
 	a.detailsComposeArea.SetText(joinDrafts(body, a.detailsComposeArea.GetText()), true)
+	if a.replyParentID() == "" {
+		a.setReplyTarget(issueID, parentID)
+		a.renderDetailsComments()
+	}
 	// The keyboard comes back only where the box is on screen. A reader who
 	// moved to the description keeps the tab they chose.
 	if a.focusedPane == FocusDetails && a.detailsCommentsVisible && a.focusedDetailsView {
@@ -474,6 +563,9 @@ func (a *App) syncComposeDraft(issueID string) {
 	a.setComposeDraft(a.composeDraftIssueID, a.detailsComposeArea.GetText())
 	a.composeDraftIssueID = issueID
 	a.detailsComposeArea.SetText(a.composeDrafts[issueID], true)
+	// The aim is held per issue beside the draft, so nothing has to be moved
+	// here; the placeholder just has to read the new issue's.
+	a.applyComposePlaceholder()
 }
 
 // setComposeDraft holds a draft against its issue, forgetting an empty one so
@@ -496,8 +588,10 @@ func (a *App) setComposeDraft(issueID, body string) {
 // longer belong to.
 func (a *App) clearComposeDrafts() {
 	a.composeDrafts = nil
+	a.composeReplyTo = nil
 	a.composeDraftIssueID = ""
 	if a.detailsComposeArea != nil {
 		a.detailsComposeArea.SetText("", false)
+		a.applyComposePlaceholder()
 	}
 }

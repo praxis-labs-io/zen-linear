@@ -83,16 +83,28 @@ type App struct {
 	detailsCommentsView        *tview.TextView // Scrollable comments view
 	detailsCommentsSource      []linearapi.Comment
 	detailsCommentsFittedWidth int
-	detailsCommentsPanel       *tview.Flex     // Comments tab shell: card stack + compose box
-	detailsComposeBox          *tview.Flex     // Hand-drawn frame around the compose area
-	detailsComposeArea         *tview.TextArea // Where a comment gets written
-	detailsComposePost         *tview.Button   // Sends what is in the box
+	// focusedCommentID is the card the ring is on and commentSpans is where
+	// every card landed in the last render. The ring is held by id rather than
+	// by index so a refetch that reorders the stack keeps it on the same card.
+	focusedCommentID string
+	commentSpans     []commentSpan
+	// commentRingPainted is whether the last render drew the ring's card in the
+	// focus color, so a focus change repaints only when it changes something.
+	commentRingPainted   bool
+	detailsCommentsPanel *tview.Flex     // Comments tab shell: card stack + compose box
+	detailsComposeBox    *tview.Flex     // Hand-drawn frame around the compose area
+	detailsComposeArea   *tview.TextArea // Where a comment gets written
+	detailsComposePost   *tview.Button   // Sends what is in the box
 	// composeDrafts holds what has been written and not posted, keyed by issue.
 	// The box is one widget over a changing selection, so a draft has to follow
 	// the issue it was written for; left in the box it would be posted to
 	// whichever issue is on screen when the chord lands.
 	composeDrafts       map[string]string
 	composeDraftIssueID string
+	// composeReplyTo holds the comment a draft is answering, keyed by issue the
+	// same way the draft is: the target belongs to the words, and both have to
+	// survive a trip to another issue and back together.
+	composeReplyTo      map[string]string
 	statusBar           *tview.TextView
 	paletteModal        *tview.Flex
 	paletteInput        *tview.InputField

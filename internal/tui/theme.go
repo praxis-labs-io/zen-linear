@@ -188,6 +188,7 @@ type ThemeTags struct {
 	Accent        string
 	AssigneeText  string
 	Border        string
+	BorderFocus   string
 	Warning       string
 	Error         string
 }
@@ -219,6 +220,7 @@ func NewThemeTags(theme Theme) ThemeTags {
 		// ColorDefault, which colorTag would hand back as [default].
 		AssigneeText: colorTag(theme.AssigneeTextColor()),
 		Border:       colorTag(theme.Border),
+		BorderFocus:  colorTag(theme.BorderFocus),
 		Warning:      colorTag(theme.StatusInProgress),
 		Error:        colorTag(theme.StatusCanceled),
 	}

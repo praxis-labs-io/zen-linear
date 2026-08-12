@@ -1,0 +1,146 @@
+package tui
+
+import (
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/zen-linear/zen-linear/internal/linearapi"
+)
+
+// threadedComments is a discussion with a reply, a reply to that reply, and a
+// reply whose parent is older than the fetched page.
+func threadedComments() []linearapi.Comment {
+	now := time.Now()
+	at := func(minutes int) time.Time { return now.Add(time.Duration(minutes) * time.Minute) }
+	return []linearapi.Comment{
+		{ID: "root-1", Body: "The debounce is the problem.", CreatedAt: at(-60), UpdatedAt: at(-60),
+			Author: linearapi.User{ID: "u1", DisplayName: "drew", IsMe: true}, URL: "https://linear.app/c/root-1"},
+		{ID: "reply-1", ParentID: "root-1", Body: "Which one?", CreatedAt: at(-50), UpdatedAt: at(-50),
+			Author: linearapi.User{ID: "u2", DisplayName: "roey"}, URL: "https://linear.app/c/reply-1"},
+		{ID: "root-2", Body: "Unrelated thought.", CreatedAt: at(-40), UpdatedAt: at(-40),
+			Author: linearapi.User{ID: "u2", DisplayName: "roey"}, URL: "https://linear.app/c/root-2"},
+		{ID: "reply-2", ParentID: "reply-1", Body: "The detail one.", CreatedAt: at(-30), UpdatedAt: at(-30),
+			Author: linearapi.User{ID: "u1", DisplayName: "drew", IsMe: true}, URL: "https://linear.app/c/reply-2"},
+		{ID: "orphan", ParentID: "off-the-page", Body: "Answering something older.", CreatedAt: at(-20), UpdatedAt: at(-20),
+			Author: linearapi.User{ID: "u2", DisplayName: "roey"}, URL: "https://linear.app/c/orphan"},
+	}
+}
+
+func rowIDs(rows []commentRow) []string {
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.Comment.ID)
+	}
+	return ids
+}
+
+func TestBuildCommentRows(t *testing.T) {
+	tests := []struct {
+		name      string
+		comments  []linearapi.Comment
+		wantIDs   []string
+		wantDepth map[string]int
+	}{
+		{
+			name:      "no comments",
+			wantIDs:   []string{},
+			wantDepth: map[string]int{},
+		},
+		{
+			name: "roots keep their order",
+			comments: []linearapi.Comment{
+				{ID: "a"}, {ID: "b"},
+			},
+			wantIDs:   []string{"a", "b"},
+			wantDepth: map[string]int{"a": 0, "b": 0},
+		},
+		{
+			name:     "replies gather under their parent",
+			comments: threadedComments(),
+			// reply-2 answers reply-1 and lands in the same thread, not a
+			// second level under it. orphan's parent is off the page, so it
+			// reads as a root rather than disappearing.
+			wantIDs: []string{"root-1", "reply-1", "reply-2", "root-2", "orphan"},
+			wantDepth: map[string]int{
+				"root-1": 0, "reply-1": 1, "reply-2": 1, "root-2": 0, "orphan": 0,
+			},
+		},
+		{
+			name: "a parent cycle does not hang the pane",
+			comments: []linearapi.Comment{
+				{ID: "a", ParentID: "b"}, {ID: "b", ParentID: "a"},
+			},
+			wantIDs:   []string{"a", "b"},
+			wantDepth: map[string]int{"a": 0, "b": 0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rows := buildCommentRows(tt.comments)
+			if got := rowIDs(rows); !slices.Equal(got, tt.wantIDs) {
+				t.Fatalf("rows = %v, want %v", got, tt.wantIDs)
+			}
+			for _, row := range rows {
+				if got, want := row.Depth, tt.wantDepth[row.Comment.ID]; got != want {
+					t.Errorf("%s is at depth %d, want %d", row.Comment.ID, got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestThreadRootID(t *testing.T) {
+	comments := threadedComments()
+	tests := []struct {
+		name string
+		id   string
+		want string
+	}{
+		{name: "a root is its own thread", id: "root-1", want: "root-1"},
+		{name: "a reply names its parent", id: "reply-1", want: "root-1"},
+		{name: "a deeper reply names the thread", id: "reply-2", want: "root-1"},
+		{name: "an orphan is a root", id: "orphan", want: "orphan"},
+		{name: "an unknown comment is left alone", id: "gone", want: "gone"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := threadRootID(comments, tt.id); got != tt.want {
+				t.Errorf("threadRootID(%q) = %q, want %q", tt.id, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestRepliesIndentUnderTheirParent covers the thread reading as a step in.
+// The rows are not trimmed here: the indent is the thing being measured.
+func TestRepliesIndentUnderTheirParent(t *testing.T) {
+	app := newThreadedTestApp(t)
+	lines := drawComments(t, app, 80)
+
+	parent := cardEdgeColumn(t, lines, "root-1 marker", 0)
+	reply := cardEdgeColumn(t, lines, "reply marker", 1)
+	if got := reply - parent; got != commentThreadIndent {
+		t.Errorf("the reply card starts %d cells in from its parent, want %d", got, commentThreadIndent)
+	}
+}
+
+// cardEdgeColumn returns the column the nth card's top border starts at.
+func cardEdgeColumn(t *testing.T, lines []string, what string, n int) int {
+	t.Helper()
+	seen := 0
+	for _, line := range lines {
+		column := strings.Index(line, "╭")
+		if column < 0 {
+			continue
+		}
+		if seen == n {
+			return column
+		}
+		seen++
+	}
+	t.Fatalf("no card %d to measure (%s):\n%s", n, what, strings.Join(lines, "\n"))
+	return 0
+}

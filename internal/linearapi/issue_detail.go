@@ -63,6 +63,8 @@ type issueDetailNode struct {
 			Body      graphql.String
 			CreatedAt graphql.String
 			UpdatedAt graphql.String
+			ParentID  *graphql.String
+			URL       graphql.String
 			User      struct {
 				ID          graphql.String
 				Name        graphql.String

@@ -23,6 +23,10 @@ var uiActionScopes = map[string]CommandScope{
 	"favorite_move_down": ScopeNavigation,
 	"favorite_nest":      ScopeNavigation,
 	"favorite_unnest":    ScopeNavigation,
+	"comment_reply":      ScopeComment,
+	"comment_quote":      ScopeComment,
+	"comment_copy_link":  ScopeComment,
+	"comment_open":       ScopeComment,
 }
 
 // bindingRune returns the rune a keybinding value resolves to, and whether it

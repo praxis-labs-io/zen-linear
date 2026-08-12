@@ -189,11 +189,17 @@ func (n issueDetailNode) toIssue() Issue {
 
 	issue.Comments = make([]Comment, 0, len(n.Comments.Nodes))
 	for _, node := range n.Comments.Nodes {
+		parentID := ""
+		if node.ParentID != nil {
+			parentID = string(*node.ParentID)
+		}
 		issue.Comments = append(issue.Comments, Comment{
 			ID:        string(node.ID),
 			Body:      string(node.Body),
 			CreatedAt: parseTime(string(node.CreatedAt)),
 			UpdatedAt: parseTime(string(node.UpdatedAt)),
+			ParentID:  parentID,
+			URL:       string(node.URL),
 			Author: User{
 				ID:          string(node.User.ID),
 				Name:        string(node.User.Name),
