@@ -353,6 +353,21 @@ func (a *App) releaseStrandedCompose() {
 	a.updateFocus()
 }
 
+// showWritingBox scrolls the card of the box holding the keyboard back onto the
+// page, and does nothing when it is already there.
+func (a *App) showWritingBox() {
+	id := blockIDCompose
+	switch a.activeWritingBox() {
+	case commentsFocusCards:
+		return
+	case commentsFocusReply, commentsFocusReplyPost:
+		id = blockIDReply
+	}
+	if index := a.commentSpanIndex(id); index >= 0 {
+		a.scrollCommentIntoView(a.commentSpans[index])
+	}
+}
+
 // postButtonActive reports whether a button is the thing with the keyboard,
 // which is where Enter posts.
 func (a *App) postButtonActive() bool {
@@ -451,6 +466,11 @@ func (a *App) leaveComposeBox() {
 // answered here falls through to the text area, so Enter is a newline and
 // letters type instead of firing global or pane shortcuts.
 func (a *App) handleComposeKey(event *tcell.EventKey) *tcell.EventKey {
+	// Typing brings the box back to where it can be seen. Scrolled off the
+	// page it still holds the keyboard, and words going into something off
+	// screen are words the writer cannot read back.
+	a.showWritingBox()
+
 	switch event.Key() {
 	case tcell.KeyCtrlC:
 		a.app.Stop()

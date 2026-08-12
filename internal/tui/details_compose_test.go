@@ -791,3 +791,27 @@ func TestTypingWorksOnAnIssueWithNoComments(t *testing.T) {
 		t.Errorf("posted %q", got)
 	}
 }
+
+// TestTypingBringsTheBoxBack covers a box scrolled off the page while it still
+// holds the keyboard. Words going into something off screen are words the
+// writer cannot read back, so the first key returns it to view.
+func TestTypingBringsTheBoxBack(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	showComments(t, app, 80, 12)
+	app.detailsCommentsView.ScrollToBeginning()
+	showComments(t, app, 80, 12)
+
+	compose := app.commentSpans[app.commentSpanIndex(blockIDCompose)]
+	if app.commentSpanVisible(compose) {
+		t.Fatal("the box is still on screen, so there is nothing to bring back")
+	}
+
+	typeRunes(t, app, "x")
+
+	if !app.commentSpanVisible(app.commentSpans[app.commentSpanIndex(blockIDCompose)]) {
+		t.Error("typing left the box off screen")
+	}
+	if got := app.detailsComposeArea.GetText(); got != "x" {
+		t.Errorf("the box holds %q", got)
+	}
+}

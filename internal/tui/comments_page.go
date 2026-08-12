@@ -69,6 +69,7 @@ func (p *commentsPage) Draw(screen tcell.Screen) {
 	p.view.Draw(screen)
 
 	top, _ := p.view.GetScrollOffset()
+	shown := false
 	for _, slot := range p.slots {
 		start, rows := slot.row-top, slot.height
 		if start+rows > height {
@@ -90,6 +91,14 @@ func (p *commentsPage) Draw(screen tcell.Screen) {
 		}
 		slot.primitive.SetRect(x+gutter+slot.column, y+start, slot.width, rows)
 		slot.primitive.Draw(screen)
+		shown = shown || slot.primitive.HasFocus()
+	}
+
+	// A widget shows the terminal's caret where it draws it, and a widget that
+	// does not draw leaves the caret wherever it was last put. Scrolled away
+	// from, the box left a block sitting over whatever took its place.
+	if !shown && p.focusedSlot() != nil {
+		screen.HideCursor()
 	}
 }
 
