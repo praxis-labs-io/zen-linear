@@ -84,13 +84,17 @@ func (a *App) closeReplyBox() {
 
 // holdReplyDraft puts what is in the reply box away against the thread it
 // answers, so closing the box is not the same as losing the words.
+//
+// A box holding nothing but a quote holds nothing the reader wrote: the app put
+// it there on one keystroke and can put it back on the same one. Kept, it
+// followed them to the next comment they quoted and stacked up in front of it.
 func (a *App) holdReplyDraft() {
 	parent := a.replyParentID()
 	if parent == "" || a.detailsReplyArea == nil {
 		return
 	}
 	body := a.detailsReplyArea.GetText()
-	if strings.TrimSpace(body) == "" {
+	if strings.TrimSpace(body) == "" || isAllQuoted(body) {
 		delete(a.replyDrafts, parent)
 		return
 	}
@@ -98,6 +102,17 @@ func (a *App) holdReplyDraft() {
 		a.replyDrafts = make(map[string]string)
 	}
 	a.replyDrafts[parent] = body
+}
+
+// isAllQuoted reports whether every line with anything on it is quoted, which
+// is a box the reader has not written in yet.
+func isAllQuoted(body string) bool {
+	for _, line := range strings.Split(body, "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, ">") {
+			return false
+		}
+	}
+	return true
 }
 
 // applyComposePlaceholder says what each box is for while it is empty. Neither

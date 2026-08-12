@@ -517,7 +517,7 @@ func TestQuoteFillsTheBoxWithTheComment(t *testing.T) {
 
 	pressInComments(t, app, 'Q')
 
-	if got, want := app.detailsReplyArea.GetText(), "> The debounce is the problem.\n"; got != want {
+	if got, want := app.detailsReplyArea.GetText(), "> The debounce is the problem.\n\n"; got != want {
 		t.Errorf("the box holds %q, want %q", got, want)
 	}
 	if got := app.replyParentID(); got != "root-1" {
@@ -788,6 +788,9 @@ func TestQuotingTwiceKeepsBothQuotes(t *testing.T) {
 	pressInComments(t, app, 'Q')
 
 	got := app.detailsReplyArea.GetText()
+	if strings.Contains(got, "\n\n\n") {
+		t.Errorf("the box holds %q, want one blank line between the quotes", got)
+	}
 	first := strings.Index(got, "> The debounce is the problem.")
 	mine := strings.Index(got, "mine")
 	// Esc puts the ring on the comment being answered, so two steps from there
@@ -798,5 +801,27 @@ func TestQuotingTwiceKeepsBothQuotes(t *testing.T) {
 	}
 	if first >= mine || mine >= second {
 		t.Errorf("the box holds %q, want the new quote under what was written", got)
+	}
+}
+
+// TestAnUnwrittenQuoteDoesNotFollowYou covers Q, Esc, Q somewhere else. The
+// first quote was the app's doing, not the reader's, so it goes when the box
+// does rather than stacking up in front of the next one.
+func TestAnUnwrittenQuoteDoesNotFollowYou(t *testing.T) {
+	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
+	pressInComments(t, app, 'Q')
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+
+	tabComments(t, app, false)
+	tabComments(t, app, false)
+	pressInComments(t, app, 'Q')
+
+	got := app.detailsReplyArea.GetText()
+	if strings.Contains(got, "The debounce is the problem.") {
+		t.Errorf("the box holds %q, want only the comment just quoted", got)
+	}
+	if !strings.Contains(got, "> The detail one.") {
+		t.Errorf("the box holds %q, want the comment just quoted", got)
 	}
 }

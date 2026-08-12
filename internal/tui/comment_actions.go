@@ -290,7 +290,10 @@ func (a *App) replyToFocusedComment(quoted string) {
 	// Under what is already written, not over it: the words in the box came
 	// first, and the quote is being added to them.
 	draft := quoted
-	if held := a.detailsReplyArea.GetText(); strings.TrimSpace(held) != "" {
+	// Trimmed before joining, because the quote above it already ends in the
+	// blank line the cursor sits on. Joined untrimmed, a second quote lands
+	// three lines below the first instead of one.
+	if held := strings.TrimSpace(a.detailsReplyArea.GetText()); held != "" {
 		draft = held + "\n\n" + quoted
 	}
 	fillWritingBox(a.detailsReplyArea, draft)
@@ -304,7 +307,9 @@ func (a *App) quoteFocusedComment() {
 	if !ok {
 		return
 	}
-	a.replyToFocusedComment(quoteBody(comment.Body) + "\n")
+	// Two newlines: one closes the quote, and one is the blank line the reply
+	// gets written on.
+	a.replyToFocusedComment(quoteBody(comment.Body) + "\n\n")
 }
 
 // quoteBody marks every line of a body as quoted, blank lines included: a gap
