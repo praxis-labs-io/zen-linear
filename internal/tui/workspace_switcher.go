@@ -91,5 +91,7 @@ func (a *App) switchWorkspace(name string) {
 	newCfg := a.config
 	newCfg.LinearAPIKey = key
 	a.applySettings(newCfg)
+	// The navigation pane's title is the workspace name.
+	a.updateAllPaneTitles()
 	a.flashStatus(fmt.Sprintf("Switched to %s", workspace.Name))
 }

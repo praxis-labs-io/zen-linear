@@ -215,7 +215,7 @@ func (a *App) updateFocus() {
 func (a *App) updateAllPaneTitles() {
 	// Update Navigation pane title
 	isNavFocused := a.focusedPane == FocusNavigation
-	a.navigationTree.SetTitle(a.paneTitle(paneNumberNavigation, a.tabSegment("Navigation", true, isNavFocused), isNavFocused))
+	a.navigationTree.SetTitle(a.paneTitle(paneNumberNavigation, a.tabSegment(a.navigationPaneLabel(), true, isNavFocused), isNavFocused))
 	a.navigationTree.SetTitleColor(a.theme.Foreground)
 
 	// Update Issues pane tab strip

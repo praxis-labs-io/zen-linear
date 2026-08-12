@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,5 +74,27 @@ func TestSelectingFavoritesFolderOnlyToggles(t *testing.T) {
 
 	if folderNode.IsExpanded() {
 		t.Error("Enter on a favorites folder did not collapse it")
+	}
+}
+
+// TestNavigationTreeDrawsWithoutARootRow covers the workspace moving from a
+// tree row to the pane border: the first row drawn is a real destination, sat
+// flush against the border rather than indented under a root.
+func TestNavigationTreeDrawsWithoutARootRow(t *testing.T) {
+	app := newUXTestApp(t)
+	app.activeWorkspaceName = "Praxis Labs"
+	app.updateAllPaneTitles()
+	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
+
+	lines := drawPrimitive(t, app.navigationTree, 40)
+
+	if !strings.Contains(lines[0], "Praxis Labs") {
+		t.Errorf("pane title row = %q, want the workspace name", lines[0])
+	}
+	if got := lines[1]; strings.TrimSpace(strings.Trim(got, "│")) != "" {
+		t.Errorf("row under the title = %q, want it blank", got)
+	}
+	if got := lines[2]; !strings.HasPrefix(strings.TrimPrefix(got, "│"), " All Issues") {
+		t.Errorf("first tree row = %q, want All Issues one column off the border", got)
 	}
 }
