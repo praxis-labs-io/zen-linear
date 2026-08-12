@@ -629,11 +629,26 @@ func (a *App) syncComposeDraft(issueID string) {
 	if a.detailsComposeArea == nil || a.composeDraftIssueID == issueID {
 		return
 	}
+	// Both boxes are one widget over a changing selection, so both have to be
+	// put away and reloaded. Held against its own thread first, while the
+	// fields still say which issue that was.
+	a.holdReplyDraft()
 	a.setComposeDraft(a.composeDraftIssueID, a.detailsComposeArea.GetText())
 	a.composeDraftIssueID = issueID
 	a.detailsComposeArea.SetText(a.composeDrafts[issueID], true)
-	// The aim is held per issue beside the draft, so nothing has to be moved
-	// here; the placeholder just has to read the new issue's.
+	a.detailsReplyArea.SetText(a.replyDrafts[a.replyParentID()], true)
+	// The new issue has no box open where the old one did. The fields alone are
+	// not enough: tview's focus is still on the reply area, so composeBoxActive
+	// would keep routing every keystroke into a box this page never drew, which
+	// is the lockup with no way out that releaseStrandedCompose cannot see —
+	// the panel is mounted, so it reads as on screen.
+	if a.replyParentID() == "" && (a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost) {
+		a.commentsFocus = commentsFocusCards
+		a.focusedCommentID = ""
+		if a.focusedPane == FocusDetails {
+			a.updateFocus()
+		}
+	}
 	a.applyComposePlaceholder()
 }
 

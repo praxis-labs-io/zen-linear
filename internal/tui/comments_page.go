@@ -70,14 +70,25 @@ func (p *commentsPage) Draw(screen tcell.Screen) {
 
 	top, _ := p.view.GetScrollOffset()
 	for _, slot := range p.slots {
-		// The rows of the slot that are on screen. A box scrolled half off the
-		// bottom draws the half that fits rather than disappearing whole.
-		start := max(slot.row-top, 0)
-		end := min(slot.row+slot.height-top, height)
-		if end <= start {
+		start, rows := slot.row-top, slot.height
+		if start+rows > height {
+			// Cut off at the bottom: a widget draws from its own first row, so
+			// the rows that fit are the right ones.
+			rows = height - start
+		}
+		// Not drawn once its first row is above the pane. A widget has no way to
+		// start part way down its own content, so a shortened rect would redraw
+		// it from the top and the words would jump as the page scrolled. The
+		// card's frame keeps scrolling either way; only the writing waits.
+		//
+		// A rect is cleared rather than left where it was: the mouse is offered
+		// to every slot, and one holding its last position takes clicks over
+		// whatever is now drawn there.
+		if start < 0 || rows <= 0 {
+			slot.primitive.SetRect(0, 0, 0, 0)
 			continue
 		}
-		slot.primitive.SetRect(x+gutter+slot.column, y+start, slot.width, end-start)
+		slot.primitive.SetRect(x+gutter+slot.column, y+start, slot.width, rows)
 		slot.primitive.Draw(screen)
 	}
 }

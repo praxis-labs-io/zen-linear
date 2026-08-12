@@ -272,9 +272,9 @@ func TestUnwrappedMarkdownIsUntouchedByHardBreaks(t *testing.T) {
 	}
 }
 
-// TestCommentsEmptyState covers the issue with no comments. It stays unframed:
-// refitDetailsComments skips an empty source, so a card laid out to a width
-// would never see the pane's real one.
+// TestCommentsEmptyState covers the issue nobody has written on. It is the one
+// most likely to be written on, so it says so and then gives you the box: the
+// message is a line above the compose card, not the whole page.
 func TestCommentsEmptyState(t *testing.T) {
 	app := newDetailsTestApp(t)
 
@@ -285,9 +285,24 @@ func TestCommentsEmptyState(t *testing.T) {
 		if !strings.Contains(drawn, "No comments yet.") {
 			t.Errorf("width %d drew no empty state:\n%s", width, strings.Join(lines, "\n"))
 		}
-		if cards := commentCards(lines); len(cards) != 0 {
-			t.Errorf("width %d framed the empty state in %d cards", width, len(cards))
+		if !strings.Contains(drawn, "write a comment") {
+			t.Errorf("width %d drew no compose card:\n%s", width, strings.Join(lines, "\n"))
 		}
+	}
+
+	// The card is a real stop with real widgets, not just a frame: without one
+	// the box takes the keyboard while nothing is drawn to take it.
+	if got := app.commentSpanIndex(blockIDCompose); got < 0 {
+		t.Error("the compose card is not in the ring on an issue with no comments")
+	}
+	if got := len(app.detailsCommentsPage.slots); got != 2 {
+		t.Errorf("the page mounted %d widgets, want the writing area and its button", got)
+	}
+	if !app.openComposeBox() {
+		t.Fatal("the box would not open on an issue with no comments")
+	}
+	if app.commentSpanIndex(blockIDCompose) < 0 {
+		t.Error("the box took the keyboard with no card on the page to hold it")
 	}
 }
 

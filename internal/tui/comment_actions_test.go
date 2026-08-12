@@ -625,10 +625,105 @@ func TestCommentKeysDoNothingWithoutComments(t *testing.T) {
 		pressInComments(t, app, key)
 	}
 
-	if got := app.focusedCommentID; got != "" {
-		t.Errorf("the ring landed on %q with no comments to land on", got)
+	// Tab has one stop to give on this page, the compose card, and no comment
+	// key answers from it.
+	if got := app.focusedCommentID; got != blockIDCompose {
+		t.Errorf("Tab landed on %q, want the compose card", got)
 	}
 	if got := app.replyParentID(); got != "" {
 		t.Errorf("the box is aimed at %q with no comments to answer", got)
+	}
+}
+
+// TestAReplyStaysWithItsOwnIssue covers the reply box being one widget over a
+// changing selection. Left alone, one issue's half-written answer shows up in
+// the next issue's box and posts to a thread it was never written for.
+func TestAReplyStaysWithItsOwnIssue(t *testing.T) {
+	app := newThreadedTestApp(t)
+	tabComments(t, app, false)
+	pressInComments(t, app, 'r')
+	typeRunes(t, app, "meant for the first issue")
+
+	second := detailsFixture()
+	second.ID, second.Identifier = "issue-2", "ZNL-2"
+	second.Comments = threadedComments()
+	app.selectedIssue = second
+	app.updateDetailsView()
+
+	if got := app.detailsReplyArea.GetText(); got != "" {
+		t.Errorf("the second issue's reply box holds %q", got)
+	}
+	if got := app.replyParentID(); got != "" {
+		t.Errorf("the second issue has a box open on %q", got)
+	}
+	// The keyboard has to come off the box with it. Left there, every keystroke
+	// goes into a text area this page never drew and there is no way out.
+	if app.composeBoxActive() {
+		t.Error("the keyboard stayed in a reply box the new page does not draw")
+	}
+	if app.commentsFocus == commentsFocusReply || app.commentsFocus == commentsFocusReplyPost {
+		t.Errorf("the ring still points at a reply box: %v", app.commentsFocus)
+	}
+
+	first := detailsFixture()
+	first.Comments = threadedComments()
+	app.selectedIssue = first
+	app.updateDetailsView()
+	pressInComments(t, app, 'r')
+	if got := app.detailsReplyArea.GetText(); got != "meant for the first issue" {
+		t.Errorf("the first issue's box came back holding %q", got)
+	}
+}
+
+// TestAnUndrawnBoxIsNoMouseTarget covers a slot scrolled off the page. Left at
+// the rectangle it last drew at, it goes on taking clicks over whatever is
+// drawn there now, and takes the keyboard with them.
+func TestAnUndrawnBoxIsNoMouseTarget(t *testing.T) {
+	app := newThreadedTestApp(t)
+	showComments(t, app, 80, 12)
+	app.detailsCommentsView.ScrollToEnd()
+	showComments(t, app, 80, 12)
+
+	_, _, width, height := app.detailsComposeArea.GetRect()
+	if width == 0 || height == 0 {
+		t.Fatal("the compose area was not drawn at the end of the page")
+	}
+
+	app.detailsCommentsView.ScrollToBeginning()
+	showComments(t, app, 80, 12)
+
+	if _, _, width, height := app.detailsComposeArea.GetRect(); width != 0 || height != 0 {
+		t.Errorf("the scrolled-away box kept a %dx%d rectangle to be clicked in", width, height)
+	}
+}
+
+// TestABoxCutOffAtTheTopIsNotRedrawn covers the other half. A widget has no way
+// to start part way down its own content, so a shortened rectangle would draw
+// it again from its first row and the words would jump as the page scrolled.
+func TestABoxCutOffAtTheTopIsNotRedrawn(t *testing.T) {
+	app := newThreadedTestApp(t)
+	// The reply box, because it sits in the middle of the page: the compose
+	// card is the last thing on it, and the scroll clamps before its top can
+	// pass the top of the pane.
+	tabComments(t, app, false)
+	pressInComments(t, app, 'r')
+	showComments(t, app, 80, 12)
+
+	// Scrolled one row past the writing area's own first row, so its top is
+	// above the pane and its tail is in it: the case a crop reads wrong.
+	var area pageSlot
+	for _, slot := range app.detailsCommentsPage.slots {
+		if slot.primitive == app.detailsReplyArea {
+			area = slot
+		}
+	}
+	if area.height == 0 {
+		t.Fatal("the compose area has no slot on the page")
+	}
+	app.detailsCommentsView.ScrollTo(area.row+1, 0)
+	showComments(t, app, 80, 12)
+
+	if _, _, width, height := app.detailsReplyArea.GetRect(); width != 0 || height != 0 {
+		t.Errorf("a box cut off at the top drew %dx%d, want it to wait until it fits", width, height)
 	}
 }

@@ -343,9 +343,6 @@ func (a *App) refitDetailsComments(width int) {
 		return
 	}
 	a.detailsCommentsFittedWidth = width
-	if len(a.detailsCommentsSource) == 0 {
-		return
-	}
 	row, column := a.detailsCommentsView.GetScrollOffset()
 	a.renderDetailsComments()
 	a.detailsCommentsView.ScrollTo(row, column)

@@ -195,7 +195,10 @@ func (a *App) commentRing() commentPaint {
 // change shows nothing until the page is written again, and rewriting it on
 // every focus change would redraw a hundred cards to change none of them.
 func (a *App) refreshCommentRing() {
-	if a.detailsCommentsView == nil || len(a.detailsCommentsSource) == 0 {
+	// Guarded on the page, not on the comments: an issue nobody has written on
+	// still draws the compose card, and that card takes the focus border and
+	// its hints like any other.
+	if a.detailsCommentsView == nil || len(a.commentSpans) == 0 {
 		return
 	}
 	if a.commentRing() == a.commentPainted {

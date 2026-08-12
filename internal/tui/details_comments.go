@@ -28,12 +28,6 @@ const (
 func (a *App) renderDetailsComments() {
 	a.commentSpans = nil
 	a.commentPainted = a.commentRing()
-	if len(a.detailsCommentsSource) == 0 {
-		// Unframed, because refitDetailsComments skips an empty source: an
-		// empty state laid out to a width would never see the real one.
-		a.detailsCommentsView.SetText(fmt.Sprintf("%sNo comments yet.[-]", a.themeTags.SecondaryText))
-		return
-	}
 
 	width := a.detailsCommentsFittedWidth
 	if width <= 0 {
@@ -43,6 +37,13 @@ func (a *App) renderDetailsComments() {
 	blocks := a.commentBlocks()
 	var lines []string
 	var slots []pageSlot
+	if len(a.detailsCommentsSource) == 0 {
+		// The empty state is a line above the compose card, not instead of the
+		// page: an issue nobody has written on is the one most likely to be
+		// written on, and a page with no card to write in leaves the keyboard
+		// in a box that was never drawn.
+		lines = append(lines, fmt.Sprintf("%sNo comments yet.[-]", a.themeTags.SecondaryText), "")
+	}
 	for i, block := range blocks {
 		if i > 0 {
 			// The rail runs through the gap above a reply, which is what joins
