@@ -330,10 +330,7 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 					SetBorderColor(a.theme.Border).
 					SetBackgroundColor(a.theme.Background)
 
-	table.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(a.theme.SelectionText).
-		Background(a.theme.SelectionBg).
-		Bold(true))
+	table.SetSelectedStyle(selectionStyle(a.theme))
 
 	setIssuesTableHeaders(table, a.theme, a.issueColumns())
 

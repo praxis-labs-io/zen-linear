@@ -13,6 +13,12 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
+// applyBindings resolves a config's keybindings against the given registry and
+// applies them, which is the pair DefaultCommands runs.
+func applyBindings(commands []Command, bindings map[string]string) {
+	applyCommandKeybindings(commands, resolveKeybindings(bindings, commandScopes(commands)))
+}
+
 // TestApplyCommandKeybindings verifies overrides apply and claimed default
 // shortcuts are cleared.
 func TestApplyCommandKeybindings(t *testing.T) {
@@ -21,7 +27,7 @@ func TestApplyCommandKeybindings(t *testing.T) {
 		{ID: "copy_url", ShortcutRune: 'w'},
 		{ID: "set_parent", ShortcutRune: 'i'},
 	}
-	applyCommandKeybindings(commands, map[string]string{
+	applyBindings(commands, map[string]string{
 		"copy_url": "y",
 		"copy_id":  "i",
 	})
@@ -44,7 +50,7 @@ func TestKeybindingStealSparesACommandInAnotherScope(t *testing.T) {
 		{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'},
 		{ID: "refresh", ShortcutRune: 'r'},
 	}
-	applyCommandKeybindings(commands, map[string]string{"toggle_favorite": "x"})
+	applyBindings(commands, map[string]string{"toggle_favorite": "x"})
 
 	if commands[0].ShortcutRune != 'x' {
 		t.Errorf("toggle_favorite = %q, want x", commands[0].ShortcutRune)
@@ -64,7 +70,7 @@ func TestKeybindingStealTakesTheRuneFromAnOverlappingScope(t *testing.T) {
 		{ID: "refresh", ShortcutRune: 'r'},
 		{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'},
 	}
-	applyCommandKeybindings(commands, map[string]string{"refresh": "x"})
+	applyBindings(commands, map[string]string{"refresh": "x"})
 
 	if commands[1].ShortcutRune != 0 {
 		t.Errorf("archive kept %q, want cleared by the global command", commands[1].ShortcutRune)
@@ -79,7 +85,7 @@ func TestBindingForAnUnknownIDTakesNoRune(t *testing.T) {
 		{ID: "edit_issue", Scope: ScopeIssue, ShortcutRune: 'e'},
 		{ID: "refresh", ShortcutRune: 'r'},
 	}
-	applyCommandKeybindings(commands, map[string]string{"toggle_expand_all": "e"})
+	applyBindings(commands, map[string]string{"toggle_expand_all": "e"})
 
 	if commands[0].ShortcutRune != 'e' {
 		t.Errorf("edit_issue lost e to a command that no longer exists, want it kept")
@@ -94,7 +100,7 @@ func TestBindingForAnUnknownIDTakesNoRune(t *testing.T) {
 // key rather than print one that does nothing.
 func TestBindingForAUIActionTakesTheRune(t *testing.T) {
 	commands := []Command{{ID: "edit_issue", Scope: ScopeIssue, ShortcutRune: 'e'}}
-	applyCommandKeybindings(commands, map[string]string{"quit": "e"})
+	applyBindings(commands, map[string]string{"quit": "e"})
 
 	if commands[0].ShortcutRune != 0 {
 		t.Errorf("edit_issue kept %q, want it cleared by the action binding", commands[0].ShortcutRune)
@@ -106,10 +112,71 @@ func TestBindingForAUIActionTakesTheRune(t *testing.T) {
 // command's rune takes nothing: the two can never both answer.
 func TestActionStealRespectsItsScope(t *testing.T) {
 	commands := []Command{{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'}}
-	applyCommandKeybindings(commands, map[string]string{"favorite_move_up": "x"})
+	applyBindings(commands, map[string]string{"favorite_move_up": "x"})
 
 	if commands[0].ShortcutRune != 'x' {
 		t.Errorf("archive lost x to a navigation action, want it kept")
+	}
+}
+
+// TestARejectedBindingLeavesItsRuneToBeClaimed covers the half-applied case. A
+// rejected binding used to keep its command's default and skip the claim check,
+// so a second command explicitly bound to that rune collided with it and lost
+// on registry order.
+func TestARejectedBindingLeavesItsRuneToBeClaimed(t *testing.T) {
+	commands := []Command{
+		{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'},
+		{ID: "edit_issue", Scope: ScopeIssue, ShortcutRune: 'e'},
+	}
+	// The first is rejected as a movement rune, the second claims archive's
+	// default.
+	applyBindings(commands, map[string]string{"archive": "j", "edit_issue": "x"})
+
+	if commands[0].ShortcutRune != 0 {
+		t.Errorf("archive kept %q, want it given up to the command bound to x", commands[0].ShortcutRune)
+	}
+	if commands[1].ShortcutRune != 'x' {
+		t.Errorf("edit_issue = %q, want x", commands[1].ShortcutRune)
+	}
+}
+
+// TestARejectedBindingDoesNotOutrankAnAction covers the same half-applied
+// binding reaching the dispatcher: its id was still in the config, so
+// commandBoundTo counted it and the command's untouched default beat the action
+// the user did bind to that rune.
+func TestARejectedBindingDoesNotOutrankAnAction(t *testing.T) {
+	// zoom_details keeps its default v because ctrl+v is not a single rune.
+	app := bindingApp(t, map[string]string{"zoom_details": "ctrl+v", "focus_details": "v"})
+	app.detailsHidden = false
+	app.focusedPane = FocusIssues
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 'v', tcell.ModNone))
+
+	if app.focusedPane != FocusDetails {
+		t.Errorf("v left focus on %v, want the action the user bound to it", app.focusedPane)
+	}
+	if app.detailsZoomed {
+		t.Error("v zoomed, so a rejected binding still outranked the action")
+	}
+}
+
+// TestAnActionBindingBeatsAnotherActionsDefault covers the last silent-dead
+// case: the switch takes the first matching case, so an action holding a rune
+// by default swallowed the one the user moved onto it.
+func TestAnActionBindingBeatsAnotherActionsDefault(t *testing.T) {
+	// search holds / by default; the user asks for focus_details there.
+	app := bindingApp(t, map[string]string{"focus_details": "/"})
+	app.detailsHidden = false
+	app.focusedPane = FocusIssues
+	section := app.activeIssuesSection
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '/', tcell.ModNone))
+
+	if app.focusedPane != FocusDetails {
+		t.Errorf("/ left focus on %v, want the details pane", app.focusedPane)
+	}
+	if app.activeIssuesSection != section {
+		t.Error("/ opened the Search tab, so the default still owned the rune")
 	}
 }
 
@@ -220,7 +287,7 @@ func TestMovementRunesStayWithTheWidgets(t *testing.T) {
 // answer one unusable key with a second one.
 func TestAMovementBindingLeavesTheDefaultAlone(t *testing.T) {
 	commands := []Command{{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'}}
-	applyCommandKeybindings(commands, map[string]string{"archive": "j"})
+	applyBindings(commands, map[string]string{"archive": "j"})
 
 	if commands[0].ShortcutRune != 'x' {
 		t.Errorf("archive = %q, want its default x kept", commands[0].ShortcutRune)
@@ -231,7 +298,7 @@ func TestAMovementBindingLeavesTheDefaultAlone(t *testing.T) {
 // remappable like any other palette command.
 func TestToggleFavoriteHonoursKeybindingOverride(t *testing.T) {
 	commands := DefaultCommands(nil)
-	applyCommandKeybindings(commands, map[string]string{"toggle_favorite": "F"})
+	applyBindings(commands, map[string]string{"toggle_favorite": "F"})
 
 	for _, cmd := range commands {
 		if cmd.ID != "toggle_favorite" {
@@ -286,13 +353,16 @@ func (h *reorderHarness) waitSettled(t *testing.T) {
 }
 
 // TestFavoriteMoveKeysResolveThroughActionKey verifies the reorder keys follow
-// the keybindings config instead of the hardcoded defaults.
+// the keybindings config instead of the hardcoded defaults. The config is read
+// once, when the registry is built, so the change has to go through the rebuild
+// a settings save runs.
 func TestFavoriteMoveKeysResolveThroughActionKey(t *testing.T) {
 	h := newReorderHarness(t)
 	h.app.config.Keybindings = map[string]string{
 		"favorite_move_up":   "U",
 		"favorite_move_down": "D",
 	}
+	h.app.rebuildCommands()
 
 	if h.press('U') != nil {
 		t.Fatal("remapped favorite_move_up was not handled")

@@ -41,6 +41,16 @@ func NewPaletteController(commands []Command) *PaletteController {
 	return pc
 }
 
+// SetCommands swaps in a rebuilt registry, which is how a settings save moves
+// shortcuts without a restart. The query and cursor reset with it: the rows
+// they pointed at came from the old list.
+func (p *PaletteController) SetCommands(commands []Command) {
+	p.commands = commands
+	p.query = ""
+	p.cursor = 0
+	p.filterCommands()
+}
+
 // SetQuery sets the search query and filters commands.
 func (p *PaletteController) SetQuery(q string) {
 	p.query = q

@@ -91,14 +91,17 @@ type App struct {
 	// The box is one widget over a changing selection, so a draft has to follow
 	// the issue it was written for; left in the box it would be posted to
 	// whichever issue is on screen when the chord lands.
-	composeDrafts        map[string]string
-	composeDraftIssueID  string
-	statusBar            *tview.TextView
-	paletteModal         *tview.Flex
-	paletteInput         *tview.InputField
-	paletteList          *tview.List
-	paletteModalContent  *tview.Flex
-	paletteCtrl          *PaletteController
+	composeDrafts       map[string]string
+	composeDraftIssueID string
+	statusBar           *tview.TextView
+	paletteModal        *tview.Flex
+	paletteInput        *tview.InputField
+	paletteList         *tview.List
+	paletteModalContent *tview.Flex
+	paletteCtrl         *PaletteController
+	// bindings is config.Keybindings after validation, set when the command
+	// registry is built. Nil until then, and every read is nil-safe.
+	bindings             *resolvedKeybindings
 	pickerModal          *PickerModal
 	issueFormModal       *IssueFormModal
 	editDescriptionModal *EditDescriptionModal
@@ -281,7 +284,7 @@ func NewApp(clientCfg linearapi.ClientConfig, cfg config.Config, templates []con
 	app.linearDeps = newLinearDeps(clientCfg, cfg.CacheTTL)
 	app.apiUseBearer = clientCfg.UseBearer
 	app.apiOnUnauthorized = clientCfg.OnUnauthorized
-	app.paletteCtrl = NewPaletteController(DefaultCommands(app))
+	app.rebuildCommands()
 	app.openURLFunc = openURL
 	app.copyToClipboardFunc = copyToClipboard
 	app.preloadTeamMetadataFunc = app.preloadTeamMetadata
@@ -522,6 +525,9 @@ func (a *App) applySettings(newCfg config.Config) {
 	defer a.restoreModalFocus()
 
 	a.config = newCfg
+	// Keybindings are resolved once, when the registry is built, so a saved
+	// change to them only lands if the registry is rebuilt with it.
+	a.rebuildCommands()
 	a.applyThemeAndDensity()
 
 	logLevel := parseLogLevel(newCfg.LogLevel)

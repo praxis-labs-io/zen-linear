@@ -26,10 +26,8 @@ var uiActionScopes = map[string]CommandScope{
 }
 
 // bindingRune returns the rune a keybinding value resolves to, and whether it
-// resolves at all. This is the one place a binding turns into a key, so it is
-// where the two rules that reject one live: a value has to be a single rune,
-// and a movement rune belongs to the widget under the cursor. actionKey applies
-// the same test, so neither a command nor an action can take one.
+// resolves at all. A value has to be a single rune, and a movement rune belongs
+// to the widget under the cursor.
 func bindingRune(key string) (rune, bool) {
 	runes := []rune(key)
 	if len(runes) != 1 || isMovementRune(runes[0]) {
@@ -38,76 +36,113 @@ func bindingRune(key string) (rune, bool) {
 	return runes[0], true
 }
 
-// applyCommandKeybindings overrides palette command shortcut runes from the
-// keybindings config, keyed by command id. Explicit mappings own their keys: a
-// command whose default shortcut is claimed by a mapping loses it, but only
-// when the two can be reached from the same pane. A navigation command and an
-// issue command never answer together, so they can share a rune.
-func applyCommandKeybindings(commands []Command, bindings map[string]string) {
-	if len(bindings) == 0 {
-		return
-	}
+// keyClaim is an id the user named on a rune, and the panes it answers from.
+type keyClaim struct {
+	id    string
+	scope CommandScope
+}
 
-	scopeByID := make(map[string]CommandScope, len(commands))
+// resolvedKeybindings is the config's keybindings after validation. A binding
+// that cannot become a key is absent rather than partly applied: half-honoring
+// one is how a rejected entry used to keep a command's default alive at one
+// call site while taking a rune at another.
+type resolvedKeybindings struct {
+	byID   map[string]rune
+	claims map[rune][]keyClaim
+}
+
+// commandScopes indexes a registry by id, including commands a session filters
+// out. A binding for one of those names a real command, not a typo.
+func commandScopes(commands []Command) map[string]CommandScope {
+	scopes := make(map[string]CommandScope, len(commands))
 	for _, cmd := range commands {
-		scopeByID[cmd.ID] = cmd.Scope
+		scopes[cmd.ID] = cmd.Scope
 	}
+	return scopes
+}
 
-	claimed := make(map[rune][]CommandScope, len(bindings))
+// resolveKeybindings drops every binding that cannot become a key, saying so in
+// the log, and indexes what survives by id and by rune.
+func resolveKeybindings(bindings map[string]string, scopes map[string]CommandScope) *resolvedKeybindings {
+	resolved := &resolvedKeybindings{
+		byID:   make(map[string]rune, len(bindings)),
+		claims: make(map[rune][]keyClaim, len(bindings)),
+	}
 	for id, key := range bindings {
 		r, ok := bindingRune(key)
 		if !ok {
-			continue
-		}
-		scope, isCommand := scopeByID[id]
-		if !isCommand {
-			// An id naming neither a command nor an action binds nothing: a
-			// typo, or a command a release removed. Letting it claim the rune
-			// would take that key from a command that still exists, and the
-			// user would have one dead key explained by another.
-			scope, isCommand = uiActionScopes[id]
-			if !isCommand {
-				continue
-			}
-		}
-		claimed[r] = append(claimed[r], scope)
-	}
-
-	for i := range commands {
-		if key, ok := bindings[commands[i].ID]; ok {
-			if r, valid := bindingRune(key); valid {
-				commands[i].ShortcutRune = r
-				commands[i].ShortcutDisplay = ""
-				continue
-			}
-			// A rejected binding leaves the default in place rather than
-			// stranding the command with no key at all.
-			continue
-		}
-		for _, scope := range claimed[commands[i].ShortcutRune] {
-			if scopesOverlap(scope, commands[i].Scope) {
-				commands[i].ShortcutRune = 0
-				break
-			}
-		}
-	}
-}
-
-// warnRejectedKeybindings logs the bindings that resolve to nothing, so a
-// config that quietly does less than it says has one place that admits it.
-// knownCommands is every command this build registers, including any the
-// session filtered out, or a binding for one would read as a typo.
-func warnRejectedKeybindings(bindings map[string]string, knownCommands map[string]bool) {
-	for id, key := range bindings {
-		if _, ok := bindingRune(key); !ok {
 			logger.Warning("tui.keybindings: binding is not a usable key, ignored id=%s key=%s", id, key)
 			continue
 		}
-		if knownCommands[id] {
+		scope, known := scopes[id]
+		if !known {
+			scope, known = uiActionScopes[id]
+		}
+		if !known {
+			// A typo, or a command a release removed. Letting it claim the
+			// rune would take that key from something that still exists, and
+			// the user would have one dead key explained by another.
+			logger.Warning("tui.keybindings: binding for unknown id, ignored id=%s key=%s", id, key)
 			continue
 		}
-		if _, isAction := uiActionScopes[id]; !isAction {
-			logger.Warning("tui.keybindings: binding for unknown id, ignored id=%s key=%s", id, key)
+		resolved.byID[id] = r
+		resolved.claims[r] = append(resolved.claims[r], keyClaim{id: id, scope: scope})
+	}
+	return resolved
+}
+
+// rebuildCommands rebuilds the palette registry against the current config,
+// which is what re-resolves App.bindings. Both a command's shortcut and a UI
+// action's key are read from that resolved set, so nothing in the keyboard
+// follows a config change until this runs.
+func (a *App) rebuildCommands() {
+	commands := DefaultCommands(a)
+	if a.paletteCtrl == nil {
+		a.paletteCtrl = NewPaletteController(commands)
+		return
+	}
+	a.paletteCtrl.SetCommands(commands)
+}
+
+// key returns the rune the config bound to an id, when it named one that
+// resolved.
+func (r *resolvedKeybindings) key(id string) (rune, bool) {
+	if r == nil {
+		return 0, false
+	}
+	k, ok := r.byID[id]
+	return k, ok
+}
+
+// takenFrom reports whether some other id was explicitly bound to this rune
+// somewhere the caller's own scope reaches. A default gives way to a binding
+// the user wrote by name; two scopes that never answer together do not collide.
+func (r *resolvedKeybindings) takenFrom(id string, key rune, scope CommandScope) bool {
+	if r == nil || key == 0 {
+		return false
+	}
+	for _, claim := range r.claims[key] {
+		if claim.id != id && scopesOverlap(claim.scope, scope) {
+			return true
+		}
+	}
+	return false
+}
+
+// applyCommandKeybindings moves palette command shortcuts onto the runes the
+// config named. A command whose default is claimed by a binding loses it, but
+// only when the two can be reached from the same pane.
+func applyCommandKeybindings(commands []Command, resolved *resolvedKeybindings) {
+	for i := range commands {
+		if key, ok := resolved.key(commands[i].ID); ok {
+			commands[i].ShortcutRune = key
+			commands[i].ShortcutDisplay = ""
+			continue
+		}
+		// Reached by commands the config never named and by ones whose binding
+		// was rejected: both keep their default only if nothing else took it.
+		if resolved.takenFrom(commands[i].ID, commands[i].ShortcutRune, commands[i].Scope) {
+			commands[i].ShortcutRune = 0
 		}
 	}
 }
@@ -121,17 +156,17 @@ func scopesOverlap(a, b CommandScope) bool {
 // commandBoundTo reports whether a command answering to this rune got it from
 // the config by name. An explicit binding outranks a default action key: the
 // user asked for the command by id, the action holds the rune only because
-// nothing else claimed it. Reading the resolved shortcut rather than the raw
-// config means a binding applyCommandKeybindings rejected is not honored here.
+// nothing else claimed it. Both halves read the resolved set, so a rejected
+// binding neither names a command here nor keeps a rune anywhere else.
 func (a *App) commandBoundTo(r rune) bool {
-	if a.paletteCtrl == nil || len(a.config.Keybindings) == 0 {
+	if a.paletteCtrl == nil {
 		return false
 	}
 	for _, cmd := range a.paletteCtrl.commands {
 		if cmd.ShortcutRune != r {
 			continue
 		}
-		if _, bound := a.config.Keybindings[cmd.ID]; bound {
+		if _, bound := a.bindings.key(cmd.ID); bound {
 			return true
 		}
 	}
@@ -171,13 +206,18 @@ func (a *App) commandShortcutLabel(id string) (label string, ok bool) {
 	return "", false
 }
 
-// actionKey returns the configured key for a UI action id, or the fallback when
-// the config names none or names one bindingRune rejects.
+// actionKey returns the key a UI action answers to: the one the config named,
+// or its fallback unless something else was bound to that rune. It returns 0
+// when the fallback is taken, which no key event carries, so the action's case
+// stops matching and the id that claimed the rune gets it. Without that, an
+// action earlier in handleGlobalKey's switch keeps a rune the user moved and
+// the binding is silently dead.
 func (a *App) actionKey(action string, fallback rune) rune {
-	if key, ok := a.config.Keybindings[action]; ok {
-		if r, valid := bindingRune(key); valid {
-			return r
-		}
+	if key, ok := a.bindings.key(action); ok {
+		return key
+	}
+	if a.bindings.takenFrom(action, fallback, uiActionScopes[action]) {
+		return 0
 	}
 	return fallback
 }

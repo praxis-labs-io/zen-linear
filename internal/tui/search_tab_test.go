@@ -90,9 +90,8 @@ func TestPerformIssueSearch_RendersResults(t *testing.T) {
 // field read the same whichever holds the keyboard.
 func TestSearchPaneStylesLightOneHalfAtATime(t *testing.T) {
 	for _, theme := range []Theme{RosePineMoonTheme, HighContrastTheme, LinearTheme} {
-		input := searchPaneStyles(theme, true, true)
-		results := searchPaneStyles(theme, true, false)
-		away := searchPaneStyles(theme, false, false)
+		input := searchPaneStyles(theme, true)
+		results := searchPaneStyles(theme, false)
 
 		if input.LabelColor != theme.Accent || input.FieldText != theme.Foreground {
 			t.Errorf("typing in the query box left it muted: label %v text %v", input.LabelColor, input.FieldText)
@@ -104,17 +103,10 @@ func TestSearchPaneStylesLightOneHalfAtATime(t *testing.T) {
 		if results.LabelColor != theme.SecondaryText || results.FieldText != theme.SecondaryText {
 			t.Errorf("the query box stayed lit while the list had the keyboard: label %v", results.LabelColor)
 		}
-		fg, bg, attr := results.SelectedStyle.Decompose()
-		if fg != theme.SelectionText || bg != theme.SelectionBg || attr&tcell.AttrBold == 0 {
-			t.Errorf("the live list selection = %v on %v attr %v, want the theme's selection", fg, bg, attr)
-		}
-
-		// Off the tab entirely, neither half claims the keyboard.
-		if away.LabelColor != theme.SecondaryText {
-			t.Error("the query box stayed lit with the pane unfocused")
-		}
-		if _, _, attr := away.SelectedStyle.Decompose(); attr&tcell.AttrBold != 0 {
-			t.Error("the list stayed lit with the pane unfocused")
+		// Only the query box mutes the list. Stepping off the pane leaves the
+		// selection lit, the way My and All leave theirs.
+		if results.SelectedStyle != selectionStyle(theme) {
+			t.Error("the list selection is not the one every other list uses")
 		}
 	}
 }
@@ -124,7 +116,7 @@ func TestSearchPaneStylesLightOneHalfAtATime(t *testing.T) {
 // its Background, and rose_pine_moon's Background is the terminal's.
 func TestTheMutedSelectionStaysFindable(t *testing.T) {
 	for _, theme := range []Theme{RosePineMoonTheme, HighContrastTheme, LinearTheme} {
-		muted := searchPaneStyles(theme, true, true).SelectedStyle
+		muted := searchPaneStyles(theme, true).SelectedStyle
 		if _, _, attr := muted.Decompose(); attr&tcell.AttrUnderline == 0 {
 			t.Error("the muted selection has no marker, so Tab comes back to a row nobody can see")
 		}
@@ -169,5 +161,11 @@ func TestTabLeavesTheSearchInputForTheResults(t *testing.T) {
 	}
 	if app.activeIssuesSection != IssuesSectionSearch {
 		t.Errorf("Tab left the Search tab for %v, want the results inside it", app.activeIssuesSection)
+	}
+
+	// Shift+Tab is the way back, matching the Tab that left.
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
+	if !app.searchInputFocused {
+		t.Error("Shift+Tab did not return the keyboard to the query box")
 	}
 }

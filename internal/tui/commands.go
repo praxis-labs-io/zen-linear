@@ -1017,12 +1017,9 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 	}
-	// Every id the build knows, read before the agent filter runs: a binding for
-	// a command this session happens not to offer is a real id, not a typo.
-	knownCommands := make(map[string]bool, len(commands))
-	for _, command := range commands {
-		knownCommands[command.ID] = true
-	}
+	// Read before the agent filter runs: a binding for a command this session
+	// happens not to offer names a real id, not a typo.
+	scopes := commandScopes(commands)
 
 	if len(availableProviders) == 0 {
 		filtered := make([]Command, 0, len(commands))
@@ -1036,8 +1033,8 @@ func DefaultCommands(app *App) []Command {
 	}
 
 	if app != nil {
-		warnRejectedKeybindings(app.config.Keybindings, knownCommands)
-		applyCommandKeybindings(commands, app.config.Keybindings)
+		app.bindings = resolveKeybindings(app.config.Keybindings, scopes)
+		applyCommandKeybindings(commands, app.bindings)
 	}
 	return commands
 }

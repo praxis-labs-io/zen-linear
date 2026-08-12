@@ -82,33 +82,31 @@ type searchPaneStyle struct {
 	SelectedStyle tcell.Style
 }
 
-// searchPaneStyles returns the colors for a focus state. The muted list keeps a
-// marker on its row rather than dropping it: the row is still where Tab comes
-// back to. It is an underline and not a background, because HeaderBg equals
-// Background in the high contrast theme and Background is transparent in
-// rose_pine_moon, so neither can carry a marker in every theme.
-func searchPaneStyles(theme Theme, paneFocused, inputFocused bool) searchPaneStyle {
-	style := searchPaneStyle{
-		LabelColor: theme.SecondaryText,
-		FieldText:  theme.SecondaryText,
+// searchPaneStyles returns the colors for a focus state. Only the query box
+// holding the keyboard mutes the list: leaving the pane entirely leaves the
+// selection lit, the way My and All keep theirs, so the details pane still says
+// which row it belongs to.
+//
+// The muted list keeps a marker on its row rather than dropping it, since that
+// row is where the way back lands. It is an underline and not a background,
+// because HeaderBg equals Background in the high contrast theme and Background
+// is the terminal's in rose_pine_moon, so no background reads in every theme.
+func searchPaneStyles(theme Theme, inputFocused bool) searchPaneStyle {
+	if !inputFocused {
+		return searchPaneStyle{
+			LabelColor:    theme.SecondaryText,
+			FieldText:     theme.SecondaryText,
+			SelectedStyle: selectionStyle(theme),
+		}
+	}
+	return searchPaneStyle{
+		LabelColor: theme.Accent,
+		FieldText:  theme.Foreground,
 		SelectedStyle: tcell.StyleDefault.
 			Foreground(theme.SecondaryText).
 			Background(theme.Background).
 			Underline(true),
 	}
-	if !paneFocused {
-		return style
-	}
-	if inputFocused {
-		style.LabelColor = theme.Accent
-		style.FieldText = theme.Foreground
-		return style
-	}
-	style.SelectedStyle = tcell.StyleDefault.
-		Foreground(theme.SelectionText).
-		Background(theme.SelectionBg).
-		Bold(true)
-	return style
 }
 
 // applySearchFocusStyles lights the half of the Search tab holding the keyboard
@@ -118,8 +116,7 @@ func (a *App) applySearchFocusStyles() {
 	if a.searchInput == nil || a.searchResultsTable == nil {
 		return
 	}
-	paneFocused := a.focusedPane == FocusIssues && a.activeIssuesSection == IssuesSectionSearch
-	style := searchPaneStyles(a.theme, paneFocused, a.searchInputFocused)
+	style := searchPaneStyles(a.theme, a.searchInputActive())
 
 	a.searchInput.SetLabelColor(style.LabelColor)
 	a.searchInput.SetFieldStyle(tcell.StyleDefault.
@@ -272,6 +269,14 @@ func (a *App) searchInputActive() bool {
 		a.searchInputFocused
 }
 
+// searchResultsHaveFocus reports whether the keyboard is on the Search tab's
+// result list rather than its query box.
+func (a *App) searchResultsHaveFocus() bool {
+	return a.focusedPane == FocusIssues &&
+		a.activeIssuesSection == IssuesSectionSearch &&
+		!a.searchInputFocused
+}
+
 // handleSearchInputKey routes keys while the search input has focus. Anything
 // not handled here falls through to the InputField, so plain letters type
 // instead of firing global shortcuts.
@@ -292,8 +297,14 @@ func (a *App) handleSearchInputKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case tcell.KeyEnter, tcell.KeyDown, tcell.KeyTab:
 		// Tab walks the pane's own controls, and the results are the only other
-		// one here. Without it the query box has no key that leaves it: h and l
-		// type, and Esc empties the query before it lets go.
+		// one here; Shift+Tab there comes back. Without it the query box has no
+		// key that leaves it and keeps the query: h and l type, and Esc empties
+		// the query before it lets go.
+		//
+		// With no results the body mounts the placeholder instead of the table,
+		// so there is nothing to hand the keyboard to. Moving focus anyway would
+		// put it on an unmounted primitive and the pane would go dead. [ and ]
+		// still leave the tab from here.
 		if len(a.searchIssueRows) == 0 {
 			return nil
 		}

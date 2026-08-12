@@ -22,6 +22,18 @@ func (a *App) buildStatusBar() *tview.TextView {
 	return statusBar
 }
 
+// keyPairLabel renders two action keys side by side, dropping either one that
+// resolved to nothing because a binding took its rune.
+func keyPairLabel(first, second rune) string {
+	label := ""
+	for _, key := range []rune{first, second} {
+		if key != 0 {
+			label += string(key)
+		}
+	}
+	return label
+}
+
 // zoomHint names the zoom key and the verb it performs, or nothing at all when
 // a keybinding has stolen the rune and left the command reachable only from the
 // palette. The trailing separator belongs to the hint so it disappears with it.
@@ -40,13 +52,16 @@ func (a *App) updateStatusBar() {
 
 	switch a.focusedPane {
 	case FocusNavigation:
-		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: select | →/l: next pane | ←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		// The tree is the leftmost pane and stepPane does not wrap, so there is
+		// no previous pane to name. h stays with the tree, where it collapses.
+		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: select | →/l: next pane | :: palette | /: search | q: quit[-]", keyColor)
 	case FocusIssues:
 		helpText = fmt.Sprintf("%sj/k: navigate | Enter: select | →/l: next pane | ←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
 	case FocusDetails:
 		// Both keys are remappable, so the hint reads them back rather than
-		// stating the defaults at a user who has moved them.
-		tabs := fmt.Sprintf("%c%c", a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']'))
+		// stating the defaults at a user who has moved them. A key another
+		// binding has taken resolves to 0 and is left out rather than printed.
+		tabs := keyPairLabel(a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']'))
 		if a.commentsFocus != commentsFocusCards && a.detailsCommentsVisible && a.focusedDetailsView {
 			// Every other key in the box is a character in the comment, so the
 			// hint names only the ones that are not. Read off the field, not

@@ -44,12 +44,17 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		a.app.Stop()
 		return nil
 	case tcell.KeyTab, tcell.KeyBacktab:
-		// Tab walks the Comments tab's own controls and nothing else. Panes move
-		// on h/l and the pane numbers, so Tab is swallowed rather than handed to
-		// tview, whose focus delegation would land it on an arbitrary primitive.
-		if a.focusedPane != FocusPalette {
-			a.stepCommentsFocus(event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0)
+		// Tab walks a pane's own controls and nothing else. Panes move on h/l
+		// and the pane numbers, so Tab is swallowed rather than handed to
+		// tview, whose focus delegation would land it on an arbitrary
+		// primitive. The palette never reaches here; it returned above.
+		backward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
+		if backward && a.searchResultsHaveFocus() {
+			// The way back into the query box, matching the Tab that left it.
+			a.focusSearchInput()
+			return nil
 		}
+		a.stepCommentsFocus(backward)
 		return nil
 	case tcell.KeyRune:
 		// A command bound by id beats the action holding that rune by default.
