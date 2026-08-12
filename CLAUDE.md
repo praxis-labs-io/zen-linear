@@ -80,7 +80,7 @@ Scratch, never committed. `docs/` describes only what is true today. Durable con
 
 ### App wiring
 
-`internal/tui/app.go` is the `App` struct, the `FocusTarget` enum, and the lifecycle around them: `NewApp`, `Run`, `loadInitialData`, `loadCurrentUser`, `applySettings`, `resetCachedState`, `buildLayout`, plus `selectedIssueID` and `parseLogLevel`. The rest splits by area: `theme_apply.go` (theme and density restyling, `rebuildModals`), `navigation_data.go` (tree fetch and build), `key_dispatch.go` (`bindGlobalKeys` and the per-pane handlers), `pane_focus.go` (Tab cycling, focus, pane titles), `issues_refresh.go` (search debounce, fetch, pagination merge, render), `issue_grouping.go` (columns, grouping, sort fields), `issue_filters.go` (`IssueFilters` and its summary formatters), `pickers.go` (`loadPickerData` and the `Show*Picker` set), `modal_launchers.go` (the `Show*Modal` set), `app_accessors.go` (the getters commands call), `nav_cache.go` (the disk copy of the tree), `loading_pane.go` (the spinner frame loop and the waiting panes' messages), `details_comments.go` (the Comments tab's cards and their relative timestamps), `details_compose.go` (the compose box, its focus ring, and the post path). The status bar updates sit in `status_bar.go` beside `buildStatusBar`, and `SortField` in `issue_sort.go` beside its comparator. `app_test.go` did not follow the split.
+`internal/tui/app.go` is the `App` struct, the `FocusTarget` enum, and the lifecycle around them: `NewApp`, `Run`, `loadInitialData`, `loadCurrentUser`, `applySettings`, `resetCachedState`, `buildLayout`, plus `selectedIssueID` and `parseLogLevel`. The rest splits by area: `theme_apply.go` (theme and density restyling, `rebuildModals`), `navigation_data.go` (tree fetch and build), `key_dispatch.go` (`bindGlobalKeys` and the per-pane handlers), `pane_focus.go` (Tab cycling, focus, pane titles), `issues_refresh.go` (search debounce, fetch, pagination merge, render), `issue_grouping.go` (columns, grouping, sort fields), `issue_filters.go` (`IssueFilters` and its summary formatters), `pickers.go` (`loadPickerData` and the `Show*Picker` set), `modal_launchers.go` (the `Show*Modal` set), `app_accessors.go` (the getters commands call), `nav_cache.go` (the disk copy of the tree), `loading_pane.go` (the spinner frame loop and the waiting panes' messages), `details_comments.go` (the Comments tab's cards, their relative timestamps, and the thread rail), `comment_thread.go` (comments to threaded blocks), `comments_page.go` (the page primitive the tab is drawn as), `comment_actions.go` (the focus ring and the per-comment keys), `details_compose.go` (the two writing boxes, the ring's focus targets, and the post path). The status bar updates sit in `status_bar.go` beside `buildStatusBar`, and `SortField` in `issue_sort.go` beside its comparator. `app_test.go` did not follow the split.
 
 ### Launch
 
@@ -88,7 +88,7 @@ Scratch, never committed. `docs/` describes only what is true today. Durable con
 
 Panes that are waiting say so: `loading_pane.go` owns one ticker for the spinner and stops it when nothing is in flight. tview has no frame loop, so anything animated needs that ticker plus `QueueUpdateDraw`, and the loop has to stop or it queues draws forever.
 
-**Never call `Application.GetFocus` from anything a draw can reach.** `Application.draw` holds the app's lock for the whole frame, so a draw func, a `SetBeforeDrawFunc`, or a `SetFocusFunc` that reads live focus blocks on a mutex its own goroutine already holds. Nothing draws after that and no key is read, Ctrl+C included: the process has to be killed. The compose box's draw func did this and froze the app on any draw of the Comments tab. Read state instead (`commentsFocus`, `focusedPane`); confine `GetFocus` to the key path, where the lock is free. `TestDrawingTheCommentsPanelKeepsTheAppAlive` hangs if it comes back.
+**Never call `Application.GetFocus` from anything a draw can reach.** `Application.draw` holds the app's lock for the whole frame, so a draw func, a `SetBeforeDrawFunc`, or a `SetFocusFunc` that reads live focus blocks on a mutex its own goroutine already holds. Nothing draws after that and no key is read, Ctrl+C included: the process has to be killed. A draw func on the compose box did this once and froze the app on any draw of the Comments tab. Read state instead (`commentsFocus`, `focusedPane`); confine `GetFocus` to the key path, where the lock is free. `TestDrawingTheCommentsPanelKeepsTheAppAlive` hangs if it comes back.
 
 ### Config plumbing (the most common trap)
 
@@ -112,7 +112,7 @@ Action ids and their scopes live in `uiActionScopes`; `TestUIActionScopesCoverEv
 
 Deleting a command is a breaking change for anyone who bound it: the id stops resolving, and the user gets a logged warning instead of a silent theft. Say so in the PR.
 
-Tab is not pane navigation. It walks a pane's own controls, the Comments focus ring and the Search tab's query box, and nothing else; `h`/`l` and the pane numbers move between panes.
+Tab is not pane navigation. It walks a pane's own controls, the Comments page's ring and the Search tab's query box, and nothing else; `h`/`l` and the pane numbers move between panes.
 
 ### Modal dispatch
 
@@ -131,6 +131,14 @@ Modal panels: `tview.NewFlex` (and Grid) set `dontClear`, so a Flex never paints
 `BuildGroupedIssueRows` (`internal/tui/issue_tree.go`) produces a flat `[]IssueRow` where group/subgroup headers are rows with `IsHeader: true` and no issue. Headers are selectable (Enter/Space/click toggles collapse), so **any code walking table rows or moving selection must skip or special-case headers** (`nextIssueRow`, and the default-selection logic in `rebuildIssuesTables`). Columns are a registry in `issues_table.go` (`issueColumnSpecs`), rendered per the `columns` config.
 
 `updateIssuesColumnLayout` swaps the mounted primitive between the table, the placeholder, and the Search panel. Focus lives on the primitive, so a swap has to carry it (`issuesPaneHasFocus`) or the pane goes dead with the keys on something off screen.
+
+### Comments tab
+
+The tab is one scrolling page, not a layout: `commentsPage` (`comments_page.go`) is text with holes in it. `renderDetailsComments` writes every card's frame into one text view — comments, an open reply box, and the compose card that ends the page — and records a `pageSlot` for each live widget. The page's `Draw` paints the text, then draws the two `TextArea`s and their buttons over the rows their frames left empty. **A widget in that page is positioned by the render, not mounted in a Flex**, which is what keeps one scroll, one measure, and one set of borders across the lot; anything added there needs a slot and nothing else.
+
+`commentBlocks` (`comment_thread.go`) is the page's order: threads from `buildCommentRows`, the reply box at the end of the thread it answers, the compose card last. The ring Tab walks is the `commentSpans` the same render recorded, so **what Tab does follows what was drawn** — a stop that is not on the page cannot be focused. Linear rejects a `parentId` that is not top level, so a reply always posts against `threadRootID`.
+
+Bottom padding is written as blank lines at the end of the text rather than held back from the content rect (`trailingPad`), so mid-scroll the content runs to the border and the gap is the end of the scroll.
 
 ### Workspaces and auth
 
