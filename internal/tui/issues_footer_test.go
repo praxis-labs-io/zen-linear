@@ -110,3 +110,16 @@ func TestSearchPanelCarriesNoContextLine(t *testing.T) {
 		}
 	}
 }
+
+// Project names are Linear's and the line is built from color tags, so a
+// bracketed name would be read as one instead of printed.
+func TestIssuesFooterKeepsABracketedName(t *testing.T) {
+	app := footerTestApp(t)
+	app.selectedNavigation = &NavigationNode{ID: "p", Text: "[red] sprint", TeamID: "team-1", IsProject: true}
+
+	for _, width := range []int{80, 20} {
+		if got := stripTags(app.issuesFooterText(width)); !strings.Contains(got, "[red]") {
+			t.Errorf("footer at width %d = %q, want the bracketed name kept", width, got)
+		}
+	}
+}

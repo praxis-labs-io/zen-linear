@@ -215,7 +215,10 @@ func (a *App) updateFocus() {
 func (a *App) updateAllPaneTitles() {
 	// Update Navigation pane title
 	isNavFocused := a.focusedPane == FocusNavigation
-	a.navigationTree.SetTitle(a.paneTitle(paneNumberNavigation, a.tabSegment(a.navigationPaneLabel(), true, isNavFocused), isNavFocused))
+	// The workspace name is the user's, and the title is built from color tags:
+	// a workspace called [red] would be read as one instead of printed.
+	navLabel := tview.Escape(a.navigationPaneLabel())
+	a.navigationTree.SetTitle(a.paneTitle(paneNumberNavigation, a.tabSegment(navLabel, true, isNavFocused), isNavFocused))
 	a.navigationTree.SetTitleColor(a.theme.Foreground)
 
 	// Update Issues pane tab strip

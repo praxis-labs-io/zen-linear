@@ -72,7 +72,7 @@ func (a *App) issuesFooterText(maxWidth int) string {
 		}
 	}
 
-	return " " + a.themeTags.SecondaryText + runewidth.Truncate(scope, maxWidth-2, "…") + "[-] "
+	return " " + a.themeTags.SecondaryText + tview.Escape(runewidth.Truncate(scope, maxWidth-2, "…")) + "[-] "
 }
 
 // issuesScopeLabel names the list on screen: the team's key and what was picked
@@ -133,7 +133,11 @@ func footerWidth(line []footerSegment) int {
 func (a *App) renderFooter(line []footerSegment) string {
 	parts := make([]string, 0, len(line))
 	for _, segment := range line {
-		parts = append(parts, segment.tag+segment.text+"[-]")
+		// Project, cycle and label names are Linear's, and this line is built
+		// from color tags: a project called [red] would be read as one instead
+		// of printed. The width is measured off the text as it stands, since
+		// the escape is not drawn.
+		parts = append(parts, segment.tag+tview.Escape(segment.text)+"[-]")
 	}
 	return " " + strings.Join(parts, a.themeTags.Border+footerSeparator+"[-]") + " "
 }
