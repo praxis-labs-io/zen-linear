@@ -815,3 +815,33 @@ func TestTypingBringsTheBoxBack(t *testing.T) {
 		t.Errorf("the box holds %q", got)
 	}
 }
+
+// TestCtrlCCopiesRatherThanQuitting covers the reflex that used to end the
+// session: Ctrl+C in a box with a selection is a copy, and the words and the
+// app both survive it.
+func TestCtrlCCopiesRatherThanQuitting(t *testing.T) {
+	copied := make(chan string, 1)
+	app, _ := newComposeTestApp(t)
+	app.copyToClipboardFunc = func(text string) error { copied <- text; return nil }
+	typeRunes(t, app, "worth keeping")
+	// Select it all, the way the box's own key does.
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyCtrlL, 0, tcell.ModCtrl))
+	// Straight through the capture, because what matters is what it hands back:
+	// tview stops the app on a Ctrl+C it gets to see.
+	left := app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModCtrl))
+	if left != nil {
+		t.Error("Ctrl+C was handed back to tview, which stops the app on it")
+	}
+
+	select {
+	case got := <-copied:
+		if got != "worth keeping" {
+			t.Errorf("copied %q, want the selection", got)
+		}
+	default:
+		t.Error("Ctrl+C copied nothing")
+	}
+	if got := app.detailsComposeArea.GetText(); got != "worth keeping" {
+		t.Errorf("the box holds %q, want the words untouched", got)
+	}
+}

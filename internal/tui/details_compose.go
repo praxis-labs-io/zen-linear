@@ -143,6 +143,20 @@ func fillWritingBox(area *tview.TextArea, text string) {
 	area.SetOffset(0, 0)
 }
 
+// copyText puts text on the system clipboard through the seam the commands use,
+// so a test can read what a box copied.
+func (a *App) copyText(text string) {
+	copyFn := a.copyToClipboardFunc
+	if copyFn == nil {
+		copyFn = copyToClipboard
+	}
+	if err := copyFn(text); err != nil {
+		a.updateStatusBarWithError(err)
+		return
+	}
+	a.flashStatus("Copied")
+}
+
 // postLabel is what the button says, padded out either side: a filled surface
 // reads as something to press where a bare word reads as a caption.
 const postLabel = "  Post  "
@@ -223,6 +237,11 @@ func (a *App) newWritingBox(text, post commentsFocus) (*tview.TextArea, *tview.B
 	// The button greys out with nothing to send, so the control does not appear
 	// and disappear as you type.
 	area.SetChangedFunc(a.applyPostButtonTheme)
+	// Copy reaches the system clipboard rather than a buffer inside the widget,
+	// which is what tview gives a box with no clipboard of its own: text copied
+	// out of a comment could not be pasted anywhere else. Paste is left to the
+	// terminal, which sends what it holds as a paste event.
+	area.SetClipboard(func(text string) { a.copyText(text) }, nil)
 	return area, button
 }
 
@@ -473,7 +492,15 @@ func (a *App) handleComposeKey(event *tcell.EventKey) *tcell.EventKey {
 
 	switch event.Key() {
 	case tcell.KeyCtrlC:
-		a.app.Stop()
+		// Copy, never quit. Ctrl+C is what a reader reaches for to copy the
+		// words they just selected, and quitting on it costs them the draft
+		// and the session. The event is swallowed either way: handed back,
+		// tview stops the app on it itself.
+		if area, _, ok := a.writingBox(a.activeWritingBox()); ok && area != nil {
+			if text, _, _ := area.GetSelection(); text != "" {
+				a.copyText(text)
+			}
+		}
 		return nil
 	case tcell.KeyEscape:
 		// The reply box closes on its way out: it is open because a card was

@@ -136,6 +136,9 @@ Replies nest under the comment they answer, and replying opens a box inside
 that thread rather than at the foot of the page, so the answer is written where
 it is going to appear. Esc closes it and keeps the words for next time.
 
+In either box, Ctrl+C copies the selection to the system clipboard and Ctrl+X
+cuts it. Ctrl+L selects everything. Paste is the terminal's own.
+
 Commands act on the pane they belong to. A key that acts on the selected issue
 answers from the issues and details panes, favorites from the navigation tree,
 and the palette lists only what applies where you opened it.
