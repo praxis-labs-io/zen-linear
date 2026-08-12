@@ -252,6 +252,7 @@ func (a *App) buildIssuesPlaceholder() {
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)
+	a.attachIssuesFooter(a.issuesPlaceholder.Box)
 
 	a.updateIssuesPlaceholder()
 }

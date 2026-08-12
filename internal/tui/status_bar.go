@@ -4,34 +4,39 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
-// buildStatusBar creates and configures the status bar widget.
-func (a *App) buildStatusBar() *tview.TextView {
-	statusBar := tview.NewTextView()
-	statusBar.SetDynamicColors(true).
+// buildStatusBar builds the strip of hints under the panes. The text style
+// carries the background as well: tview repaints a TextView's inner rect in its
+// text style whenever that differs from the box, which left the padding columns
+// as blocks in a second color.
+func (a *App) buildStatusBar() {
+	a.statusBar = tview.NewTextView()
+	a.statusBar.SetDynamicColors(true).
 		SetWrap(false).
-		SetBorder(false).
-		SetBackgroundColor(a.theme.HeaderBg) // Use header bg for status bar
+		SetTextStyle(tcell.StyleDefault.Background(a.theme.Background).Foreground(a.theme.SecondaryText))
+	a.statusBar.SetBorder(false).SetBackgroundColor(a.theme.Background)
 
-	// Add padding
-	padding := a.density.StatusBarPadding
-	statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-
-	return statusBar
+	a.applyStatusBarPadding()
 }
 
-// keyPairLabel renders two action keys side by side, dropping either one that
+func (a *App) applyStatusBarPadding() {
+	padding := a.density.StatusBarPadding
+	a.statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+}
+
+// keyPairLabel renders two action keys as one hint, dropping either one that
 // resolved to nothing because a binding took its rune.
 func keyPairLabel(first, second rune) string {
-	label := ""
+	keys := make([]string, 0, 2)
 	for _, key := range []rune{first, second} {
 		if key != 0 {
-			label += string(key)
+			keys = append(keys, string(key))
 		}
 	}
-	return label
+	return strings.Join(keys, "/")
 }
 
 // commentActionHints names what a picked card answers to, in the order a reader
@@ -56,128 +61,119 @@ func (a *App) commentActionHints() []string {
 	return labels
 }
 
-// zoomHint names the zoom key and the verb it performs, or nothing at all when
-// a keybinding has stolen the rune and left the command reachable only from the
-// palette. The trailing separator belongs to the hint so it disappears with it.
-func (a *App) zoomHint(verb string) string {
-	key, ok := a.commandShortcutLabel("zoom_details")
-	if !ok {
-		return ""
-	}
-	return fmt.Sprintf("%s: %s | ", key, verb)
+// hint is a key and the verb it performs, the unit the status bar prints.
+type hint struct {
+	key  string
+	verb string
 }
 
-// updateStatusBar updates the status bar with current information.
+// hintLine joins hints in reading order, dropping any left keyless because a
+// binding took the rune. The hint never states a default the user has moved.
+func (a *App) hintLine(hints ...hint) string {
+	labels := make([]string, 0, len(hints))
+	for _, item := range hints {
+		if item.key == "" {
+			continue
+		}
+		labels = append(labels, item.key+" "+item.verb)
+	}
+	if len(labels) == 0 {
+		return ""
+	}
+	return a.themeTags.SecondaryText + strings.Join(labels, " · ") + "[-]"
+}
+
+// actionHint names a UI action's key, or nothing when a binding took the rune.
+func (a *App) actionHint(id string, fallback rune, verb string) hint {
+	key := a.actionKey(id, fallback)
+	if key == 0 {
+		return hint{}
+	}
+	return hint{key: string(key), verb: verb}
+}
+
+// commandHint names a command's key, or nothing when the command is reachable
+// only from the palette because a binding took its rune.
+func (a *App) commandHint(id, verb string) hint {
+	key, ok := a.commandShortcutLabel(id)
+	if !ok {
+		return hint{}
+	}
+	return hint{key: key, verb: verb}
+}
+
+// tabsHint names the pair of keys that step a pane's tabs.
+func (a *App) tabsHint() hint {
+	return hint{
+		key:  keyPairLabel(a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']')),
+		verb: "tabs",
+	}
+}
+
+// updateStatusBar rewrites the pane hints and whatever was last flashed. The
+// palette leads every line, being the way to everything the bar has no room to
+// name. What list is on screen, how it is sorted and what it is filtered by are
+// the issues pane's own footer, not this bar's business.
 func (a *App) updateStatusBar() {
-	var helpText string
-	keyColor := a.themeTags.SecondaryText
+	tabs := a.tabsHint()
+	view := a.commandHint("zoom_details", "view")
+	hideDetails := a.commandHint("toggle_details_pane", "hide details")
+
+	hints := []hint{a.actionHint("open_palette", ':', "palette")}
+	note := ""
 
 	switch a.focusedPane {
 	case FocusNavigation:
 		// The tree is the leftmost pane and stepPane does not wrap, so there is
 		// no previous pane to name. h stays with the tree, where it collapses.
-		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: select | →/l: next pane | :: palette | /: search | q: quit[-]", keyColor)
+		hints = append(hints, hint{"↑↓", "move"}, hint{"⏎", "open"}, hint{"l", "issues"},
+			a.commandHint("toggle_navigation_pane", "hide nav"))
 	case FocusIssues:
-		helpText = fmt.Sprintf("%sj/k: navigate | Enter: select | →/l: next pane | ←/h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		hints = append(hints, hint{"j/k", "move"}, hint{"⏎", "preview"}, view, tabs, hint{"h/l", "panes"})
 	case FocusDetails:
-		// Both keys are remappable, so the hint reads them back rather than
-		// stating the defaults at a user who has moved them. A key another
-		// binding has taken resolves to 0 and is left out rather than printed.
-		tabs := keyPairLabel(a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']'))
 		// The keys a box or a picked card answers to are named on the card
 		// itself, in the row with the Post button and in the border under the
 		// comment. Saying them again here is the same fact twice, so the bar
 		// names only what the card cannot: where the reader is on the page.
 		// Read off the field, not live focus: a focus callback can reach here
 		// from inside a draw.
-		if a.commentsFocus != commentsFocusCards && a.detailsCommentsVisible && a.focusedDetailsView {
-			writing := "a comment"
+		switch {
+		case a.commentsFocus != commentsFocusCards && a.detailsCommentsVisible && a.focusedDetailsView:
+			// Every key in the box types, the palette's included, so the line
+			// names none of them.
+			hints = nil
+			note = "Writing a comment"
 			if a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost {
-				writing = "a reply"
+				note = "Writing a reply"
 			}
-			helpText = fmt.Sprintf("%sWriting %s | %s: switch description/comments[-]", keyColor, writing, tabs)
-			break
-		}
-		if a.cardsHaveFocus() && a.focusedCommentID != "" {
-			helpText = fmt.Sprintf("%sTab: next comment | Esc: let go | %s: switch description/comments[-]", keyColor, tabs)
-			break
-		}
-		if len(a.commentSpans) > 0 && a.cardsHaveFocus() {
-			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | Tab: pick a comment | %s: switch description/comments[-]",
-				keyColor, tabs)
-			break
-		}
-		if a.detailsZoomed {
+		case a.cardsHaveFocus() && a.focusedCommentID != "":
+			hints = append(hints, hint{"Tab", "next comment"}, hint{"Esc", "let go"}, tabs, view, hideDetails)
+		case len(a.commentSpans) > 0 && a.cardsHaveFocus():
+			hints = append(hints, hint{"j/k", "scroll"}, hint{"Tab", "pick a comment"}, tabs, view, hideDetails)
+		case a.detailsZoomed:
 			// Below the wide breakpoint the zoom leaves no nav tree to step
 			// onto, so offering the key there would be a lie.
-			toNav := ""
+			toNav := hint{}
 			if a.layoutMode == layoutWide && !a.navigationHidden {
-				toNav = "←/h: navigation | "
+				toNav = hint{"←/h", "navigation"}
 			}
-			helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s%sEsc: back to list | :: palette | /: search | q: quit[-]",
-				keyColor, tabs, toNav, a.zoomHint("unzoom"))
-			break
+			hints = append(hints, hint{"j/k", "scroll"}, tabs, a.commandHint("zoom_details", "exit view"),
+				toNav, hint{"Esc", "back to list"})
+		default:
+			hints = append(hints, hint{"j/k", "scroll"}, tabs, view, hideDetails, hint{"h", "back"})
 		}
-		helpText = fmt.Sprintf("%sj/k, Ctrl+D/U: scroll | %s: switch description/comments | %s←/h: prev pane | :: palette | /: search | q: quit[-]",
-			keyColor, tabs, a.zoomHint("zoom"))
 	case FocusPalette:
-		helpText = fmt.Sprintf("%s↑↓: navigate | Enter: execute | Esc: close[-]", keyColor)
+		hints = []hint{{"↑↓", "move"}, {"⏎", "run"}, {"Esc", "close"}}
 	default:
-		helpText = fmt.Sprintf("%sj/k: navigate | l: next pane | h: prev pane | :: palette | /: search | q: quit[-]", keyColor)
+		hints = append(hints, hint{"j/k", "move"}, hint{"h/l", "panes"})
 	}
 
-	navText := ""
-	if a.selectedNavigation != nil {
-		label := a.selectedNavigation.Text
-		if a.selectedNavigation.IsStatus {
-			if a.selectedNavigation.StateName != "" {
-				label = fmt.Sprintf("Status: %s", a.selectedNavigation.StateName)
-			} else {
-				label = "Status"
-			}
-		} else if a.selectedNavigation.IsCycle {
-			if a.selectedNavigation.CycleName != "" {
-				label = fmt.Sprintf("Cycle: %s", a.selectedNavigation.CycleName)
-			} else {
-				label = "Cycle"
-			}
-		}
-		navText = fmt.Sprintf("%s%s[-]", a.themeTags.Accent, label)
+	text := a.hintLine(hints...)
+	if note != "" {
+		text += fmt.Sprintf("%s%s[-]", a.themeTags.SecondaryText, note)
 	}
-
-	filterText := ""
-	if !a.richFilters.Empty() {
-		filterText = fmt.Sprintf("%sFilters: %s[-]", a.themeTags.Warning, a.richFilters.Summary())
-	}
-
-	a.issuesMu.RLock()
-	issuesLen := len(a.issues)
-	a.issuesMu.RUnlock()
-	statusText := fmt.Sprintf("%s%d issues[-]", a.themeTags.Accent, issuesLen)
-	if issuesLen == 0 {
-		statusText = fmt.Sprintf("%sNo issues[-]", a.themeTags.SecondaryText)
-	}
-
-	sep := fmt.Sprintf("%s | [-]", a.themeTags.Border)
-
-	sortText := fmt.Sprintf("%sSort: %s[-]", a.themeTags.SecondaryText, sortChainLabel(a.effectiveSortFields()))
-
-	parts := []string{helpText}
-	if navText != "" {
-		parts = append(parts, navText)
-	}
-	if filterText != "" {
-		parts = append(parts, filterText)
-	}
-	parts = append(parts, sortText)
 	if a.statusMessage != "" {
-		parts = append(parts, fmt.Sprintf("%s%s[-]", a.themeTags.Accent, a.statusMessage))
-	}
-	parts = append(parts, statusText)
-
-	text := parts[0]
-	for i := 1; i < len(parts); i++ {
-		text += sep + parts[i]
+		text += fmt.Sprintf("%s · [-]%s%s[-]", a.themeTags.Border, a.themeTags.Accent, a.statusMessage)
 	}
 
 	a.statusBar.SetText(text)

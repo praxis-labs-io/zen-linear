@@ -107,7 +107,8 @@ func (a *App) applyThemeToComponents() {
 	}
 
 	if a.statusBar != nil {
-		a.statusBar.SetBackgroundColor(a.theme.HeaderBg)
+		a.statusBar.SetTextStyle(tcell.StyleDefault.Background(a.theme.Background).Foreground(a.theme.SecondaryText))
+		a.statusBar.SetBackgroundColor(a.theme.Background)
 	}
 }
 
@@ -121,8 +122,7 @@ func (a *App) applyDensityToComponents() {
 		a.detailsCommentsPanel.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
 	}
 	if a.statusBar != nil {
-		padding := a.density.StatusBarPadding
-		a.statusBar.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+		a.applyStatusBarPadding()
 	}
 	if a.agentOutputModal != nil {
 		a.agentOutputModal.ApplyDensity(a.density)

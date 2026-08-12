@@ -468,8 +468,7 @@ func TestPaneNumberOneReachesTheNavigationTreeWhileZoomed(t *testing.T) {
 	}
 }
 
-// The zoomed help must not offer a key that does nothing, and must not lose
-// the global search shortcut that still works.
+// The zoomed help must not offer a key that does nothing.
 func TestZoomedStatusBarHelpMatchesTheKeysThatWork(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -489,7 +488,7 @@ func TestZoomedStatusBarHelpMatchesTheKeysThatWork(t *testing.T) {
 	if strings.Contains(narrow, "navigation") {
 		t.Errorf("narrow zoomed help = %q, want no navigation key with no tree on screen", narrow)
 	}
-	for _, want := range []string{"/: search", "v: unzoom", "Esc"} {
+	for _, want := range []string{"v exit view", "Esc back to list"} {
 		if !strings.Contains(narrow, want) {
 			t.Errorf("zoomed help = %q, want it to mention %q", narrow, want)
 		}

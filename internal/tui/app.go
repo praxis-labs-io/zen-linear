@@ -110,7 +110,8 @@ type App struct {
 	// replyDrafts holds what has been written into a reply box and not sent,
 	// keyed by the comment being answered. Closing the box is not losing the
 	// words, and reopening on the same thread finds them.
-	replyDrafts         map[string]string
+	replyDrafts map[string]string
+	// statusBar holds the pane hints and whatever was last flashed.
 	statusBar           *tview.TextView
 	paletteModal        *tview.Flex
 	paletteInput        *tview.InputField
@@ -688,7 +689,7 @@ func (a *App) buildLayout() {
 	// no rows yet, so what actually mounts is the placeholder.
 	a.updateIssuesColumnLayout()
 	a.detailsView = a.buildDetailsView()
-	a.statusBar = a.buildStatusBar()
+	a.buildStatusBar()
 
 	// Horizontal split. rebuildContentLayout below owns the weights and which
 	// panes are mounted.

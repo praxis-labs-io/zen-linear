@@ -26,16 +26,16 @@ func TestFormatShortcutPreservesCase(t *testing.T) {
 }
 
 // TestSortByPickerAppliesWholeOrdering drives the sort picker: one row is one
-// complete ordering, and the status bar names what is in effect.
+// complete ordering, and the issues pane's footer names what is in effect.
 func TestSortByPickerAppliesWholeOrdering(t *testing.T) {
 	for _, tc := range []struct {
 		label      string
 		wantFields []SortField
 		wantConfig []string
-		wantStatus string
+		wantSort   string
 	}{
-		{label: "Status, then priority", wantFields: []SortField{SortByStatus, SortByPriority}, wantConfig: []string{"status", "priority"}, wantStatus: "Sort: status → priority"},
-		{label: "Priority", wantFields: []SortField{SortByPriority}, wantConfig: []string{"priority"}, wantStatus: "Sort: priority"},
+		{label: "Status, then priority", wantFields: []SortField{SortByStatus, SortByPriority}, wantConfig: []string{"status", "priority"}, wantSort: "Sort: status → priority"},
+		{label: "Priority", wantFields: []SortField{SortByPriority}, wantConfig: []string{"priority"}, wantSort: "Sort: priority"},
 	} {
 		t.Run(tc.label, func(t *testing.T) {
 			app := newUXTestApp(t)
@@ -60,9 +60,10 @@ func TestSortByPickerAppliesWholeOrdering(t *testing.T) {
 			}
 			waitForRefreshCompletion(t, refreshDone)
 
-			app.updateStatusBar()
-			if got := app.statusBar.GetText(true); !strings.Contains(got, tc.wantStatus) {
-				t.Fatalf("status bar = %q, want it to name %q", got, tc.wantStatus)
+			// The ordering is named on the issues pane's own footer.
+			app.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
+			if got := stripTags(app.issuesFooterText(120)); !strings.Contains(got, tc.wantSort) {
+				t.Fatalf("issues footer = %q, want it to name %q", got, tc.wantSort)
 			}
 		})
 	}
