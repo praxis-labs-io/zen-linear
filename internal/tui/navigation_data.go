@@ -90,7 +90,7 @@ func (a *App) buildWaitingNavigationRoot() *tview.TreeNode {
 		SetSelectable(false)
 	a.navLoadingNode = loadingNode
 	root.AddChild(loadingNode)
-	a.applySelectionStyleToTree(root)
+	a.applyNavSelectionStyle(root)
 
 	return root
 }
@@ -150,7 +150,7 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearap
 		root.AddChild(teamNode)
 	}
 
-	a.applySelectionStyleToTree(root)
+	a.applyNavSelectionStyle(root)
 	a.navigationTree.SetRoot(root)
 	a.navigationTree.SetCurrentNode(allIssues)
 	a.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
@@ -277,7 +277,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 			})
 		teamNode.AddChild(projNode)
 	}
-	a.applySelectionStyleToTree(teamNode)
+	a.applyNavSelectionStyle(teamNode)
 }
 
 func sortCyclesForNavigation(cycles []linearapi.Cycle) {

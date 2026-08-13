@@ -131,7 +131,7 @@ func (a *App) addFavorite(label string, target linearapi.FavoriteTarget) {
 		func() {
 			a.favorites = upsertFavorite(a.favorites, created)
 			a.refreshFavoritesSection("")
-			a.flashStatus("Favorited " + label)
+			a.flashSuccess("Favorited " + label)
 		},
 		"create failed label=%s", label,
 	)
@@ -147,7 +147,7 @@ func (a *App) removeFavorite(favorite linearapi.Favorite) {
 		func() {
 			a.favorites = removeFavoriteByID(a.favorites, favorite.ID)
 			a.refreshFavoritesSection("")
-			a.flashStatus("Unfavorited " + label)
+			a.flashSuccess("Unfavorited " + label)
 		},
 		"delete failed favorite_id=%s", favorite.ID,
 	)
@@ -496,7 +496,7 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 
 	a.favoritesGroup = group
 	root.SetChildren(rebuilt)
-	a.applySelectionStyleToTree(root)
+	a.applyNavSelectionStyle(root)
 	a.restoreNavigationCursor(root, group, preferFavoriteID)
 	// The disk copy is what the next launch paints, so a toggle or a reorder
 	// has to reach it too, or the tree comes back wrong for a moment.

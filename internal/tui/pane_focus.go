@@ -11,10 +11,8 @@ func (a *App) issuesPaneHasFocus() bool {
 		return false
 	}
 	for _, candidate := range []tview.Primitive{
-		a.allIssuesTable,
-		a.myIssuesTable,
+		a.listIssuesTable,
 		a.issuesPlaceholder,
-		a.searchInput,
 		a.searchResultsTable,
 	} {
 		if focus == candidate {
@@ -115,11 +113,16 @@ func (a *App) updateFocus() {
 	}
 	switch a.focusedPane {
 	case FocusNavigation:
-		a.app.SetFocus(a.navigationTree)
-		a.navigationTree.SetBorderColor(a.theme.BorderFocus)
-		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.allIssuesTable.SetBorderColor(a.theme.Border)
-		a.searchPanel.SetBorderColor(a.theme.Border)
+		// The pane holds two controls under one border: the query box and the
+		// tree. navSearchFocused says which of them the keyboard is on.
+		if a.navSearchFocused {
+			a.app.SetFocus(a.navSearchInput)
+		} else {
+			a.app.SetFocus(a.navigationTree)
+		}
+		a.navigationPanel.SetBorderColor(a.theme.BorderFocus)
+		a.listIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchResultsTable.SetBorderColor(a.theme.Border)
 		a.setIssuesPlaceholderBorder(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
@@ -127,18 +130,10 @@ func (a *App) updateFocus() {
 		a.updateAllPaneTitles()
 	case FocusIssues:
 		// Focus the visible issues section
-		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.allIssuesTable.SetBorderColor(a.theme.Border)
-		a.searchPanel.SetBorderColor(a.theme.Border)
+		a.listIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchResultsTable.SetBorderColor(a.theme.Border)
 		a.setIssuesPlaceholderBorder(a.theme.Border)
-		if a.activeIssuesSection == IssuesSectionSearch {
-			a.searchPanel.SetBorderColor(a.theme.BorderFocus)
-			if a.searchInputFocused {
-				a.app.SetFocus(a.searchInput)
-			} else {
-				a.app.SetFocus(a.searchResultsTable)
-			}
-		} else if a.issuesPaneIsEmpty() && a.issuesPlaceholder != nil {
+		if a.issuesPaneIsEmpty() && a.issuesPlaceholder != nil {
 			// The placeholder is what is mounted, so it is what takes the focus
 			// border. Highlighting the detached table leaves the pane looking
 			// unfocused and sends keys to something off screen.
@@ -150,7 +145,7 @@ func (a *App) updateFocus() {
 		}
 		// Update all pane titles
 		a.updateAllPaneTitles()
-		a.navigationTree.SetBorderColor(a.theme.Border)
+		a.navigationPanel.SetBorderColor(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
 	case FocusDetails:
@@ -183,28 +178,26 @@ func (a *App) updateFocus() {
 			a.detailsDescriptionView.SetBorderColor(a.theme.BorderFocus)
 			a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
 		}
-		a.navigationTree.SetBorderColor(a.theme.Border)
-		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.allIssuesTable.SetBorderColor(a.theme.Border)
-		a.searchPanel.SetBorderColor(a.theme.Border)
+		a.navigationPanel.SetBorderColor(a.theme.Border)
+		a.listIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchResultsTable.SetBorderColor(a.theme.Border)
 		a.setIssuesPlaceholderBorder(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusPalette:
 		a.app.SetFocus(a.paletteInput)
-		a.navigationTree.SetBorderColor(a.theme.Border)
-		a.myIssuesTable.SetBorderColor(a.theme.Border)
-		a.allIssuesTable.SetBorderColor(a.theme.Border)
-		a.searchPanel.SetBorderColor(a.theme.Border)
+		a.navigationPanel.SetBorderColor(a.theme.Border)
+		a.listIssuesTable.SetBorderColor(a.theme.Border)
+		a.searchResultsTable.SetBorderColor(a.theme.Border)
 		a.setIssuesPlaceholderBorder(a.theme.Border)
 		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
 		a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	}
-	// The Search tab's two halves share one border, so which of them is live
-	// has to be said in their own colors, from every branch above.
-	a.applySearchFocusStyles()
+	// The nav pane's two controls share one border, so which of them is live
+	// has to be said in the query box's own colors, from every branch above.
+	a.applyNavSearchStyles()
 	// The comment ring's border is in the card text, not on a primitive, so it
 	// takes a rewrite rather than a color set.
 	a.refreshCommentRing()
@@ -218,22 +211,18 @@ func (a *App) updateAllPaneTitles() {
 	// The workspace name is the user's, and the title is built from color tags:
 	// a workspace called [red] would be read as one instead of printed.
 	navLabel := tview.Escape(a.navigationPaneLabel())
-	a.navigationTree.SetTitle(a.paneTitle(paneNumberNavigation, a.tabSegment(navLabel, true, isNavFocused), isNavFocused))
-	a.navigationTree.SetTitleColor(a.theme.Foreground)
+	a.navigationPanel.SetTitle(a.paneTitle(paneNumberNavigation, a.paneLabel(navLabel, isNavFocused), isNavFocused))
+	a.navigationPanel.SetTitleColor(a.theme.Foreground)
 
-	// Update Issues pane tab strip
+	// Update Issues pane title
 	isIssuesFocused := a.focusedPane == FocusIssues
-	issuesTitle := a.paneTitle(paneNumberIssues, a.issuesTabsTitle(isIssuesFocused), isIssuesFocused)
-	a.myIssuesTable.SetTitle(issuesTitle)
-	a.myIssuesTable.SetTitleColor(a.theme.Foreground)
-	a.allIssuesTable.SetTitle(issuesTitle)
-	a.allIssuesTable.SetTitleColor(a.theme.Foreground)
-	if a.searchPanel != nil {
-		a.searchPanel.SetTitle(issuesTitle)
-		a.searchPanel.SetTitleColor(a.theme.Foreground)
-	}
+	issuesTitle := a.paneTitle(paneNumberIssues, a.issuesPaneTitle(isIssuesFocused), isIssuesFocused)
+	a.listIssuesTable.SetTitle(issuesTitle)
+	a.listIssuesTable.SetTitleColor(a.theme.Foreground)
+	a.searchResultsTable.SetTitle(issuesTitle)
+	a.searchResultsTable.SetTitleColor(a.theme.Foreground)
 	if a.issuesPlaceholder != nil {
-		// It stands in for the table, so it wears the same tab strip.
+		// It stands in for the table, so it wears the same title.
 		a.issuesPlaceholder.SetTitle(issuesTitle)
 		a.issuesPlaceholder.SetTitleColor(a.theme.Foreground)
 	}

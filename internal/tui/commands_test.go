@@ -62,7 +62,7 @@ func TestSortByPickerAppliesWholeOrdering(t *testing.T) {
 
 			// The ordering is named on the issues pane's own footer.
 			app.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
-			if got := stripTags(app.issuesFooterText(120)); !strings.Contains(got, tc.wantSort) {
+			if got := stripTags(app.issuesContextText(120)); !strings.Contains(got, tc.wantSort) {
 				t.Fatalf("issues footer = %q, want it to name %q", got, tc.wantSort)
 			}
 		})

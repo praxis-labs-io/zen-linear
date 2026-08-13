@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gdamore/tcell/v2"
 )
 
 // TestPaneHintsNameWhatTheKeyboardDoesHere pins each pane's hints. The bar is
@@ -20,15 +22,15 @@ func TestPaneHintsNameWhatTheKeyboardDoesHere(t *testing.T) {
 		{
 			name: "navigation",
 			pane: FocusNavigation,
-			want: []string{": palette", "↑↓ move", "⏎ open", "l issues", "{ hide nav"},
+			want: []string{": palette", "↑↓ move", "⏎ open", "Tab search", "l issues", "{ hide nav"},
 			// The tree is the leftmost pane; there is nothing to its left.
 			wantNot: []string{"panes", "hide details"},
 		},
 		{
 			name:    "issues",
 			pane:    FocusIssues,
-			want:    []string{": palette", "j/k move", "⏎ preview", "v view", "[/] tabs", "h/l panes"},
-			wantNot: []string{"hide nav"},
+			want:    []string{": palette", "j/k move", "⏎ preview", "v view", "/ search", "h/l panes"},
+			wantNot: []string{"hide nav", "tabs"},
 		},
 		{
 			name:    "details",
@@ -123,6 +125,51 @@ func TestFlashedMessageTakesTheCorner(t *testing.T) {
 	}
 	if got := app.statusBar.GetText(true); !strings.Contains(got, "j/k move") {
 		t.Errorf("hints = %q, want the keys still named", got)
+	}
+}
+
+// The corner says three things and colors them apart: plain text is a nudge,
+// green is something that finished, red is something that failed. Plain is the
+// default so the color means something when it shows up.
+func TestTheToastColorsSaySuccessAndFailureApart(t *testing.T) {
+	app := newUXTestApp(t)
+
+	for _, tc := range []struct {
+		name  string
+		flash func(string)
+		want  string
+	}{
+		{"info", app.flashStatus, app.themeTags.Foreground},
+		{"success", app.flashSuccess, app.themeTags.Success},
+		{"error", app.flashError, app.themeTags.Error},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.flash("Something happened")
+			if got := app.toastTag(); got != tc.want {
+				t.Errorf("%s toast tag = %q, want %q", tc.name, got, tc.want)
+			}
+		})
+	}
+
+	// Progress is not a result, so it stays plain whatever the last flash was.
+	app.flashSuccess("Archived ZNL-1")
+	app.statusMessage = ""
+	if got := app.toastTag(); got != app.themeTags.Foreground {
+		t.Errorf("loading tag = %q, want plain text", got)
+	}
+}
+
+// Every theme needs a green to say success in, and the fallback has to give one
+// to a theme that predates the field rather than an unpaintable default.
+func TestEveryThemeHasASuccessColor(t *testing.T) {
+	for name, theme := range ThemeRegistry {
+		if got := theme.SuccessColor(); !got.Valid() {
+			t.Errorf("%s has no success color: %v", name, got)
+		}
+	}
+	legacy := Theme{StatusReview: tcell.NewRGBColor(1, 2, 3)}
+	if got := legacy.SuccessColor(); got != legacy.StatusReview {
+		t.Errorf("a theme with no Success falls back to %v, want the review color", got)
 	}
 }
 

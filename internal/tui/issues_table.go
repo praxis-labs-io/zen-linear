@@ -307,24 +307,25 @@ func getRowForIssueModel(issueID string, rows []IssueRow) int {
 	return -1
 }
 
-// IssuesSection represents which issues section is active.
+// IssuesSection is what the issues pane is showing: the list the navigation
+// tree picked, or search results. They are separate models, so a background
+// refresh of the list cannot overwrite results the user is browsing.
 type IssuesSection int
 
-// All is the zero value so a freshly built App opens on it.
+// List is the zero value so a freshly built App opens on it.
 const (
-	IssuesSectionAll IssuesSection = iota
-	IssuesSectionMy
+	IssuesSectionList IssuesSection = iota
 	IssuesSectionSearch
 )
 
-// buildIssuesTable creates and configures an issues table widget with the given title.
-// The table will use the provided getIssue and getRow functions for lookups.
-func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table {
+// buildIssuesTable creates and configures the table backing one issues section.
+// It carries no title of its own: updateAllPaneTitles writes the pane title on
+// whichever table is mounted.
+func (a *App) buildIssuesTable(section IssuesSection) *tview.Table {
 	table := tview.NewTable()
 	table.SetBorders(false). // Remove cell borders for cleaner look
 					SetSelectable(true, false).
 					SetBorder(true).
-					SetTitle(title).
 					SetTitleAlign(tview.AlignLeft).
 					SetTitleColor(a.theme.Foreground).
 					SetBorderColor(a.theme.Border).
@@ -353,11 +354,11 @@ func (a *App) buildIssuesTable(title string, section IssuesSection) *tview.Table
 	// Set up keyboard navigation with cross-section support
 	a.setupIssuesTableNavigation(table, section)
 
-	// The search results table is borderless inside the search panel, which
-	// owns the border. That panel carries no context line of its own: a search
-	// is workspace-wide, so the line would be false about its results.
+	// A search is workspace-wide and takes neither the tree's scope, the rich
+	// filters, nor the sort chain, so the context line would be false about
+	// these results.
 	if section != IssuesSectionSearch {
-		a.attachIssuesFooter(table.Box)
+		a.attachIssuesContext(table.Box)
 	}
 
 	return table
@@ -402,8 +403,9 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					a.activeIssuesSection = section
 				}
 			} else if section == IssuesSectionSearch {
-				// At top of search results - return to the search input
-				a.focusSearchInput()
+				// The way into these results was the query box, so the way back
+				// off the top of them is the same box, over in the nav pane.
+				a.focusNavSearch()
 			}
 			return nil
 		}
@@ -414,10 +416,8 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 // rowsForSection returns the row model for the specified section.
 func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 	switch section {
-	case IssuesSectionAll:
-		return a.allIssueRows
-	case IssuesSectionMy:
-		return a.myIssueRows
+	case IssuesSectionList:
+		return a.listIssueRows
 	case IssuesSectionSearch:
 		return a.searchIssueRows
 	}
@@ -427,10 +427,8 @@ func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 // issueMapForSection returns the id lookup backing a section's rows.
 func (a *App) issueMapForSection(section IssuesSection) map[string]*linearapi.Issue {
 	switch section {
-	case IssuesSectionAll:
-		return a.allIDToIssue
-	case IssuesSectionMy:
-		return a.myIDToIssue
+	case IssuesSectionList:
+		return a.listIDToIssue
 	case IssuesSectionSearch:
 		return a.searchIDToIssue
 	}
@@ -438,10 +436,10 @@ func (a *App) issueMapForSection(section IssuesSection) map[string]*linearapi.Is
 }
 
 // renderIssueSections paints the mounted section and defers the rest. Only one
-// tab is ever on screen, so rendering all three costs three tables' worth of
-// cell allocations to show one, and resets the off-screen tabs' selection to
-// the first row every time. Deferred sections paint in
-// updateIssuesColumnLayout, which every tab switch already routes through.
+// is ever on screen, so painting the other costs a table's worth of cell
+// allocations for something nobody can see, and resets its selection to the
+// first row every time. Deferred sections paint in updateIssuesColumnLayout,
+// which every move between the list and search already routes through.
 func (a *App) renderIssueSections(selected map[IssuesSection]string) {
 	if a.pendingSectionRenders == nil {
 		a.pendingSectionRenders = make(map[IssuesSection]string, len(selected))
@@ -542,8 +540,9 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 				a.activeIssuesSection = section
 			}
 		} else if section == IssuesSectionSearch {
-			// At top of search results - return to the search input
-			a.focusSearchInput()
+			// The way into these results was the query box, so the way back off
+			// the top of them is the same box, over in the nav pane.
+			a.focusNavSearch()
 		}
 		return nil
 	case 'g':

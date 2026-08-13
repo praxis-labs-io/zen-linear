@@ -34,11 +34,22 @@ func TestLoad(t *testing.T) {
 			want:    File{},
 		},
 		{
+			// Version 1 wrote the query box's contents whatever tab was open
+			// and guarded it with section on the way back in. Read as version
+			// 2, a leftover query means "the pane was showing results", so the
+			// record has to go rather than launch into a search its owner had
+			// tabbed away from.
+			name:    "version 1 is discarded rather than read as the new shape",
+			write:   true,
+			content: `{"version": 1, "last_workspace": "Acme", "workspaces": {"acme": {"section": "all", "search": "login"}}}`,
+			want:    File{},
+		},
+		{
 			name:    "current version parses",
 			write:   true,
-			content: `{"version": 1, "last_workspace": "Acme", "workspaces": {"acme": {"nav": {"kind": "team", "team_id": "t1"}, "issue_id": "i1"}}}`,
+			content: `{"version": 2, "last_workspace": "Acme", "workspaces": {"acme": {"nav": {"kind": "team", "team_id": "t1"}, "issue_id": "i1"}}}`,
 			want: File{
-				Version:       1,
+				Version:       2,
 				LastWorkspace: "Acme",
 				Workspaces: map[string]State{
 					"acme": {Nav: NavSelection{Kind: NavTeam, TeamID: "t1"}, IssueID: "i1"},
@@ -89,7 +100,7 @@ func TestRecordKeepsOtherWorkspaces(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "session.json")
 
 	stateA := State{Nav: NavSelection{Kind: NavProject, TeamID: "t1", ProjectID: "p1"}, IssueID: "i1"}
-	stateB := State{Nav: NavSelection{Kind: NavTeam, TeamID: "t2"}, Section: "my"}
+	stateB := State{Nav: NavSelection{Kind: NavTeam, TeamID: "t2"}, Search: "login"}
 
 	if err := Record(path, "Alpha", stateA); err != nil {
 		t.Fatalf("Record(Alpha) error: %v", err)
@@ -196,7 +207,6 @@ func TestSaveRoundTrip(t *testing.T) {
 			"alpha": {
 				Nav:     NavSelection{Kind: NavStatus, TeamID: "t1", StateID: "s1"},
 				IssueID: "i1",
-				Section: "my",
 				Search:  "login",
 				Filters: Filters{
 					AssigneeID:   "u1",

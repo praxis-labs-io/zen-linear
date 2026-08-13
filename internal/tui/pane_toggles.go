@@ -56,7 +56,7 @@ func (a *App) rebuildContentLayout() {
 		// reading is the point.
 		a.contentFlex.Clear()
 		if showNav && a.layoutMode == layoutWide {
-			a.contentFlex.AddItem(a.navigationTree, 0, navWeightZoomed, a.focusedPane == FocusNavigation)
+			a.contentFlex.AddItem(a.navigationPanel, 0, navWeightZoomed, a.focusedPane == FocusNavigation)
 		}
 		a.contentFlex.AddItem(a.detailsView, 0, detailsWeight, a.focusedPane == FocusDetails)
 		return
@@ -81,7 +81,7 @@ func (a *App) rebuildContentLayout() {
 
 	a.contentFlex.Clear()
 	if showNav {
-		a.contentFlex.AddItem(a.navigationTree, 0, nav, a.focusedPane == FocusNavigation)
+		a.contentFlex.AddItem(a.navigationPanel, 0, nav, a.focusedPane == FocusNavigation)
 	}
 	if showIssues {
 		a.contentFlex.AddItem(a.issuesColumn, 0, issuesWeight, a.focusedPane == FocusIssues)

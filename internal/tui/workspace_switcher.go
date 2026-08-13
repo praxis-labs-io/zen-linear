@@ -37,7 +37,7 @@ func workspacePickerItems(workspaces []config.Workspace, active string) []Picker
 // showWorkspacePicker opens the workspace selection modal.
 func (a *App) showWorkspacePicker() {
 	if len(a.config.Workspaces) == 0 {
-		a.flashStatus("No workspaces configured — add a workspaces list to config.json")
+		a.flashError("No workspaces configured — add a workspaces list to config.json")
 		return
 	}
 	items := workspacePickerItems(a.config.Workspaces, a.activeWorkspaceName)
@@ -64,13 +64,13 @@ func (a *App) switchWorkspace(name string) {
 		}
 	}
 	if !found {
-		a.flashStatus(fmt.Sprintf("Unknown workspace %q", name))
+		a.flashError(fmt.Sprintf("Unknown workspace %q", name))
 		return
 	}
 
 	key := workspace.APIKey()
 	if key == "" {
-		a.flashStatus(fmt.Sprintf("%s is not set — cannot switch to %s", workspace.APIKeyEnv, workspace.Name))
+		a.flashError(fmt.Sprintf("%s is not set — cannot switch to %s", workspace.APIKeyEnv, workspace.Name))
 		return
 	}
 
@@ -93,5 +93,5 @@ func (a *App) switchWorkspace(name string) {
 	a.applySettings(newCfg)
 	// The navigation pane's title is the workspace name.
 	a.updateAllPaneTitles()
-	a.flashStatus(fmt.Sprintf("Switched to %s", workspace.Name))
+	a.flashSuccess(fmt.Sprintf("Switched to %s", workspace.Name))
 }

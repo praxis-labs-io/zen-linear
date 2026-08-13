@@ -67,7 +67,7 @@ func TestToggleGroupCollapse_KeepsTheHydratedSelection(t *testing.T) {
 	app := hydratedGroupingApp(t)
 
 	var header IssueRow
-	for _, row := range app.rowsForSection(IssuesSectionAll) {
+	for _, row := range app.rowsForSection(IssuesSectionList) {
 		if row.IsHeader {
 			header = row
 			break
@@ -76,7 +76,7 @@ func TestToggleGroupCollapse_KeepsTheHydratedSelection(t *testing.T) {
 	if header.HeaderKey == "" {
 		t.Fatal("no group header in the All rows")
 	}
-	app.toggleGroupCollapse(IssuesSectionAll, header)
+	app.toggleGroupCollapse(IssuesSectionList, header)
 
 	assertSelectionStaysHydrated(t, app)
 }

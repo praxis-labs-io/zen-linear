@@ -24,7 +24,7 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 	if team == nil {
 		logger.Warning("tui.app: default team not found team=%q", teamQuery)
 		a.queueUpdateDraw(func() {
-			a.flashStatus(fmt.Sprintf("Default team %q not found", teamQuery))
+			a.flashError(fmt.Sprintf("Default team %q not found", teamQuery))
 		})
 		return false
 	}
@@ -43,7 +43,7 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 		if projectsErr != nil {
 			logger.Warning("tui.app: failed to load default project team_id=%s project=%q error=%v", team.ID, projectQuery, projectsErr)
 			a.queueUpdateDraw(func() {
-				a.flashStatus(fmt.Sprintf("Could not load default project %q", projectQuery))
+				a.flashError(fmt.Sprintf("Could not load default project %q", projectQuery))
 			})
 		} else {
 			project = findProjectByName(projects, projectQuery)
@@ -51,12 +51,12 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 			case project == nil:
 				logger.Warning("tui.app: default project not found team_id=%s project=%q", team.ID, projectQuery)
 				a.queueUpdateDraw(func() {
-					a.flashStatus(fmt.Sprintf("Default project %q not found", projectQuery))
+					a.flashError(fmt.Sprintf("Default project %q not found", projectQuery))
 				})
 			case !childrenLoaded:
 				logger.Warning("tui.app: could not apply default project after partial child load failure team_id=%s project=%q", team.ID, projectQuery)
 				a.queueUpdateDraw(func() {
-					a.flashStatus(fmt.Sprintf("Could not load default project %q", projectQuery))
+					a.flashError(fmt.Sprintf("Could not load default project %q", projectQuery))
 				})
 			}
 		}

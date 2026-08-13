@@ -335,32 +335,31 @@ func (a *App) applyRichFiltersToParams(params *linearapi.FetchIssuesParams) {
 	}
 }
 
-// updateIssuesColumnLayout shows the active issues tab at full height.
+// updateIssuesColumnLayout shows the active issues section at full height.
 func (a *App) updateIssuesColumnLayout() {
 	// Focus lives on the primitive, not the pane, so swapping the table for the
 	// placeholder under a focused pane sends keys to something off screen.
 	refocus := a.issuesPaneHasFocus()
 	a.issuesColumn.Clear()
 
-	// A tab about to come on screen may still be holding cells from before the
-	// last model change.
+	// A section about to come on screen may still be holding cells from before
+	// the last model change.
 	a.flushPendingSectionRender(a.activeIssuesSection)
 
-	// The Search tab mounts its input-plus-results panel instead of a table. A
-	// tab with no rows mounts the placeholder, which says what it is waiting on
-	// rather than showing column headers over nothing.
-	switch {
-	case a.activeIssuesSection == IssuesSectionSearch:
-		a.issuesColumn.AddItem(a.searchPanel, 0, 1, false)
-	case a.issuesPaneIsEmpty() && a.issuesPlaceholder != nil:
+	// A section with no rows mounts the placeholder, which says what it is
+	// waiting on rather than showing column headers over nothing.
+	if a.issuesPaneIsEmpty() && a.issuesPlaceholder != nil {
 		a.updateIssuesPlaceholder()
 		a.issuesColumn.AddItem(a.issuesPlaceholder, 0, 1, false)
-	default:
+	} else {
 		a.issuesColumn.AddItem(a.tableForSection(a.activeIssuesSection), 0, 1, false)
 	}
 
 	// Update all pane titles to reflect current state
 	a.updateAllPaneTitles()
+	// The tree's selection names the list on screen, and search just replaced
+	// it, so this is where that row goes out and comes back.
+	a.applyNavSearchStyles()
 
 	if refocus {
 		a.updateFocus()
@@ -412,7 +411,7 @@ func (a *App) rebuildIssuesTables(targetIssueID string) *linearapi.Issue {
 
 	var found *linearapi.Issue
 	if targetIssueID != "" {
-		found = a.allIDToIssue[targetIssueID]
+		found = a.listIDToIssue[targetIssueID]
 	}
 
 	// Without a target, fall back to the first issue row of the tab on screen,

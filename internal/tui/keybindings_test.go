@@ -226,30 +226,32 @@ func bindingApp(t *testing.T, bindings map[string]string) *App {
 // rune an action holds by default never fired, with nothing said about it.
 func TestCommandBindingBeatsADefaultActionKey(t *testing.T) {
 	app := bindingApp(t, map[string]string{"toggle_navigation_pane": "]"})
-	app.focusedPane = FocusIssues
-	section := app.activeIssuesSection
+	app.focusedPane = FocusDetails
+	app.detailsCommentsVisible = true
+	tab := app.focusedDetailsView
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, ']', tcell.ModNone))
 
 	if !app.navigationHidden {
 		t.Error("] did not run the command bound to it")
 	}
-	if app.activeIssuesSection != section {
-		t.Errorf("] also cycled to %v, want the command to own the key", app.activeIssuesSection)
+	if app.focusedDetailsView != tab {
+		t.Error("] also cycled the details tabs, want the command to own the key")
 	}
 }
 
 // TestActionKeyStandsWhenTheBoundCommandIsOutOfScope pins the limit of that
 // precedence. A navigation command holds the rune nowhere else, so the action
-// still answers in the issues pane.
+// still answers in the details pane.
 func TestActionKeyStandsWhenTheBoundCommandIsOutOfScope(t *testing.T) {
 	app := bindingApp(t, map[string]string{"toggle_favorite": "]"})
-	app.focusedPane = FocusIssues
-	section := app.activeIssuesSection
+	app.focusedPane = FocusDetails
+	app.detailsCommentsVisible = true
+	tab := app.focusedDetailsView
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, ']', tcell.ModNone))
 
-	if app.activeIssuesSection == section {
+	if app.focusedDetailsView == tab {
 		t.Error("] did not cycle the tabs, want the action to answer out of the command's scope")
 	}
 }

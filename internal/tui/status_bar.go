@@ -85,8 +85,25 @@ func (a *App) fitStatusToast() {
 		}
 		width = runewidth.StringWidth(message) + gap
 	}
-	a.statusToast.SetText(a.themeTags.Accent + tview.Escape(message) + "[-]")
+	a.statusToast.SetText(a.toastTag() + tview.Escape(message) + "[-]")
 	a.statusRow.ResizeItem(a.statusToast, width, 0)
+}
+
+// toastTag colors the corner by what it is saying. Plain text is the default,
+// so the color means something when it appears: green only when something
+// finished, red only when something failed. Progress is plain, not a result.
+func (a *App) toastTag() string {
+	if a.statusMessage == "" {
+		return a.themeTags.Foreground
+	}
+	switch a.statusLevel {
+	case statusSuccess:
+		return a.themeTags.Success
+	case statusError:
+		return a.themeTags.Error
+	default:
+		return a.themeTags.Foreground
+	}
 }
 
 // setLoadingMessage says what a fetch is doing, in the same corner and behind
@@ -197,12 +214,21 @@ func (a *App) updateStatusBar() {
 
 	switch a.focusedPane {
 	case FocusNavigation:
+		// Read the field, not live focus: a focus callback can reach here from
+		// inside a draw.
+		if a.navSearchFocused {
+			// Every letter in the box types, the palette's included, so the
+			// line names only the keys that leave it.
+			hints = []hint{{"⏎", "results"}, {"↓", "tree"}, {"Esc", "clear"}}
+			break
+		}
 		// The tree is the leftmost pane and stepPane does not wrap, so there is
 		// no previous pane to name. h stays with the tree, where it collapses.
-		hints = append(hints, hint{"↑↓", "move"}, hint{"⏎", "open"}, hint{"l", "issues"},
-			a.commandHint("toggle_navigation_pane", "hide nav"))
+		hints = append(hints, hint{"↑↓", "move"}, hint{"⏎", "open"}, hint{"Tab", "search"},
+			hint{"l", "issues"}, a.commandHint("toggle_navigation_pane", "hide nav"))
 	case FocusIssues:
-		hints = append(hints, hint{"j/k", "move"}, hint{"⏎", "preview"}, view, tabs, hint{"h/l", "panes"})
+		hints = append(hints, hint{"j/k", "move"}, hint{"⏎", "preview"}, view,
+			a.actionHint("search", '/', "search"), hint{"h/l", "panes"})
 	case FocusDetails:
 		// The keys a box or a picked card answers to are named on the card
 		// itself, in the row with the Post button and in the border under the
@@ -259,18 +285,46 @@ func (a *App) updateStatusBar() {
 func (a *App) updateStatusBarWithError(err error) {
 	a.cancelStatusFlash()
 	a.statusMessage = ""
+	a.statusLevel = statusInfo
 	a.fitStatusToast()
 	a.statusBar.SetText(fmt.Sprintf("%sError: %s[-]", a.themeTags.Error, tview.Escape(err.Error())))
 }
 
+// statusLevel is what a flashed message is: something the user should know,
+// something that finished, or something that failed.
+type statusLevel int
+
+const (
+	statusInfo statusLevel = iota
+	statusSuccess
+	statusError
+)
+
 // flashStatus says what just happened, in the strip's right corner, until it
-// expires.
+// expires. Plain text: a nudge, a count, a state nobody asked about.
 func (a *App) flashStatus(message string) {
+	a.flashStatusLevel(statusInfo, message)
+}
+
+// flashSuccess says an action finished, in green.
+func (a *App) flashSuccess(message string) {
+	a.flashStatusLevel(statusSuccess, message)
+}
+
+// flashError says an action failed, in red. For a failure that carries an
+// error value, updateStatusBarWithError keeps the whole thing on the hint line
+// instead: this corner is sized to a few words.
+func (a *App) flashError(message string) {
+	a.flashStatusLevel(statusError, message)
+}
+
+func (a *App) flashStatusLevel(level statusLevel, message string) {
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return
 	}
 	a.statusMessage = message
+	a.statusLevel = level
 	a.updateStatusBar()
 	a.scheduleStatusFlashClear()
 }
@@ -294,6 +348,7 @@ func (a *App) scheduleStatusFlashClear() {
 				return
 			}
 			a.statusMessage = ""
+			a.statusLevel = statusInfo
 			a.updateStatusBar()
 		})
 	})

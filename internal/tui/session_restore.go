@@ -106,6 +106,7 @@ func (a *App) applySessionNavigation(ctx context.Context, state *session.State, 
 // the tree already has selected, so only the surrounding state is restored.
 func (a *App) restoreSessionAllIssues(state session.State) {
 	a.beginSessionRestore(state)
+	defer func() { a.restoringSession = false }()
 	current := a.navigationTree.GetCurrentNode()
 	if current == nil {
 		a.refreshIssuesWithFocusChange(false, state.IssueID)
@@ -117,6 +118,7 @@ func (a *App) restoreSessionAllIssues(state session.State) {
 // restoreSessionFavorite reopens a list saved from the Favorites section.
 func (a *App) restoreSessionFavorite(state session.State) {
 	a.beginSessionRestore(state)
+	defer func() { a.restoringSession = false }()
 	target := a.findFavoriteTreeNode(state.Nav.FavoriteID)
 	if target == nil {
 		a.refreshIssuesWithFocusChange(false)
@@ -129,6 +131,7 @@ func (a *App) restoreSessionFavorite(state session.State) {
 // populating the team's children first when they have not been built yet.
 func (a *App) restoreSessionTeamNode(state session.State, children teamChildren) {
 	a.beginSessionRestore(state)
+	defer func() { a.restoringSession = false }()
 
 	teamNode := a.findTeamTreeNode(state.Nav.TeamID)
 	if teamNode == nil {
@@ -158,30 +161,31 @@ func (a *App) restoreSessionTeamNode(state session.State, children teamChildren)
 }
 
 // beginSessionRestore reinstates the state a refresh reads before it starts.
-// The filters have to land first: currentFetchParams reads them the moment
-// the refresh begins, so setting them afterwards is a page too late.
+// Everything it sets has to land before the refresh, which reads the filters
+// the moment it begins and runs on a goroutine that reads the rest.
+//
+// restoringSession is what keeps the query: selecting the saved node is a
+// navigation pick like any other, and one of those drops a live search.
 func (a *App) beginSessionRestore(state session.State) {
 	a.richFilters = filtersFromSession(state.Filters)
-	a.activeIssuesSection = sectionFromSession(state.Section)
-	a.updateIssuesColumnLayout()
+	a.restoringSession = true
+	a.restoreSessionSearch(state)
+}
 
-	// Only the Search tab restores its query. The query outlives a move off the
-	// tab, so restoring it unconditionally would fire a workspace-wide search on
-	// every launch for a tab the user is not even on.
-	if a.activeIssuesSection != IssuesSectionSearch {
+// restoreSessionSearch puts the saved query back in the box.
+func (a *App) restoreSessionSearch(state session.State) {
+	if state.Search == "" || a.navSearchInput == nil {
 		return
 	}
-	// Focus stays on the navigation pane; this only decides where a step into
-	// the issues pane lands.
-	a.searchInputFocused = true
-	if state.Search != "" && a.searchInput != nil {
-		// updateIssuesData returns early for this tab, so the saved issue can
-		// only be reselected once the search results themselves land.
-		a.pendingSearchIssueID = state.IssueID
-		// The input's change handler schedules the debounced search, so the
-		// results load without a fetch call here.
-		a.searchInput.SetText(state.Search)
-	}
+	// The keyboard stays on the tree. A launch that opens with the cursor in a
+	// text field swallows the first key the user types, and the query is
+	// already there to read; / and Shift+Tab are the way back into it.
+	// updateIssuesData returns early while results are showing, so the saved
+	// issue can only be reselected once the search results themselves land.
+	a.pendingSearchIssueID = state.IssueID
+	// The box's change handler schedules the debounced search, which mounts the
+	// results and moves the section; there is no fetch call to make here.
+	a.navSearchInput.SetText(state.Search)
 }
 
 // selectSessionNode moves the tree cursor to the restored node and opens its

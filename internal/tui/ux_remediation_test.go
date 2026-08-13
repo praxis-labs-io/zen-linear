@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -34,6 +35,7 @@ func stopBackgroundWorkOnCleanup(t testing.TB, app *App) {
 	t.Helper()
 	t.Cleanup(func() {
 		app.cancelDetailDebounce()
+		app.cancelSearchDebounce()
 		app.cancelStatusFlash()
 		// A test App never reaches Run, so the frame loop has no other way to
 		// stop. Left running with queueUpdateDraw stubbed inline, it keeps
@@ -71,25 +73,27 @@ func TestPaletteController_FilterCommandsMatchesAllQueryTokens(t *testing.T) {
 	}
 }
 
-func TestOpenSearchTabFocusesInput(t *testing.T) {
+func TestFocusNavSearchFocusesTheQueryBox(t *testing.T) {
 	app := newUXTestApp(t)
 
-	app.openSearchTab()
+	app.focusNavSearch()
 
-	if app.activeIssuesSection != IssuesSectionSearch {
-		t.Fatalf("activeIssuesSection = %v, want IssuesSectionSearch", app.activeIssuesSection)
+	if app.focusedPane != FocusNavigation {
+		t.Fatalf("focusedPane = %v, want FocusNavigation", app.focusedPane)
 	}
-	if app.focusedPane != FocusIssues {
-		t.Fatalf("focusedPane = %v, want FocusIssues", app.focusedPane)
+	if !app.navSearchFocused {
+		t.Fatal("navSearchFocused = false, want the query box focused")
 	}
-	if !app.searchInputFocused {
-		t.Fatal("searchInputFocused = false, want the input focused")
+	if app.app.GetFocus() != tview.Primitive(app.navSearchInput) {
+		t.Fatal("the keyboard did not land on the query box")
 	}
-	if got := app.searchInput.GetLabel(); got != "/ " {
-		t.Fatalf("search input label = %q, want %q", got, "/ ")
+	if got := app.navSearchInput.GetLabel(); got != "/ " {
+		t.Fatalf("query box label = %q, want %q", got, "/ ")
 	}
-	if !strings.Contains(app.issuesTabsTitle(true), "Search") {
-		t.Fatalf("issues tab strip %q missing the Search tab", app.issuesTabsTitle(true))
+	// The pane is still showing the list: a box with nothing typed in it has
+	// no results to put there.
+	if app.activeIssuesSection != IssuesSectionList {
+		t.Fatalf("activeIssuesSection = %v, want the list still on screen", app.activeIssuesSection)
 	}
 }
 

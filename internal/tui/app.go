@@ -54,19 +54,17 @@ type App struct {
 	zoomPreviousHidden     bool
 	layoutMode             layoutMode
 	palettePreviousPane    FocusTarget
+	navigationPanel        *tview.Flex // Navigation pane shell: query box + tree
+	navSearchFrame         *tview.Flex // Bordered frame around the query box
+	navSearchInput         *tview.InputField
 	navigationTree         *tview.TreeView
 	navLoadingNode         *tview.TreeNode // "Loading teams" node, until a tree replaces it
 	navNodeLabels          map[*tview.TreeNode]navNodeLabel
 	favorites              []linearapi.Favorite
 	favoritesGroup         *tview.TreeNode
-	allIssuesTable         *tview.Table
-	myIssuesTable          *tview.Table
-	searchInput            *tview.InputField
+	listIssuesTable        *tview.Table
 	searchResultsTable     *tview.Table
-	searchPanel            *tview.Flex     // Search tab shell: input row + body
-	searchBody             *tview.Flex     // Swappable slot: results table or placeholder
-	searchPlaceholder      *tview.TextView // Centered empty/loading/error message
-	issuesPlaceholder      *tview.Flex     // Stands in for the All/My table when it has no rows
+	issuesPlaceholder      *tview.Flex     // Stands in for a table with no rows
 	issuesPlaceholderText  *tview.TextView // Centered loading/empty/error message
 	issuesColumn           *tview.Flex     // Vertical flex holding the active issues tab
 	detailsView            *tview.Flex     // Flex container for details (description + comments)
@@ -149,13 +147,11 @@ type App struct {
 	selectedNavigation  *NavigationNode
 	issues              []linearapi.Issue
 	focusedPane         FocusTarget
-	activeIssuesSection IssuesSection // Which issues tab is on screen: All, My, or Search
+	activeIssuesSection IssuesSection // What the issues pane is showing: the list or search
 
 	// Per-section issue tree state (for sub-issue hierarchy)
-	allIssueRows  []IssueRow                  // Flattened rows for the "All Issues" table
-	allIDToIssue  map[string]*linearapi.Issue // Quick lookup by issue ID for "All Issues"
-	myIssueRows   []IssueRow                  // Flattened rows for the "My Issues" table
-	myIDToIssue   map[string]*linearapi.Issue // Quick lookup by issue ID for "My Issues"
+	listIssueRows []IssueRow                  // Flattened rows for the navigation list
+	listIDToIssue map[string]*linearapi.Issue // Quick lookup by issue ID for the list
 	expandedState map[string]bool             // Expanded state for parent issues (shared across sections)
 	// pendingSectionRenders holds sections whose cells are stale because they
 	// were off screen when the model changed, keyed to the row they should
@@ -170,6 +166,7 @@ type App struct {
 	configuredSortFields []SortField
 	collapsedGroups      map[string]bool
 	statusMessage        string
+	statusLevel          statusLevel
 
 	// Display settings of the active custom view, overriding config until
 	// the user picks another list. The overridden flags keep in-session
@@ -178,16 +175,18 @@ type App struct {
 	groupingOverridden bool
 	sortOverridden     bool
 
-	// Search tab state, independent from the main issues list. All fields
-	// are read and written on the UI thread only.
-	searchQuery         string
-	searchIssues        []linearapi.Issue
-	searchIssueRows     []IssueRow
-	searchIDToIssue     map[string]*linearapi.Issue
-	searchInputFocused  bool // sub-focus within FocusIssues + Search tab
-	searchLoading       bool
-	searchErr           error
-	searchReturnSection IssuesSection // tab to return to on Esc from an empty input
+	// Search state, independent from the main issues list. All fields are read
+	// and written on the UI thread only.
+	searchQuery      string
+	searchIssues     []linearapi.Issue
+	searchIssueRows  []IssueRow
+	searchIDToIssue  map[string]*linearapi.Issue
+	navSearchFocused bool // sub-focus within FocusNavigation: the query box, not the tree
+	// restoringSession is up while a session restore picks the saved node, so
+	// that pick does not drop the query the restore just put back.
+	restoringSession bool
+	searchLoading    bool
+	searchErr        error
 	// pendingSearchIssueID is the restored session's issue, selected once when
 	// the first search results land.
 	pendingSearchIssueID string
@@ -304,8 +303,7 @@ func NewApp(clientCfg linearapi.ClientConfig, cfg config.Config, templates []con
 		configuredSortFields: parseSortFields(cfg.SortBy),
 		expandedState:        make(map[string]bool),
 		navNodeLabels:        make(map[*tview.TreeNode]navNodeLabel),
-		allIDToIssue:         make(map[string]*linearapi.Issue),
-		myIDToIssue:          make(map[string]*linearapi.Issue),
+		listIDToIssue:        make(map[string]*linearapi.Issue),
 		searchIDToIssue:      make(map[string]*linearapi.Issue),
 		agentPromptTemplates: templates,
 		activeWorkspaceName:  workspaceNameForKey(cfg.Workspaces, cfg.LinearAPIKey),
@@ -521,7 +519,7 @@ func (a *App) rebuildAroundCurrentPlace(ctx context.Context, pending *session.St
 			// the configured default the way a launch does would move them a
 			// second time, for something they did not do.
 			a.QueueUpdateDraw(func() {
-				a.flashStatus("That list is no longer in this workspace")
+				a.flashError("That list is no longer in this workspace")
 				a.refreshIssuesWithFocusChange(false)
 			})
 		}()
@@ -608,10 +606,8 @@ func (a *App) selectedIssueID(section IssuesSection) string {
 func (a *App) resetCachedState() {
 	a.issuesMu.Lock()
 	a.issues = nil
-	a.allIssueRows = nil
-	a.allIDToIssue = make(map[string]*linearapi.Issue)
-	a.myIssueRows = nil
-	a.myIDToIssue = make(map[string]*linearapi.Issue)
+	a.listIssueRows = nil
+	a.listIDToIssue = make(map[string]*linearapi.Issue)
 	a.issuesMu.Unlock()
 
 	a.selectedNavigation = nil
@@ -634,29 +630,29 @@ func (a *App) resetCachedState() {
 	a.viewPrefs = nil
 	a.groupingOverridden = false
 	a.sortOverridden = false
-	a.searchQuery = ""
-	a.clearSearchResults()
-	if a.searchInput != nil {
-		a.searchInput.SetText("")
+	// Emptying the box fires its change handler, which arms a debounce, so the
+	// cancel has to come after it. Canceled first, a stray search for the
+	// empty string lands a quarter second later and calls updateFocus, which
+	// can put the keyboard on a pane while a modal is still on screen.
+	if a.navSearchInput != nil {
+		a.navSearchInput.SetText("")
 	}
-	a.updateSearchBody()
 	a.cancelSearchDebounce()
-	a.searchInputFocused = false
-	a.searchReturnSection = IssuesSectionAll
+	a.clearSearchResults()
+	a.searchQuery = ""
+	a.navSearchFocused = false
 	a.pendingSearchIssueID = ""
-	a.activeIssuesSection = IssuesSectionAll
+	a.activeIssuesSection = IssuesSectionList
 	a.expandedState = make(map[string]bool)
-	// Clearing the models is not enough: an off-screen tab keeps its painted
-	// cells until something repaints it, and dropping the pending markers
-	// removes the only thing that would have.
+	// Clearing the models is not enough: an off-screen section keeps its
+	// painted cells until something repaints it, and dropping the pending
+	// markers removes the only thing that would have.
 	a.pendingSectionRenders = nil
-	for _, section := range []IssuesSection{IssuesSectionAll, IssuesSectionMy} {
-		if table := a.tableForSection(section); table != nil {
-			table.Clear()
-		}
+	if a.listIssuesTable != nil {
+		a.listIssuesTable.Clear()
 	}
-	// The reset moved the active tab back to All, and the column is still
-	// mounting whichever tab the user was on.
+	// The reset moved the pane back to the list, and the column is still
+	// mounting whatever was on screen.
 	a.updateIssuesColumnLayout()
 
 	a.issuesErr = nil
@@ -694,14 +690,14 @@ func parseLogLevel(level string) logger.LogLevel {
 func (a *App) buildLayout() {
 	// Build all panes
 	a.navigationTree = a.buildNavigationTree()
-	a.allIssuesTable = a.buildIssuesTable(" All Issues ", IssuesSectionAll)
-	a.myIssuesTable = a.buildIssuesTable(" My Issues ", IssuesSectionMy)
-	a.buildSearchPanel()
+	a.buildNavigationPanel()
+	a.listIssuesTable = a.buildIssuesTable(IssuesSectionList)
+	a.searchResultsTable = a.buildIssuesTable(IssuesSectionSearch)
 	a.buildIssuesPlaceholder()
 	// Create vertical flex for issues column
 	a.issuesColumn = tview.NewFlex().SetDirection(tview.FlexRow)
-	// All is the tab the app opens on; the others mount on a tab switch. It has
-	// no rows yet, so what actually mounts is the placeholder.
+	// The list is what the app opens on, and it has no rows yet, so what
+	// actually mounts is the placeholder.
 	a.updateIssuesColumnLayout()
 	a.detailsView = a.buildDetailsView()
 	a.buildStatusBar()

@@ -153,7 +153,7 @@ func (a *App) showSubgroupByPicker() {
 // toggleIssueExpanded toggles the expand/collapse state of a parent issue.
 func (a *App) toggleIssueExpanded(issueID string) {
 	// All holds every fetched issue, whichever tab the press came from.
-	issue, ok := a.allIDToIssue[issueID]
+	issue, ok := a.listIDToIssue[issueID]
 	if !ok || issue == nil {
 		logger.Debug("tui.app: issue not found for toggle issue_id=%s", issueID)
 		return
@@ -179,6 +179,18 @@ func (a *App) toggleIssueExpanded(issueID string) {
 // restored session reopens the row the user left on.
 func (a *App) onNavigationSelected(node *NavigationNode, issueID ...string) {
 	logger.Debug("tui.app: navigation selected node_id=%s node_text=%s is_team=%v is_project=%v is_cycle=%v is_issue=%v", node.ID, node.Text, node.IsTeam, node.IsProject, node.IsCycle, node.IsIssue)
+
+	// Picking a list is asking to see it, and a live query is holding the pane
+	// that would show it. The refresh below mounts the list; there is nothing
+	// to select in it yet. A restore is the exception: it picks the saved node
+	// and the saved query together, and the query is what the user left up.
+	if a.searchQuery != "" && !a.restoringSession {
+		a.clearNavSearch()
+		// Mount the list now rather than when the fetch answers: the results
+		// are still on screen until something swaps them, and that is a whole
+		// round trip of showing the wrong list.
+		a.jumpToSection(IssuesSectionList, 0)
+	}
 
 	// A new list starts fresh: its own view settings apply again until the
 	// user overrides them.

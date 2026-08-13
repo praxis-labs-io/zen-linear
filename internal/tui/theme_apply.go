@@ -59,31 +59,29 @@ func (a *App) applyThemeStyles() {
 
 func (a *App) applyThemeToComponents() {
 	if a.navigationTree != nil {
-		a.navigationTree.SetBackgroundColor(a.theme.Background).
-			SetBorderColor(a.theme.Border).
-			SetTitleColor(a.theme.Foreground)
+		a.navigationTree.SetBackgroundColor(a.theme.Background)
 		a.recolorNavigationTree()
 	}
-
-	if a.myIssuesTable != nil {
-		a.applyIssuesTableTheme(a.myIssuesTable)
-		renderIssuesTableModel(a.myIssuesTable, a.myIssueRows, a.myIDToIssue, a.selectedIssueID(IssuesSectionMy), a.theme, a.issueColumns())
+	if a.navigationPanel != nil {
+		// Rebuild the shell so the query box picks up the new InputBg (tview
+		// bakes it at construction), then remount it: contentFlex and the focus
+		// are both still holding the old pointer.
+		a.buildNavigationPanel()
+		a.rebuildContentLayout()
 	}
-	if a.allIssuesTable != nil {
-		a.applyIssuesTableTheme(a.allIssuesTable)
-		renderIssuesTableModel(a.allIssuesTable, a.allIssueRows, a.allIDToIssue, a.selectedIssueID(IssuesSectionAll), a.theme, a.issueColumns())
+
+	if a.listIssuesTable != nil {
+		a.applyIssuesTableTheme(a.listIssuesTable)
+		renderIssuesTableModel(a.listIssuesTable, a.listIssueRows, a.listIDToIssue, a.selectedIssueID(IssuesSectionList), a.theme, a.issueColumns())
+	}
+	if a.searchResultsTable != nil {
+		a.applyIssuesTableTheme(a.searchResultsTable)
+		renderIssuesTableModel(a.searchResultsTable, a.searchIssueRows, a.searchIDToIssue, a.selectedIssueID(IssuesSectionSearch), a.theme, a.issueColumns())
 	}
 	if a.issuesPlaceholder != nil {
-		// Rebuilt rather than restyled, like the Search panel: the colors are
-		// baked into the flex and its text view at construction.
+		// Rebuilt rather than restyled: the colors are baked into the flex and
+		// its text view at construction.
 		a.buildIssuesPlaceholder()
-	}
-	if a.searchPanel != nil {
-		// Rebuild the panel so the input picks up the new InputBg (tview
-		// bakes it at construction), then restyle and re-render the results.
-		a.applyIssuesTableTheme(a.searchResultsTable)
-		a.buildSearchPanel()
-		renderIssuesTableModel(a.searchResultsTable, a.searchIssueRows, a.searchIDToIssue, a.selectedIssueID(IssuesSectionSearch), a.theme, a.issueColumns())
 		a.updateIssuesColumnLayout()
 	}
 
@@ -194,7 +192,6 @@ func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
 			node.SetColor(a.theme.Foreground)
 		}
 	}
-	node.SetSelectedTextStyle(selectionStyle(a.theme))
 	for _, child := range node.GetChildren() {
 		a.applyNavigationNodeColors(child)
 	}
@@ -220,16 +217,4 @@ func (a *App) listSelectionStyle() tcell.Style {
 		Foreground(a.theme.InverseTextColor()).
 		Background(a.theme.Accent).
 		Bold(true)
-}
-
-// applySelectionStyleToTree sets the shared selection style on a node subtree
-// without touching node colors.
-func (a *App) applySelectionStyleToTree(node *tview.TreeNode) {
-	if node == nil {
-		return
-	}
-	node.SetSelectedTextStyle(selectionStyle(a.theme))
-	for _, child := range node.GetChildren() {
-		a.applySelectionStyleToTree(child)
-	}
 }

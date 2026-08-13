@@ -173,7 +173,7 @@ func (a *App) runIssueValueAction(value, emptyMsg string, action func(string) er
 		a.updateStatusBarWithError(err)
 		return
 	}
-	a.flashStatus(successMsg)
+	a.flashSuccess(successMsg)
 }
 
 func handleOpenBrowserCommand(a *App) {
@@ -237,7 +237,7 @@ func handleOpenGitHubCommand(a *App) {
 			a.updateStatusBarWithError(err)
 			return
 		}
-		a.flashStatus(fmt.Sprintf("Opened GitHub: %s", attachment.URL))
+		a.flashSuccess(fmt.Sprintf("Opened GitHub: %s", attachment.URL))
 		return
 	}
 	a.flashStatus(fmt.Sprintf("No GitHub link on %s", issue.Identifier))
@@ -282,7 +282,7 @@ func DefaultCommands(app *App) []Command {
 			Keywords:        []string{"search", "find", "s", "/"},
 			ShortcutDisplay: "/", // Handled globally, not via ShortcutRune
 			Run: func(a *App) {
-				a.openSearchTab()
+				a.focusNavSearch()
 			},
 		},
 		{
@@ -703,7 +703,7 @@ func DefaultCommands(app *App) []Command {
 									return
 								}
 								logger.Info("tui.commands: archived issue issue=%s", issue.Identifier)
-								a.flashStatus(fmt.Sprintf("Archived %s", issue.Identifier))
+								a.flashSuccess(fmt.Sprintf("Archived %s", issue.Identifier))
 								if len(issue.Children) > 0 {
 									// Linear may archive sub-issues with the
 									// parent; only a fetch answers for them.
@@ -896,7 +896,7 @@ func DefaultCommands(app *App) []Command {
 				}
 				// A loaded parent with no row is hidden behind a collapsed
 				// group or ancestor, which is not the same as never fetched.
-				if _, loaded := a.allIDToIssue[issue.Parent.ID]; loaded {
+				if _, loaded := a.listIDToIssue[issue.Parent.ID]; loaded {
 					a.flashStatus("Parent issue is hidden by a collapsed group")
 					return
 				}
@@ -964,7 +964,7 @@ func DefaultCommands(app *App) []Command {
 				// Cannot set parent if this issue has children
 				if len(issue.Children) > 0 {
 					logger.Warning("tui.commands: cannot set parent on issue with sub-issues issue=%s", issue.Identifier)
-					a.flashStatus("Cannot set parent on issue with sub-issues")
+					a.flashError("Cannot set parent on issue with sub-issues")
 					return
 				}
 				a.ShowParentIssuePicker(a.issueContextLine(*issue), func(parentID string) {
