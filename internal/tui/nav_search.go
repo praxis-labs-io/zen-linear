@@ -143,6 +143,14 @@ func (a *App) navSearchActive() bool {
 // It must not call updateFocus itself: that calls SetFocus, which calls the
 // focus callbacks that call this, and the app spins.
 func (a *App) claimNavFocus(searchBox bool) {
+	// An overlay owns the keys however focus is delegated underneath it. tview
+	// re-delegates down the whole tree on every page add and remove, and that
+	// walk reaches this pane: the palette rebuilds its page on each keystroke,
+	// so without this the first key typed there took the pane back and the
+	// palette's own re-show guard then failed silently.
+	if a.focusedPane == FocusPalette || a.activeModal() != nil {
+		return
+	}
 	a.focusedPane = FocusNavigation
 	a.navSearchFocused = searchBox
 	a.applyNavSearchStyles()

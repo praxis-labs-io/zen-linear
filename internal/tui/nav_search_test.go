@@ -78,6 +78,32 @@ func clickNavPane(t *testing.T, app *App, target tview.Primitive) {
 	app.app.SetFocus(target)
 }
 
+// TestAnOverlayKeepsTheKeysWhileItsPageChurns covers what the nav pane's focus
+// claim must not do. tview re-delegates focus down the whole tree on every page
+// add and remove, and that walk reaches this pane. The palette rebuilds its
+// page on each keystroke, so a claim there took the pane back mid-rebuild and
+// the palette's own re-show guard then failed silently: every key closed it.
+func TestAnOverlayKeepsTheKeysWhileItsPageChurns(t *testing.T) {
+	app := newUXTestApp(t)
+	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
+	app.app.SetRoot(app.pages, true)
+	app.openPalette()
+
+	for _, event := range []*tcell.EventKey{
+		tcell.NewEventKey(tcell.KeyRune, 'a', tcell.ModNone),
+		tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone),
+		tcell.NewEventKey(tcell.KeyBackspace2, 0, tcell.ModNone),
+	} {
+		app.handleGlobalKey(event)
+		if front, _ := app.pages.GetFrontPage(); front != "palette" {
+			t.Fatalf("%v closed the palette; the front page is %q", event.Key(), front)
+		}
+		if app.focusedPane != FocusPalette {
+			t.Fatalf("%v handed the pane to %v while the palette was up", event.Key(), app.focusedPane)
+		}
+	}
+}
+
 // TestTheQueryBoxSwallowsGlobalRunes is why navSearchActive gates above the
 // global rune switch. Without it, typing a word with a q in it quits.
 func TestTheQueryBoxSwallowsGlobalRunes(t *testing.T) {
