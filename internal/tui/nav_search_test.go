@@ -43,6 +43,41 @@ func TestDelegatedFocusReachesTheTree(t *testing.T) {
 	}
 }
 
+// TestClickingEitherControlMovesTheKeyboardWithIt covers the mouse skipping
+// updateFocus entirely. A click that focuses the widget without saying so
+// leaves handleGlobalKey routing to the pane the user clicked out of, and in
+// the query box that means q quits with the caret sitting in it.
+func TestClickingEitherControlMovesTheKeyboardWithIt(t *testing.T) {
+	app := newUXTestApp(t)
+	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
+	// The pane the click has to take the keyboard away from.
+	app.focusedPane = FocusIssues
+
+	clickNavPane(t, app, app.navSearchInput)
+	if !app.navSearchActive() {
+		t.Fatal("clicking the query box left the keys with the pane the user clicked out of")
+	}
+	event := tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone)
+	if got := app.handleGlobalKey(event); got != event {
+		t.Fatal("q fired the quit shortcut with the caret in the query box")
+	}
+
+	clickNavPane(t, app, app.navigationTree)
+	if app.navSearchActive() {
+		t.Error("clicking the tree left the query box holding the keys")
+	}
+	if app.focusedPane != FocusNavigation {
+		t.Errorf("clicking the tree left the pane on %v", app.focusedPane)
+	}
+}
+
+// clickNavPane focuses a primitive the way a mouse click does: straight through
+// tview, with none of the app's own focus bookkeeping.
+func clickNavPane(t *testing.T, app *App, target tview.Primitive) {
+	t.Helper()
+	app.app.SetFocus(target)
+}
+
 // TestTheQueryBoxSwallowsGlobalRunes is why navSearchActive gates above the
 // global rune switch. Without it, typing a word with a q in it quits.
 func TestTheQueryBoxSwallowsGlobalRunes(t *testing.T) {

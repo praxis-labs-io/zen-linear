@@ -46,6 +46,10 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 
 	tree.SetBorder(false)
 	tree.SetBackgroundColor(a.theme.Background)
+	// The other half of the pane's click handling; see claimNavFocus. Without
+	// it a click on the tree leaves the query box holding the keys, and Esc
+	// there wipes a query the user never went back to.
+	tree.SetFocusFunc(func() { a.claimNavFocus(false) })
 	tree.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		// Re-fit node labels on every draw so they track pane resizes and
 		// lazily added nodes.

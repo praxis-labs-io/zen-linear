@@ -41,6 +41,11 @@ func (a *App) buildNavigationPanel() {
 		a.searchQuery = text
 		a.scheduleSearchDebounce(text)
 	})
+	// A click focuses the widget without going through updateFocus, so the
+	// state that says where the keyboard is has to be set here too. Left
+	// behind, handleGlobalKey still routes to the pane the user clicked out
+	// of, and q quits with the caret sitting in the box.
+	a.navSearchInput.SetFocusFunc(func() { a.claimNavFocus(true) })
 
 	a.navSearchFrame = tview.NewFlex().SetDirection(tview.FlexRow)
 	// Flex sets dontClear and never paints its own background; restore the
@@ -129,6 +134,19 @@ func (a *App) applyNavSelectionStyle(node *tview.TreeNode) {
 // navSearchActive reports whether typed keys belong to the query box.
 func (a *App) navSearchActive() bool {
 	return a.focusedPane == FocusNavigation && a.navSearchFocused
+}
+
+// claimNavFocus records that one of the navigation pane's two controls has the
+// keyboard. It is what a mouse click goes through, since a click never reaches
+// updateFocus.
+//
+// It must not call updateFocus itself: that calls SetFocus, which calls the
+// focus callbacks that call this, and the app spins.
+func (a *App) claimNavFocus(searchBox bool) {
+	a.focusedPane = FocusNavigation
+	a.navSearchFocused = searchBox
+	a.applyNavSearchStyles()
+	a.updateStatusBar()
 }
 
 // focusNavSearch puts the keyboard in the query box, revealing the navigation
