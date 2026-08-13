@@ -429,6 +429,12 @@ func (a *App) deleteFocusedComment() {
 					if a.replyParentID() == comment.ID {
 						a.closeReplyBox()
 					}
+					// The card stayed actionable while this was out, so a box
+					// can have been opened on it. Left open, the render would
+					// pull its slot away from a widget still holding the keys.
+					if a.editingCommentID() == comment.ID {
+						a.closeEditBox()
+					}
 					a.removeComment(issueID, comment.ID)
 					a.flashSuccess("Comment deleted")
 				})
@@ -489,9 +495,16 @@ func (a *App) removeComment(issueID, commentID string) {
 	}
 	a.issuesMu.Unlock()
 
+	// Read before the render, which is what takes the card off the page.
+	held := a.commentsFocus == commentsFocusCards && a.focusedCommentID == commentID
 	a.cancelDetailFetch()
 	a.detailsCommentsSource = comments
 	a.renderDetailsPage()
+	// The ring moves only when the card that left was the one holding it. A
+	// reader who stepped away, or started writing, keeps where they are.
+	if !held {
+		return
+	}
 	// Rendered before the ring is aimed: the spans still hold the card that
 	// just left, and a stop looked up in those would be the deleted one.
 	if neighbor == "" {

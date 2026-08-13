@@ -110,6 +110,25 @@ func (a *App) closeEditBox() {
 	a.updateFocus()
 }
 
+// dropEditForMissingComment closes an edit box whose comment the latest fetch
+// no longer carries, deleted upstream or otherwise. Left open, the box is drawn
+// nowhere while it still holds the keyboard, and the compose card on the page
+// is enough for composeBoxOnScreen to keep routing keys into it.
+//
+// Nothing holds a rewrite by design, so there is nothing here to keep.
+func (a *App) dropEditForMissingComment() {
+	editing := a.editingCommentID()
+	if editing == "" {
+		return
+	}
+	for _, comment := range a.detailsCommentsSource {
+		if comment.ID == editing {
+			return
+		}
+	}
+	a.closeEditBox()
+}
+
 // closeReplyBox takes the box off the page, keeping what was written against
 // the thread it was written to. The ring lands on the comment being answered,
 // which is where the reader was.
@@ -780,6 +799,14 @@ func (a *App) saveCommentEdit() {
 		a.closeEditBox()
 		return
 	}
+	if _, out := a.savingComments[commentID]; out {
+		a.flashStatus("Already saving this comment")
+		return
+	}
+	if a.savingComments == nil {
+		a.savingComments = make(map[string]struct{})
+	}
+	a.savingComments[commentID] = struct{}{}
 	a.flashStatus("Saving comment...")
 
 	update := a.updateCommentFunc
@@ -790,6 +817,7 @@ func (a *App) saveCommentEdit() {
 			IssueID: issueID,
 		})
 		a.QueueUpdateDraw(func() {
+			delete(a.savingComments, commentID)
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.details_compose: update comment failed comment=%s", commentID)
 				a.updateStatusBarWithError(err)
@@ -834,7 +862,12 @@ func (a *App) replaceComment(issueID string, comment linearapi.Comment) {
 	a.cancelDetailFetch()
 	a.detailsCommentsSource = comments
 	a.renderDetailsPage()
-	a.focusComment(comment.ID)
+	// The reader may have moved while this was out: onto another card, or into
+	// a box. The ring follows the rewritten card only when it was already on
+	// it, which is where closeEditBox left it a moment ago.
+	if a.commentsFocus == commentsFocusCards && a.focusedCommentID == comment.ID {
+		a.focusComment(comment.ID)
+	}
 }
 
 // insertCommentInOrder places a comment by its timestamp. Two posts can be in

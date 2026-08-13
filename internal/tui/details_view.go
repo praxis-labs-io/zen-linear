@@ -477,6 +477,7 @@ func (a *App) updateDetailsView() {
 	// is laid out at can change without the issue changing.
 	a.detailsDescriptionMarkdown = issue.Description
 	a.detailsCommentsSource = issue.Comments
+	a.dropEditForMissingComment()
 	a.renderDetailsBody(a.detailsMeasureWidth())
 	a.renderDetailsPage()
 	a.detailsPageView.ScrollToBeginning()

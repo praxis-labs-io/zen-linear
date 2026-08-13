@@ -395,6 +395,120 @@ func TestASlowSaveLeavesALaterEditAlone(t *testing.T) {
 	if got := app.detailsEditArea.GetText(); got != later {
 		t.Errorf("the box holds %q, want the words written after the save went out", got)
 	}
+	// The keyboard is physically in the box, so the state that says where it is
+	// has to agree. Tab, the growth refit and the hints all read this.
+	if app.commentsFocus != commentsFocusEdit {
+		t.Errorf("focus reads %v, want the box the keys are going to", app.commentsFocus)
+	}
+	if got := app.focusedCommentID; got != mineReplyID {
+		t.Errorf("the ring moved to %q, want it left on the box being written in", got)
+	}
+}
+
+// The box stays open until Linear answers, so Ctrl+Enter twice inside one round
+// trip sends two rewrites. The loser closes the box under the winner, and out
+// of order it pins the older body to the card.
+func TestASecondSaveWaitsForTheFirst(t *testing.T) {
+	app, drawn := newEditableCommentsApp(t)
+	release := make(chan struct{})
+	sent := make(chan string, 4)
+	app.updateCommentFunc = func(_ context.Context, input linearapi.UpdateCommentInput) (linearapi.Comment, error) {
+		sent <- input.Body
+		<-release
+		return linearapi.Comment{ID: input.ID, Body: input.Body, Author: linearapi.User{ID: "u1", IsMe: true}}, nil
+	}
+
+	stepToComment(t, app, mineID)
+	pressInComments(t, app, 'e')
+	fillWritingBox(app.detailsEditArea, "First.")
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModCtrl))
+	<-sent
+
+	fillWritingBox(app.detailsEditArea, "Second.")
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModCtrl))
+
+	close(release)
+	waitForDraw(t, drawn)
+	if extra := len(sent); extra != 0 {
+		t.Errorf("the mutation ran %d more times, want the second refused while the first was out", extra)
+	}
+}
+
+// A card being deleted stays actionable for the length of the round trip, so a
+// box can be opened on it. The render then pulls the box's slot away from a
+// widget that still owns the keyboard.
+func TestDeletingACommentClosesTheBoxOpenOnIt(t *testing.T) {
+	app, drawn := newEditableCommentsApp(t)
+	release := make(chan struct{})
+	app.deleteCommentFunc = func(context.Context, string) error {
+		<-release
+		return nil
+	}
+	stepToComment(t, app, mineID)
+	pressInComments(t, app, 'd')
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModNone))
+
+	pressInComments(t, app, 'e')
+	if app.editingCommentID() != mineID {
+		t.Fatal("e did not open a box on the card being deleted")
+	}
+
+	close(release)
+	waitForDraw(t, drawn)
+
+	if got := app.editingCommentID(); got != "" {
+		t.Errorf("the box on %q is still open after its comment left the page", got)
+	}
+	if app.commentsFocus != commentsFocusCards {
+		t.Errorf("focus reads %v, want the cards: the box it names is not drawn", app.commentsFocus)
+	}
+}
+
+// A comment can be deleted upstream while it is being rewritten here. The box
+// is then drawn nowhere while the compose card keeps composeBoxOnScreen true,
+// so every key goes to an editor nothing paints.
+func TestARefreshWithoutTheEditedCommentClosesTheBox(t *testing.T) {
+	app, _ := newEditableCommentsApp(t)
+	stepToComment(t, app, mineID)
+	pressInComments(t, app, 'e')
+	fillWritingBox(app.detailsEditArea, "Rewriting something that is about to go.")
+
+	app.issuesMu.Lock()
+	app.selectedIssue.Comments = app.selectedIssue.Comments[1:]
+	app.issuesMu.Unlock()
+	app.updateDetailsView()
+
+	if got := app.editingCommentID(); got != "" {
+		t.Errorf("the box on %q is still open after the refresh dropped its comment", got)
+	}
+	if app.commentsFocus != commentsFocusCards {
+		t.Errorf("focus reads %v, want the cards", app.commentsFocus)
+	}
+	if app.commentSpanIndex(mineID) >= 0 {
+		t.Error("the deleted comment is still on the page")
+	}
+}
+
+// The ring belongs to the reader, not to a mutation answering late. A delete
+// landing after they stepped away must not haul them back to its neighbor.
+func TestADeleteLandingLateLeavesTheRingAlone(t *testing.T) {
+	app, drawn := newEditableCommentsApp(t)
+	release := make(chan struct{})
+	app.deleteCommentFunc = func(context.Context, string) error {
+		<-release
+		return nil
+	}
+	stepToComment(t, app, mineID)
+	pressInComments(t, app, 'd')
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModNone))
+
+	stepToComment(t, app, "root-2")
+	close(release)
+	waitForDraw(t, drawn)
+
+	if got := app.focusedCommentID; got != "root-2" {
+		t.Errorf("the ring landed on %q, want the card the reader stepped to", got)
+	}
 }
 
 // Linear reads leading whitespace as an indented code block, so trimming the
