@@ -54,8 +54,8 @@ func (a *App) focusPane(pane FocusTarget) {
 		}
 	case FocusDetails:
 		a.detailsHidden = false
-		// Enter on the description, the same way l enters it.
-		a.focusedDetailsView = false
+		// Enter on the cards, the same way l enters the pane.
+		a.commentsFocus = commentsFocusCards
 	case FocusIssues:
 		// The issues list is not on screen while zoomed, so asking for it by
 		// number is also how the zoom is released.
@@ -86,8 +86,10 @@ func (a *App) stepPane(direction int) {
 	}
 	a.focusedPane = panes[next]
 	if a.focusedPane == FocusDetails {
-		// Enter on the description, the same way the pane numbers do.
-		a.focusedDetailsView = false
+		// Enter on the cards, never mid-sentence in a box, the same way the pane
+		// numbers do. The reset lives here rather than in updateFocus, which
+		// openComposeBox calls straight after putting the keyboard in the box.
+		a.commentsFocus = commentsFocusCards
 	}
 	a.updateFocus()
 }
@@ -124,8 +126,7 @@ func (a *App) updateFocus() {
 		a.listIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchResultsTable.SetBorderColor(a.theme.Border)
 		a.setIssuesPlaceholderBorder(a.theme.Border)
-		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
-		a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
+		a.detailsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	case FocusIssues:
@@ -146,38 +147,20 @@ func (a *App) updateFocus() {
 		// Update all pane titles
 		a.updateAllPaneTitles()
 		a.navigationPanel.SetBorderColor(a.theme.Border)
-		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
-		a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
+		a.detailsView.SetBorderColor(a.theme.Border)
 	case FocusDetails:
-		// Focus the appropriate sub-view based on state
-		if !a.detailsCommentsVisible {
-			a.focusedDetailsView = false
-		}
-		if !a.focusedDetailsView {
-			// Every way out of the Comments tab drops the sub-focus, so coming
-			// back lands on the cards rather than mid-sentence.
-			a.commentsFocus = commentsFocusCards
-		}
-		a.updateDetailsLayout()
-		if a.focusedDetailsView && a.detailsCommentsVisible {
-			// The page has two kinds of stop: a card reads, and a box writes
-			// with a button that sends.
-			if area, button, ok := a.writingBox(a.commentsFocus); ok {
-				if a.commentsFocus.isWriting() {
-					a.app.SetFocus(area)
-				} else {
-					a.app.SetFocus(button)
-				}
+		// The page has two kinds of stop: a card reads, and a box writes with a
+		// button that sends.
+		if area, button, ok := a.writingBox(a.commentsFocus); ok {
+			if a.commentsFocus.isWriting() {
+				a.app.SetFocus(area)
 			} else {
-				a.app.SetFocus(a.detailsCommentsPage)
+				a.app.SetFocus(button)
 			}
-			a.detailsDescriptionView.SetBorderColor(a.theme.Border)
-			a.detailsCommentsPanel.SetBorderColor(a.theme.BorderFocus)
 		} else {
-			a.app.SetFocus(a.detailsDescriptionView)
-			a.detailsDescriptionView.SetBorderColor(a.theme.BorderFocus)
-			a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
+			a.app.SetFocus(a.detailsPage)
 		}
+		a.detailsView.SetBorderColor(a.theme.BorderFocus)
 		a.navigationPanel.SetBorderColor(a.theme.Border)
 		a.listIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchResultsTable.SetBorderColor(a.theme.Border)
@@ -190,8 +173,7 @@ func (a *App) updateFocus() {
 		a.listIssuesTable.SetBorderColor(a.theme.Border)
 		a.searchResultsTable.SetBorderColor(a.theme.Border)
 		a.setIssuesPlaceholderBorder(a.theme.Border)
-		a.detailsDescriptionView.SetBorderColor(a.theme.Border)
-		a.detailsCommentsPanel.SetBorderColor(a.theme.Border)
+		a.detailsView.SetBorderColor(a.theme.Border)
 		// Update all pane titles
 		a.updateAllPaneTitles()
 	}
@@ -227,16 +209,11 @@ func (a *App) updateAllPaneTitles() {
 		a.issuesPlaceholder.SetTitleColor(a.theme.Foreground)
 	}
 
-	// Update Details pane tab strip
+	// Update Details pane title
 	isDetailsFocused := a.focusedPane == FocusDetails
-	if a.detailsDescriptionView != nil {
-		detailsTitle := a.paneTitle(paneNumberDetails, a.detailsTabsTitle(isDetailsFocused), isDetailsFocused)
-		a.detailsDescriptionView.SetTitle(detailsTitle)
-		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground)
-		if a.detailsCommentsPanel != nil {
-			a.detailsCommentsPanel.SetTitle(detailsTitle)
-			a.detailsCommentsPanel.SetTitleColor(a.theme.Foreground)
-		}
+	if a.detailsView != nil {
+		a.detailsView.SetTitle(a.paneTitle(paneNumberDetails, a.paneLabel("Details", isDetailsFocused), isDetailsFocused))
+		a.detailsView.SetTitleColor(a.theme.Foreground)
 	}
 }
 

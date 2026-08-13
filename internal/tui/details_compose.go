@@ -10,7 +10,7 @@ import (
 	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
-// The compose box is the last card in the Comments tab, under everything
+// The compose box is the last card on the details page, under everything
 // already said, which is where the comment being written is going to appear. It
 // is always on the page: a box that has to be summoned is one nobody knows is
 // there. It scrolls with the page rather than sitting over it, because a box
@@ -54,7 +54,7 @@ func (a *App) openReplyBox(parentID string) {
 
 	// Rendered before the focus moves: the box has no place on the page, and so
 	// no stop in the ring, until the page has been written with it in.
-	a.renderDetailsComments()
+	a.renderDetailsPage()
 	// The ring is a pair, the stop and what it names. Moving one and not the
 	// other left the card the reader came from lit while the keyboard was in
 	// the box, and the box itself unlit.
@@ -78,7 +78,7 @@ func (a *App) closeReplyBox() {
 	a.detailsReplyArea.SetText("", false)
 	a.commentsFocus = commentsFocusCards
 	a.focusedCommentID = parent
-	a.renderDetailsComments()
+	a.renderDetailsPage()
 	a.updateFocus()
 }
 
@@ -161,9 +161,8 @@ func (a *App) copyText(text string) {
 // reads as something to press where a bare word reads as a caption.
 const postLabel = "  Post  "
 
-// commentsFocus names what inside the Comments tab holds the keyboard. Tab
-// steps through the cards, then either box and its button, and leaves the pane
-// off either end.
+// commentsFocus names what on the details page holds the keyboard. The braces
+// step the cards and the boxes; Tab moves between a box and its button.
 type commentsFocus int
 
 const (
@@ -191,34 +190,17 @@ func postFocusFor(f commentsFocus) (commentsFocus, bool) {
 	return 0, false
 }
 
-// buildDetailsCommentsPanel wraps the page in one bordered panel, the way the
-// Search tab wraps its input and results. The panel owns the border, the tab
-// title, and the density padding; the page inside it is borderless.
-func (a *App) buildDetailsCommentsPanel() {
+// buildDetailsPage builds the page and the two boxes drawn in it. The panel
+// around it owns the border, the title and the density padding; the page is
+// borderless.
+func (a *App) buildDetailsPage() {
 	a.detailsComposeArea, a.detailsComposePost = a.newWritingBox(commentsFocusText, commentsFocusPost)
 	a.detailsReplyArea, a.detailsReplyPost = a.newWritingBox(commentsFocusReply, commentsFocusReplyPost)
-	a.detailsCommentsView.SetFocusFunc(func() { a.enterCommentsFocus(commentsFocusCards) })
+	a.detailsPageView.SetFocusFunc(func() { a.enterCommentsFocus(commentsFocusCards) })
 	a.applyComposeTheme()
 
-	a.detailsCommentsPage = newCommentsPage(a.detailsCommentsView, a.refitDetailsComments)
-	a.detailsCommentsPage.SetBackgroundColor(a.theme.Background)
-
-	a.detailsCommentsPanel = tview.NewFlex().SetDirection(tview.FlexRow)
-	a.detailsCommentsPanel.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
-	a.detailsCommentsPanel.
-		SetBorder(true).
-		SetTitleAlign(tview.AlignLeft).
-		SetTitleColor(a.theme.Foreground).
-		SetBorderColor(a.theme.Border).
-		SetBackgroundColor(a.theme.Background)
-	padding := a.density.DetailsPadding
-	// No bottom padding: the page writes its own at the end of the text, so the
-	// gap is the end of the conversation rather than a row the pane never uses.
-	a.detailsCommentsPanel.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
-	// The page is the panel's focus item. With none flagged, Flex.Focus falls
-	// through to the panel's own Box, whose InputHandler is nil, and any focus
-	// tview delegates on its own leaves the tab dead to the keyboard.
-	a.detailsCommentsPanel.AddItem(a.detailsCommentsPage, 0, 1, true)
+	a.detailsPage = newDetailsPage(a.detailsPageView, a.refitDetailsPage)
+	a.detailsPage.SetBackgroundColor(a.theme.Background)
 }
 
 // newWritingBox builds one box: the writing area and the button that sends it.
@@ -279,8 +261,8 @@ func (a *App) applyComposeTheme() {
 	}
 	a.applyComposePlaceholder()
 	a.applyPostButtonTheme()
-	if a.detailsCommentsPage != nil {
-		a.detailsCommentsPage.SetBackgroundColor(a.theme.Background)
+	if a.detailsPage != nil {
+		a.detailsPage.SetBackgroundColor(a.theme.Background)
 	}
 }
 
@@ -306,23 +288,17 @@ func (a *App) applyPostButtonTheme() {
 	}
 }
 
-// composeBoxOnScreen reports whether the box is mounted and showing.
+// composeBoxOnScreen reports whether the box was drawn and is showing.
 //
-// Focus outlives the layout that put it there: clearing the selection unmounts
-// the Comments tab without moving the keyboard off the box. Letting the box
+// Focus outlives the render that put it there: clearing the selection takes the
+// card off the page without moving the keyboard off the box. Letting the box
 // take keys from there locks the app — every key goes to a text area nobody can
 // see, and there is nothing on screen to say so.
+//
+// It asks the page rather than a field of its own, so the answer is what was
+// actually drawn. Draw-safe: the spans are a slice, read under no lock.
 func (a *App) composeBoxOnScreen() bool {
-	if a.detailsView == nil || a.detailsCommentsPanel == nil ||
-		a.detailsHidden || !a.detailsCommentsVisible {
-		return false
-	}
-	for i := 0; i < a.detailsView.GetItemCount(); i++ {
-		if a.detailsView.GetItem(i) == a.detailsCommentsPanel {
-			return true
-		}
-	}
-	return false
+	return a.detailsView != nil && !a.detailsHidden && a.commentSpanIndex(blockIDCompose) >= 0
 }
 
 // composeBoxActive reports whether a key belongs to the compose box.
@@ -397,37 +373,44 @@ func (a *App) postButtonActive() bool {
 	return false
 }
 
-// enterCommentsFocus records that something in the Comments tab took the
-// keyboard, for the paths that take it without calling updateFocus: a mouse
-// click, and tview handing focus down to a child. It repaints the cues but must
-// never move focus itself, or focusing would recurse.
+// enterCommentsFocus records that something on the page took the keyboard, for
+// the paths that take it without calling updateFocus: a mouse click, and tview
+// handing focus down to a child. It repaints the cues but must never move focus
+// itself, or focusing would recurse.
 func (a *App) enterCommentsFocus(target commentsFocus) {
+	// An overlay owns the keys however focus is delegated underneath it. tview
+	// re-delegates down the whole tree on every page add and remove, and that
+	// walk reaches this pane: the palette rebuilds its page on each keystroke,
+	// so without this the first key typed there took focusedPane back and the
+	// palette's own re-show guard then failed silently. Same guard, same
+	// reason, as claimNavFocus.
+	if a.focusedPane == FocusPalette || a.activeModal() != nil {
+		return
+	}
 	// tview delegates focus down the tree on its own during layout rebuilds and
-	// page adds. Acting on one of those would claim the pane for a tab that is
-	// not even mounted.
+	// page adds. Acting on one of those would claim the pane for a page holding
+	// nothing to act on.
 	if !a.composeBoxOnScreen() {
 		return
 	}
 	a.focusedPane = FocusDetails
-	a.focusedDetailsView = true
 	a.commentsFocus = target
-	if a.detailsCommentsPanel != nil {
-		a.detailsCommentsPanel.SetBorderColor(a.theme.BorderFocus)
+	if a.detailsView != nil {
+		a.detailsView.SetBorderColor(a.theme.BorderFocus)
 	}
 	a.updateAllPaneTitles()
 	a.updateStatusBar()
 }
 
-// stepCommentsFocus walks the Comments tab's own focus ring: every comment card
-// in turn, the reply box where one is open on the thread, and the compose card
-// that ends the page, each box followed by its button. The ring does not wrap
-// and Tab does not leave the pane, so off either end the focus stays where it
-// is.
+// stepCommentsFocus walks the page's focus ring: every comment card in turn,
+// the reply box where one is open on the thread, and the compose card that ends
+// the page, each box followed by its button. The ring does not wrap and does
+// not leave the pane, so off either end the focus stays where it is.
 //
 // The ring is the page: the stops are recorded by the render, in the order the
-// cards were written, so what Tab does follows what the reader can see.
+// cards were written, so what the braces do follows what the reader can see.
 func (a *App) stepCommentsFocus(backward bool) {
-	if a.focusedPane != FocusDetails || !a.detailsCommentsVisible || !a.focusedDetailsView {
+	if a.focusedPane != FocusDetails {
 		return
 	}
 	step := 1
@@ -440,12 +423,37 @@ func (a *App) stepCommentsFocus(backward bool) {
 	a.updateFocus()
 }
 
-// openComposeBox shows the Comments tab and puts the keyboard in the box,
-// reporting whether it got there. It sets the fields itself rather than calling
-// focusPane, which enters the details pane on the description.
+// stepWritingBoxFocus moves between the box holding the keyboard and the button
+// that sends it, which is the whole of what Tab does in this pane. A two-stop
+// walk reads the same in both directions, so there is no direction to pass.
+func (a *App) stepWritingBoxFocus() {
+	// Scoped to the pane that owns the boxes. commentsFocus outlives the pane
+	// being left — nothing resets it on the way out — so an unscoped Tab in the
+	// issues list would step a box nobody is looking at.
+	if !a.detailsHaveFocus() {
+		return
+	}
+	switch a.commentsFocus {
+	case commentsFocusText:
+		a.commentsFocus = commentsFocusPost
+	case commentsFocusPost:
+		a.commentsFocus = commentsFocusText
+	case commentsFocusReply:
+		a.commentsFocus = commentsFocusReplyPost
+	case commentsFocusReplyPost:
+		a.commentsFocus = commentsFocusReply
+	default:
+		return
+	}
+	a.updateFocus()
+}
+
+// openComposeBox puts the keyboard in the compose box, reporting whether it got
+// there. It sets the fields itself rather than calling focusPane, which enters
+// the details pane on the cards.
 func (a *App) openComposeBox() bool {
 	issue := a.GetSelectedIssue()
-	if a.detailsCommentsPanel == nil || issue == nil {
+	if a.detailsPage == nil || issue == nil {
 		return false
 	}
 	// The selection moves at once but the draft sync rides the detail debounce,
@@ -454,7 +462,6 @@ func (a *App) openComposeBox() bool {
 	a.syncComposeDraft(issue.ID)
 	a.detailsHidden = false
 	a.focusedPane = FocusDetails
-	a.focusedDetailsView = true
 	a.commentsFocus = commentsFocusText
 	a.focusedCommentID = blockIDCompose
 	a.rebuildContentLayout()
@@ -522,7 +529,7 @@ func (a *App) handleComposeKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 	case tcell.KeyTab, tcell.KeyBacktab:
-		a.stepCommentsFocus(event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0)
+		a.stepWritingBoxFocus()
 		return nil
 	}
 	return event
@@ -605,7 +612,7 @@ func (a *App) postFrom(from commentsFocus) {
 }
 
 // appendComment puts a posted comment at the end of the thread it belongs to.
-// Comments arrive oldest first, so a new one goes last. The tab is only
+// Comments arrive oldest first, so a new one goes last. The page is only
 // re-rendered when the selection has not moved on while the write was out.
 func (a *App) appendComment(issueID string, comment linearapi.Comment) {
 	a.issuesMu.Lock()
@@ -619,13 +626,11 @@ func (a *App) appendComment(issueID string, comment linearapi.Comment) {
 	a.issuesMu.Unlock()
 
 	a.detailsCommentsSource = comments
-	a.renderDetailsComments()
-	a.detailsCommentsView.ScrollToEnd()
+	a.renderDetailsPage()
+	a.detailsPageView.ScrollToEnd()
 	// The ring follows the comment that was just written, so the reply it is
 	// under is the card the next key acts on.
 	a.focusComment(comment.ID)
-	// The tab strip carries the count.
-	a.updateAllPaneTitles()
 }
 
 // insertCommentInOrder places a comment by its timestamp. Two posts can be in
@@ -670,8 +675,8 @@ func (a *App) restoreComposeDraft(issueID, body, parentID string) {
 
 	fillWritingBox(a.detailsComposeArea, joinDrafts(body, a.detailsComposeArea.GetText()))
 	// The keyboard comes back only where the box is on screen. A reader who
-	// moved to the description keeps the tab they chose.
-	if a.focusedPane == FocusDetails && a.detailsCommentsVisible && a.focusedDetailsView {
+	// moved to another pane stays in it.
+	if a.detailsHaveFocus() && a.composeBoxOnScreen() {
 		a.commentsFocus = commentsFocusText
 		a.updateFocus()
 	}
@@ -689,7 +694,7 @@ func (a *App) restoreReplyDraft(issueID, body, parentID string) {
 	}
 	a.replyDrafts[parentID] = joinDrafts(body, held)
 
-	if a.composeDraftIssueID != issueID || !a.commentsHaveFocus() {
+	if a.composeDraftIssueID != issueID || !a.detailsHaveFocus() {
 		return
 	}
 	a.openReplyBox(parentID)

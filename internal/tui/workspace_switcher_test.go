@@ -133,7 +133,7 @@ func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 		{
 			name:  "details",
 			setUp: func(app *App) { app.focusedPane = FocusDetails },
-			want:  func(app *App) tview.Primitive { return app.detailsDescriptionView },
+			want:  func(app *App) tview.Primitive { return app.detailsPageView },
 		},
 		{
 			// The reset empties the query underneath the switch, so leaving
@@ -228,7 +228,7 @@ func TestSwitchWorkspaceEmptiesTheDetailsPane(t *testing.T) {
 
 	app.switchWorkspace("Side")
 
-	if got := app.detailsDescriptionView.GetText(true); strings.Contains(got, "Alpha") {
+	if got := app.detailsPageView.GetText(true); strings.Contains(got, "Alpha") {
 		t.Errorf("details pane still shows the old workspace's issue: %q", got)
 	}
 	if app.GetSelectedIssue() != nil {

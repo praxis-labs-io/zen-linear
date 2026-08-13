@@ -17,34 +17,46 @@ const (
 	// commentCardMinWidth is where the frame stops earning its share of the
 	// line and the card falls back to plain text.
 	commentCardMinWidth = 12
-	// commentCardFallbackWidth stands in before the first draw fixes the
-	// measure. The draw func's refit re-renders at the real one.
-	commentCardFallbackWidth = 40
+	// detailsFallbackWidth stands in before the first draw fixes the measure.
+	// That draw's refit re-renders at the real one.
+	detailsFallbackWidth = 40
 )
 
-// renderDetailsComments writes the comments tab as a stack of cards at the
-// width of the pane's last draw, threads nested under their parent. It records
-// where each card landed, which is what the ring moves and scrolls by.
-func (a *App) renderDetailsComments() {
+// renderDetailsPage writes the whole details page at the width of the pane's
+// last draw: the issue above the rule, its description, then the comment cards
+// with threads nested under their parent. It records where each card landed,
+// which is what the ring moves and scrolls by.
+//
+// The header goes into the same line slice the cards are counted in, so every
+// span and slot below it is already offset by however many rows the issue took.
+// A count kept apart from the lines would have to be recomputed on every refit,
+// since the header's height moves with the width.
+func (a *App) renderDetailsPage() {
+	if a.detailsPageView == nil {
+		return
+	}
 	a.commentSpans = nil
 	a.commentPainted = a.commentRing()
 
-	width := a.detailsCommentsFittedWidth
-	if width <= 0 {
-		width = commentCardFallbackWidth
+	if a.detailsHeaderLines == nil {
+		// No issue: nothing to write on, nothing to write in. The ring is put
+		// back where it starts, or it names a card that is no longer drawn.
+		a.commentsFocus, a.focusedCommentID = commentsFocusCards, ""
+		a.detailsPageView.SetText(a.emptyDetailsMessage())
+		a.detailsPage.setSlots(nil)
+		return
 	}
 
+	width := a.detailsMeasureWidth()
 	blocks := a.commentBlocks()
-	var lines []string
 	var slots []pageSlot
-	if len(a.detailsCommentsSource) == 0 {
-		// The empty state is a line above the compose card, not instead of the
-		// page: an issue nobody has written on is the one most likely to be
-		// written on, and a page with no card to write in leaves the keyboard
-		// in a box that was never drawn.
-		lines = append(lines, wrapTagged(fmt.Sprintf("%sNo comments yet.[-]", a.themeTags.SecondaryText), width)...)
-		lines = append(lines, "")
-	}
+	lines := append(a.detailsHeaderBlock(width), a.detailsSeam(width)...)
+	// The count heads the section the way Description: heads the one above it.
+	// It is the whole of the empty state too: an issue nobody has written on
+	// says so in the number, and the compose card under it says what to do.
+	lines = append(lines,
+		truncateTagged(fmt.Sprintf("%sComments (%d)[-]", a.themeTags.SecondaryText, len(a.detailsCommentsSource)), width),
+		"")
 	for i, block := range blocks {
 		if i > 0 {
 			// The rail runs through the gap above a reply, which is what joins
@@ -75,10 +87,8 @@ func (a *App) renderDetailsComments() {
 			a.commentSpans = append(a.commentSpans, span)
 		}
 	}
-	a.detailsCommentsView.SetText(strings.Join(lines, "\n") + a.trailingPad())
-	if a.detailsCommentsPage != nil {
-		a.detailsCommentsPage.setSlots(slots)
-	}
+	a.detailsPageView.SetText(strings.Join(lines, "\n") + a.trailingPad())
+	a.detailsPage.setSlots(slots)
 }
 
 // blockCard renders one block of the page and reports the widgets that go in
@@ -101,6 +111,9 @@ func (a *App) blockCard(block commentBlock, width int) ([]string, []pageSlot) {
 // written sits among what has been said rather than beside it. The interior
 // rows are left blank for the text area drawn over them.
 func (a *App) writingCard(width int, heading, border string, focus commentsFocus, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
+	if width < commentCardMinWidth {
+		return a.writingPlain(width, heading, focus, area, post)
+	}
 	inner := width - commentCardChrome
 	lines := []string{
 		cardEdge("╭", "╮", width, border),
@@ -126,12 +139,30 @@ func (a *App) writingCard(width int, heading, border string, focus commentsFocus
 	}
 }
 
+// writingPlain drops the frame on a pane too narrow to hold one, the way a
+// comment does. The box keeps its rows and its button; only the border goes,
+// because two border cells and two pad cells out of a pane this size leave
+// nothing to write in.
+func (a *App) writingPlain(width int, heading string, focus commentsFocus, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
+	lines := []string{truncateTagged(a.writingByline(heading), width)}
+	for i := 0; i < composeRows; i++ {
+		lines = append(lines, "")
+	}
+	label := min(len([]rune(postLabel)), max(width, 0))
+	lines = append(lines, truncateTagged(a.writingHints(focus, max(width-label-1, 0)), width))
+
+	return lines, []pageSlot{
+		{primitive: area, row: 1, height: composeRows, column: 0, width: max(width, 0)},
+		{primitive: post, row: 1 + composeRows, height: 1, column: max(width-label, 0), width: label},
+	}
+}
+
 // writingHints names what a box answers to, for as long as the keys are going
 // to it. A box nobody is writing in says nothing: the keys named there would be
 // the reader's, and they are not.
 func (a *App) writingHints(focus commentsFocus, width int) string {
 	button, _ := postFocusFor(focus)
-	if !a.commentsHaveFocus() || (a.commentsFocus != focus && a.commentsFocus != button) {
+	if !a.detailsHaveFocus() || (a.commentsFocus != focus && a.commentsFocus != button) {
 		return ""
 	}
 	done := "esc done"
@@ -265,7 +296,7 @@ func (a *App) cardFooter(id string, width int, border string) string {
 // what it was for; the box is drawn inside the thread now, which says it
 // better than a second color on a second card.
 func (a *App) commentBorderTag(id string) string {
-	if id != "" && id == a.focusedCommentID && a.commentsHaveFocus() {
+	if id != "" && id == a.focusedCommentID && a.detailsHaveFocus() {
 		return a.themeTags.BorderFocus
 	}
 	return a.themeTags.Border
@@ -276,8 +307,8 @@ func (a *App) commentBorderTag(id string) string {
 //
 // It wraps its own body rather than leaving that to the text view. A line the
 // view wraps is one page line drawn as two screen rows, and every slot and span
-// below it is then a row out: the boxes paint over the wrong cards and Tab
-// lands on them.
+// below it is then a row out: the boxes paint over the wrong cards and the
+// ring lands on them.
 func (a *App) commentPlain(comment linearapi.Comment, width int) []string {
 	lines := []string{truncateTagged(a.commentByline(comment), width)}
 	for _, line := range commentBodyLines(comment.Body, width) {

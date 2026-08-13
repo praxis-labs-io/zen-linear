@@ -14,7 +14,7 @@ import (
 // included. Anything reachable from a draw reads state, never live focus.
 func TestDrawingTheCommentsPanelKeepsTheAppAlive(t *testing.T) {
 	app, _ := newComposeTestApp(t)
-	app.app.SetRoot(app.detailsCommentsPanel, true)
+	app.app.SetRoot(app.detailsView, true)
 
 	screen := tcell.NewSimulationScreen("UTF-8")
 	if err := screen.Init(); err != nil {

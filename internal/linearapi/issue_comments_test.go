@@ -48,7 +48,7 @@ func TestIssueCommentsAreOldestFirst(t *testing.T) {
 	}
 }
 
-// TestIssueCommentsCarryTheirThread covers the two fields the Comments tab
+// TestIssueCommentsCarryTheirThread covers the two fields the details page
 // threads and links by. Linear returns a null parentId on a top-level comment,
 // which has to read as no parent rather than as one.
 func TestIssueCommentsCarryTheirThread(t *testing.T) {

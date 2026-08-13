@@ -355,21 +355,21 @@ func TestCtrlDAndCtrlUScrollTheDetailsPaneHalfAPage(t *testing.T) {
 	app := newDetailsTestApp(t)
 	app.focusedPane = FocusDetails
 	drawDetails(t, app, 60)
-	app.detailsDescriptionView.SetRect(0, 0, 60, height)
+	app.detailsPageView.SetRect(0, 0, 60, height)
 
-	inner := viewHeight(app.detailsDescriptionView)
+	inner := viewHeight(app.detailsPageView)
 	want := inner / 2
 	if want < 1 {
 		t.Fatalf("inner height %d leaves no half page to scroll", inner)
 	}
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlD, 0, tcell.ModNone))
-	if row, _ := app.detailsDescriptionView.GetScrollOffset(); row != want {
+	if row, _ := app.detailsPageView.GetScrollOffset(); row != want {
 		t.Errorf("Ctrl+D scrolled to row %d, want %d", row, want)
 	}
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlU, 0, tcell.ModNone))
-	if row, _ := app.detailsDescriptionView.GetScrollOffset(); row != 0 {
+	if row, _ := app.detailsPageView.GetScrollOffset(); row != 0 {
 		t.Errorf("Ctrl+U scrolled to row %d, want back to 0", row)
 	}
 }
@@ -381,26 +381,8 @@ func TestCtrlUStopsAtTheTop(t *testing.T) {
 	drawDetails(t, app, 60)
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlU, 0, tcell.ModNone))
-	if row, _ := app.detailsDescriptionView.GetScrollOffset(); row != 0 {
+	if row, _ := app.detailsPageView.GetScrollOffset(); row != 0 {
 		t.Errorf("Ctrl+U at the top scrolled to row %d, want 0", row)
-	}
-}
-
-// The keys follow the tab on screen rather than always driving the description.
-func TestCtrlDScrollsTheCommentsTab(t *testing.T) {
-	app := newDetailsTestApp(t)
-	app.focusedPane = FocusDetails
-	app.detailsCommentsVisible = true
-	app.focusedDetailsView = true
-	app.detailsCommentsView.SetRect(0, 0, 60, 40)
-
-	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlD, 0, tcell.ModNone))
-
-	if row, _ := app.detailsCommentsView.GetScrollOffset(); row == 0 {
-		t.Error("Ctrl+D did not scroll the comments tab")
-	}
-	if row, _ := app.detailsDescriptionView.GetScrollOffset(); row != 0 {
-		t.Errorf("Ctrl+D scrolled the description tab to %d as well", row)
 	}
 }
 
@@ -488,7 +470,7 @@ func TestZoomedStatusBarHelpMatchesTheKeysThatWork(t *testing.T) {
 	if strings.Contains(narrow, "navigation") {
 		t.Errorf("narrow zoomed help = %q, want no navigation key with no tree on screen", narrow)
 	}
-	for _, want := range []string{"v exit view", "Esc back to list"} {
+	for _, want := range []string{"v close", "Esc back to list"} {
 		if !strings.Contains(narrow, want) {
 			t.Errorf("zoomed help = %q, want it to mention %q", narrow, want)
 		}

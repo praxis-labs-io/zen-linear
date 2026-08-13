@@ -24,6 +24,16 @@ const (
 // so pickers can map a selection straight onto the API field.
 var priorityLabels = []string{"No priority", "Urgent", "High", "Normal", "Low"}
 
+// priorityLabel names a priority, falling back to the number itself for a value
+// Linear has added since. The list column has no room for a word; this is for
+// the surfaces that do.
+func priorityLabel(priority int) string {
+	if priority < 0 || priority >= len(priorityLabels) {
+		return fmt.Sprintf("P%d", priority)
+	}
+	return priorityLabels[priority]
+}
+
 // formatPriority renders a priority as an arrow glyph — up for high, equals
 // for normal, down for low, triangle for urgent — all single-cell text
 // presentation so rows stay aligned (no emoji-width variance).

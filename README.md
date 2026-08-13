@@ -105,7 +105,7 @@ The options beyond the original linear-tui set:
   `default_project` first-run settings. Turn it off to open on those every
   time
 - `keybindings` remaps palette commands by id, the global quit, open_palette,
-  and search actions, and the tab_next, tab_prev, columns_left,
+  and search actions, and the comment_next, comment_prev, columns_left,
   columns_right, focus_navigation, focus_issues, focus_details,
   favorite_move_up, favorite_move_down, favorite_nest, favorite_unnest,
   comment_reply, comment_quote, comment_copy_link, and comment_open actions
@@ -114,8 +114,8 @@ The options beyond the original linear-tui set:
 
     j/k         move            Enter       toggle details
     h/l         switch panes    Space       expand sub-issues
-    1/2/3       focus a pane    [ ]         cycle details tabs
-    {           hide/show nav   }           hide/show details
+    1/2/3       focus a pane    { }         step comments
+    <           hide/show nav   >           hide/show details
     v           zoom details    H/L         scroll columns
     :           palette         /           search
     r           refresh         w           switch workspace
@@ -124,11 +124,11 @@ The options beyond the original linear-tui set:
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.
 
-The Comments tab is one page: the comments, then a box to write in at the end
-of them. Tab steps through the cards and on into that box; j/k keep scrolling.
-Nothing is picked out until Tab says so, and Esc lets go again. A picked card
-answers to four keys of its own, which shadow the issue keys on the same runes
-for as long as it holds them:
+The details pane is one page: the issue, its description, the comments, then a
+box to write in at the end of them. `{` and `}` step through the cards; j/k
+keep scrolling. Nothing is picked out until a brace says so, and Esc lets go
+again. A picked card answers to four keys of its own, which shadow the issue
+keys on the same runes for as long as it holds them:
 
     r           reply           Q           quote and reply
     y           copy link       o           open in Linear
@@ -167,8 +167,8 @@ Everything else is in the palette: filters, grouping, sorting, expand and
 collapse all, parent issues, due dates, estimates, milestones, relations,
 attachments, and the agent.
 
-In the Comments tab, Tab steps through the card stack, the compose box, and
-the Post button:
+`}` past the last card puts the keyboard in the compose box, where every key
+types. Tab moves between the box and the Post button:
 
     Ctrl+Enter  post it         Enter       new line, or post from the button
     Esc         stop writing, keeping what is in the box

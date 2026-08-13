@@ -314,7 +314,7 @@ func DefaultCommands(app *App) []Command {
 			ID:           "toggle_navigation_pane",
 			Title:        "Toggle navigation pane",
 			Keywords:     []string{"navigation", "sidebar", "pane", "hide", "show", "toggle"},
-			ShortcutRune: '{',
+			ShortcutRune: '<',
 			Run: func(a *App) {
 				a.toggleNavigationPane()
 			},
@@ -323,7 +323,7 @@ func DefaultCommands(app *App) []Command {
 			ID:           "toggle_details_pane",
 			Title:        "Toggle details pane",
 			Keywords:     []string{"details", "pane", "hide", "show", "toggle"},
-			ShortcutRune: '}',
+			ShortcutRune: '>',
 			Run: func(a *App) {
 				a.toggleDetailsPane()
 			},

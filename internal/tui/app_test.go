@@ -590,13 +590,13 @@ func TestResetCachedStateEmptiesTheDetailsPane(t *testing.T) {
 	app.detailsHidden = false
 	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"}
 	app.updateDetailsView()
-	if !strings.Contains(app.detailsDescriptionView.GetText(true), "Alpha") {
+	if !strings.Contains(app.detailsPageView.GetText(true), "Alpha") {
 		t.Fatal("the details pane never showed the issue, so this test proves nothing")
 	}
 
 	app.resetCachedState()
 
-	if got := app.detailsDescriptionView.GetText(true); strings.Contains(got, "Alpha") {
+	if got := app.detailsPageView.GetText(true); strings.Contains(got, "Alpha") {
 		t.Fatalf("details pane still shows the old workspace's issue: %q", got)
 	}
 	if app.GetSelectedIssue() != nil {
@@ -741,7 +741,7 @@ func TestUpdateDetailsView_IncludesCycle(t *testing.T) {
 	app.issuesMu.Unlock()
 
 	app.updateDetailsView()
-	text := app.detailsDescriptionView.GetText(true)
+	text := app.detailsPageView.GetText(true)
 	if !strings.Contains(text, "Cycle:") || !strings.Contains(text, "Launch") {
 		t.Fatalf("details text = %q, want Cycle: Launch", text)
 	}

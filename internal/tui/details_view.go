@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/glamour"
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -128,26 +127,6 @@ func formatUserDisplayName(user linearapi.User) string {
 // from one line to the next.
 const detailsMeasure = 90
 
-// detailsDrawFunc returns the draw func both details tabs use: it hands the
-// tab its capped, centered content rect and tells it the width to lay out at.
-// The draw func is the only place the live width is known, and a pane narrower
-// than its own border and padding would otherwise hand tview a negative
-// content rect, which it draws from without checking.
-// The bottom padding is not held back from the content rect: it is written as
-// blank lines at the end of the text instead, so it is the end of the scroll
-// rather than a row of the pane. Reserved, it costs a line of reading on every
-// screen of a long description to leave a gap under the last one.
-func (a *App) detailsDrawFunc(refit func(int)) func(tcell.Screen, int, int, int, int) (int, int, int, int) {
-	return func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
-		inner := a.density.DetailsPadding
-		innerWidth := max(0, width-2-inner.Left-inner.Right)
-		innerHeight := max(0, height-2-inner.Top)
-		measure, gutter := readingMeasure(innerWidth)
-		refit(measure)
-		return x + 1 + inner.Left + gutter, y + 1 + inner.Top, measure, innerHeight
-	}
-}
-
 // trailingPad is the bottom padding written as text: the blank lines that close
 // a scrolling pane, seen only once the reader reaches the end of it.
 func (a *App) trailingPad() string {
@@ -170,45 +149,41 @@ func readingMeasure(innerWidth int) (measure int, gutter int) {
 	return measure, (innerWidth - measure) / 2
 }
 
-// buildDetailsView creates and configures the details view with separate description and comments sections.
+// buildDetailsView creates the details pane: one bordered panel around one
+// page, which holds the issue, its comments, and the boxes they are written in.
 func (a *App) buildDetailsView() *tview.Flex {
-	// Create description/metadata view (top section, scrollable)
-	a.detailsDescriptionView = tview.NewTextView()
-	a.detailsDescriptionView.SetDynamicColors(true).
-		SetWrap(true).
-		SetWordWrap(true).
-		SetBorder(true).
-		SetTitle(" Details ").
-		SetTitleAlign(tview.AlignLeft).
-		SetTitleColor(a.theme.Foreground).
-		SetBorderColor(a.theme.Border)
-	// Not chained: SetBorder returns the Box, whose SetBackgroundColor leaves
-	// the text style behind. tview fills the inner rect whenever the two
-	// disagree, which the centered measure shows as a block of the wrong color.
-	// The theme owns the value, the same as every other pane; a transparent
-	// theme is transparent because its Background says so.
-	a.detailsDescriptionView.SetBackgroundColor(a.theme.Background)
-	padding := a.density.DetailsPadding
-	a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-	a.detailsDescriptionView.SetDrawFunc(a.detailsDrawFunc(a.refitDetailsHeader))
-
-	// Create the comments page's text. The page around it owns the measure and
-	// the refit, and the panel around that owns the border, the tab title and
-	// the padding, so this one goes bare and unfitted.
-	a.detailsCommentsView = tview.NewTextView()
+	// The page around this text owns the measure and the refit, and the panel
+	// around that owns the border, the title and the padding, so the view goes
+	// bare and unfitted.
+	a.detailsPageView = tview.NewTextView()
 	// Wrapping off, because the page counts its own lines: a line the view
 	// wrapped would be one page line drawn as two screen rows, and every slot
 	// and span below it a row out. Everything written to it is fitted to the
 	// measure first, so there is nothing left to wrap.
-	a.detailsCommentsView.SetDynamicColors(true).
+	a.detailsPageView.SetDynamicColors(true).
 		SetWrap(false)
-	a.detailsCommentsView.SetBackgroundColor(a.theme.Background)
-	a.buildDetailsCommentsPanel()
+	a.detailsPageView.SetBackgroundColor(a.theme.Background)
+	a.buildDetailsPage()
 
-	// Create flex layout; comments are added conditionally after issue selection.
-	detailsFlex := tview.NewFlex().SetDirection(tview.FlexRow)
-	a.detailsView = detailsFlex
-	a.setDetailsCommentsVisibility(false)
+	a.detailsView = tview.NewFlex().SetDirection(tview.FlexRow)
+	// Restores the fill a Flex does not paint for itself, or the layer beneath
+	// bleeds through every cell the page leaves blank.
+	a.detailsView.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
+	a.detailsView.
+		SetBorder(true).
+		SetTitle(" Details ").
+		SetTitleAlign(tview.AlignLeft).
+		SetTitleColor(a.theme.Foreground).
+		SetBorderColor(a.theme.Border).
+		SetBackgroundColor(a.theme.Background)
+	padding := a.density.DetailsPadding
+	// No bottom padding: the page writes its own at the end of the text, so the
+	// gap is the end of the issue rather than a row the pane never uses.
+	a.detailsView.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
+	// The page is the panel's focus item. With none flagged, Flex.Focus falls
+	// through to the panel's own Box, whose InputHandler is nil, and any focus
+	// tview delegates on its own leaves the pane dead to the keyboard.
+	a.detailsView.AddItem(a.detailsPage, 0, 1, true)
 
 	return a.detailsView
 }
@@ -222,39 +197,16 @@ func viewHeight(view *tview.TextView) int {
 	return 0
 }
 
-// visibleDetailsView returns the details tab currently on screen.
-func (a *App) visibleDetailsView() *tview.TextView {
-	if a.detailsCommentsVisible && a.focusedDetailsView {
-		return a.detailsCommentsView
-	}
-	return a.detailsDescriptionView
-}
-
-// scrollDetailsHalfPage moves the details tab half a screen down (+1) or up
+// scrollDetailsHalfPage moves the details page half a screen down (+1) or up
 // (-1). tview's TextView stops at whole pages and keeps its page size private,
-// so the height comes off the inner rect the draw func set.
+// so the height comes off the inner rect the last draw set.
 func (a *App) scrollDetailsHalfPage(direction int) {
-	view := a.visibleDetailsView()
-	if view == nil {
+	if a.detailsPageView == nil {
 		return
 	}
-	step := max(1, viewHeight(view)/2)
-	row, column := view.GetScrollOffset()
-	view.ScrollTo(max(0, row+direction*step), column)
-}
-
-// setDetailsCommentsVisibility records whether the Comments tab exists and
-// re-renders the tabbed details layout.
-func (a *App) setDetailsCommentsVisibility(showComments bool) {
-	if a.detailsView == nil || a.detailsDescriptionView == nil || a.detailsCommentsPanel == nil {
-		return
-	}
-	a.detailsCommentsVisible = showComments
-	if !showComments {
-		a.focusedDetailsView = false
-		a.commentsFocus = commentsFocusCards
-	}
-	a.updateDetailsLayout()
+	step := max(1, viewHeight(a.detailsPageView)/2)
+	row, column := a.detailsPageView.GetScrollOffset()
+	a.detailsPageView.ScrollTo(max(0, row+direction*step), column)
 }
 
 // truncateTagged shortens a color-tagged line to width cells and marks the cut
@@ -271,84 +223,91 @@ func truncateTagged(line string, width int) string {
 	return wrapped[0] + "…[-]"
 }
 
-// renderDetailsDescription writes the metadata header and the description at
-// the width of the pane's last draw. The header lines are single rows of
-// fielded text, so they truncate; the description below is prose and keeps
-// wrapping. Before the first draw the width is unknown and nothing is cut, so
-// a render that beats the layout does not shorten the header to a stale box.
-func (a *App) renderDetailsDescription() {
-	if a.detailsDescriptionView == nil {
-		return
+// detailsMeasureWidth is the width the page lays out at: what the last draw
+// measured, or a stand-in before the first one, which that draw's refit
+// re-renders at the real measure.
+func (a *App) detailsMeasureWidth() int {
+	if a.detailsFittedWidth > 0 {
+		return a.detailsFittedWidth
 	}
+	return detailsFallbackWidth
+}
 
-	fitted := make([]string, 0, len(a.detailsHeaderLines)+3)
+// detailsHeaderBlock is the top of the page: the metadata, the rule under it,
+// and the description. The header lines are single rows of fielded text, so
+// they truncate; the description below is prose and wraps.
+//
+// It returns lines rather than text because the page counts rows, and every
+// card below this block is placed by that count.
+func (a *App) detailsHeaderBlock(width int) []string {
+	lines := make([]string, 0, len(a.detailsHeaderLines)+len(a.detailsBodyLines)+3)
 	for _, line := range a.detailsHeaderLines {
-		fitted = append(fitted, truncateTagged(line, a.detailsFittedWidth))
+		// Cut at what the last draw measured, which is 0 and cuts nothing before
+		// the first one: a render that beats the layout must not shorten the
+		// header to a box that was never on screen.
+		lines = append(lines, truncateTagged(line, a.detailsFittedWidth))
 	}
-	if len(fitted) > 0 {
-		gap := a.density.DetailsSectionGap
-		for i := 0; i < gap; i++ {
-			fitted = append(fitted, "")
-		}
-		fitted = append(fitted, fmt.Sprintf("%s%s[-]", a.themeTags.Border, detailsDivider(a.detailsFittedWidth)))
-		for i := 0; i < gap; i++ {
-			fitted = append(fitted, "")
-		}
+	if len(lines) > 0 {
+		lines = append(lines, a.detailsSeam(width)...)
 	}
-
-	// The compact density ends the header on the divider with no trailing gap
-	// line, so the description needs its own break or it lands on the divider.
-	text := strings.Join(fitted, "\n")
-	if text != "" && a.detailsBody != "" && !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	a.detailsDescriptionView.SetText(text + a.detailsBody + a.trailingPad())
+	return append(lines, a.detailsBodyLines...)
 }
 
-// renderDetailsBody renders the description markdown at the fitted width. The
-// raw markdown is kept rather than the issue so this can run from a draw func,
+// detailsSeam is the rule the page changes section on, spaced by the density.
+// It is drawn at render time rather than baked into the header, because it
+// spans the measure and the measure moves.
+func (a *App) detailsSeam(width int) []string {
+	gap := a.density.DetailsSectionGap
+	lines := make([]string, 0, gap*2+1)
+	for i := 0; i < gap; i++ {
+		lines = append(lines, "")
+	}
+	lines = append(lines, fmt.Sprintf("%s%s[-]", a.themeTags.Border, detailsDivider(width)))
+	for i := 0; i < gap; i++ {
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+// renderDetailsBody renders the description markdown to rows of the measure.
+// The raw markdown is kept rather than the issue so this can run from a draw,
 // where taking the issues lock would be a poor idea.
-func (a *App) renderDetailsBody() {
+//
+// The rows are wrapped here rather than by the view, for the reason the page
+// turns wrapping off: a line the view wrapped is one page line drawn as two
+// screen rows, and every card and box below it lands a row out. Glamour wraps
+// prose to the measure but cannot break a bare URL and does not wrap code
+// blocks or tables, so its output goes through the same wrap a comment body
+// does.
+func (a *App) renderDetailsBody(width int) {
 	if a.detailsDescriptionMarkdown == "" {
-		a.detailsBody = fmt.Sprintf("%sNo description available[-]", a.themeTags.SecondaryText)
+		a.detailsBodyLines = []string{fmt.Sprintf("%sNo description available[-]", a.themeTags.SecondaryText)}
 		return
 	}
-	var body strings.Builder
-	writer := tview.ANSIWriter(&body)
-	_, _ = fmt.Fprintf(writer, "%sDescription:[-]\n\n", a.themeTags.SecondaryText)
-	_, _ = fmt.Fprint(writer, renderMarkdownAt(a.detailsDescriptionMarkdown, a.detailsFittedWidth))
-	a.detailsBody = body.String()
+	label := truncateTagged(fmt.Sprintf("%sDescription:[-]", a.themeTags.SecondaryText), width)
+	lines := []string{label, ""}
+	for _, line := range commentBodyLines(a.detailsDescriptionMarkdown, width) {
+		lines = append(lines, wrapTagged(line, width)...)
+	}
+	a.detailsBodyLines = lines
 }
 
-// refitDetailsHeader re-fits the description tab to a pane width, keeping the
-// scroll position. It runs from the view's draw func, the only place the live
-// width is known, so it skips the work whenever the width has not moved.
-// The body is re-rendered too, not just re-truncated: glamour sizes tables to
-// the width it was given, so a stale one draws them at the old measure.
-func (a *App) refitDetailsHeader(width int) {
+// refitDetailsPage re-renders the page at a pane width, keeping the scroll
+// position. It runs from the page's draw, the only place the live width is
+// known, so it skips the work whenever the width has not moved.
+//
+// The description is re-rendered too, not just re-truncated: glamour sizes
+// tables to the width it was given, so a stale one draws them at the old
+// measure.
+func (a *App) refitDetailsPage(width int) {
 	if width == a.detailsFittedWidth {
 		return
 	}
 	a.detailsFittedWidth = width
-	if len(a.detailsHeaderLines) == 0 {
-		return
-	}
-	row, column := a.detailsDescriptionView.GetScrollOffset()
-	a.renderDetailsBody()
-	a.renderDetailsDescription()
-	a.detailsDescriptionView.ScrollTo(row, column)
-}
-
-// refitDetailsComments re-renders the comments tab at a pane width, for the
-// same reason the description needs it.
-func (a *App) refitDetailsComments(width int) {
-	if width == a.detailsCommentsFittedWidth {
-		return
-	}
-	a.detailsCommentsFittedWidth = width
-	row, column := a.detailsCommentsView.GetScrollOffset()
-	a.renderDetailsComments()
-	a.detailsCommentsView.ScrollTo(row, column)
+	row, column := a.detailsPageView.GetScrollOffset()
+	a.renderDetailsBody(width)
+	a.renderDetailsPage()
+	a.detailsPageView.ScrollTo(row, column)
 }
 
 // updateDetailsView updates the details view with the selected issue.
@@ -356,9 +315,6 @@ func (a *App) updateDetailsView() {
 	a.issuesMu.RLock()
 	selectedIssue := a.selectedIssue
 	a.issuesMu.RUnlock()
-	// The Comments tab is always reachable for a selected issue; an issue
-	// without comments shows the empty state.
-	a.setDetailsCommentsVisibility(selectedIssue != nil)
 	// A half-written comment belongs to the issue it was written for, not to
 	// the box, which stays put while the selection moves.
 	if selectedIssue == nil {
@@ -368,13 +324,11 @@ func (a *App) updateDetailsView() {
 	}
 	if selectedIssue == nil {
 		a.detailsHeaderLines = nil
-		a.detailsBody = ""
+		a.detailsBodyLines = nil
 		a.detailsDescriptionMarkdown = ""
 		a.detailsCommentsSource = nil
-		a.detailsDescriptionView.SetText(a.emptyDetailsMessage())
-		a.detailsCommentsView.SetText("")
-		a.updateAllPaneTitles()
-		if a.focusedPane == FocusDetails && !a.detailsCommentsVisible {
+		a.renderDetailsPage()
+		if a.focusedPane == FocusDetails {
 			a.updateFocus()
 		}
 		return
@@ -398,8 +352,11 @@ func (a *App) updateDetailsView() {
 		headerLines = append(headerLines, "")
 	}
 
-	// Metadata grid simulation
-	headerLines = append(headerLines, fmt.Sprintf("%sState:[-]      %s%s[-]", keyColor, valColor, issue.State))
+	// The metadata grid, ordered the way it is read: what the issue is and who
+	// has it, then where it sits in the plan, then its dates.
+	stateIcon, stateColor := formatStateIcon(issue.State, a.theme)
+	stateTag := colorTag(stateColor)
+	headerLines = append(headerLines, fmt.Sprintf("%sState:[-]      %s%s %s[-]", keyColor, stateTag, stateIcon, issue.State))
 
 	assignee := "Unassigned"
 	if issue.Assignee != "" {
@@ -407,25 +364,12 @@ func (a *App) updateDetailsView() {
 	}
 	headerLines = append(headerLines, fmt.Sprintf("%sAssignee:[-]   %s%s[-]", keyColor, valColor, assignee))
 
-	headerLines = append(headerLines, fmt.Sprintf("%sPriority:[-]   %s%d[-]", keyColor, valColor, issue.Priority))
+	// The glyph is the list's, so a priority reads the same in both places; the
+	// word is what the pane has room for and the column does not.
+	priorityIcon, priorityColor := formatPriority(issue.Priority, a.theme)
+	priorityTag := colorTag(priorityColor)
+	headerLines = append(headerLines, fmt.Sprintf("%sPriority:[-]   %s%s %s[-]", keyColor, priorityTag, priorityIcon, priorityLabel(issue.Priority)))
 
-	cycle := "No cycle"
-	if issue.Cycle != nil {
-		cycle = issue.Cycle.DisplayName()
-	}
-	headerLines = append(headerLines, fmt.Sprintf("%sCycle:[-]      %s%s[-]", keyColor, valColor, cycle))
-
-	project := "No project"
-	if issue.ProjectName != "" {
-		project = issue.ProjectName
-	}
-	headerLines = append(headerLines, fmt.Sprintf("%sProject:[-]    %s%s[-]", keyColor, valColor, project))
-
-	headerLines = append(headerLines, fmt.Sprintf("%sDue date:[-]   %s%s[-]", keyColor, valColor, formatDueDate(issue.DueDate)))
-	headerLines = append(headerLines, fmt.Sprintf("%sEstimate:[-]   %s%s[-]", keyColor, valColor, formatEstimate(issue.Estimate)))
-	headerLines = append(headerLines, fmt.Sprintf("%sMilestone:[-]  %s%s[-]", keyColor, valColor, formatMilestoneName(issue.ProjectMilestone)))
-
-	// Labels
 	labelsText := "No labels"
 	if len(issue.Labels) > 0 {
 		labelNames := make([]string, len(issue.Labels))
@@ -435,6 +379,23 @@ func (a *App) updateDetailsView() {
 		labelsText = strings.Join(labelNames, ", ")
 	}
 	headerLines = append(headerLines, fmt.Sprintf("%sLabels:[-]     %s%s[-]", keyColor, valColor, labelsText))
+
+	project := "No project"
+	if issue.ProjectName != "" {
+		project = issue.ProjectName
+	}
+	headerLines = append(headerLines, fmt.Sprintf("%sProject:[-]    %s%s[-]", keyColor, valColor, project))
+
+	headerLines = append(headerLines, fmt.Sprintf("%sMilestone:[-]  %s%s[-]", keyColor, valColor, formatMilestoneName(issue.ProjectMilestone)))
+
+	cycle := "No cycle"
+	if issue.Cycle != nil {
+		cycle = issue.Cycle.DisplayName()
+	}
+	headerLines = append(headerLines, fmt.Sprintf("%sCycle:[-]      %s%s[-]", keyColor, valColor, cycle))
+
+	headerLines = append(headerLines, fmt.Sprintf("%sDue date:[-]   %s%s[-]", keyColor, valColor, formatDueDate(issue.DueDate)))
+	headerLines = append(headerLines, fmt.Sprintf("%sEstimate:[-]   %s%s[-]", keyColor, valColor, formatEstimate(issue.Estimate)))
 
 	branchName := issue.BranchName
 	if branchName == "" {
@@ -508,26 +469,21 @@ func (a *App) updateDetailsView() {
 		}
 	}
 
-	// The rule closing the header is drawn at render time, not baked in here:
-	// it spans the measure, and a refit only re-truncates these lines.
+	// The rules between sections are drawn at render time, not baked in here:
+	// they span the measure, and the measure moves. Held nil, these lines are
+	// also what says no issue is selected.
 	a.detailsHeaderLines = headerLines
 	// The raw markdown is kept, not just its rendering, because the width it
 	// is laid out at can change without the issue changing.
 	a.detailsDescriptionMarkdown = issue.Description
 	a.detailsCommentsSource = issue.Comments
-	a.renderDetailsBody()
-	a.renderDetailsDescription()
-	a.detailsDescriptionView.ScrollToBeginning()
-
-	a.renderDetailsComments()
-	a.detailsCommentsView.ScrollToBeginning()
-	// The ring keeps its card across the async fetch that fills the tab in, and
-	// drops it on an issue whose comments it is not on: ids do not survive a
-	// change of issue, and nothing is lit until Tab says so.
+	a.renderDetailsBody(a.detailsMeasureWidth())
+	a.renderDetailsPage()
+	a.detailsPageView.ScrollToBeginning()
+	// The ring keeps its card across the async fetch that fills the comments
+	// in, and drops it on an issue whose comments it is not on: ids do not
+	// survive a change of issue, and nothing is lit until a brace says so.
 	if a.commentSpanIndex(a.focusedCommentID) < 0 {
 		a.focusedCommentID = ""
 	}
-	// Comments arrive with the async full-issue fetch; refresh the tab strip
-	// so its count tracks what just rendered.
-	a.updateAllPaneTitles()
 }

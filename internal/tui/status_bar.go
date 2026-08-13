@@ -89,12 +89,14 @@ func (a *App) fitStatusToast() {
 	a.statusRow.ResizeItem(a.statusToast, width, 0)
 }
 
-// toastTag colors the corner by what it is saying. Plain text is the default,
-// so the color means something when it appears: green only when something
-// finished, red only when something failed. Progress is plain, not a result.
+// toastTag colors the corner by what it is saying. A result carries the theme's
+// success or failure color; a nudge is plain text, so those two colors mean
+// something when they appear. An empty message means what is showing is the
+// loading line, which takes the accent: it is the app working, not a result,
+// and the accent is what the rest of the chrome uses to say something is live.
 func (a *App) toastTag() string {
 	if a.statusMessage == "" {
-		return a.themeTags.Foreground
+		return a.themeTags.Accent
 	}
 	switch a.statusLevel {
 	case statusSuccess:
@@ -192,11 +194,11 @@ func (a *App) commandHint(id, verb string) hint {
 	return hint{key: key, verb: verb}
 }
 
-// tabsHint names the pair of keys that step a pane's tabs.
-func (a *App) tabsHint() hint {
+// commentsHint names the pair of keys that step the page's comments.
+func (a *App) commentsHint() hint {
 	return hint{
-		key:  keyPairLabel(a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']')),
-		verb: "tabs",
+		key:  keyPairLabel(a.actionKey("comment_prev", '{'), a.actionKey("comment_next", '}')),
+		verb: "comments",
 	}
 }
 
@@ -205,9 +207,25 @@ func (a *App) tabsHint() hint {
 // name. What list is on screen, how it is sorted and what it is filtered by are
 // the issues pane's own footer, not this bar's business.
 func (a *App) updateStatusBar() {
-	tabs := a.tabsHint()
+	comments := a.commentsHint()
 	view := a.commandHint("zoom_details", "view")
 	hideDetails := a.commandHint("toggle_details_pane", "hide details")
+	// The zoom's own keys, decided here rather than in the branches below: those
+	// are picked by what the comment ring is doing, which has nothing to say
+	// about the zoom, so a lit card used to leave the reader with hints for a
+	// layout they were not in.
+	toNav, backToList := hint{}, hint{}
+	if a.detailsZoomed {
+		// The same key closes the view again, and hiding the pane is inert.
+		view = a.commandHint("zoom_details", "close")
+		hideDetails = hint{}
+		// Below the wide breakpoint the zoom leaves no nav tree to step onto,
+		// so offering the key there would be a lie.
+		if a.layoutMode == layoutWide && !a.navigationHidden {
+			toNav = hint{"←/h", "navigation"}
+		}
+		backToList = hint{"Esc", "back to list"}
+	}
 
 	hints := []hint{a.actionHint("open_palette", ':', "palette")}
 	note := ""
@@ -237,7 +255,7 @@ func (a *App) updateStatusBar() {
 		// Read off the field, not live focus: a focus callback can reach here
 		// from inside a draw.
 		switch {
-		case a.commentsFocus != commentsFocusCards && a.detailsCommentsVisible && a.focusedDetailsView:
+		case a.commentsFocus != commentsFocusCards && a.detailsHaveFocus():
 			// Every key in the box types, the palette's included, so the line
 			// names none of them.
 			hints = nil
@@ -246,20 +264,16 @@ func (a *App) updateStatusBar() {
 				note = "Writing a reply"
 			}
 		case a.cardsHaveFocus() && a.focusedCommentID != "":
-			hints = append(hints, hint{"Tab", "next comment"}, hint{"Esc", "let go"}, tabs, view, hideDetails)
+			// Esc is a ladder: it lets go of the card first and only the next
+			// press leaves the zoom, so the line names the rung it is on and
+			// backToList waits its turn.
+			hints = append(hints, hint{"Esc", "let go"}, comments, view, hideDetails, toNav)
 		case len(a.commentSpans) > 0 && a.cardsHaveFocus():
-			hints = append(hints, hint{"j/k", "scroll"}, hint{"Tab", "pick a comment"}, tabs, view, hideDetails)
+			hints = append(hints, hint{"j/k", "scroll"}, comments, view, hideDetails, toNav, backToList)
 		case a.detailsZoomed:
-			// Below the wide breakpoint the zoom leaves no nav tree to step
-			// onto, so offering the key there would be a lie.
-			toNav := hint{}
-			if a.layoutMode == layoutWide && !a.navigationHidden {
-				toNav = hint{"←/h", "navigation"}
-			}
-			hints = append(hints, hint{"j/k", "scroll"}, tabs, a.commandHint("zoom_details", "exit view"),
-				toNav, hint{"Esc", "back to list"})
+			hints = append(hints, hint{"j/k", "scroll"}, comments, view, toNav, backToList)
 		default:
-			hints = append(hints, hint{"j/k", "scroll"}, tabs, view, hideDetails, hint{"h", "back"})
+			hints = append(hints, hint{"j/k", "scroll"}, comments, view, hideDetails, hint{"h", "back"})
 		}
 	case FocusPalette:
 		hints = []hint{{"↑↓", "move"}, {"⏎", "run"}, {"Esc", "close"}}

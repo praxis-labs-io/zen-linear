@@ -22,7 +22,7 @@ func TestPaneHintsNameWhatTheKeyboardDoesHere(t *testing.T) {
 		{
 			name: "navigation",
 			pane: FocusNavigation,
-			want: []string{": palette", "↑↓ move", "⏎ open", "Tab search", "l issues", "{ hide nav"},
+			want: []string{": palette", "↑↓ move", "⏎ open", "Tab search", "l issues", "< hide nav"},
 			// The tree is the leftmost pane; there is nothing to its left.
 			wantNot: []string{"panes", "hide details"},
 		},
@@ -30,12 +30,12 @@ func TestPaneHintsNameWhatTheKeyboardDoesHere(t *testing.T) {
 			name:    "issues",
 			pane:    FocusIssues,
 			want:    []string{": palette", "j/k move", "⏎ preview", "v view", "/ search", "h/l panes"},
-			wantNot: []string{"hide nav", "tabs"},
+			wantNot: []string{"hide nav", "comments"},
 		},
 		{
 			name:    "details",
 			pane:    FocusDetails,
-			want:    []string{": palette", "j/k scroll", "[/] tabs", "v view", "} hide details", "h back"},
+			want:    []string{": palette", "j/k scroll", "{/} comments", "v view", "> hide details", "h back"},
 			wantNot: []string{"pick a comment"},
 		},
 		{
@@ -96,13 +96,61 @@ func TestPaletteHintLeadsEveryPane(t *testing.T) {
 	}
 }
 
+// TestZoomedHintsDropTheHideKey covers the bar offering a key that does
+// nothing. Hiding the details pane is inert while zoomed, and the branch that
+// knew that sat below the ones the comment ring picks, so a lit card brought
+// the hint back.
+func TestZoomedHintsDropTheHideKey(t *testing.T) {
+	app := newThreadedTestApp(t)
+	app.toggleDetailsZoom()
+
+	for _, tc := range []struct {
+		name string
+		lit  string
+	}{
+		{"nothing lit", ""},
+		{"a card lit", app.detailsCommentsSource[0].ID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app.focusedCommentID = tc.lit
+			app.updateStatusBar()
+
+			got := app.statusBar.GetText(true)
+			if strings.Contains(got, "hide details") {
+				t.Errorf("zoomed hints = %q, want no hide key while it is inert", got)
+			}
+			// The branches are picked by what the ring is doing, so each of
+			// them has to name the keys by what they do from in here.
+			if !strings.Contains(got, "v close") {
+				t.Errorf("zoomed hints = %q, want the zoom key to read as closing the view", got)
+			}
+			if strings.Contains(got, "v view") {
+				t.Errorf("zoomed hints = %q, want no offer to open a view already open", got)
+			}
+			if !strings.Contains(got, "←/h navigation") {
+				t.Errorf("zoomed hints = %q, want the way off the zoomed pane", got)
+			}
+			// Esc is a ladder, so the line names one rung: let go of the card,
+			// or leave the zoom when there is no card to let go of.
+			wantEscape := "Esc back to list"
+			if tc.lit != "" {
+				wantEscape = "Esc let go"
+			}
+			if !strings.Contains(got, wantEscape) {
+				t.Errorf("zoomed hints = %q, want %q", got, wantEscape)
+			}
+			if tc.lit != "" && strings.Contains(got, "back to list") {
+				t.Errorf("zoomed hints = %q, want Esc to name only the card it lets go of", got)
+			}
+		})
+	}
+}
+
 // Every key typed into a comment box goes into the text, the palette's
 // included, so the line names none of them.
 func TestWritingDropsTheKeyHints(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusDetails
-	app.detailsCommentsVisible = true
-	app.focusedDetailsView = true
 	app.commentsFocus = commentsFocusText
 
 	app.updateStatusBar()
@@ -128,9 +176,10 @@ func TestFlashedMessageTakesTheCorner(t *testing.T) {
 	}
 }
 
-// The corner says three things and colors them apart: plain text is a nudge,
-// green is something that finished, red is something that failed. Plain is the
-// default so the color means something when it shows up.
+// The corner says four things and colors them apart: plain text is a nudge, the
+// success color is something that finished, the error color is something that
+// failed, and the accent is the app still working. Plain is the default for a
+// nudge so the other three mean something when they show up.
 func TestTheToastColorsSaySuccessAndFailureApart(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -151,15 +200,16 @@ func TestTheToastColorsSaySuccessAndFailureApart(t *testing.T) {
 		})
 	}
 
-	// Progress is not a result, so it stays plain whatever the last flash was.
+	// Progress takes the accent whatever the last flash was: it is the app
+	// working, and it must not inherit the color of a result that has passed.
 	app.flashSuccess("Archived ZNL-1")
 	app.statusMessage = ""
-	if got := app.toastTag(); got != app.themeTags.Foreground {
-		t.Errorf("loading tag = %q, want plain text", got)
+	if got := app.toastTag(); got != app.themeTags.Accent {
+		t.Errorf("loading tag = %q, want the accent", got)
 	}
 }
 
-// Every theme needs a green to say success in, and the fallback has to give one
+// Every theme needs a color to say success in, and the fallback has to give one
 // to a theme that predates the field rather than an unpaintable default.
 func TestEveryThemeHasASuccessColor(t *testing.T) {
 	for name, theme := range ThemeRegistry {

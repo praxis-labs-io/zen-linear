@@ -16,7 +16,7 @@ func paneTitles(app *App) map[string]string {
 	return map[string]string{
 		"navigation": stripTags(app.navigationPanel.GetTitle()),
 		"issues":     stripTags(app.listIssuesTable.GetTitle()),
-		"details":    stripTags(app.detailsDescriptionView.GetTitle()),
+		"details":    stripTags(app.detailsView.GetTitle()),
 	}
 }
 
@@ -172,7 +172,7 @@ func TestFocusedPaneNumberTakesTheAccent(t *testing.T) {
 	titleFor := map[FocusTarget]func() string{
 		FocusNavigation: app.navigationPanel.GetTitle,
 		FocusIssues:     app.listIssuesTable.GetTitle,
-		FocusDetails:    app.detailsDescriptionView.GetTitle,
+		FocusDetails:    app.detailsView.GetTitle,
 	}
 
 	for pane, title := range titleFor {

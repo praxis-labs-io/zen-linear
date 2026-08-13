@@ -8,10 +8,10 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
-// The page carries a focus ring: Tab steps it card by card, through the reply
-// box where one is open and on to the compose card at the end, and the actions
-// below act on whichever card it is on. The ring is what gives a per-comment
-// action something to aim at.
+// The page carries a focus ring: the braces step it card by card, through the
+// reply box where one is open and on to the compose card at the end, and the
+// actions below act on whichever card it is on. The ring is what gives a
+// per-comment action something to aim at.
 
 // commentSpan is one stop in the ring and where it landed on the page, in line
 // numbers. The ring moves by these and scrolls by them, so nothing has to
@@ -25,19 +25,18 @@ type commentSpan struct {
 	end   int
 }
 
-// commentsHaveFocus reports whether the page holds the keyboard.
+// detailsHaveFocus reports whether the page holds the keyboard.
 //
-// It reads the focus fields rather than Application.GetFocus because the render
-// path runs from a draw func, where taking the app's lock again hangs the
-// process.
-func (a *App) commentsHaveFocus() bool {
-	return a.focusedPane == FocusDetails && a.detailsCommentsVisible && a.focusedDetailsView
+// It reads the focus field rather than Application.GetFocus because the render
+// path runs from a draw, where taking the app's lock again hangs the process.
+func (a *App) detailsHaveFocus() bool {
+	return a.focusedPane == FocusDetails
 }
 
 // cardsHaveFocus reports whether the ring is on a comment card rather than in
 // one of the boxes, which is what the per-comment keys answer from.
 func (a *App) cardsHaveFocus() bool {
-	return a.commentsHaveFocus() && a.commentsFocus == commentsFocusCards
+	return a.detailsHaveFocus() && a.commentsFocus == commentsFocusCards
 }
 
 // focusedComment returns the comment the ring is on, and whether there is one
@@ -87,8 +86,8 @@ func (a *App) commentSpanIndex(id string) int {
 }
 
 // stepCommentRing moves the ring one stop and reports whether it took the step.
-// It answers false off either end, where Tab stays put rather than leaving the
-// pane.
+// It answers false off either end, where the ring stays put rather than
+// leaving the pane.
 //
 // A ring with no stop, or one that has been scrolled off screen, anchors to
 // what is on screen instead of stepping. A reader who scrolled away has moved
@@ -101,8 +100,8 @@ func (a *App) stepCommentRing(step int) bool {
 	index := a.commentStopIndex()
 	// Only a card is given up for being off screen. A box holding the keyboard
 	// is where the reader is whatever the scroll says, and stepping off it to
-	// a card they happen to be looking at would take Tab away from the button
-	// that sends what they just wrote.
+	// a card they happen to be looking at would take the keys away from what
+	// they were writing.
 	if index < 0 || (a.commentsFocus == commentsFocusCards && !a.commentSpanVisible(a.commentSpans[index])) {
 		a.focusCommentAt(a.anchorComment(step))
 		return true
@@ -116,13 +115,13 @@ func (a *App) stepCommentRing(step int) bool {
 }
 
 // clearCommentFocus takes the ring off every card, reporting whether one was
-// lit. Nothing is lit until Tab says so, and Escape puts it back that way.
+// lit. Nothing is lit until a brace says so, and Escape puts it back that way.
 func (a *App) clearCommentFocus() bool {
 	if a.focusedCommentID == "" {
 		return false
 	}
 	a.focusedCommentID = ""
-	a.renderDetailsComments()
+	a.renderDetailsPage()
 	a.updateStatusBar()
 	return true
 }
@@ -138,7 +137,7 @@ func (a *App) focusCommentAt(index int) {
 		// Re-rendered rather than repainted: the border lives in the text, so
 		// the ring only moves when the page is written again. The spans are
 		// rebuilt by the same call, so the scroll below reads the new ones.
-		a.renderDetailsComments()
+		a.renderDetailsPage()
 		if index = a.commentStopIndex(); index < 0 {
 			return
 		}
@@ -187,7 +186,7 @@ type commentPaint struct {
 // commentRing is the ring as it stands now, to be compared against what the
 // page is currently showing.
 func (a *App) commentRing() commentPaint {
-	return commentPaint{active: a.commentsHaveFocus(), focus: a.commentsFocus, id: a.focusedCommentID}
+	return commentPaint{active: a.detailsHaveFocus(), focus: a.commentsFocus, id: a.focusedCommentID}
 }
 
 // refreshCommentRing repaints the page when the ring has moved or has gained or
@@ -198,23 +197,23 @@ func (a *App) refreshCommentRing() {
 	// Guarded on the page, not on the comments: an issue nobody has written on
 	// still draws the compose card, and that card takes the focus border and
 	// its hints like any other.
-	if a.detailsCommentsView == nil || len(a.commentSpans) == 0 {
+	if a.detailsPageView == nil || len(a.commentSpans) == 0 {
 		return
 	}
 	if a.commentRing() == a.commentPainted {
 		return
 	}
-	a.renderDetailsComments()
+	a.renderDetailsPage()
 }
 
 // scrollCommentIntoView scrolls the stack the least it can to show a card,
 // showing the top of one taller than the pane.
 func (a *App) scrollCommentIntoView(span commentSpan) {
-	height := viewHeight(a.detailsCommentsView)
+	height := viewHeight(a.detailsPageView)
 	if height <= 0 {
 		return
 	}
-	row, column := a.detailsCommentsView.GetScrollOffset()
+	row, column := a.detailsPageView.GetScrollOffset()
 	switch {
 	case span.start < row:
 		row = span.start
@@ -223,18 +222,18 @@ func (a *App) scrollCommentIntoView(span commentSpan) {
 	default:
 		return
 	}
-	a.detailsCommentsView.ScrollTo(max(0, row), column)
+	a.detailsPageView.ScrollTo(max(0, row), column)
 }
 
 // commentSpanVisible reports whether any row of a card is on screen.
 func (a *App) commentSpanVisible(span commentSpan) bool {
-	height := viewHeight(a.detailsCommentsView)
+	height := viewHeight(a.detailsPageView)
 	if height <= 0 {
 		// Before the first draw nothing can be off screen, and treating the
 		// ring as stranded there would re-anchor it on every key.
 		return true
 	}
-	row, _ := a.detailsCommentsView.GetScrollOffset()
+	row, _ := a.detailsPageView.GetScrollOffset()
 	return span.end >= row && span.start < row+height
 }
 
@@ -242,7 +241,7 @@ func (a *App) commentSpanVisible(span commentSpan) bool {
 // took the event. It runs ahead of the pane's command shortcuts, which is what
 // lets r mean reply here and refresh everywhere else.
 func (a *App) handleCommentKey(event *tcell.EventKey) bool {
-	if !a.commentsHaveFocus() || len(a.commentSpans) == 0 {
+	if !a.detailsHaveFocus() || len(a.commentSpans) == 0 {
 		return false
 	}
 	if event.Key() != tcell.KeyRune {

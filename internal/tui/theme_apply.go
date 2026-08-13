@@ -89,16 +89,11 @@ func (a *App) applyThemeToComponents() {
 	// one the chain would reach, so the text style tracks it. Left behind, the
 	// two disagree and tview fills the inner rect, which the centered reading
 	// measure shows as a block narrower than the pane.
-	if a.detailsDescriptionView != nil {
-		a.detailsDescriptionView.SetTitleColor(a.theme.Foreground).
-			SetBorderColor(a.theme.Border)
-		a.detailsDescriptionView.SetBackgroundColor(a.theme.Background)
+	if a.detailsPageView != nil {
+		a.detailsPageView.SetBackgroundColor(a.theme.Background)
 	}
-	if a.detailsCommentsView != nil {
-		a.detailsCommentsView.SetBackgroundColor(a.theme.Background)
-	}
-	if a.detailsCommentsPanel != nil {
-		a.detailsCommentsPanel.SetTitleColor(a.theme.Foreground).
+	if a.detailsView != nil {
+		a.detailsView.SetTitleColor(a.theme.Foreground).
 			SetBorderColor(a.theme.Border).
 			SetBackgroundColor(a.theme.Background)
 		a.applyComposeTheme()
@@ -114,13 +109,9 @@ func (a *App) applyThemeToComponents() {
 }
 
 func (a *App) applyDensityToComponents() {
-	if a.detailsDescriptionView != nil {
+	if a.detailsView != nil {
 		padding := a.density.DetailsPadding
-		a.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-	}
-	if a.detailsCommentsPanel != nil {
-		padding := a.density.DetailsPadding
-		a.detailsCommentsPanel.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
+		a.detailsView.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
 	}
 	if a.statusRow != nil {
 		a.applyStatusBarPadding()

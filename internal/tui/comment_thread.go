@@ -6,7 +6,7 @@ import "github.com/zen-linear/zen-linear/internal/linearapi"
 // its elbow are drawn in it, and the card gives up the same width.
 const commentThreadIndent = 3
 
-// commentRow is one card in the Comments tab: a comment and how deep in a
+// commentRow is one card on the details page: a comment and how deep in a
 // thread it sits.
 type commentRow struct {
 	Comment linearapi.Comment
