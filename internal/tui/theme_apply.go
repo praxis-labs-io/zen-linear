@@ -192,7 +192,6 @@ func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
 			node.SetColor(a.theme.Foreground)
 		}
 	}
-	node.SetSelectedTextStyle(selectionStyle(a.theme))
 	for _, child := range node.GetChildren() {
 		a.applyNavigationNodeColors(child)
 	}

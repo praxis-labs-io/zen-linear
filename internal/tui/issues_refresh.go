@@ -357,6 +357,9 @@ func (a *App) updateIssuesColumnLayout() {
 
 	// Update all pane titles to reflect current state
 	a.updateAllPaneTitles()
+	// The tree's selection names the list on screen, and search just replaced
+	// it, so this is where that row goes out and comes back.
+	a.applyNavSearchStyles()
 
 	if refocus {
 		a.updateFocus()

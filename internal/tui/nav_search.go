@@ -78,9 +78,10 @@ func (a *App) buildNavigationPanel() {
 	a.applyNavSearchStyles()
 }
 
-// applyNavSearchStyles lights the query box while it holds the keyboard and
-// mutes it otherwise. The tree's selection stays lit either way: it names the
-// list the issues pane is showing, which is still true while you type.
+// applyNavSearchStyles lights the query box while it holds the keyboard, and
+// puts out the tree's selection while search results are what the issues pane
+// is showing. A lit row there claims to name the list on screen, and search
+// takes no list.
 func (a *App) applyNavSearchStyles() {
 	if a.navSearchInput == nil || a.navSearchFrame == nil {
 		return
@@ -91,6 +92,24 @@ func (a *App) applyNavSearchStyles() {
 	}
 	a.navSearchFrame.SetBorderColor(border)
 	a.navSearchInput.SetLabelColor(label)
+	a.applyNavSelectionStyle(a.navigationTree.GetRoot())
+}
+
+// applyNavSelectionStyle sets how the tree's current row paints. Every node
+// gets it, not just the current one, so arrowing around while results are up
+// cannot light the row the cursor lands on.
+func (a *App) applyNavSelectionStyle(node *tview.TreeNode) {
+	if node == nil {
+		return
+	}
+	style := selectionStyle(a.theme)
+	if a.activeIssuesSection == IssuesSectionSearch {
+		style = tcell.StyleDefault.Foreground(node.GetColor()).Background(a.theme.Background)
+	}
+	node.SetSelectedTextStyle(style)
+	for _, child := range node.GetChildren() {
+		a.applyNavSelectionStyle(child)
+	}
 }
 
 // navSearchActive reports whether typed keys belong to the query box.
@@ -110,6 +129,17 @@ func (a *App) focusNavSearch() {
 func (a *App) focusNavigationTree() {
 	a.navSearchFocused = false
 	a.updateFocus()
+}
+
+// navigationTreeIsAtTop reports whether the tree's cursor is on its first row,
+// the one an Up steps off. The root is hidden, so that row is its first child.
+func (a *App) navigationTreeIsAtTop() bool {
+	root := a.navigationTree.GetRoot()
+	if root == nil {
+		return false
+	}
+	children := root.GetChildren()
+	return len(children) > 0 && a.navigationTree.GetCurrentNode() == children[0]
 }
 
 // clearNavSearch empties the query and drops the results. Emptying the box

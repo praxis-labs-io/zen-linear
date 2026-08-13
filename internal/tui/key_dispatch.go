@@ -135,11 +135,23 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyRight:
 		a.stepPane(1)
 		return nil
+	case tcell.KeyUp:
+		if a.navigationTreeIsAtTop() {
+			a.focusNavSearch()
+			return nil
+		}
 	case tcell.KeyRune:
 		switch r := event.Rune(); r {
 		case 'l':
 			a.stepPane(1)
 			return nil
+		case 'k':
+			// Off the top of the tree is the query box above it, matching the
+			// Down that came out of it.
+			if a.navigationTreeIsAtTop() {
+				a.focusNavSearch()
+				return nil
+			}
 		case a.actionKey("favorite_move_up", 'K'):
 			if a.moveFavorite(a.currentNavigationNode(), -1) {
 				return nil
@@ -156,7 +168,7 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 			if a.nestFavorite(a.currentNavigationNode(), true) {
 				return nil
 			}
-		case 'j', 'k', 'g', 'G', 'h':
+		case 'j', 'g', 'G', 'h':
 			// Tree movement keys stay with the tree.
 		default:
 			// Command shortcuts work from the navigation pane too.

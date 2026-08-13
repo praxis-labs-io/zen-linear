@@ -96,6 +96,42 @@ func TestPerformIssueSearch_ASupersededFetchIsNotAFailure(t *testing.T) {
 	}
 }
 
+// The spinner is a ticker, not a glyph: nothing in tview has a frame loop, so a
+// waiting state that does not run the loop paints one frozen frame and reads as
+// a hang.
+func TestSearchRunsTheSpinner(t *testing.T) {
+	app := newUXTestApp(t)
+	app.config.SearchDebounce = time.Hour
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	app.fetchIssuesPage = func(ctx context.Context, _ linearapi.FetchIssuesParams, _ *string) (linearapi.IssuePage, error) {
+		started <- struct{}{}
+		<-release
+		return linearapi.IssuePage{}, ctx.Err()
+	}
+
+	app.performIssueSearch("auth")
+	<-started
+
+	if !app.loading.running() {
+		t.Fatal("the frame loop is stopped while a search is out, so the spinner cannot advance")
+	}
+	first, _ := app.issuesPlaceholderMessage()
+	// The indicator is seeded with frame zero and the first advance returns it
+	// again, so the glyph only moves on the second.
+	app.loading.advance()
+	app.loading.advance()
+	if second, _ := app.issuesPlaceholderMessage(); second == first {
+		t.Errorf("the waiting message did not change with the frame: %q", second)
+	}
+
+	app.setSearchLoading(false)
+	if app.loading.running() {
+		t.Error("the frame loop kept running with nothing in flight, so it queues draws forever")
+	}
+}
+
 func TestPerformIssueSearch_RendersResults(t *testing.T) {
 	app := newUXTestApp(t)
 	// Search state is UI-thread-only, so the test reads it after the queued

@@ -85,6 +85,63 @@ func TestDownAndTabReachTheTree(t *testing.T) {
 	}
 }
 
+// TestUpOffTheTopOfTheTreeReachesTheQueryBox covers the return trip for the
+// Down that left it. Anywhere else in the tree, Up is the tree's own move.
+func TestUpOffTheTopOfTheTreeReachesTheQueryBox(t *testing.T) {
+	for _, key := range []*tcell.EventKey{
+		tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone),
+		tcell.NewEventKey(tcell.KeyRune, 'k', tcell.ModNone),
+	} {
+		app := newUXTestApp(t)
+		app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
+		rows := app.navigationTree.GetRoot().GetChildren()
+		if len(rows) < 2 {
+			t.Fatalf("fixture has %d tree rows, want at least two", len(rows))
+		}
+
+		app.navigationTree.SetCurrentNode(rows[1])
+		if got := app.handleGlobalKey(key); got == nil {
+			t.Errorf("%v was claimed mid-tree, want it left to the tree", key.Key())
+		}
+
+		app.navigationTree.SetCurrentNode(rows[0])
+		if got := app.handleGlobalKey(key); got != nil {
+			t.Errorf("%v leaked past the top of the tree", key.Key())
+		}
+		if !app.navSearchActive() {
+			t.Errorf("%v off the top of the tree did not reach the query box", key.Key())
+		}
+	}
+}
+
+// TestSearchResultsPutOutTheTreeSelection covers a lit row claiming to name the
+// list on screen while what is on screen is a workspace-wide search, which
+// takes no list.
+func TestSearchResultsPutOutTheTreeSelection(t *testing.T) {
+	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me"})
+	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
+	current := app.navigationTree.GetRoot().GetChildren()[0]
+	app.navigationTree.SetCurrentNode(current)
+	app.applyNavSearchStyles()
+
+	lit := current.GetSelectedTextStyle()
+	if lit != selectionStyle(app.theme) {
+		t.Fatalf("the tree row is not lit to start with: %v", lit)
+	}
+
+	app.performIssueSearch("found")
+	waitForResults()
+
+	if got := current.GetSelectedTextStyle(); got == lit {
+		t.Error("the tree row stayed lit while search results held the pane")
+	}
+
+	app.performIssueSearch("")
+	if got := current.GetSelectedTextStyle(); got != lit {
+		t.Error("the tree row stayed out after the list came back")
+	}
+}
+
 // TestEscClearsThenLetsGo covers both stops. Esc on a live query is a clear,
 // not an exit: leaving with the words still there strands results nobody asked
 // to keep.

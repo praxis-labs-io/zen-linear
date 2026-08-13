@@ -28,7 +28,7 @@ func (a *App) performIssueSearch(query string) {
 		a.jumpToSection(IssuesSectionList, 0)
 		return
 	}
-	a.searchLoading = true
+	a.setSearchLoading(true)
 	a.searchErr = nil
 	a.activeIssuesSection = IssuesSectionSearch
 	a.updateIssuesColumnLayout()
@@ -52,7 +52,7 @@ func (a *App) performIssueSearch(query string) {
 			if generation != a.searchFetchGeneration.Load() {
 				return
 			}
-			a.searchLoading = false
+			a.setSearchLoading(false)
 			if err != nil {
 				a.searchErr = err
 				a.updateIssuesColumnLayout()
@@ -99,6 +99,6 @@ func (a *App) clearSearchResults() {
 	a.searchIssues = nil
 	a.searchIssueRows = nil
 	a.searchIDToIssue = make(map[string]*linearapi.Issue)
-	a.searchLoading = false
+	a.setSearchLoading(false)
 	a.searchErr = nil
 }

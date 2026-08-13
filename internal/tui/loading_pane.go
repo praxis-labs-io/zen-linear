@@ -121,6 +121,12 @@ func (a *App) setIssuesLoading(loading bool) {
 	a.syncLoadingIndicator()
 }
 
+// setSearchLoading records whether a search request is out. UI thread only.
+func (a *App) setSearchLoading(loading bool) {
+	a.searchLoading = loading
+	a.syncLoadingIndicator()
+}
+
 // finishIssuesLoad settles the pane when this refresh is the one that claimed
 // it. A superseded refresh reaching a completion path must not clear the flag:
 // the refresh that replaced it is still fetching, and the pane would drop to
@@ -141,7 +147,7 @@ func (a *App) syncLoadingIndicator() {
 	if a.loading == nil {
 		a.loading = newLoadingIndicator()
 	}
-	if a.isLoading || a.navLoading {
+	if a.isLoading || a.navLoading || a.searchLoading {
 		a.loading.start(a.loadingFrameInterval(), func() {
 			a.QueueUpdateDraw(func() {
 				a.loading.advance()
