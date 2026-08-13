@@ -210,6 +210,15 @@ func (a *App) updateStatusBar() {
 	comments := a.commentsHint()
 	view := a.commandHint("zoom_details", "view")
 	hideDetails := a.commandHint("toggle_details_pane", "hide details")
+	if a.detailsZoomed {
+		// Zoomed, the same key closes the view again, and hiding the pane is
+		// inert. Both set here rather than per branch: the branches below are
+		// picked by what the comment ring is doing, which has nothing to say
+		// about the zoom, and one of them offering "view" from inside the view
+		// is how this was found.
+		view = a.commandHint("zoom_details", "close")
+		hideDetails = hint{}
+	}
 
 	hints := []hint{a.actionHint("open_palette", ':', "palette")}
 	note := ""
@@ -258,7 +267,7 @@ func (a *App) updateStatusBar() {
 			if a.layoutMode == layoutWide && !a.navigationHidden {
 				toNav = hint{"←/h", "navigation"}
 			}
-			hints = append(hints, hint{"j/k", "scroll"}, comments, a.commandHint("zoom_details", "exit view"),
+			hints = append(hints, hint{"j/k", "scroll"}, comments, view,
 				toNav, hint{"Esc", "back to list"})
 		default:
 			hints = append(hints, hint{"j/k", "scroll"}, comments, view, hideDetails, hint{"h", "back"})

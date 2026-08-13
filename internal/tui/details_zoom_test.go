@@ -470,7 +470,7 @@ func TestZoomedStatusBarHelpMatchesTheKeysThatWork(t *testing.T) {
 	if strings.Contains(narrow, "navigation") {
 		t.Errorf("narrow zoomed help = %q, want no navigation key with no tree on screen", narrow)
 	}
-	for _, want := range []string{"v exit view", "Esc back to list"} {
+	for _, want := range []string{"v close", "Esc back to list"} {
 		if !strings.Contains(narrow, want) {
 			t.Errorf("zoomed help = %q, want it to mention %q", narrow, want)
 		}

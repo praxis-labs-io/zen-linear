@@ -318,21 +318,25 @@ func TestDetailsSectionOrder(t *testing.T) {
 	}
 }
 
-// TestDetailsDescriptionKeepsItsOwnLine covers the compact density, where the
-// header ends on the divider with no trailing gap line and the description
-// would otherwise be appended to it.
-func TestDetailsDescriptionKeepsItsOwnLine(t *testing.T) {
+// TestDetailsSectionLabelsKeepTheirOwnLine covers the compact density, where a
+// rule carries no gap line either side and the label under it would otherwise
+// be appended to it. This is the whole of the coverage for compact: the density
+// setting itself does not currently apply, so nobody can check it by eye.
+func TestDetailsSectionLabelsKeepTheirOwnLine(t *testing.T) {
 	app := newDetailsTestApp(t)
+	app.selectedIssue.Comments = threadedComments()
 	app.density = ResolveDensity(config.DensityCompact)
 	app.updateDetailsView()
 
-	lines := drawDetails(t, app, 60)
-	for _, line := range lines {
-		if strings.Contains(line, "────") && strings.Contains(line, "Description:") {
-			t.Errorf("divider and description share a line: %q", line)
+	lines := drawComments(t, app, 60)
+	for _, label := range []string{"Description:", "Comments ("} {
+		for _, line := range lines {
+			if strings.Contains(line, "────") && strings.Contains(line, label) {
+				t.Errorf("the rule and %q share a line: %q", label, line)
+			}
 		}
+		findLine(t, lines, label)
 	}
-	findLine(t, lines, "Description:")
 }
 
 // TestDetailsPaneSurvivesAPaneNarrowerThanItsBorder covers the draw func

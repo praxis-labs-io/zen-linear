@@ -96,6 +96,41 @@ func TestPaletteHintLeadsEveryPane(t *testing.T) {
 	}
 }
 
+// TestZoomedHintsDropTheHideKey covers the bar offering a key that does
+// nothing. Hiding the details pane is inert while zoomed, and the branch that
+// knew that sat below the ones the comment ring picks, so a lit card brought
+// the hint back.
+func TestZoomedHintsDropTheHideKey(t *testing.T) {
+	app := newThreadedTestApp(t)
+	app.toggleDetailsZoom()
+
+	for _, tc := range []struct {
+		name string
+		lit  string
+	}{
+		{"nothing lit", ""},
+		{"a card lit", app.detailsCommentsSource[0].ID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app.focusedCommentID = tc.lit
+			app.updateStatusBar()
+
+			got := app.statusBar.GetText(true)
+			if strings.Contains(got, "hide details") {
+				t.Errorf("zoomed hints = %q, want no hide key while it is inert", got)
+			}
+			// The branches are picked by what the ring is doing, so each of
+			// them has to name the key by what it does from in here.
+			if !strings.Contains(got, "v close") {
+				t.Errorf("zoomed hints = %q, want the zoom key to read as closing the view", got)
+			}
+			if strings.Contains(got, "v view") {
+				t.Errorf("zoomed hints = %q, want no offer to open a view already open", got)
+			}
+		})
+	}
+}
+
 // Every key typed into a comment box goes into the text, the palette's
 // included, so the line names none of them.
 func TestWritingDropsTheKeyHints(t *testing.T) {

@@ -142,9 +142,11 @@ func TestZoomedLayoutDropsTheNavBelowWide(t *testing.T) {
 	}
 }
 
-// TestZoomIsReleasedWhenTheDetailsPaneIsHidden guards the arrangement that
-// would otherwise mount nothing at all.
-func TestZoomIsReleasedWhenTheDetailsPaneIsHidden(t *testing.T) {
+// TestHidingTheDetailsPaneIsInertWhileZoomed guards the arrangement that would
+// otherwise mount nothing at all, and it guards it by refusing rather than by
+// unzooming. The key used to end the zoom as a side effect of hiding, which
+// read as a hide key doing something it never claims to do.
+func TestHidingTheDetailsPaneIsInertWhileZoomed(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
 	app.detailsZoomed = true
@@ -152,7 +154,13 @@ func TestZoomIsReleasedWhenTheDetailsPaneIsHidden(t *testing.T) {
 
 	app.toggleDetailsPane()
 
-	if app.detailsZoomed {
-		t.Error("hiding the details pane left the zoom on")
+	if !app.detailsZoomed {
+		t.Error("hiding the details pane released the zoom, want the key inert")
+	}
+	if app.detailsHidden {
+		t.Error("the details pane hid itself while zoomed, leaving nothing mounted")
+	}
+	if app.focusedPane != FocusDetails {
+		t.Errorf("focus moved to %v, want it to stay in the zoomed pane", app.focusedPane)
 	}
 }

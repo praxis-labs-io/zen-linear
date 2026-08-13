@@ -121,11 +121,16 @@ func (a *App) toggleNavigationPane() {
 	}
 }
 
-// toggleDetailsPane shows or hides the details pane.
+// toggleDetailsPane shows or hides the details pane. It is inert while zoomed:
+// the zoom is the details pane holding the whole screen, so a key that hides it
+// from inside can only end the zoom, and ending the zoom is what v is for. It
+// used to do exactly that, which read as the key doing something unrelated to
+// what it says.
 func (a *App) toggleDetailsPane() {
+	if a.detailsZoomed {
+		return
+	}
 	a.detailsHidden = !a.detailsHidden
-	// Hiding a zoomed pane would leave the content area holding nothing.
-	a.detailsZoomed = a.detailsZoomed && !a.detailsHidden
 	a.rebuildContentLayout()
 	a.updateFocus()
 	if a.detailsHidden {
