@@ -122,13 +122,19 @@ Adding a page moves focus. `Pages.AddPage` re-delegates focus to the top visible
 
 ### Theme system
 
-Themes are structs in `internal/tui/theme.go` registered in `ThemeRegistry`. Optional fields (`InverseText`, `StatusReview`, `StatusTriage`, `AssigneeText`) have fallback methods so legacy themes need no changes. `RosePineMoonTheme` sets `Background: tcell.ColorDefault` (terminal transparency), which breaks tview defaults that assume an opaque `PrimitiveBackgroundColor` — selection styles, InputField inner fill, modal backgrounds all have explicit workarounds (`selectionStyle`, `newThemedInputField`, `ModalBackground`). When adding UI, style from the theme, not tview defaults.
+Themes are structs in `internal/tui/theme.go` registered in `ThemeRegistry`. Optional fields (`InverseText`, `StatusReview`, `StatusTriage`, `AssigneeText`, `Success`) have fallback methods so legacy themes need no changes.
+
+The status bar's message corner is colored by what it says: `flashStatus` for a nudge (plain text), `flashSuccess` for an action that finished (green), `flashError` for one that failed (red). Plain is the default so a color means something when it appears — a failure carrying an error value goes to `updateStatusBarWithError` instead, which keeps the whole thing on the hint line rather than in a corner sized to a few words. `RosePineMoonTheme` sets `Background: tcell.ColorDefault` (terminal transparency), which breaks tview defaults that assume an opaque `PrimitiveBackgroundColor` — selection styles, InputField inner fill, modal backgrounds all have explicit workarounds (`selectionStyle`, `newThemedInputField`, `ModalBackground`). When adding UI, style from the theme, not tview defaults.
 
 Modal panels: `tview.NewFlex` (and Grid) set `dontClear`, so a Flex never paints its own background and the layer beneath bleeds through unpainted cells. Any modal panel needs `panel.Box = tview.NewBox()` before its other Box settings to restore the fill — `FormModal` does this for its shells; hand-built overlays must too.
 
 ### Navigation pane
 
-The pane is `navigationPanel` (`nav_search.go`), a Flex owning the border, the pane title, and one column of border padding: the query box, a hairline rule, and a borderless `navigationTree` beneath. `navSearchFocused` says which of the two controls holds the keyboard, and `navSearchActive()` gates key routing above the global runes in `handleGlobalKey` — without that gate, `q`, `:` and the pane numbers fire while you type. The box **must be rebuilt, not restyled**, on a theme change (tview bakes `InputBg` at construction), and the rebuild has to end in `rebuildContentLayout` or `contentFlex` keeps the old pointer.
+The pane is `navigationPanel` (`nav_search.go`), a Flex owning the border, the pane title, and one column of border padding: the query box in a bordered frame of its own, and a borderless `navigationTree` beneath. `navSearchFocused` says which of the two controls holds the keyboard, and `navSearchActive()` gates key routing above the global runes in `handleGlobalKey` — without that gate, `q`, `:` and the pane numbers fire while you type. `buildNavigationPanel` rebuilds the box and the frame on a theme change and must end in `rebuildContentLayout`, or `contentFlex` keeps the old pointer.
+
+Both controls call `claimNavFocus` from a `SetFocusFunc`, because a mouse click focuses a widget without ever reaching `updateFocus`. Two rules there. It must **never call `updateFocus`** — that calls `SetFocus`, which calls the callback back. And it **stands down while an overlay is up**: tview re-delegates focus down the whole tree on every page add and remove, that walk reaches this pane, and the palette rebuilds its page on every keystroke. Without the guard the claim took the pane back mid-rebuild and the palette's own re-show check then failed silently, so every key closed it.
+
+One of the panel's two children must carry the Flex's focus flag. `SetRoot` and every added page delegate focus downward, and a Flex with nothing flagged keeps it on its own Box, which answers no keys: the pane looks focused and the arrows do nothing.
 
 The search is workspace-wide and takes neither the tree's scope, the rich filters, nor the sort chain. That is why the issues context line skips it.
 
