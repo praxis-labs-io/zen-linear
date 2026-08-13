@@ -91,7 +91,7 @@ func (a *App) issuesScopeLabel() string {
 		label = "Cycle: " + node.CycleName
 	}
 	if key := a.teamKey(node.TeamID); key != "" && !node.IsTeam {
-		return key + " · " + label
+		return key + ": " + label
 	}
 	return label
 }

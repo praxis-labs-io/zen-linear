@@ -26,7 +26,7 @@ func TestIssuesTitleNamesTheListAndItsCount(t *testing.T) {
 	app := contextTestApp(t)
 	app.listIssueRows = []IssueRow{{IssueID: "issue-1"}, {IssueID: "issue-2"}}
 
-	if got := app.issuesTitleLabel(); got != "ZNL · Polish & Bugs (2)" {
+	if got := app.issuesTitleLabel(); got != "ZNL: Polish & Bugs (2)" {
 		t.Errorf("title = %q, want the list named with its count", got)
 	}
 }
@@ -37,7 +37,7 @@ func TestIssuesTitleLeavesATeamRowUnprefixed(t *testing.T) {
 	app := contextTestApp(t)
 	app.selectedNavigation = &NavigationNode{ID: "team-1", Text: "Zen Linear", TeamID: "team-1", IsTeam: true}
 
-	if got := app.issuesTitleLabel(); strings.Contains(got, "ZNL ·") {
+	if got := app.issuesTitleLabel(); strings.Contains(got, "ZNL:") {
 		t.Errorf("title = %q, want no key in front of the team's own name", got)
 	}
 }
@@ -107,7 +107,7 @@ func TestIssuesContextDrawsOnTheTopBorder(t *testing.T) {
 	lines := drawPrimitive(t, app.listIssuesTable, 80)
 
 	top := lines[0]
-	if !strings.Contains(top, "ZNL · Polish & Bugs") {
+	if !strings.Contains(top, "ZNL: Polish & Bugs") {
 		t.Errorf("top border = %q, want the list named in it", top)
 	}
 	if !strings.Contains(top, "Sort: ") {

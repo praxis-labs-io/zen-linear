@@ -20,17 +20,20 @@ func (a *App) buildNavigationPanel() {
 		previousQuery = a.navSearchInput.GetText()
 	}
 
-	a.navSearchInput = newThemedInputField(a.theme.InputBg)
-	a.navSearchInput.
+	// A form field, not a filled input: the frame around it is what says where
+	// it starts and ends, and the field itself takes the pane's background so a
+	// transparent theme stays transparent.
+	a.navSearchInput = tview.NewInputField().
 		SetLabel("/ ").
 		SetLabelColor(a.theme.Accent).
 		SetFieldWidth(0).
 		// The pane is around twenty columns wide, so the placeholder is one
 		// word or it is truncated.
 		SetPlaceholder("Search").
-		SetFieldStyle(tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.InputBg)).
-		SetPlaceholderStyle(tcell.StyleDefault.Foreground(a.theme.SecondaryText).Background(a.theme.InputBg)).
-		SetBackgroundColor(a.theme.Background)
+		SetFieldBackgroundColor(a.theme.Background).
+		SetFieldTextColor(a.theme.Foreground).
+		SetPlaceholderTextColor(a.theme.SecondaryText)
+	a.navSearchInput.SetBackgroundColor(a.theme.Background)
 	// Restore the query before installing the change handler so a theme
 	// rebuild does not re-fire the search.
 	a.navSearchInput.SetText(previousQuery)
@@ -39,15 +42,15 @@ func (a *App) buildNavigationPanel() {
 		a.scheduleSearchDebounce(text)
 	})
 
-	a.navSearchRule = tview.NewBox()
-	a.navSearchRule.SetBackgroundColor(a.theme.Background)
-	a.navSearchRule.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
-		style := tcell.StyleDefault.Foreground(a.theme.Border).Background(a.theme.Background)
-		for column := range width {
-			screen.SetContent(x+column, y, tcell.RuneHLine, nil, style)
-		}
-		return x, y, 0, 0
-	})
+	a.navSearchFrame = tview.NewFlex().SetDirection(tview.FlexRow)
+	// Flex sets dontClear and never paints its own background; restore the
+	// fill so the layer beneath cannot bleed through.
+	a.navSearchFrame.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
+	a.navSearchFrame.
+		SetBorder(true).
+		SetBorderColor(a.theme.Border).
+		SetBackgroundColor(a.theme.Background)
+	a.navSearchFrame.AddItem(a.navSearchInput, 0, 1, false)
 
 	a.navigationPanel = tview.NewFlex().SetDirection(tview.FlexRow)
 	// Flex sets dontClear and never paints its own background; restore the
@@ -64,8 +67,7 @@ func (a *App) buildNavigationPanel() {
 	// without this its first column would sit on the border.
 	a.navigationPanel.SetBorderPadding(0, 0, 1, 1)
 	a.navigationPanel.
-		AddItem(a.navSearchInput, 1, 0, false).
-		AddItem(a.navSearchRule, 1, 0, false).
+		AddItem(a.navSearchFrame, 3, 0, false).
 		AddItem(a.navigationTree, 0, 1, false)
 
 	a.applyNavSearchStyles()
@@ -75,17 +77,15 @@ func (a *App) buildNavigationPanel() {
 // mutes it otherwise. The tree's selection stays lit either way: it names the
 // list the issues pane is showing, which is still true while you type.
 func (a *App) applyNavSearchStyles() {
-	if a.navSearchInput == nil {
+	if a.navSearchInput == nil || a.navSearchFrame == nil {
 		return
 	}
-	label, text := a.theme.SecondaryText, a.theme.SecondaryText
+	border, label := a.theme.Border, a.theme.SecondaryText
 	if a.navSearchActive() {
-		label, text = a.theme.Accent, a.theme.Foreground
+		border, label = a.theme.BorderFocus, a.theme.Accent
 	}
+	a.navSearchFrame.SetBorderColor(border)
 	a.navSearchInput.SetLabelColor(label)
-	a.navSearchInput.SetFieldStyle(tcell.StyleDefault.
-		Foreground(text).
-		Background(a.theme.InputBg))
 }
 
 // navSearchActive reports whether typed keys belong to the query box.

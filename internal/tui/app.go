@@ -54,9 +54,9 @@ type App struct {
 	zoomPreviousHidden     bool
 	layoutMode             layoutMode
 	palettePreviousPane    FocusTarget
-	navigationPanel        *tview.Flex // Navigation pane shell: query box + rule + tree
+	navigationPanel        *tview.Flex // Navigation pane shell: query box + tree
+	navSearchFrame         *tview.Flex // Bordered frame around the query box
 	navSearchInput         *tview.InputField
-	navSearchRule          *tview.Box // Hairline between the query box and the tree
 	navigationTree         *tview.TreeView
 	navLoadingNode         *tview.TreeNode // "Loading teams" node, until a tree replaces it
 	navNodeLabels          map[*tview.TreeNode]navNodeLabel

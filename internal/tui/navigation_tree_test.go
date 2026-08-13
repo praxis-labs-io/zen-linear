@@ -77,9 +77,9 @@ func TestSelectingFavoritesFolderOnlyToggles(t *testing.T) {
 	}
 }
 
-// TestNavigationPaneDrawsItsControlsInOrder covers the pane's stack under one
-// border: the workspace names it, the query box takes the first row, a rule
-// closes it off, and the tree starts one column off the border with no root row
+// TestNavigationPaneDrawsItsControlsInOrder covers the pane's stack: the
+// workspace names the pane border, the query box sits in a frame of its own
+// under it, and the tree starts one column off the border with no root row
 // above it.
 func TestNavigationPaneDrawsItsControlsInOrder(t *testing.T) {
 	app := newUXTestApp(t)
@@ -92,13 +92,16 @@ func TestNavigationPaneDrawsItsControlsInOrder(t *testing.T) {
 	if !strings.Contains(lines[0], "Praxis Labs") {
 		t.Errorf("pane title row = %q, want the workspace name", lines[0])
 	}
-	if got := lines[1]; !strings.Contains(got, "/") || !strings.Contains(got, "Search") {
-		t.Errorf("first row = %q, want the query box", got)
+	if got := lines[1]; !strings.Contains(got, "┌") {
+		t.Errorf("first row = %q, want the query box's own frame", got)
 	}
-	if got := lines[2]; !strings.Contains(got, "──") {
-		t.Errorf("second row = %q, want the rule under the query box", got)
+	if got := lines[2]; !strings.Contains(got, "/") || !strings.Contains(got, "Search") {
+		t.Errorf("second row = %q, want the query box", got)
 	}
-	if got := lines[3]; !strings.HasPrefix(strings.TrimPrefix(got, "│"), " All Issues") {
+	if got := lines[3]; !strings.Contains(got, "└") {
+		t.Errorf("third row = %q, want the frame closing under the query box", got)
+	}
+	if got := lines[4]; !strings.HasPrefix(strings.TrimPrefix(got, "│"), " All Issues") {
 		t.Errorf("first tree row = %q, want All Issues one column off the border", got)
 	}
 }

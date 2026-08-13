@@ -177,9 +177,9 @@ func (a *App) restoreSessionSearch(state session.State) {
 	if state.Search == "" || a.navSearchInput == nil {
 		return
 	}
-	// Focus stays on the navigation tree; this only decides where a step back
-	// into the query box lands.
-	a.navSearchFocused = true
+	// The keyboard stays on the tree. A launch that opens with the cursor in a
+	// text field swallows the first key the user types, and the query is
+	// already there to read; / and Shift+Tab are the way back into it.
 	// updateIssuesData returns early while results are showing, so the saved
 	// issue can only be reselected once the search results themselves land.
 	a.pendingSearchIssueID = state.IssueID
