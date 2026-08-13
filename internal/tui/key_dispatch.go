@@ -10,7 +10,7 @@ func (a *App) bindGlobalKeys() {
 }
 
 // handleGlobalKey is the app's single input capture: modals first, then the
-// palette and search input, then global keys, then the focused pane.
+// palette and the query box, then global keys, then the focused pane.
 func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if modal := a.activeModal(); modal != nil {
 		return modal.HandleKey(event)
@@ -26,10 +26,10 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return a.handlePaletteKey(event)
 	}
 
-	// The search input owns keys next, so typed letters reach the field
+	// The nav pane's query box owns keys next, so typed letters reach the field
 	// instead of firing global or pane shortcuts.
-	if a.searchInputActive() {
-		return a.handleSearchInputKey(event)
+	if a.navSearchActive() {
+		return a.handleNavSearchKey(event)
 	}
 
 	// The compose box owns keys for the same reason: a comment is prose, and q
@@ -49,9 +49,10 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		// tview, whose focus delegation would land it on an arbitrary
 		// primitive. The palette never reaches here; it returned above.
 		backward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
-		if backward && a.searchResultsHaveFocus() {
-			// The way back into the query box, matching the Tab that left it.
-			a.focusSearchInput()
+		if a.focusedPane == FocusNavigation {
+			// Two controls under one border, so either direction is the other
+			// one. Tab out of the query box is handled with its own keys.
+			a.focusNavSearch()
 			return nil
 		}
 		a.stepCommentsFocus(backward)
@@ -70,7 +71,7 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 			a.openPalette()
 			return nil
 		case a.actionKey("search", '/'):
-			a.openSearchTab()
+			a.focusNavSearch()
 			return nil
 		case a.actionKey("focus_navigation", '1'):
 			a.focusPane(FocusNavigation)
@@ -171,9 +172,10 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEscape:
-		// Esc in the search results returns to the search input.
+		// Esc in the search results returns to the query box that produced
+		// them, over in the navigation pane.
 		if a.activeIssuesSection == IssuesSectionSearch {
-			a.focusSearchInput()
+			a.focusNavSearch()
 			return nil
 		}
 	case tcell.KeyLeft:
@@ -191,15 +193,6 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case 'l':
 			a.stepPane(1)
-			return nil
-		}
-		// [ and ] cycle the issues tabs, lazygit-style.
-		switch r {
-		case a.actionKey("tab_prev", '['):
-			a.cycleIssuesSection(-1)
-			return nil
-		case a.actionKey("tab_next", ']'):
-			a.cycleIssuesSection(1)
 			return nil
 		}
 		// Handle command shortcuts (plain letters) - skip navigation keys

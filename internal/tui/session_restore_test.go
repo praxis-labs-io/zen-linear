@@ -201,7 +201,7 @@ func TestApplySessionNavigationRestoresFocusedIssue(t *testing.T) {
 		t.Fatal("applySessionNavigation() = false, want true")
 	}
 
-	if got := app.selectedIssueID(IssuesSectionAll); got != "issue-2" {
+	if got := app.selectedIssueID(IssuesSectionList); got != "issue-2" {
 		t.Fatalf("selected issue = %q, want issue-2", got)
 	}
 }
@@ -218,58 +218,41 @@ func TestApplySessionNavigationMissingIssueFallsBack(t *testing.T) {
 		t.Fatal("applySessionNavigation() = false, want true")
 	}
 
-	if got := app.selectedIssueID(IssuesSectionAll); got != "issue-1" {
+	if got := app.selectedIssueID(IssuesSectionList); got != "issue-1" {
 		t.Fatalf("selected issue = %q, want the first row issue-1", got)
-	}
-}
-
-func TestApplySessionNavigationRestoresTab(t *testing.T) {
-	app, _ := newSessionRestoreTestApp(t, session.State{
-		Nav:     session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
-		Section: sessionSectionMy,
-	})
-
-	if !restoreSession(t, app, nil) {
-		t.Fatal("applySessionNavigation() = false, want true")
-	}
-
-	if app.activeIssuesSection != IssuesSectionMy {
-		t.Fatalf("activeIssuesSection = %v, want My", app.activeIssuesSection)
 	}
 }
 
 func TestApplySessionNavigationRestoresSearch(t *testing.T) {
 	app, _ := newSessionRestoreTestApp(t, session.State{
-		Nav:     session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
-		Section: sessionSectionSearch,
-		Search:  "login",
+		Nav:    session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
+		Search: "login",
 	})
 
 	if !restoreSession(t, app, nil) {
 		t.Fatal("applySessionNavigation() = false, want true")
 	}
 
-	if app.activeIssuesSection != IssuesSectionSearch {
-		t.Fatalf("activeIssuesSection = %v, want Search", app.activeIssuesSection)
-	}
-	if got := app.searchInput.GetText(); got != "login" {
+	if got := app.navSearchInput.GetText(); got != "login" {
 		t.Fatalf("search input = %q, want login", got)
 	}
 	if app.searchQuery != "login" {
 		t.Fatalf("searchQuery = %q, want login", app.searchQuery)
 	}
-	// The restored query runs through the debounce, so the results have to
-	// land before the test ends or its goroutine outlives it.
+	// The restored query runs through the debounce, and the section follows the
+	// results rather than being restored on its own.
 	waitForSearchRows(t, app, 2)
+	if app.activeIssuesSection != IssuesSectionSearch {
+		t.Fatalf("activeIssuesSection = %v, want Search", app.activeIssuesSection)
+	}
 }
 
-// TestApplySessionNavigationSelectsSavedSearchIssue verifies the Search tab
-// reopens on the issue it was left on. updateIssuesData returns early for this
-// tab, so the selection can only happen once the results land.
+// TestApplySessionNavigationSelectsSavedSearchIssue verifies a restored search
+// reopens on the issue it was left on. updateIssuesData returns early while
+// results are showing, so the selection can only happen once they land.
 func TestApplySessionNavigationSelectsSavedSearchIssue(t *testing.T) {
 	app, _ := newSessionRestoreTestApp(t, session.State{
 		Nav:     session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
-		Section: sessionSectionSearch,
 		Search:  "login",
 		IssueID: "issue-2",
 	})
@@ -284,46 +267,43 @@ func TestApplySessionNavigationSelectsSavedSearchIssue(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationSkipsSearchOffTheSearchTab verifies a saved query
-// does not fire a workspace-wide search on launch when the user left on
-// another tab. The query outlives a Tab away from the Search tab, so restoring
-// it unconditionally spends an API call nobody asked for.
-func TestApplySessionNavigationSkipsSearchOffTheSearchTab(t *testing.T) {
-	for _, section := range []string{sessionSectionAll, sessionSectionMy} {
-		t.Run(section, func(t *testing.T) {
-			app, _ := newSessionRestoreTestApp(t, session.State{
-				Nav:     session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
-				Section: section,
-				Search:  "login",
-			})
+// TestApplySessionNavigationSkipsSearchWithNoSavedQuery verifies a session left
+// on the list opens on the list, and spends no API call on a search nobody
+// asked for.
+func TestApplySessionNavigationSkipsSearchWithNoSavedQuery(t *testing.T) {
+	app, _ := newSessionRestoreTestApp(t, session.State{
+		Nav: session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
+	})
 
-			if !restoreSession(t, app, nil) {
-				t.Fatal("applySessionNavigation() = false, want true")
-			}
+	if !restoreSession(t, app, nil) {
+		t.Fatal("applySessionNavigation() = false, want true")
+	}
 
-			if got := app.searchInput.GetText(); got != "" {
-				t.Fatalf("search input = %q, want empty: a saved query must not search from the %s tab", got, section)
-			}
-			if app.searchQuery != "" {
-				t.Fatalf("searchQuery = %q, want empty", app.searchQuery)
-			}
-		})
+	if got := app.navSearchInput.GetText(); got != "" {
+		t.Fatalf("search input = %q, want empty", got)
+	}
+	if app.activeIssuesSection != IssuesSectionList {
+		t.Fatalf("activeIssuesSection = %v, want the list", app.activeIssuesSection)
 	}
 }
 
 // TestApplySessionNavigationKeepsNavigationFocus verifies the restore never
-// pulls focus out of the navigation pane, on any tab.
+// pulls focus out of the navigation pane, with or without a saved query.
 func TestApplySessionNavigationKeepsNavigationFocus(t *testing.T) {
-	sections := []string{sessionSectionAll, sessionSectionMy, sessionSectionSearch}
-	for _, name := range sections {
+	for name, query := range map[string]string{"list": "", "search": "login"} {
 		t.Run(name, func(t *testing.T) {
 			app, _ := newSessionRestoreTestApp(t, session.State{
-				Nav:     session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
-				Section: name,
+				Nav:    session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
+				Search: query,
 			})
 
 			if !restoreSession(t, app, nil) {
 				t.Fatal("applySessionNavigation() = false, want true")
+			}
+			if query != "" {
+				// The restored query runs through the debounce; let it land
+				// rather than leaving its goroutine to outlive the test.
+				waitForSearchRows(t, app, 2)
 			}
 
 			if app.focusedPane != FocusNavigation {

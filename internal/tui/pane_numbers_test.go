@@ -14,8 +14,8 @@ import (
 func paneTitles(app *App) map[string]string {
 	app.updateAllPaneTitles()
 	return map[string]string{
-		"navigation": stripTags(app.navigationTree.GetTitle()),
-		"issues":     stripTags(app.allIssuesTable.GetTitle()),
+		"navigation": stripTags(app.navigationPanel.GetTitle()),
+		"issues":     stripTags(app.listIssuesTable.GetTitle()),
 		"details":    stripTags(app.detailsDescriptionView.GetTitle()),
 	}
 }
@@ -35,7 +35,7 @@ func TestPaneTitlesCarryTheirNumber(t *testing.T) {
 
 	for pane, want := range map[string]string{
 		"navigation": "[1] Navigation",
-		"issues":     "[2] All (0) - My (0) - Search",
+		"issues":     "[2] Issues",
 		"details":    "[3] Details",
 	} {
 		if got := strings.TrimSpace(titles[pane]); got != want {
@@ -140,8 +140,8 @@ func TestFocusedPaneNumberTakesTheAccent(t *testing.T) {
 	app.detailsHidden = false
 
 	titleFor := map[FocusTarget]func() string{
-		FocusNavigation: app.navigationTree.GetTitle,
-		FocusIssues:     app.allIssuesTable.GetTitle,
+		FocusNavigation: app.navigationPanel.GetTitle,
+		FocusIssues:     app.listIssuesTable.GetTitle,
 		FocusDetails:    app.detailsDescriptionView.GetTitle,
 	}
 

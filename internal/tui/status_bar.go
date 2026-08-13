@@ -197,12 +197,21 @@ func (a *App) updateStatusBar() {
 
 	switch a.focusedPane {
 	case FocusNavigation:
+		// Read the field, not live focus: a focus callback can reach here from
+		// inside a draw.
+		if a.navSearchFocused {
+			// Every letter in the box types, the palette's included, so the
+			// line names only the keys that leave it.
+			hints = []hint{{"⏎", "results"}, {"↓", "tree"}, {"Esc", "clear"}}
+			break
+		}
 		// The tree is the leftmost pane and stepPane does not wrap, so there is
 		// no previous pane to name. h stays with the tree, where it collapses.
-		hints = append(hints, hint{"↑↓", "move"}, hint{"⏎", "open"}, hint{"l", "issues"},
-			a.commandHint("toggle_navigation_pane", "hide nav"))
+		hints = append(hints, hint{"↑↓", "move"}, hint{"⏎", "open"}, hint{"Tab", "search"},
+			hint{"l", "issues"}, a.commandHint("toggle_navigation_pane", "hide nav"))
 	case FocusIssues:
-		hints = append(hints, hint{"j/k", "move"}, hint{"⏎", "preview"}, view, tabs, hint{"h/l", "panes"})
+		hints = append(hints, hint{"j/k", "move"}, hint{"⏎", "preview"}, view,
+			a.actionHint("search", '/', "search"), hint{"h/l", "panes"})
 	case FocusDetails:
 		// The keys a box or a picked card answers to are named on the card
 		// itself, in the row with the Post button and in the border under the

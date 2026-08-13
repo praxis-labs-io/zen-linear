@@ -374,9 +374,9 @@ func TestSearchTabTypingDebouncesLatestQuery(t *testing.T) {
 		return linearapi.IssuePage{Issues: []linearapi.Issue{}, HasNext: true}, nil
 	}
 
-	app.openSearchTab()
-	app.searchInput.SetText("a")
-	app.searchInput.SetText("ab")
+	app.focusNavSearch()
+	app.navSearchInput.SetText("a")
+	app.navSearchInput.SetText("ab")
 
 	select {
 	case params := <-called:
@@ -409,7 +409,7 @@ func TestSearchTabTypingDebouncesLatestQuery(t *testing.T) {
 	if app.activeIssuesSection != IssuesSectionSearch {
 		t.Fatalf("activeIssuesSection = %v, want IssuesSectionSearch", app.activeIssuesSection)
 	}
-	if !app.searchInputFocused {
+	if !app.navSearchFocused {
 		t.Fatal("search input lost focus during live search")
 	}
 
@@ -445,14 +445,14 @@ func TestSearchTabEnterMovesFocusToResults(t *testing.T) {
 		return issue, nil
 	}
 
-	app.openSearchTab()
-	app.searchInput.SetText("hit")
+	app.focusNavSearch()
+	app.navSearchInput.SetText("hit")
 	waitForSearchRows(t, app, 1)
 
-	app.handleSearchInputKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	app.handleNavSearchKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 
-	if app.searchInputFocused {
-		t.Fatal("searchInputFocused = true after Enter, want focus on results")
+	if app.navSearchFocused {
+		t.Fatal("navSearchFocused = true after Enter, want focus on results")
 	}
 	app.issuesMu.RLock()
 	selected := app.selectedIssue
@@ -485,7 +485,7 @@ func TestSearchStaleResultsDropped(t *testing.T) {
 		return linearapi.IssuePage{Issues: []linearapi.Issue{issueB}}, nil
 	}
 
-	app.openSearchTab()
+	app.focusNavSearch()
 	app.performIssueSearch("stale")
 	<-firstStarted
 	app.performIssueSearch("fresh")
@@ -518,7 +518,7 @@ func TestSearchEmptyQueryClearsWithoutFetch(t *testing.T) {
 		return linearapi.IssuePage{Issues: []linearapi.Issue{issue}}, nil
 	}
 
-	app.openSearchTab()
+	app.focusNavSearch()
 	app.performIssueSearch("hit")
 	waitForSearchRows(t, app, 1)
 
@@ -540,100 +540,16 @@ func TestSearchTabTypedLettersReachInput(t *testing.T) {
 	stopBackgroundWorkOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
 
-	app.openSearchTab()
-	if !app.searchInputActive() {
-		t.Fatal("searchInputActive() = false after openSearchTab")
+	app.focusNavSearch()
+	if !app.navSearchActive() {
+		t.Fatal("navSearchActive() = false after focusNavSearch")
 	}
 
 	// The quit shortcut must pass through to the input instead of stopping
 	// the app.
 	event := tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone)
-	if got := app.handleSearchInputKey(event); got != event {
-		t.Fatalf("handleSearchInputKey(q) = %v, want the event passed through", got)
-	}
-}
-
-func TestSearchTabRemappedTabKeysCycleOutOfInput(t *testing.T) {
-	cfg := config.Config{
-		PageSize:    1,
-		CacheTTL:    time.Minute,
-		Keybindings: map[string]string{"tab_next": "]", "tab_prev": "["},
-	}
-	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
-	stopBackgroundWorkOnCleanup(t, app)
-	app.queueUpdateDraw = func(f func()) { f() }
-
-	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
-	app.allIssueRows, app.allIDToIssue = buildFlatSearchRows([]linearapi.Issue{issue})
-	// Hold the detail fetch until assertions are done so its immediate
-	// queueUpdateDraw stub cannot run concurrently with them.
-	releaseDetails := make(chan struct{})
-	defer close(releaseDetails)
-	app.fetchIssueByID = func(ctx context.Context, id string) (linearapi.Issue, error) {
-		<-releaseDetails
-		return issue, nil
-	}
-
-	app.openSearchTab()
-	if got := app.handleSearchInputKey(tcell.NewEventKey(tcell.KeyRune, ']', tcell.ModNone)); got != nil {
-		t.Fatal("tab_next rune leaked through to the search input")
-	}
-	if app.activeIssuesSection == IssuesSectionSearch {
-		t.Fatal("tab_next did not cycle out of the Search tab")
-	}
-	if app.searchInput.GetText() != "" {
-		t.Fatalf("search input text = %q, want empty (rune must not be typed)", app.searchInput.GetText())
-	}
-}
-
-func TestSearchEscOnEmptyInputReturnsToPreviousTab(t *testing.T) {
-	cfg := config.Config{
-		PageSize:       1,
-		CacheTTL:       time.Minute,
-		SearchDebounce: 10 * time.Millisecond,
-	}
-	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
-	stopBackgroundWorkOnCleanup(t, app)
-	app.queueUpdateDraw = func(f func()) { f() }
-	app.activeIssuesSection = IssuesSectionAll
-
-	app.openSearchTab()
-	if app.searchReturnSection != IssuesSectionAll {
-		t.Fatalf("searchReturnSection = %v, want IssuesSectionAll", app.searchReturnSection)
-	}
-
-	app.handleSearchInputKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
-	if app.activeIssuesSection != IssuesSectionAll {
-		t.Fatalf("activeIssuesSection = %v, want IssuesSectionAll after Esc", app.activeIssuesSection)
-	}
-	if app.searchInputFocused {
-		t.Fatal("searchInputFocused = true after leaving the tab")
-	}
-}
-
-func TestCycleIssuesSectionReachesEmptySearchTab(t *testing.T) {
-	cfg := config.Config{
-		PageSize: 1,
-		CacheTTL: time.Minute,
-	}
-	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
-	stopBackgroundWorkOnCleanup(t, app)
-	app.queueUpdateDraw = func(f func()) { f() }
-
-	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
-	app.allIssueRows, app.allIDToIssue = buildFlatSearchRows([]linearapi.Issue{issue})
-	app.activeIssuesSection = IssuesSectionAll
-
-	app.cycleIssuesSection(1)
-	if app.activeIssuesSection != IssuesSectionMy {
-		t.Fatalf("activeIssuesSection = %v, want IssuesSectionMy (an empty tab is still a tab)", app.activeIssuesSection)
-	}
-	app.cycleIssuesSection(1)
-	if app.activeIssuesSection != IssuesSectionSearch {
-		t.Fatalf("activeIssuesSection = %v, want IssuesSectionSearch (empty Search tab must stay reachable)", app.activeIssuesSection)
-	}
-	if !app.searchInputFocused {
-		t.Fatal("entering the Search tab must focus its input")
+	if got := app.handleNavSearchKey(event); got != event {
+		t.Fatalf("handleNavSearchKey(q) = %v, want the event passed through", got)
 	}
 }
 
@@ -652,7 +568,7 @@ func TestResetCachedStateClearsSearch(t *testing.T) {
 		return linearapi.IssuePage{Issues: []linearapi.Issue{issue}}, nil
 	}
 
-	app.openSearchTab()
+	app.focusNavSearch()
 	app.performIssueSearch("hit")
 	waitForSearchRows(t, app, 1)
 
@@ -660,8 +576,8 @@ func TestResetCachedStateClearsSearch(t *testing.T) {
 	if len(app.searchIssueRows) != 0 || len(app.searchIssues) != 0 {
 		t.Fatalf("search state not cleared: rows=%d issues=%d", len(app.searchIssueRows), len(app.searchIssues))
 	}
-	if app.searchInput.GetText() != "" {
-		t.Fatalf("search input text = %q, want empty", app.searchInput.GetText())
+	if app.navSearchInput.GetText() != "" {
+		t.Fatalf("search input text = %q, want empty", app.navSearchInput.GetText())
 	}
 }
 
@@ -692,26 +608,28 @@ func TestResetCachedStateEmptiesTheDetailsPane(t *testing.T) {
 // cells it was last painted with, so a workspace switch used to leave the
 // previous workspace's issues sitting in the My tab until something repainted
 // it, which for a failed fetch is never.
-func TestResetCachedStateClearsOffScreenSectionTables(t *testing.T) {
+// A table off screen keeps its painted cells until something repaints it, so a
+// workspace switch that only clears the models leaves the old workspace's rows
+// waiting behind the search results.
+func TestResetCachedStateClearsTheOffScreenListTable(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", AssigneeID: "user-1", Assignee: "Me"},
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
 	app.rebuildIssueRowModels()
 	holdDetailFetches(t, app)
 
-	// Paint My, then move off it so it holds this workspace's rows unseen.
-	app.activeIssuesSection = IssuesSectionMy
-	app.renderIssueSections(map[IssuesSection]string{IssuesSectionMy: "issue-1"})
-	app.activeIssuesSection = IssuesSectionAll
-	if len(renderedTitles(app, IssuesSectionMy)) == 0 {
-		t.Fatal("My was never painted, so this test proves nothing")
+	// Paint the list, then move to search so it holds this workspace's rows
+	// unseen.
+	app.renderIssueSections(map[IssuesSection]string{IssuesSectionList: "issue-1"})
+	app.activeIssuesSection = IssuesSectionSearch
+	if len(renderedTitles(app, IssuesSectionList)) == 0 {
+		t.Fatal("the list was never painted, so this test proves nothing")
 	}
 
 	app.resetCachedState()
 
-	if got := renderedTitles(app, IssuesSectionMy); len(got) != 0 {
-		t.Fatalf("My still shows %v after a reset, want no rows", got)
+	if got := renderedTitles(app, IssuesSectionList); len(got) != 0 {
+		t.Fatalf("the list still shows %v after a reset, want no rows", got)
 	}
 	if len(app.pendingSectionRenders) != 0 {
 		t.Fatalf("pendingSectionRenders = %v, want empty", app.pendingSectionRenders)
@@ -904,14 +822,14 @@ func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
 		defer app.issuesMu.RUnlock()
 		return len(app.issues) == 2
 	})
-	if got := renderedTitles(app, IssuesSectionAll); !slices.Equal(got, []string{"First"}) {
+	if got := renderedTitles(app, IssuesSectionList); !slices.Equal(got, []string{"First"}) {
 		t.Fatalf("rendered titles mid-pagination = %v, want [First]", got)
 	}
 
 	close(blockLast)
 	waitForRefreshCompletion(t, refreshDone)
 
-	got := renderedTitles(app, IssuesSectionAll)
+	got := renderedTitles(app, IssuesSectionList)
 	want := []string{"First", "Second", "Third"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("rendered titles after pagination = %v, want %v", got, want)
@@ -951,7 +869,7 @@ func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
 	app.refreshIssues()
 	waitForRefreshCompletion(t, refreshDone)
 
-	got := renderedTitles(app, IssuesSectionAll)
+	got := renderedTitles(app, IssuesSectionList)
 	if !slices.Equal(got, []string{"Alpha", "Beta"}) {
 		t.Fatalf("rendered titles = %v, want [Alpha Beta]", got)
 	}
@@ -1095,7 +1013,7 @@ func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 	app.queueUpdateDraw = func(f func()) {
 		f()
 		paintedMu.Lock()
-		painted = renderedTitles(app, IssuesSectionAll)
+		painted = renderedTitles(app, IssuesSectionList)
 		paintedMu.Unlock()
 	}
 	lastPainted := func() []string {
@@ -1170,7 +1088,7 @@ func TestRenderedTitles_SkipsGroupHeaders(t *testing.T) {
 	if app.effectiveGroupBy() != GroupByStatus {
 		t.Fatalf("effectiveGroupBy = %q, want %q", app.effectiveGroupBy(), GroupByStatus)
 	}
-	rows := app.rowsForSection(IssuesSectionAll)
+	rows := app.rowsForSection(IssuesSectionList)
 	headers := 0
 	for _, row := range rows {
 		if row.IsHeader {
@@ -1181,7 +1099,7 @@ func TestRenderedTitles_SkipsGroupHeaders(t *testing.T) {
 		t.Fatal("no group headers rendered, so this test proves nothing")
 	}
 
-	got := renderedTitles(app, IssuesSectionAll)
+	got := renderedTitles(app, IssuesSectionList)
 	want := []string{"Second", "First"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("renderedTitles = %v, want %v", got, want)

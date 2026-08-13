@@ -282,7 +282,7 @@ func DefaultCommands(app *App) []Command {
 			Keywords:        []string{"search", "find", "s", "/"},
 			ShortcutDisplay: "/", // Handled globally, not via ShortcutRune
 			Run: func(a *App) {
-				a.openSearchTab()
+				a.focusNavSearch()
 			},
 		},
 		{
@@ -896,7 +896,7 @@ func DefaultCommands(app *App) []Command {
 				}
 				// A loaded parent with no row is hidden behind a collapsed
 				// group or ancestor, which is not the same as never fetched.
-				if _, loaded := a.allIDToIssue[issue.Parent.ID]; loaded {
+				if _, loaded := a.listIDToIssue[issue.Parent.ID]; loaded {
 					a.flashStatus("Parent issue is hidden by a collapsed group")
 					return
 				}

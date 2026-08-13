@@ -201,6 +201,16 @@ func (a *App) loadingFrame() string {
 // what it is waiting on, why it failed, or that there is nothing to list. The
 // line count rides along because the centering flex sizes the text row.
 func (a *App) issuesPlaceholderMessage() (string, int) {
+	if a.activeIssuesSection == IssuesSectionSearch {
+		switch {
+		case a.searchErr != nil:
+			return fmt.Sprintf("%sSearch failed[-]\n%s%v[-]", a.themeTags.Error, a.themeTags.SecondaryText, a.searchErr), 2
+		case a.searchLoading:
+			return a.spinnerLabel("Searching"), 1
+		default:
+			return fmt.Sprintf("%sNo results[-]", a.themeTags.SecondaryText), 1
+		}
+	}
 	switch {
 	case a.isLoading || !a.issuesSettled:
 		return a.spinnerLabel("Loading issues"), 1
@@ -212,7 +222,7 @@ func (a *App) issuesPlaceholderMessage() (string, int) {
 }
 
 // updateIssuesPlaceholder re-centers the message in the placeholder panel,
-// mirroring updateSearchBody. UI thread only.
+// UI thread only.
 func (a *App) updateIssuesPlaceholder() {
 	if a.issuesPlaceholder == nil || a.issuesPlaceholderText == nil {
 		return
@@ -234,10 +244,10 @@ func (a *App) emptyDetailsMessage() string {
 	return fmt.Sprintf("%sNo issue selected. Select an issue from the list to view details.[-]", a.themeTags.SecondaryText)
 }
 
-// buildIssuesPlaceholder builds the panel the All and My tabs mount when they
-// have no rows. It carries its own border and title because it stands in for
-// the table, which carries both. Rebuilt on a theme change, like the Search
-// panel, since the colors are baked in here.
+// buildIssuesPlaceholder builds the panel the issues pane mounts when what it
+// is showing has no rows. It carries its own border and title because it stands
+// in for the table, which carries both. Rebuilt rather than restyled on a theme
+// change, since the colors are baked in here.
 func (a *App) buildIssuesPlaceholder() {
 	a.issuesPlaceholderText = tview.NewTextView()
 	a.issuesPlaceholderText.
@@ -256,7 +266,7 @@ func (a *App) buildIssuesPlaceholder() {
 		SetTitleColor(a.theme.Foreground).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)
-	a.attachIssuesFooter(a.issuesPlaceholder.Box)
+	a.attachIssuesContext(a.issuesPlaceholder.Box)
 
 	a.updateIssuesPlaceholder()
 }
@@ -270,12 +280,8 @@ func (a *App) setIssuesPlaceholderBorder(color tcell.Color) {
 	a.issuesPlaceholder.SetBorderColor(color)
 }
 
-// issuesPaneIsEmpty reports whether the tab on screen has nothing to render, so
-// the placeholder takes the table's place. The Search tab keeps its own
-// placeholder inside its panel.
+// issuesPaneIsEmpty reports whether what is on screen has nothing to render, so
+// the placeholder takes the table's place.
 func (a *App) issuesPaneIsEmpty() bool {
-	if a.activeIssuesSection == IssuesSectionSearch {
-		return false
-	}
 	return len(a.rowsForSection(a.activeIssuesSection)) == 0
 }

@@ -136,15 +136,12 @@ func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 			want:  func(app *App) tview.Primitive { return app.detailsDescriptionView },
 		},
 		{
-			// The reset moves the active tab back to All underneath the switch,
-			// so restoring focus to the tab the user was on lands on nothing.
-			name: "search tab",
-			setUp: func(app *App) {
-				app.openSearchTab()
-				app.searchInputFocused = false
-				app.updateFocus()
-			},
-			want: func(app *App) tview.Primitive { return app.issuesPlaceholder },
+			// The reset empties the query underneath the switch, so leaving
+			// focus in the box would park the keyboard on a search the user no
+			// longer has. The tree beside it is where the pane belongs.
+			name:  "query box",
+			setUp: func(app *App) { app.focusNavSearch() },
+			want:  func(app *App) tview.Primitive { return app.navigationTree },
 		},
 	}
 
@@ -212,10 +209,10 @@ func TestSwitchWorkspaceKeepsIssuesFocusWhenTheNewListLands(t *testing.T) {
 	waitForNavSettled(t, navSettled)
 	waitForRefreshCompletion(t, refreshDone)
 
-	if len(app.allIssueRows) == 0 {
+	if len(app.listIssueRows) == 0 {
 		t.Fatal("the new workspace's issues never landed")
 	}
-	if got := app.app.GetFocus(); got != tview.Primitive(app.allIssuesTable) {
+	if got := app.app.GetFocus(); got != tview.Primitive(app.listIssuesTable) {
 		t.Fatalf("keyboard focus landed on %T once the new list arrived, want the issues table", got)
 	}
 }

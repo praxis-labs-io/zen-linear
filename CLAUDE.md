@@ -80,7 +80,7 @@ Scratch, never committed. `docs/` describes only what is true today. Durable con
 
 ### App wiring
 
-`internal/tui/app.go` is the `App` struct, the `FocusTarget` enum, and the lifecycle around them: `NewApp`, `Run`, `loadInitialData`, `loadCurrentUser`, `applySettings`, `resetCachedState`, `buildLayout`, plus `selectedIssueID` and `parseLogLevel`. The rest splits by area: `theme_apply.go` (theme and density restyling, `rebuildModals`), `navigation_data.go` (tree fetch and build), `key_dispatch.go` (`bindGlobalKeys` and the per-pane handlers), `pane_focus.go` (Tab cycling, focus, pane titles), `issues_refresh.go` (search debounce, fetch, pagination merge, render), `issue_grouping.go` (columns, grouping, sort fields), `issue_filters.go` (`IssueFilters` and its summary formatters), `pickers.go` (`loadPickerData` and the `Show*Picker` set), `modal_launchers.go` (the `Show*Modal` set), `app_accessors.go` (the getters commands call), `nav_cache.go` (the disk copy of the tree), `loading_pane.go` (the spinner frame loop and the waiting panes' messages), `details_comments.go` (the Comments tab's cards, their relative timestamps, and the thread rail), `comment_thread.go` (comments to threaded blocks), `comments_page.go` (the page primitive the tab is drawn as), `comment_actions.go` (the focus ring and the per-comment keys), `details_compose.go` (the two writing boxes, the ring's focus targets, and the post path). The status bar updates sit in `status_bar.go` beside `buildStatusBar`, and `SortField` in `issue_sort.go` beside its comparator. `app_test.go` did not follow the split.
+`internal/tui/app.go` is the `App` struct, the `FocusTarget` enum, and the lifecycle around them: `NewApp`, `Run`, `loadInitialData`, `loadCurrentUser`, `applySettings`, `resetCachedState`, `buildLayout`, plus `selectedIssueID` and `parseLogLevel`. The rest splits by area: `theme_apply.go` (theme and density restyling, `rebuildModals`), `navigation_data.go` (tree fetch and build), `nav_search.go` (the pane shell, the query box, and its keys), `issue_search.go` (the search fetch and its model), `key_dispatch.go` (`bindGlobalKeys` and the per-pane handlers), `pane_focus.go` (Tab cycling, focus, pane titles), `issues_refresh.go` (search debounce, fetch, pagination merge, render), `issue_grouping.go` (columns, grouping, sort fields), `issue_filters.go` (`IssueFilters` and its summary formatters), `pickers.go` (`loadPickerData` and the `Show*Picker` set), `modal_launchers.go` (the `Show*Modal` set), `app_accessors.go` (the getters commands call), `nav_cache.go` (the disk copy of the tree), `loading_pane.go` (the spinner frame loop and the waiting panes' messages), `details_comments.go` (the Comments tab's cards, their relative timestamps, and the thread rail), `comment_thread.go` (comments to threaded blocks), `comments_page.go` (the page primitive the tab is drawn as), `comment_actions.go` (the focus ring and the per-comment keys), `details_compose.go` (the two writing boxes, the ring's focus targets, and the post path). The status bar updates sit in `status_bar.go` beside `buildStatusBar`, and `SortField` in `issue_sort.go` beside its comparator. `app_test.go` did not follow the split.
 
 ### Launch
 
@@ -112,7 +112,7 @@ Action ids and their scopes live in `uiActionScopes`; `TestUIActionScopesCoverEv
 
 Deleting a command is a breaking change for anyone who bound it: the id stops resolving, and the user gets a logged warning instead of a silent theft. Say so in the PR.
 
-Tab is not pane navigation. It walks a pane's own controls, the Comments page's ring and the Search tab's query box, and nothing else; `h`/`l` and the pane numbers move between panes.
+Tab is not pane navigation. It walks a pane's own controls, the Comments page's ring and the navigation pane's query box, and nothing else; `h`/`l` and the pane numbers move between panes.
 
 ### Modal dispatch
 
@@ -126,11 +126,19 @@ Themes are structs in `internal/tui/theme.go` registered in `ThemeRegistry`. Opt
 
 Modal panels: `tview.NewFlex` (and Grid) set `dontClear`, so a Flex never paints its own background and the layer beneath bleeds through unpainted cells. Any modal panel needs `panel.Box = tview.NewBox()` before its other Box settings to restore the fill — `FormModal` does this for its shells; hand-built overlays must too.
 
+### Navigation pane
+
+The pane is `navigationPanel` (`nav_search.go`), a Flex owning the border, the pane title, and one column of border padding: the query box, a hairline rule, and a borderless `navigationTree` beneath. `navSearchFocused` says which of the two controls holds the keyboard, and `navSearchActive()` gates key routing above the global runes in `handleGlobalKey` — without that gate, `q`, `:` and the pane numbers fire while you type. The box **must be rebuilt, not restyled**, on a theme change (tview bakes `InputBg` at construction), and the rebuild has to end in `rebuildContentLayout` or `contentFlex` keeps the old pointer.
+
+The search is workspace-wide and takes neither the tree's scope, the rich filters, nor the sort chain. That is why the issues context line skips it.
+
 ### Issues list
 
 `BuildGroupedIssueRows` (`internal/tui/issue_tree.go`) produces a flat `[]IssueRow` where group/subgroup headers are rows with `IsHeader: true` and no issue. Headers are selectable (Enter/Space/click toggles collapse), so **any code walking table rows or moving selection must skip or special-case headers** (`nextIssueRow`, and the default-selection logic in `rebuildIssuesTables`). Columns are a registry in `issues_table.go` (`issueColumnSpecs`), rendered per the `columns` config.
 
-`updateIssuesColumnLayout` swaps the mounted primitive between the table, the placeholder, and the Search panel. Focus lives on the primitive, so a swap has to carry it (`issuesPaneHasFocus`) or the pane goes dead with the keys on something off screen.
+`updateIssuesColumnLayout` swaps the mounted primitive between the active section's table and the placeholder. Focus lives on the primitive, so a swap has to carry it (`issuesPaneHasFocus`) or the pane goes dead with the keys on something off screen.
+
+The pane has no tabs. `IssuesSection` is two values, `List` and `Search`, with a table and a row model each; `performIssueSearch` owns which one is active, so an empty query is what puts the list back. The pane title names what is on screen (`issuesTitleLabel`) and `issues_context.go` right-aligns the sort and filter line into the same top border row, measuring against that title so the two cannot collide.
 
 ### Comments tab
 

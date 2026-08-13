@@ -302,8 +302,7 @@ func (a *App) moveChildRef(oldParent, newParent *linearapi.IssueRef, child linea
 // looking at does not pull the pane away from the row they are.
 func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 	previousRows := map[IssuesSection][]IssueRow{
-		IssuesSectionAll: a.allIssueRows,
-		IssuesSectionMy:  a.myIssueRows,
+		IssuesSectionList: a.listIssueRows,
 	}
 	a.rebuildIssueRowModels()
 	selections := a.sectionSelectionsFor(targetIssueID)
@@ -323,8 +322,8 @@ func (a *App) renderIssueChange(targetIssueID string, selectTarget bool) {
 		a.renderIssueSections(deferred)
 	}
 
-	// The tab on screen cannot change here, so only its title needs redrawing:
-	// the counts in the strip move even when the mounted table does not.
+	// What is on screen cannot change here, so only the title needs redrawing:
+	// its count moves even when the mounted table does not.
 	a.updateAllPaneTitles()
 
 	a.repointSelection(targetIssueID, selectTarget)
@@ -342,7 +341,7 @@ func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 		selectedID = previousSelected.ID
 	}
 
-	target := a.allIDToIssue[targetIssueID]
+	target := a.listIDToIssue[targetIssueID]
 	switch {
 	case target != nil && selectedID == targetIssueID:
 		// Same issue: take the fresh list fields, keep the detail data only
@@ -361,40 +360,25 @@ func (a *App) repointSelection(targetIssueID string, selectTarget bool) {
 	}
 }
 
-// rebuildIssueRowModels rebuilds every section's rows from the issue list.
+// rebuildIssueRowModels rebuilds the list's rows from the issue slice. Search
+// results are not in here: they come from their own query and their own model.
 func (a *App) rebuildIssueRowModels() {
 	a.issuesMu.RLock()
-	// The id maps below point into whatever slice they index, and pagination
+	// The id map below points into whatever slice it indexes, and pagination
 	// re-sorts a.issues in place between paints. Index a snapshot, or a lookup
 	// inside that window returns whichever issue now sits in the slot.
 	issues := slices.Clone(a.issues)
 	a.issuesMu.RUnlock()
 
-	currentUserID := ""
-	if a.currentUser != nil {
-		currentUserID = a.currentUser.ID
-	}
-	// Build hierarchical tree rows for each section, grouped when enabled.
-	a.allIssueRows, a.allIDToIssue = a.buildIssueRowsFor(issues)
-	a.myIssueRows, a.myIDToIssue = a.buildIssueRowsFor(myIssues(issues, currentUserID))
+	// Build hierarchical tree rows, grouped when enabled.
+	a.listIssueRows, a.listIDToIssue = a.buildIssueRowsFor(issues)
 }
 
-// sectionSelectionsFor maps each section to the row it should land on. All
-// holds every fetched issue; My gets the target only when it is in there. The
-// tab on screen is the user's choice and stays put either way.
+// sectionSelectionsFor maps each section to the row it should land on. The list
+// holds every fetched issue, so the target is always in it. What is on screen
+// is the user's choice and stays put either way.
 func (a *App) sectionSelectionsFor(targetIssueID string) map[IssuesSection]string {
-	selections := map[IssuesSection]string{
-		IssuesSectionAll: "",
-		IssuesSectionMy:  "",
-	}
-	if targetIssueID == "" {
-		return selections
-	}
-	selections[IssuesSectionAll] = targetIssueID
-	if _, ok := a.myIDToIssue[targetIssueID]; ok {
-		selections[IssuesSectionMy] = targetIssueID
-	}
-	return selections
+	return map[IssuesSection]string{IssuesSectionList: targetIssueID}
 }
 
 // repaintIssueRow rewrites one issue's cells in a section's table.

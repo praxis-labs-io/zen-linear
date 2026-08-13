@@ -72,9 +72,10 @@ type Filters struct {
 type State struct {
 	Nav     NavSelection `json:"nav"`
 	IssueID string       `json:"issue_id,omitempty"`
-	Section string       `json:"section,omitempty"`
 	Filters Filters      `json:"filters,omitempty"`
-	Search  string       `json:"search,omitempty"`
+	// Search is the query box's contents. A non-empty one is also what says the
+	// issues pane was showing results rather than the list.
+	Search string `json:"search,omitempty"`
 }
 
 // File is the on-disk session record. States are keyed by workspace because

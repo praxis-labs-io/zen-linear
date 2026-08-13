@@ -67,7 +67,7 @@ func TestIssuesPaneNamesWhatItIsWaitingOn(t *testing.T) {
 	close(release)
 	waitForRefreshCompletion(t, refreshDone)
 
-	if got := mountedIssuesPane(t, app); got != tview.Primitive(app.allIssuesTable) {
+	if got := mountedIssuesPane(t, app); got != tview.Primitive(app.listIssuesTable) {
 		t.Fatalf("mounted %T once rows arrived, want the table", got)
 	}
 }
@@ -89,7 +89,7 @@ func TestIssuesPaneFocusFollowsTheSwap(t *testing.T) {
 		{
 			name: "rows arrive",
 			then: withIssues,
-			want: func(app *App) tview.Primitive { return app.allIssuesTable },
+			want: func(app *App) tview.Primitive { return app.listIssuesTable },
 		},
 		{
 			name:  "rows go away",
@@ -266,7 +266,7 @@ func TestFocusLandsOnThePlaceholderWhenMounted(t *testing.T) {
 	app.focusedPane = FocusIssues
 	app.updateFocus()
 
-	if got := app.app.GetFocus(); got != tview.Primitive(app.allIssuesTable) {
+	if got := app.app.GetFocus(); got != tview.Primitive(app.listIssuesTable) {
 		t.Fatalf("focus landed on %T once rows arrived, want the table", got)
 	}
 }

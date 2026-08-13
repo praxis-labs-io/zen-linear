@@ -35,32 +35,22 @@ type NavigationNode struct {
 	FavoriteParentID string
 }
 
-// Inset of the tree's content from the pane border: one column of gutter, one
-// blank row under the title.
-const (
-	navTreeInsetX = 2
-	navTreeInsetY = 2
-)
-
-// buildNavigationTree creates and configures the navigation tree widget.
+// buildNavigationTree creates and configures the navigation tree widget. It is
+// borderless: navigationPanel wraps it with the query box under one border, and
+// that panel's border padding supplies the gutter the tree used to inset for
+// itself.
 func (a *App) buildNavigationTree() *tview.TreeView {
 	tree := tview.NewTreeView()
 
 	root := a.buildWaitingNavigationRoot()
 
-	tree.SetBorder(true).
-		SetTitle(" Navigation ").
-		SetTitleAlign(tview.AlignLeft).
-		SetTitleColor(a.theme.Foreground).
-		SetBorderColor(a.theme.Border)
+	tree.SetBorder(false)
 	tree.SetBackgroundColor(a.theme.Background)
 	tree.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		// Re-fit node labels on every draw so they track pane resizes and
 		// lazily added nodes.
-		a.padNavigationTree(width - navTreeInsetX - 1)
-		// The tree has no root row and no graphics on its top level, so the
-		// inset is what keeps the first column off the border.
-		return x + navTreeInsetX, y + navTreeInsetY, width - navTreeInsetX - 1, height - navTreeInsetY - 1
+		a.padNavigationTree(width)
+		return x, y, width, height
 	})
 	tree.SetRoot(root)
 	tree.SetCurrentNode(root)

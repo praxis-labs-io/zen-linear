@@ -96,7 +96,7 @@ func TestApplyIssueUpdate_RepaintsOneRowWhenNothingMoves(t *testing.T) {
 
 	// Park the cursor and the horizontal scroll somewhere a full re-render
 	// would reset.
-	table := app.tableForSection(IssuesSectionAll)
+	table := app.tableForSection(IssuesSectionList)
 	table.Select(2, 0)
 	table.SetOffset(0, 2)
 
@@ -176,36 +176,6 @@ func TestApplyIssueUpdate_ConsecutiveEditsFollowTheEditedIssue(t *testing.T) {
 		t.Fatalf("selected title = %q, want %q", selected.Title, "Gamma edited")
 	}
 	assertSelectionNotAliased(t, app)
-}
-
-func TestApplyIssueUpdate_AddsIssueToMyWithoutRefetch(t *testing.T) {
-	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
-		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
-	})
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
-	holdDetailFetches(t, app)
-
-	app.applyIssueUpdate(linearapi.Issue{
-		ID: "issue-1", Identifier: "LIN-1", Title: "Alpha",
-		AssigneeID: "user-1", Assignee: "Me",
-	})
-
-	if _, ok := app.myIDToIssue["issue-1"]; !ok {
-		t.Fatalf("issue-1 missing from My Issues: %#v", app.myIDToIssue)
-	}
-	// An assignment is not a reason to move the user off the tab they chose.
-	if app.activeIssuesSection != IssuesSectionAll {
-		t.Fatalf("active section = %v, want All", app.activeIssuesSection)
-	}
-
-	app.cycleIssuesSection(1)
-	if app.activeIssuesSection != IssuesSectionMy {
-		t.Fatalf("tab key landed on %v, want My", app.activeIssuesSection)
-	}
-	if got := app.tableForSection(IssuesSectionMy).GetCell(1, titleColumn).Text; got != "Alpha" {
-		t.Fatalf("My Issues row 1 title = %q, want Alpha", got)
-	}
 }
 
 func TestApplyIssueUpdate_ReflectsEditToAnIssueOutsideTheList(t *testing.T) {
@@ -361,7 +331,7 @@ func TestApplyIssueRemoval_KeepsCursorWhenAnotherRowIsRemoved(t *testing.T) {
 	if selected == nil || selected.ID != "issue-1" {
 		t.Fatalf("selected issue = %#v, want issue-1", selected)
 	}
-	table := app.tableForSection(IssuesSectionAll)
+	table := app.tableForSection(IssuesSectionList)
 	if got := table.GetCell(2, titleColumn).Text; got != "Gamma" {
 		t.Fatalf("row 2 title = %q, want Gamma", got)
 	}
@@ -389,31 +359,26 @@ func TestApplyIssueRemoval_SelectedRowLandsOnSuccessor(t *testing.T) {
 	}
 }
 
-func TestApplyIssueRemoval_KeepsMyMountedWhenItsLastIssueGoes(t *testing.T) {
+// Removing the last row leaves the list on screen saying it is empty, rather
+// than bouncing the user somewhere else, and drops the selection so status,
+// assign and archive stop acting on a row that is gone.
+func TestApplyIssueRemoval_LeavesTheEmptiedListOnScreen(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{ID: "issue-1", Identifier: "LIN-1", Title: "Mine", AssigneeID: "user-1", Assignee: "Me"},
-		{ID: "issue-2", Identifier: "LIN-2", Title: "Theirs"},
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Only"},
 	})
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
 	app.rebuildIssueRowModels()
-	app.activeIssuesSection = IssuesSectionMy
 	app.updateIssuesColumnLayout()
 	app.issuesMu.Lock()
-	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Mine"}
+	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Only"}
 	app.issuesMu.Unlock()
 
 	app.applyIssueRemoval("issue-1")
 
-	// My is a fixed tab, so emptying it leaves it on screen showing nothing
-	// rather than bouncing the user to All.
-	if app.issuesColumn.GetItemCount() != 1 || app.issuesColumn.GetItem(0) != app.myIssuesTable {
-		t.Fatal("emptying My moved the user off the tab they were on")
+	if app.activeIssuesSection != IssuesSectionList {
+		t.Fatalf("emptying the list moved the pane to %v", app.activeIssuesSection)
 	}
-	if app.activeIssuesSection != IssuesSectionMy {
-		t.Fatalf("active section = %v, want My to stay active while empty", app.activeIssuesSection)
-	}
-	if got := app.myIssuesTable.GetCell(1, titleColumn).Text; !strings.Contains(got, "No issues") {
-		t.Fatalf("emptied My table renders %q, want its empty placeholder", got)
+	if got := app.listIssuesTable.GetCell(1, titleColumn).Text; !strings.Contains(got, "No issues") {
+		t.Fatalf("the emptied list renders %q, want its empty row", got)
 	}
 	app.issuesMu.RLock()
 	defer app.issuesMu.RUnlock()
@@ -506,7 +471,7 @@ func TestApplyIssueInsert_AddsTheCreatedRowAndSelectsIt(t *testing.T) {
 	if selected == nil || selected.ID != "issue-2" {
 		t.Fatalf("selected issue = %#v, want issue-2", selected)
 	}
-	if _, ok := app.allIDToIssue["issue-2"]; !ok {
+	if _, ok := app.listIDToIssue["issue-2"]; !ok {
 		t.Fatal("created issue missing from the row model")
 	}
 }
@@ -558,46 +523,43 @@ func TestExpandAllKeepsGroupingAndCoversAllTab(t *testing.T) {
 		}
 		return false
 	}
-	if !hasHeader(app.allIssueRows) {
-		t.Fatal("expand_all dropped grouping from the All rows")
+	if !hasHeader(app.listIssueRows) {
+		t.Fatal("expand_all dropped grouping from the list rows")
 	}
-	if !hasHeader(app.myIssueRows) {
-		t.Fatal("expand_all dropped grouping from the My rows")
-	}
-	if _, pending := app.pendingSectionRenders[IssuesSectionAll]; !pending && app.activeIssuesSection != IssuesSectionAll {
-		t.Fatal("expand_all left the All tab neither painted nor deferred")
+	if _, pending := app.pendingSectionRenders[IssuesSectionList]; !pending && app.activeIssuesSection != IssuesSectionList {
+		t.Fatal("expand_all left the list neither painted nor deferred")
 	}
 }
 
-func TestRenderIssueSections_DefersOffScreenTabsUntilShown(t *testing.T) {
+// A refresh while search results are showing rebuilds the list off screen.
+// Painting it there costs a table's worth of cells nobody can see and resets
+// its selection, so the paint waits for the section to come back.
+func TestRenderIssueSections_DefersTheOffScreenListUntilShown(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", AssigneeID: "user-1", Assignee: "Me"},
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
 	})
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
 	app.rebuildIssueRowModels()
+	app.listIssuesTable.Clear()
 
-	app.activeIssuesSection = IssuesSectionAll
-	app.renderIssueSections(map[IssuesSection]string{
-		IssuesSectionAll: "issue-2",
-		IssuesSectionMy:  "issue-1",
-	})
+	app.activeIssuesSection = IssuesSectionSearch
+	app.renderIssueSections(map[IssuesSection]string{IssuesSectionList: "issue-2"})
 
-	if _, pending := app.pendingSectionRenders[IssuesSectionMy]; !pending {
-		t.Fatal("My Issues rendered while off screen")
+	if _, pending := app.pendingSectionRenders[IssuesSectionList]; !pending {
+		t.Fatal("the list rendered while off screen")
 	}
-	if got := app.tableForSection(IssuesSectionAll).GetCell(2, titleColumn).Text; got != "Beta" {
-		t.Fatalf("All Issues row 2 title = %q, want Beta", got)
+	if got := app.listIssuesTable.GetCell(2, titleColumn).Text; got != "" {
+		t.Fatalf("the off-screen list already shows %q", got)
 	}
 
-	app.activeIssuesSection = IssuesSectionMy
+	app.activeIssuesSection = IssuesSectionList
 	app.updateIssuesColumnLayout()
 
-	if _, pending := app.pendingSectionRenders[IssuesSectionMy]; pending {
-		t.Fatal("My Issues still pending after being shown")
+	if _, pending := app.pendingSectionRenders[IssuesSectionList]; pending {
+		t.Fatal("the list is still pending after being shown")
 	}
-	if got := app.tableForSection(IssuesSectionMy).GetCell(1, titleColumn).Text; got != "Alpha" {
-		t.Fatalf("My Issues row 1 title = %q, want Alpha", got)
+	if got := app.listIssuesTable.GetCell(2, titleColumn).Text; got != "Beta" {
+		t.Fatalf("list row 2 title = %q, want Beta", got)
 	}
 }
 
@@ -633,8 +595,8 @@ func TestSkimmingDuringPagination_SelectsTheIssueTheRowNames(t *testing.T) {
 
 	pressInIssuesTable(app, tcell.KeyRune, 'j')
 
-	row, _ := app.tableForSection(IssuesSectionAll).GetSelection()
-	want := app.allIssueRows[row-1].IssueID
+	row, _ := app.tableForSection(IssuesSectionList).GetSelection()
+	want := app.listIssueRows[row-1].IssueID
 	selected := app.GetSelectedIssue()
 	if selected == nil || selected.ID != want {
 		t.Fatalf("selected issue = %#v, want the %s the cursor is on", selected, want)
@@ -656,10 +618,10 @@ func TestRebuildIssueRowModels_IndexesASnapshotNotTheLiveList(t *testing.T) {
 
 	app.issuesMu.RLock()
 	defer app.issuesMu.RUnlock()
-	for id, issue := range app.allIDToIssue {
+	for id, issue := range app.listIDToIssue {
 		for i := range app.issues {
 			if issue == &app.issues[i] {
-				t.Fatalf("allIDToIssue[%q] aliases the live issues array", id)
+				t.Fatalf("listIDToIssue[%q] aliases the live issues array", id)
 			}
 		}
 	}

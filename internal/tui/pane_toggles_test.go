@@ -20,11 +20,11 @@ func paneRect(pane tview.Primitive) (left, width int) {
 func paneWidths(t *testing.T, app *App, width int) (nav, issues, details int) {
 	t.Helper()
 
-	app.navigationTree = tview.NewTreeView()
+	app.navigationPanel = tview.NewFlex()
 	app.issuesColumn = tview.NewFlex()
 	app.detailsView = tview.NewFlex()
 	app.contentFlex = tview.NewFlex()
-	for _, pane := range []tview.Primitive{app.navigationTree, app.issuesColumn, app.detailsView} {
+	for _, pane := range []tview.Primitive{app.navigationPanel, app.issuesColumn, app.detailsView} {
 		pane.SetRect(0, 0, 0, 0)
 	}
 
@@ -41,7 +41,7 @@ func paneWidths(t *testing.T, app *App, width int) (nav, issues, details int) {
 	app.contentFlex.SetRect(0, 0, width, 40)
 	app.contentFlex.Draw(screen)
 
-	_, nav = paneRect(app.navigationTree)
+	_, nav = paneRect(app.navigationPanel)
 	_, issues = paneRect(app.issuesColumn)
 	_, details = paneRect(app.detailsView)
 	return nav, issues, details

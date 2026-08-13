@@ -77,24 +77,28 @@ func TestSelectingFavoritesFolderOnlyToggles(t *testing.T) {
 	}
 }
 
-// TestNavigationTreeDrawsWithoutARootRow covers the workspace moving from a
-// tree row to the pane border: the first row drawn is a real destination, sat
-// flush against the border rather than indented under a root.
-func TestNavigationTreeDrawsWithoutARootRow(t *testing.T) {
+// TestNavigationPaneDrawsItsControlsInOrder covers the pane's stack under one
+// border: the workspace names it, the query box takes the first row, a rule
+// closes it off, and the tree starts one column off the border with no root row
+// above it.
+func TestNavigationPaneDrawsItsControlsInOrder(t *testing.T) {
 	app := newUXTestApp(t)
 	app.activeWorkspaceName = "Praxis Labs"
 	app.updateAllPaneTitles()
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
 
-	lines := drawPrimitive(t, app.navigationTree, 40)
+	lines := drawPrimitive(t, app.navigationPanel, 40)
 
 	if !strings.Contains(lines[0], "Praxis Labs") {
 		t.Errorf("pane title row = %q, want the workspace name", lines[0])
 	}
-	if got := lines[1]; strings.TrimSpace(strings.Trim(got, "│")) != "" {
-		t.Errorf("row under the title = %q, want it blank", got)
+	if got := lines[1]; !strings.Contains(got, "/") || !strings.Contains(got, "Search") {
+		t.Errorf("first row = %q, want the query box", got)
 	}
-	if got := lines[2]; !strings.HasPrefix(strings.TrimPrefix(got, "│"), " All Issues") {
+	if got := lines[2]; !strings.Contains(got, "──") {
+		t.Errorf("second row = %q, want the rule under the query box", got)
+	}
+	if got := lines[3]; !strings.HasPrefix(strings.TrimPrefix(got, "│"), " All Issues") {
 		t.Errorf("first tree row = %q, want All Issues one column off the border", got)
 	}
 }

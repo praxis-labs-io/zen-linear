@@ -143,8 +143,8 @@ func TestRefreshAppliesCustomViewPreferences(t *testing.T) {
 	if chain := app.effectiveSortFields(); len(chain) != 1 || chain[0] != SortByPriority {
 		t.Fatalf("effective sort chain = %v, want priority alone", app.effectiveSortFields())
 	}
-	if len(app.allIssueRows) == 0 || !app.allIssueRows[0].IsHeader {
-		t.Fatalf("allIssueRows[0] = %+v, want a group header from the view's grouping", app.allIssueRows)
+	if len(app.listIssueRows) == 0 || !app.listIssueRows[0].IsHeader {
+		t.Fatalf("listIssueRows[0] = %+v, want a group header from the view's grouping", app.listIssueRows)
 	}
 
 	// A manual grouping override outranks the view for the session.
@@ -154,8 +154,12 @@ func TestRefreshAppliesCustomViewPreferences(t *testing.T) {
 	}
 	app.groupingOverridden = false
 
-	// Leaving the view clears its settings with the next list.
-	app.selectedNavigation = &NavigationNode{ID: "team-1", TeamID: "team-1", IsTeam: true}
+	// Leaving the view clears its settings with the next list. The pane title
+	// reads the selection, and a detail fetch from the last refresh can still
+	// be painting one, so take the UI lock the way the app's own writes do.
+	app.QueueUpdateDraw(func() {
+		app.selectedNavigation = &NavigationNode{ID: "team-1", TeamID: "team-1", IsTeam: true}
+	})
 	app.refreshIssues()
 	waitForRefreshCompletion(t, refreshDone)
 	if app.viewPrefs != nil {

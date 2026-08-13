@@ -89,7 +89,7 @@ func TestRecordKeepsOtherWorkspaces(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "session.json")
 
 	stateA := State{Nav: NavSelection{Kind: NavProject, TeamID: "t1", ProjectID: "p1"}, IssueID: "i1"}
-	stateB := State{Nav: NavSelection{Kind: NavTeam, TeamID: "t2"}, Section: "my"}
+	stateB := State{Nav: NavSelection{Kind: NavTeam, TeamID: "t2"}, Search: "login"}
 
 	if err := Record(path, "Alpha", stateA); err != nil {
 		t.Fatalf("Record(Alpha) error: %v", err)
@@ -196,7 +196,6 @@ func TestSaveRoundTrip(t *testing.T) {
 			"alpha": {
 				Nav:     NavSelection{Kind: NavStatus, TeamID: "t1", StateID: "s1"},
 				IssueID: "i1",
-				Section: "my",
 				Search:  "login",
 				Filters: Filters{
 					AssigneeID:   "u1",

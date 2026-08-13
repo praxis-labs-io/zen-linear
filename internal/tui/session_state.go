@@ -6,15 +6,6 @@ import (
 	"github.com/zen-linear/zen-linear/internal/session"
 )
 
-// Section names as they appear in the session file. They are strings rather
-// than the IssuesSection int so reordering the enum cannot silently change
-// what a saved file means.
-const (
-	sessionSectionAll    = "all"
-	sessionSectionMy     = "my"
-	sessionSectionSearch = "search"
-)
-
 // UseSession installs the saved session: the path the quit flush writes to,
 // and the restore point for the workspace this App opened with. The path is
 // kept even when restore is off, so turning the toggle on mid-session still
@@ -44,7 +35,6 @@ func (a *App) sessionSnapshot() session.State {
 	return session.State{
 		Nav:     navSelectionFor(a.selectedNavigation),
 		IssueID: a.selectedIssueID(a.activeIssuesSection),
-		Section: sessionSectionName(a.activeIssuesSection),
 		Filters: sessionFiltersFor(a.richFilters),
 		Search:  a.searchQuery,
 	}
@@ -111,31 +101,6 @@ func navSelectionFor(node *NavigationNode) session.NavSelection {
 		selection.Kind = session.NavAll
 	}
 	return selection
-}
-
-// sessionSectionName maps the active tab to its saved name.
-func sessionSectionName(section IssuesSection) string {
-	switch section {
-	case IssuesSectionMy:
-		return sessionSectionMy
-	case IssuesSectionSearch:
-		return sessionSectionSearch
-	default:
-		return sessionSectionAll
-	}
-}
-
-// sectionFromSession maps a saved tab name back. An unknown or absent name
-// opens All, which is where a fresh app opens anyway.
-func sectionFromSession(name string) IssuesSection {
-	switch name {
-	case sessionSectionMy:
-		return IssuesSectionMy
-	case sessionSectionSearch:
-		return IssuesSectionSearch
-	default:
-		return IssuesSectionAll
-	}
 }
 
 // sessionFiltersFor converts the live filters for storage. Only Eq is carried

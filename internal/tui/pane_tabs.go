@@ -2,44 +2,34 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/rivo/tview"
 )
 
-// The issues and details panes render lazygit-style tabs: one view fills the
-// pane and the border title lists every tab, highlighting the active one.
-// The [ and ] keys cycle tabs within the focused pane; { and } belong to the
-// pane toggles. Both pairs are remappable, so read them through actionKey.
+// The details pane renders lazygit-style tabs: one view fills the pane and the
+// border title lists every tab, highlighting the active one. The [ and ] keys
+// cycle them; { and } belong to the pane toggles. Both pairs are remappable, so
+// read them through actionKey. The issues pane has no tabs: it shows the list
+// the tree picked, or search results.
 
 // tableForSection returns the table widget backing a section.
 func (a *App) tableForSection(section IssuesSection) *tview.Table {
 	switch section {
-	case IssuesSectionAll:
-		return a.allIssuesTable
-	case IssuesSectionMy:
-		return a.myIssuesTable
+	case IssuesSectionList:
+		return a.listIssuesTable
 	case IssuesSectionSearch:
 		return a.searchResultsTable
 	}
 	return nil
 }
 
-// jumpToSection makes the given section the visible issues tab and selects a
-// row in it. Pass row 0 to keep whatever selection the tab already has,
+// jumpToSection mounts the given section in the issues pane and selects a row
+// in it. Pass row 0 to keep whatever selection the section already has,
 // including one a deferred render just made.
 func (a *App) jumpToSection(section IssuesSection, row int) {
-	if section == IssuesSectionSearch {
-		// Entering the Search tab always lands on its input; Down/Enter
-		// reach the results.
-		a.activeIssuesSection = section
-		a.searchInputFocused = true
-		a.updateIssuesColumnLayout()
-		a.updateFocus()
-		return
-	}
 	a.activeIssuesSection = section
-	// Flushes any render this tab was owed, which may set its selection.
+	// Flushes any render this section was owed, which may set its selection.
 	a.updateIssuesColumnLayout()
 	table := a.tableForSection(section)
 	rows := a.rowsForSection(section)
@@ -56,8 +46,8 @@ func (a *App) jumpToSection(section IssuesSection, row int) {
 	}
 
 	if row < 1 {
-		// An empty tab is still a tab: mount it and focus it, but drop the
-		// selection, or every command keeps acting on the tab we just left.
+		// An empty section still mounts and takes focus, but drops the
+		// selection, or every command keeps acting on the one we just left.
 		a.clearSelectedIssue()
 		a.updateFocus()
 		return
@@ -80,8 +70,9 @@ func (a *App) clearSelectedIssue() {
 	a.updateDetailsView()
 }
 
-// jumpToParent selects an issue's parent in the tab on screen, falling back to
-// All, which holds every fetched issue. Reports whether the parent was found.
+// jumpToParent selects an issue's parent in whatever is on screen, falling back
+// to the navigation list, which holds every fetched issue. Reports whether the
+// parent was found.
 func (a *App) jumpToParent(parentID string) bool {
 	section := a.activeIssuesSection
 	row := 0
@@ -90,7 +81,7 @@ func (a *App) jumpToParent(parentID string) bool {
 		row = a.getRowForIssueInSection(parentID, section)
 	}
 	if row < 1 {
-		section = IssuesSectionAll
+		section = IssuesSectionList
 		row = a.getRowForIssueInSection(parentID, section)
 	}
 	if row < 1 {
@@ -98,22 +89,6 @@ func (a *App) jumpToParent(parentID string) bool {
 	}
 	a.jumpToSection(section, row)
 	return true
-}
-
-// cycleIssuesSection cycles the All, My, and Search tabs in the given
-// direction (+1 forward, -1 backward), keeping each tab's own selection. The
-// three tabs are fixed, so an empty one is reachable and shows itself empty
-// rather than being skipped over.
-func (a *App) cycleIssuesSection(direction int) {
-	order := []IssuesSection{IssuesSectionAll, IssuesSectionMy, IssuesSectionSearch}
-	current := 0
-	for i, section := range order {
-		if section == a.activeIssuesSection {
-			current = i
-			break
-		}
-	}
-	a.jumpToSection(order[((current+direction)%len(order)+len(order))%len(order)], 0)
 }
 
 // Pane numbers shown in the titles and typed to focus a pane. They are fixed
@@ -127,29 +102,44 @@ const (
 // tabSeparator sits between tab labels in a pane title.
 const tabSeparator = " - "
 
-// paneTitle wraps a pane's tab strip with its number, which goes accent
-// colored while the pane holds focus.
-func (a *App) paneTitle(number int, tabs string, focused bool) string {
+// paneTitle wraps a pane's label with its number, which goes accent colored
+// while the pane holds focus.
+func (a *App) paneTitle(number int, label string, focused bool) string {
 	tag := a.themeTags.SecondaryText
 	if focused {
 		tag = a.themeTags.Accent
 	}
-	return fmt.Sprintf(" %s[%d][-] %s ", tag, number, tabs)
+	return fmt.Sprintf(" %s[%d][-] %s ", tag, number, label)
 }
 
-// issuesTabsTitle renders the tab strip for the issues pane border.
-func (a *App) issuesTabsTitle(focused bool) string {
-	shown := a.activeIssuesSection
-	segments := []string{
-		a.tabSegment(fmt.Sprintf("All (%d)", tabRowCount(a.allIssueRows)), shown == IssuesSectionAll, focused),
+// paneTitleWidth measures a title as drawn, off the untagged label.
+func paneTitleWidth(label string) int {
+	// " [N] " plus the label plus the trailing space.
+	return runewidth.StringWidth(label) + 6
+}
+
+// issuesTitleLabel names what the issues pane is showing, untagged. The context
+// line shares the same border row and measures against this to know how much of
+// it is already spoken for, so the text has one source and both callers use it.
+func (a *App) issuesTitleLabel() string {
+	if a.activeIssuesSection == IssuesSectionSearch {
+		if count := visibleRowCount(a.searchIssueRows); count > 0 {
+			return fmt.Sprintf("Search (%d)", count)
+		}
+		return "Search"
 	}
-	segments = append(segments, a.tabSegment(fmt.Sprintf("My (%d)", tabRowCount(a.myIssueRows)), shown == IssuesSectionMy, focused))
-	searchLabel := "Search"
-	if len(a.searchIssueRows) > 0 {
-		searchLabel = fmt.Sprintf("Search (%d)", tabRowCount(a.searchIssueRows))
+	scope := a.issuesScopeLabel()
+	if scope == "" {
+		return "Issues"
 	}
-	segments = append(segments, a.tabSegment(searchLabel, shown == IssuesSectionSearch, focused))
-	return strings.Join(segments, tabSeparator)
+	return fmt.Sprintf("%s (%d)", scope, visibleRowCount(a.listIssueRows))
+}
+
+// issuesPaneTitle colors the issues pane label. Project and cycle names are
+// Linear's and this title is built from color tags, so one called [red] would
+// be read as one instead of printed.
+func (a *App) issuesPaneTitle(focused bool) string {
+	return a.tabSegment(tview.Escape(a.issuesTitleLabel()), true, focused)
 }
 
 // detailsTabsTitle renders the tab strip for the details pane border.
@@ -172,9 +162,9 @@ func (a *App) selectedIssueCommentCount() int {
 	return len(a.selectedIssue.Comments)
 }
 
-// tabRowCount counts a tab's rows excluding gap spacers, so the tab strip
-// numbers stay unchanged by group spacing.
-func tabRowCount(rows []IssueRow) int {
+// visibleRowCount counts rows excluding gap spacers, so a title's number stays
+// unchanged by group spacing.
+func visibleRowCount(rows []IssueRow) int {
 	count := 0
 	for _, row := range rows {
 		if !row.IsSpacer {

@@ -20,15 +20,15 @@ func TestPaneHintsNameWhatTheKeyboardDoesHere(t *testing.T) {
 		{
 			name: "navigation",
 			pane: FocusNavigation,
-			want: []string{": palette", "↑↓ move", "⏎ open", "l issues", "{ hide nav"},
+			want: []string{": palette", "↑↓ move", "⏎ open", "Tab search", "l issues", "{ hide nav"},
 			// The tree is the leftmost pane; there is nothing to its left.
 			wantNot: []string{"panes", "hide details"},
 		},
 		{
 			name:    "issues",
 			pane:    FocusIssues,
-			want:    []string{": palette", "j/k move", "⏎ preview", "v view", "[/] tabs", "h/l panes"},
-			wantNot: []string{"hide nav"},
+			want:    []string{": palette", "j/k move", "⏎ preview", "v view", "/ search", "h/l panes"},
+			wantNot: []string{"hide nav", "tabs"},
 		},
 		{
 			name:    "details",

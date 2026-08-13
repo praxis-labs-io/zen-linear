@@ -28,7 +28,7 @@ func skimTestIssues() []linearapi.Issue {
 // would race the timer over state neither side locks in production.
 func pressInIssuesTable(app *App, key tcell.Key, r rune) {
 	app.QueueUpdateDraw(func() {
-		handler := app.tableForSection(IssuesSectionAll).InputHandler()
+		handler := app.tableForSection(IssuesSectionList).InputHandler()
 		handler(tcell.NewEventKey(key, r, tcell.ModNone), func(tview.Primitive) {})
 	})
 }
@@ -202,7 +202,7 @@ func TestReselectingAnIssueKeepsItsFetchedDetail(t *testing.T) {
 	})
 
 	// A tab switch reselects the same row from the list model.
-	app.QueueUpdateDraw(func() { app.jumpToSection(IssuesSectionAll, 1) })
+	app.QueueUpdateDraw(func() { app.jumpToSection(IssuesSectionList, 1) })
 
 	selected := app.GetSelectedIssue()
 	if selected == nil || len(selected.Subscribers) != 1 || len(selected.Comments) != 1 {
@@ -240,22 +240,22 @@ func TestPostMutationRefetchCannotRetargetTheSelection(t *testing.T) {
 	}
 }
 
-func TestLandingOnAnEmptyTabDropsThePendingLoad(t *testing.T) {
+func TestLandingOnAnEmptySectionDropsThePendingLoad(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, skimTestIssues())
 	app.detailDebounce = 40 * time.Millisecond
 	fetched := recordDetailFetches(app)
 
 	pressInIssuesTable(app, tcell.KeyRune, 'j')
-	// My has no assigned issues, so the tab is empty and the selection drops.
-	app.QueueUpdateDraw(func() { app.jumpToSection(IssuesSectionMy, 0) })
+	// Search has no results, so the section is empty and the selection drops.
+	app.QueueUpdateDraw(func() { app.jumpToSection(IssuesSectionSearch, 0) })
 
 	select {
 	case id := <-fetched:
-		t.Fatalf("fetched %s for a tab the cursor left", id)
+		t.Fatalf("fetched %s for a list the cursor left", id)
 	case <-time.After(200 * time.Millisecond):
 	}
 	if selected := app.GetSelectedIssue(); selected != nil {
-		t.Fatalf("selected issue on an empty tab = %#v, want none", selected)
+		t.Fatalf("selected issue on an empty section = %#v, want none", selected)
 	}
 }
 

@@ -9,21 +9,6 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
-// tabLabels strips the color tags the strip is built from, leaving the labels
-// in the order they render.
-func tabLabels(t *testing.T, app *App) []string {
-	t.Helper()
-	title := app.issuesTabsTitle(false)
-	var labels []string
-	for _, segment := range strings.Split(title, tabSeparator) {
-		clean := strings.TrimSpace(stripColorTags(segment))
-		if clean != "" {
-			labels = append(labels, clean)
-		}
-	}
-	return labels
-}
-
 // pressKey sends a rune through the app's real input capture, so a handler that
 // claims the key before the focused pane sees it shows up here.
 func pressKey(app *App, r rune) {
@@ -55,79 +40,10 @@ func holdDetailFetches(t *testing.T, app *App) {
 	}
 }
 
-func stripColorTags(s string) string {
-	for {
-		open := strings.Index(s, "[")
-		if open < 0 {
-			return s
-		}
-		end := strings.Index(s[open:], "]")
-		if end < 0 {
-			return s
-		}
-		s = s[:open] + s[open+end+1:]
-	}
-}
-
-func TestIssuesTabsTitle_AllLeadsAndMyStaysAtZero(t *testing.T) {
-	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
-		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta", AssigneeID: "user-1", Assignee: "Me"},
-	})
-
-	// The three tabs are fixed. An empty My reads (0) rather than vanishing and
-	// shifting the tabs beside it.
-	got := tabLabels(t, app)
-	want := []string{"All (2)", "My (0)", "Search"}
-	if !equalLabels(got, want) {
-		t.Fatalf("tab strip without a current user = %v, want %v", got, want)
-	}
-
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
-	app.rebuildIssuesTables("")
-
-	got = tabLabels(t, app)
-	want = []string{"All (2)", "My (1)", "Search"}
-	if !equalLabels(got, want) {
-		t.Fatalf("tab strip with My populated = %v, want %v", got, want)
-	}
-}
-
-func TestCycleIssuesSection_OrdersAllMyThenSearch(t *testing.T) {
-	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
-		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta", AssigneeID: "user-1", Assignee: "Me"},
-	})
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
-	app.rebuildIssuesTables("")
-	// Landing on a tab selects a row, and that detail fetch would repaint the
-	// pane titles from its own goroutine while the next cycle repaints them here.
-	holdDetailFetches(t, app)
-
-	if app.activeIssuesSection != IssuesSectionAll {
-		t.Fatalf("a fresh list opens on %v, want All", app.activeIssuesSection)
-	}
-
-	forward := []IssuesSection{IssuesSectionMy, IssuesSectionSearch, IssuesSectionAll}
-	for _, want := range forward {
-		app.cycleIssuesSection(1)
-		if app.activeIssuesSection != want {
-			t.Fatalf("cycling forward reached %v, want %v", app.activeIssuesSection, want)
-		}
-	}
-
-	backward := []IssuesSection{IssuesSectionSearch, IssuesSectionMy, IssuesSectionAll}
-	for _, want := range backward {
-		app.cycleIssuesSection(-1)
-		if app.activeIssuesSection != want {
-			t.Fatalf("cycling backward reached %v, want %v", app.activeIssuesSection, want)
-		}
-	}
-}
-
-// ZNL-16: the row index came from the All model and the selection was applied
-// to the Other table, so the parent jump landed on a row nobody was looking at.
-func TestJumpToParent_SelectsTheParentInTheTabOnScreen(t *testing.T) {
+// ZNL-16: the row index came from one section model and the selection was
+// applied to another table, so the parent jump landed on a row nobody was
+// looking at.
+func TestJumpToParent_SelectsTheParentInTheSectionOnScreen(t *testing.T) {
 	parentRef := &linearapi.IssueRef{ID: "parent-1", Identifier: "LIN-1", Title: "Parent"}
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{
@@ -141,25 +57,25 @@ func TestJumpToParent_SelectsTheParentInTheTabOnScreen(t *testing.T) {
 	holdDetailFetches(t, app)
 	app.toggleIssueExpanded("parent-1")
 
-	table := app.tableForSection(IssuesSectionAll)
-	childRow := app.getRowForIssueInSection("child-1", IssuesSectionAll)
+	table := app.tableForSection(IssuesSectionList)
+	childRow := app.getRowForIssueInSection("child-1", IssuesSectionList)
 	if childRow < 1 {
-		t.Fatal("child has no row in All after expanding its parent")
+		t.Fatal("child has no row in the list after expanding its parent")
 	}
 	table.Select(childRow, 0)
 	app.issuesMu.Lock()
-	app.selectedIssue = app.allIDToIssue["child-1"]
+	app.selectedIssue = app.listIDToIssue["child-1"]
 	app.issuesMu.Unlock()
 	app.focusedPane = FocusIssues
 
 	runPaletteCommand(t, app, "view_parent")
 
-	if app.activeIssuesSection != IssuesSectionAll {
-		t.Fatalf("view_parent switched to %v, want to stay on All", app.activeIssuesSection)
+	if app.activeIssuesSection != IssuesSectionList {
+		t.Fatalf("view_parent switched to %v, want to stay on the list", app.activeIssuesSection)
 	}
-	wantRow := app.getRowForIssueInSection("parent-1", IssuesSectionAll)
+	wantRow := app.getRowForIssueInSection("parent-1", IssuesSectionList)
 	if row, _ := table.GetSelection(); row != wantRow {
-		t.Fatalf("All table selection = row %d, want the parent at row %d", row, wantRow)
+		t.Fatalf("list selection = row %d, want the parent at row %d", row, wantRow)
 	}
 	if got := app.GetSelectedIssue(); got == nil || got.ID != "parent-1" {
 		t.Fatalf("selected issue = %v, want parent-1", got)
@@ -185,36 +101,37 @@ func TestViewParent_SaysSoWhenTheParentIsNotLoaded(t *testing.T) {
 	}
 }
 
-// A child assigned to the user whose parent is not is an orphan in My. The jump
-// there has to fall back to All rather than sit on a parent My cannot show.
-func TestViewParentFallsBackToAllWhenMyHasNoParent(t *testing.T) {
+// Search results are a flat list, so a parent there is not a tree move. The
+// jump has to fall back to the navigation list, which holds every fetched
+// issue, rather than sit on a row search cannot show.
+func TestViewParentFallsBackToTheListFromSearchResults(t *testing.T) {
 	parentRef := &linearapi.IssueRef{ID: "parent-1", Identifier: "LIN-1", Title: "Parent"}
+	child := linearapi.Issue{ID: "child-1", Identifier: "LIN-2", Title: "Child", Parent: parentRef}
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{ID: "parent-1", Identifier: "LIN-1", Title: "Parent", AssigneeID: "user-2"},
-		{ID: "child-1", Identifier: "LIN-2", Title: "Child", AssigneeID: "user-1", Assignee: "Me", Parent: parentRef},
+		{ID: "parent-1", Identifier: "LIN-1", Title: "Parent"},
+		child,
 	})
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
 	app.rebuildIssuesTables("child-1")
 	holdDetailFetches(t, app)
 
-	app.activeIssuesSection = IssuesSectionMy
+	app.searchIssues = []linearapi.Issue{child}
+	app.searchIssueRows, app.searchIDToIssue = buildFlatSearchRows(app.searchIssues)
+	app.activeIssuesSection = IssuesSectionSearch
+	app.renderIssueSections(map[IssuesSection]string{IssuesSectionSearch: "child-1"})
 	app.updateIssuesColumnLayout()
 	app.focusedPane = FocusIssues
-	myTable := app.tableForSection(IssuesSectionMy)
-	myTable.Select(app.getRowForIssueInSection("child-1", IssuesSectionMy), 0)
 	app.issuesMu.Lock()
-	app.selectedIssue = app.myIDToIssue["child-1"]
+	app.selectedIssue = app.searchIDToIssue["child-1"]
 	app.issuesMu.Unlock()
 
 	runPaletteCommand(t, app, "view_parent")
 
-	if app.activeIssuesSection != IssuesSectionAll {
-		t.Fatalf("view_parent from My landed on %v, want All, which holds the parent", app.activeIssuesSection)
+	if app.activeIssuesSection != IssuesSectionList {
+		t.Fatalf("view_parent from search landed on %v, want the list, which holds the parent", app.activeIssuesSection)
 	}
-	allTable := app.tableForSection(IssuesSectionAll)
-	wantRow := app.getRowForIssueInSection("parent-1", IssuesSectionAll)
-	if row, _ := allTable.GetSelection(); row != wantRow {
-		t.Fatalf("All table selection = row %d, want the parent at row %d", row, wantRow)
+	wantRow := app.getRowForIssueInSection("parent-1", IssuesSectionList)
+	if row, _ := app.listIssuesTable.GetSelection(); row != wantRow {
+		t.Fatalf("list selection = row %d, want the parent at row %d", row, wantRow)
 	}
 }
 
@@ -241,47 +158,33 @@ func TestIssuesListLeavesHAndLToPaneMovement(t *testing.T) {
 	}
 }
 
-func equalLabels(got, want []string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// Empty tabs became reachable when My stopped hiding itself. Landing on one has
-// to drop the selection, or status, assign and archive act on the issue the
-// previous tab had selected, invisibly.
-func TestJumpToSection_EmptyTabDropsTheSelection(t *testing.T) {
+// Landing on an empty section has to drop the selection, or status, assign and
+// archive act on the issue the previous one had selected, invisibly.
+func TestJumpToSection_AnEmptySectionDropsTheSelection(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
 	app.rebuildIssuesTables("issue-1")
 	holdDetailFetches(t, app)
 
 	app.issuesMu.Lock()
-	app.selectedIssue = app.allIDToIssue["issue-1"]
+	app.selectedIssue = app.listIDToIssue["issue-1"]
 	app.issuesMu.Unlock()
-	if len(app.myIssueRows) != 0 {
-		t.Fatalf("fixture has %d My rows, want an empty My tab", len(app.myIssueRows))
+	if len(app.searchIssueRows) != 0 {
+		t.Fatalf("fixture has %d search rows, want none", len(app.searchIssueRows))
 	}
 
-	app.cycleIssuesSection(1)
+	app.jumpToSection(IssuesSectionSearch, 0)
 
-	if app.activeIssuesSection != IssuesSectionMy {
-		t.Fatalf("cycling landed on %v, want the empty My tab", app.activeIssuesSection)
+	if app.activeIssuesSection != IssuesSectionSearch {
+		t.Fatalf("the jump landed on %v, want the empty search section", app.activeIssuesSection)
 	}
 	if got := app.GetSelectedIssue(); got != nil {
-		t.Fatalf("selected issue on an empty tab = %v, want nil", got)
+		t.Fatalf("selected issue on an empty section = %v, want nil", got)
 	}
 }
 
-// rebuildIssuesTables resolves through allIDToIssue, whose values point into a
+// rebuildIssuesTables resolves through listIDToIssue, whose values point into a
 // snapshot of the list that the next rebuild replaces.
 func TestRebuildIssuesTables_ReturnsACopyNotAnAlias(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
@@ -303,32 +206,31 @@ func TestRebuildIssuesTables_ReturnsACopyNotAnAlias(t *testing.T) {
 	}
 }
 
-// A tab owed a deferred render carries the row it should land on. Restoring a
-// remembered index over it drops the cursor on whatever now sits there.
-func TestCycleIssuesSection_KeepsTheDeferredRenderSelection(t *testing.T) {
+// A section owed a deferred render carries the row it should land on. Restoring
+// a remembered index over it drops the cursor on whatever now sits there.
+func TestJumpToSection_KeepsTheDeferredRenderSelection(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
-		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", AssigneeID: "user-1", Assignee: "Me"},
-		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta", AssigneeID: "user-1", Assignee: "Me"},
+		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
+		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
 	})
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Me"}
 	app.rebuildIssueRowModels()
 	holdDetailFetches(t, app)
 
-	// Park My's cursor on row 1, then defer a render that wants row 2.
-	app.activeIssuesSection = IssuesSectionAll
-	app.tableForSection(IssuesSectionMy).Select(1, 0)
-	app.renderIssueSections(map[IssuesSection]string{IssuesSectionMy: "issue-2"})
-	if _, pending := app.pendingSectionRenders[IssuesSectionMy]; !pending {
-		t.Fatal("My was painted rather than deferred; the test needs a pending render")
+	// Park the list's cursor on row 1, then defer a render that wants row 2.
+	app.listIssuesTable.Select(1, 0)
+	app.activeIssuesSection = IssuesSectionSearch
+	app.renderIssueSections(map[IssuesSection]string{IssuesSectionList: "issue-2"})
+	if _, pending := app.pendingSectionRenders[IssuesSectionList]; !pending {
+		t.Fatal("the list was painted rather than deferred; the test needs a pending render")
 	}
 
-	app.cycleIssuesSection(1)
+	app.jumpToSection(IssuesSectionList, 0)
 
-	if app.activeIssuesSection != IssuesSectionMy {
-		t.Fatalf("cycling landed on %v, want My", app.activeIssuesSection)
+	if app.activeIssuesSection != IssuesSectionList {
+		t.Fatalf("the jump landed on %v, want the list", app.activeIssuesSection)
 	}
-	want := app.getRowForIssueInSection("issue-2", IssuesSectionMy)
-	if row, _ := app.tableForSection(IssuesSectionMy).GetSelection(); row != want {
-		t.Fatalf("My selection = row %d, want row %d from the deferred render", row, want)
+	want := app.getRowForIssueInSection("issue-2", IssuesSectionList)
+	if row, _ := app.listIssuesTable.GetSelection(); row != want {
+		t.Fatalf("list selection = row %d, want row %d from the deferred render", row, want)
 	}
 }

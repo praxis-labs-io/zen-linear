@@ -33,7 +33,8 @@ Issues
 - Linear-style columns, configurable order and visibility
 - Grouping and subgrouping by status, priority, assignee, cycle, project, or
   milestone, with collapsible headers
-- All, My, and Search tabs with lazygit-style tab strips
+- Workspace-wide search from a query box at the top of the navigation pane,
+  its results replacing the list until the query is cleared
 - Sort by updated, created, priority, or status
 - Details drawer with themed markdown, comments, attachments, and branch name
 
@@ -98,7 +99,7 @@ The options beyond the original linear-tui set:
   updated
 - `workspaces` reads keys from the named env vars. Keys are never stored in
   the file
-- `session_restore` reopens the last workspace, list, filters, tab, and
+- `session_restore` reopens the last workspace, list, filters, search, and
   focused issue, saved to `~/.zen-linear/session.json` on quit. It is on by
   default, which makes `default_workspace`, `default_team`, and
   `default_project` first-run settings. Turn it off to open on those every
@@ -113,7 +114,7 @@ The options beyond the original linear-tui set:
 
     j/k         move            Enter       toggle details
     h/l         switch panes    Space       expand sub-issues
-    1/2/3       focus a pane    [ ]         cycle tabs
+    1/2/3       focus a pane    [ ]         cycle details tabs
     {           hide/show nav   }           hide/show details
     v           zoom details    H/L         scroll columns
     :           palette         /           search
