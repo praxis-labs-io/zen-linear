@@ -35,6 +35,7 @@ func stopBackgroundWorkOnCleanup(t testing.TB, app *App) {
 	t.Helper()
 	t.Cleanup(func() {
 		app.cancelDetailDebounce()
+		app.cancelSearchDebounce()
 		app.cancelStatusFlash()
 		// A test App never reaches Run, so the frame loop has no other way to
 		// stop. Left running with queueUpdateDraw stubbed inline, it keeps

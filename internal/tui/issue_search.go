@@ -18,11 +18,11 @@ import (
 // box can never disagree. Called on the UI thread by the debounce callback.
 func (a *App) performIssueSearch(query string) {
 	query = strings.TrimSpace(query)
-	generation := a.searchFetchGeneration.Add(1)
-	// The generation counter already discards a superseded result. Canceling
-	// stops the request too, so a fast typist is not leaving one query per
-	// debounce window running against the API.
+	// Read the generation after the cancel, which bumps it: a number taken
+	// before would be stale by the time this fetch answers, and this fetch's
+	// own result would be thrown away.
 	a.cancelSearchFetch()
+	generation := a.searchFetchGeneration.Load()
 	if query == "" {
 		a.clearSearchResults()
 		a.jumpToSection(IssuesSectionList, 0)
@@ -79,9 +79,13 @@ func (a *App) performIssueSearch(query string) {
 	}()
 }
 
-// cancelSearchFetch stops the in-flight search request, if any. UI thread only,
-// like the rest of the search path.
+// cancelSearchFetch stops the in-flight search request, if any, and invalidates
+// whatever it was going to deliver. The bump is the load-bearing half: a
+// canceled request answers with context.Canceled, and every keystroke cancels
+// one, so without it the pane reads "Search failed" between every two letters
+// the user types. UI thread only, like the rest of the search path.
 func (a *App) cancelSearchFetch() {
+	a.searchFetchGeneration.Add(1)
 	if a.searchFetchCancel != nil {
 		a.searchFetchCancel()
 		a.searchFetchCancel = nil
@@ -91,7 +95,6 @@ func (a *App) cancelSearchFetch() {
 // clearSearchResults drops all search results and invalidates in-flight
 // fetches.
 func (a *App) clearSearchResults() {
-	a.searchFetchGeneration.Add(1)
 	a.cancelSearchFetch()
 	a.searchIssues = nil
 	a.searchIssueRows = nil

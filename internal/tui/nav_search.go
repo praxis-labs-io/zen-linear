@@ -50,7 +50,7 @@ func (a *App) buildNavigationPanel() {
 		SetBorder(true).
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)
-	a.navSearchFrame.AddItem(a.navSearchInput, 0, 1, false)
+	a.navSearchFrame.AddItem(a.navSearchInput, 0, 1, true)
 
 	a.navigationPanel = tview.NewFlex().SetDirection(tview.FlexRow)
 	// Flex sets dontClear and never paints its own background; restore the
@@ -66,9 +66,14 @@ func (a *App) buildNavigationPanel() {
 	// alike. The tree has no root row and no graphics on its top level, so
 	// without this its first column would sit on the border.
 	a.navigationPanel.SetBorderPadding(0, 0, 1, 1)
+	// One of the two has to carry the Flex's focus flag. tview delegates focus
+	// down the tree on SetRoot and on any page it adds, and a Flex with nothing
+	// flagged keeps the focus on its own Box, which answers no keys: the pane
+	// looks focused and the arrows do nothing until something calls
+	// updateFocus again.
 	a.navigationPanel.
-		AddItem(a.navSearchFrame, 3, 0, false).
-		AddItem(a.navigationTree, 0, 1, false)
+		AddItem(a.navSearchFrame, 3, 0, a.navSearchFocused).
+		AddItem(a.navigationTree, 0, 1, !a.navSearchFocused)
 
 	a.applyNavSearchStyles()
 }

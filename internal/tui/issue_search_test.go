@@ -55,6 +55,47 @@ func TestPerformIssueSearch_CancelsTheSupersededFetch(t *testing.T) {
 	}
 }
 
+// A canceled request answers with context.Canceled, and every keystroke cancels
+// one. Delivered as a result, that reads "Search failed" between every two
+// letters typed.
+func TestPerformIssueSearch_ASupersededFetchIsNotAFailure(t *testing.T) {
+	app := newUXTestApp(t)
+	// The cancel this covers is synchronous; the search behind it is not, and
+	// left armed it paints from its own goroutine after the test returns.
+	app.config.SearchDebounce = time.Hour
+	drawn := make(chan struct{}, 8)
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		select {
+		case drawn <- struct{}{}:
+		default:
+		}
+	}
+	started := make(chan struct{}, 1)
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, _ *string) (linearapi.IssuePage, error) {
+		if params.Search == "a" {
+			started <- struct{}{}
+			<-ctx.Done()
+			return linearapi.IssuePage{}, ctx.Err()
+		}
+		return linearapi.IssuePage{Issues: []linearapi.Issue{{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me"}}}, nil
+	}
+
+	app.performIssueSearch("a")
+	<-started
+	// Typing the next letter cancels the first request, the way the debounce
+	// does on every keystroke.
+	app.scheduleSearchDebounce("ab")
+	waitForDraw(t, drawn)
+
+	if app.searchErr != nil {
+		t.Fatalf("searchErr = %v after a superseded fetch, want none", app.searchErr)
+	}
+	if message, _ := app.issuesPlaceholderMessage(); strings.Contains(message, "failed") {
+		t.Fatalf("the pane says %q while a newer query is in flight", message)
+	}
+}
+
 func TestPerformIssueSearch_RendersResults(t *testing.T) {
 	app := newUXTestApp(t)
 	// Search state is UI-thread-only, so the test reads it after the queued

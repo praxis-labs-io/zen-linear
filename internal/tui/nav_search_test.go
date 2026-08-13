@@ -29,6 +29,20 @@ func TestSearchOpensFromEveryPane(t *testing.T) {
 	}
 }
 
+// TestDelegatedFocusReachesTheTree covers the pane going dead on launch.
+// SetRoot hands focus down the primitive tree, and a Flex with no item flagged
+// keeps it on its own Box, which answers no keys: the border says the pane is
+// focused and the arrows do nothing.
+func TestDelegatedFocusReachesTheTree(t *testing.T) {
+	app := newUXTestApp(t)
+
+	app.app.SetFocus(app.pages)
+
+	if got := app.app.GetFocus(); got != tview.Primitive(app.navigationTree) {
+		t.Fatalf("delegated focus landed on %T, want the navigation tree", got)
+	}
+}
+
 // TestTheQueryBoxSwallowsGlobalRunes is why navSearchActive gates above the
 // global rune switch. Without it, typing a word with a q in it quits.
 func TestTheQueryBoxSwallowsGlobalRunes(t *testing.T) {
