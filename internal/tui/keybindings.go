@@ -27,6 +27,8 @@ var uiActionScopes = map[string]CommandScope{
 	"comment_quote":      ScopeComment,
 	"comment_copy_link":  ScopeComment,
 	"comment_open":       ScopeComment,
+	"comment_edit":       ScopeComment,
+	"comment_delete":     ScopeComment,
 }
 
 // bindingRune returns the rune a keybinding value resolves to, and whether it

@@ -8,6 +8,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
 	"github.com/rivo/tview"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // flashDuration is how long a one-off message holds its place beside the hints.
@@ -132,23 +133,35 @@ func keyPairLabel(first, second rune) string {
 // commentActionHints names what a picked card answers to, in the order a reader
 // reaches for them. Each key is read back from the bindings and dropped when a
 // binding took its rune, so the hint never states a default the user has moved.
-func (a *App) commentActionHints() []string {
-	labels := make([]string, 0, 4)
-	for _, action := range []struct {
-		id       string
-		fallback rune
-		verb     string
-	}{
-		{"comment_reply", 'r', "reply"},
-		{"comment_quote", 'Q', "quote"},
-		{"comment_copy_link", 'y', "copy link"},
-		{"comment_open", 'o', "open"},
-	} {
+//
+// Only the keys that act on the conversation. comment_copy_link and
+// comment_open still answer here; they leave for a browser or a clipboard, and
+// naming them cost a crowded border to tell a reader something the README
+// already does. Edit and delete are yours alone.
+func (a *App) commentActionHints(comment linearapi.Comment) []string {
+	actions := []commentAction{{"comment_reply", 'r', "reply"}}
+	if comment.Author.IsMe {
+		actions = append(actions,
+			commentAction{"comment_edit", 'e', "edit"},
+			commentAction{"comment_delete", 'd', "delete"})
+	}
+	actions = append(actions, commentAction{"comment_quote", 'Q', "quote"})
+
+	labels := make([]string, 0, len(actions))
+	for _, action := range actions {
 		if key := a.actionKey(action.id, action.fallback); key != 0 {
 			labels = append(labels, fmt.Sprintf("%c %s", key, action.verb))
 		}
 	}
 	return labels
+}
+
+// commentAction is one key a card offers: the binding id, the rune it takes
+// when nothing else claimed it, and the word the hint prints.
+type commentAction struct {
+	id       string
+	fallback rune
+	verb     string
 }
 
 // hint is a key and the verb it performs, the unit the status bar prints.
@@ -260,8 +273,11 @@ func (a *App) updateStatusBar() {
 			// names none of them.
 			hints = nil
 			note = "Writing a comment"
-			if a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost {
+			switch a.commentsFocus {
+			case commentsFocusReply, commentsFocusReplyPost:
 				note = "Writing a reply"
+			case commentsFocusEdit, commentsFocusEditPost:
+				note = "Editing a comment"
 			}
 		case a.cardsHaveFocus() && a.focusedCommentID != "":
 			// Esc is a ladder: it lets go of the card first and only the next

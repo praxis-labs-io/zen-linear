@@ -92,6 +92,8 @@ type App struct {
 	detailsComposePost *tview.Button   // Sends what is in the compose box
 	detailsReplyArea   *tview.TextArea // Where a reply gets written, inside its thread
 	detailsReplyPost   *tview.Button   // Sends what is in the reply box
+	detailsEditArea    *tview.TextArea // Where a comment gets rewritten, in place of its card
+	detailsEditPost    *tview.Button   // Saves what is in the edit box
 	// composeDrafts holds what has been written and not posted, keyed by issue.
 	// The box is one widget over a changing selection, so a draft has to follow
 	// the issue it was written for; left in the box it would be posted to
@@ -106,6 +108,11 @@ type App struct {
 	// keyed by the comment being answered. Closing the box is not losing the
 	// words, and reopening on the same thread finds them.
 	replyDrafts map[string]string
+	// composeEditing holds the comment being rewritten, keyed by issue the way
+	// the reply box is. There is no draft map beside it: an edit box always
+	// opens on the comment as it stands, so nobody is shown a half-edit from
+	// last week in place of what the comment actually says.
+	composeEditing map[string]string
 	// statusBar holds the pane hints; statusToast is the message corner it
 	// shares the statusRow strip with, and statusRowWidth is what the last
 	// draw measured that strip at.

@@ -108,7 +108,8 @@ The options beyond the original linear-tui set:
   and search actions, and the comment_next, comment_prev, columns_left,
   columns_right, focus_navigation, focus_issues, focus_details,
   favorite_move_up, favorite_move_down, favorite_nest, favorite_unnest,
-  comment_reply, comment_quote, comment_copy_link, and comment_open actions
+  comment_reply, comment_quote, comment_copy_link, comment_open, comment_edit,
+  and comment_delete actions
 
 ## Keys
 
@@ -127,18 +128,29 @@ brings it back if it has been toggled off.
 The details pane is one page: the issue, its description, the comments, then a
 box to write in at the end of them. `{` and `}` step through the cards; j/k
 keep scrolling. Nothing is picked out until a brace says so, and Esc lets go
-again. A picked card answers to four keys of its own, which shadow the issue
-keys on the same runes for as long as it holds them:
+again. A picked card answers to keys of its own, which shadow the issue keys on
+the same runes for as long as it holds them:
 
     r           reply           Q           quote and reply
     y           copy link       o           open in Linear
+    e           edit            d           delete
+
+Edit and delete are offered on your own comments only. A picked card names the
+keys that act on the conversation along its bottom border; `y` and `o` leave for
+a clipboard or a browser, and answer without being advertised there.
 
 Replies nest under the comment they answer, and replying opens a box inside
 that thread rather than at the foot of the page, so the answer is written where
 it is going to appear. Esc closes it and keeps the words for next time.
 
-In either box, Ctrl+C copies the selection to the system clipboard and Ctrl+X
-cuts it. Ctrl+L selects everything. Paste is the terminal's own.
+Editing turns the card into a box in the place it stood, holding what the
+comment says. Ctrl+Enter saves, and Esc drops the rewrite and puts the card
+back: a box always opens on the comment as it stands. Deleting asks first, and
+replies stay when the comment they answered goes.
+
+Every box grows with what is written in it. In any of them, Ctrl+C copies the
+selection to the system clipboard and Ctrl+X cuts it. Ctrl+L selects
+everything. Paste is the terminal's own.
 
 Commands act on the pane they belong to. A key that acts on the selected issue
 answers from the issues and details panes, favorites from the navigation tree,

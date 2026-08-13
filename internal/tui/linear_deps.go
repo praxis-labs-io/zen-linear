@@ -23,6 +23,8 @@ type linearDeps struct {
 	updateIssueFunc         func(context.Context, linearapi.UpdateIssueInput) (linearapi.Issue, error)
 	createIssueFunc         func(context.Context, linearapi.CreateIssueInput) (linearapi.Issue, error)
 	createCommentFunc       func(context.Context, linearapi.CreateCommentInput) (linearapi.Comment, error)
+	updateCommentFunc       func(context.Context, linearapi.UpdateCommentInput) (linearapi.Comment, error)
+	deleteCommentFunc       func(context.Context, string) error
 	createIssueRelationFunc func(context.Context, linearapi.CreateIssueRelationInput) (linearapi.IssueRelation, error)
 	deleteIssueRelationFunc func(context.Context, string) error
 	subscribeIssueFunc      func(context.Context, string) (linearapi.Issue, error)
@@ -56,6 +58,8 @@ func newLinearDeps(cfg linearapi.ClientConfig, cacheTTL time.Duration) linearDep
 		updateIssueFunc:         api.UpdateIssue,
 		createIssueFunc:         api.CreateIssue,
 		createCommentFunc:       api.CreateComment,
+		updateCommentFunc:       api.UpdateComment,
+		deleteCommentFunc:       api.DeleteComment,
 		createIssueRelationFunc: api.CreateIssueRelation,
 		deleteIssueRelationFunc: api.DeleteIssueRelation,
 		subscribeIssueFunc:      api.SubscribeToIssue,

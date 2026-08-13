@@ -19,8 +19,9 @@ import (
 // The reply box is the same card opened inside a thread, so an answer is
 // written where it is going to appear as well.
 
-// composeRows is the writing a box shows at once. It does not grow with what
-// you type, so a long draft does not push the thread it answers off the page.
+// composeRows is how tall an empty box is. A box grows past it with what is
+// written in it, so nothing being typed is hidden behind a scroll inside a
+// frame; see writingBoxRows.
 const composeRows = 4
 
 // composePlaceholder and replyPlaceholder are what each empty box says.
@@ -63,6 +64,50 @@ func (a *App) openReplyBox(parentID string) {
 	if index := a.commentSpanIndex(blockIDReply); index >= 0 {
 		a.scrollCommentIntoView(a.commentSpans[index])
 	}
+}
+
+// editingCommentID is the comment the edit box is open on, empty when none is.
+// One at a time per issue, for the reason the reply box gives.
+func (a *App) editingCommentID() string {
+	return a.composeEditing[a.composeDraftIssueID]
+}
+
+// openEditBox turns a card into a box holding what the comment says, in the
+// place the card was and inside its thread.
+func (a *App) openEditBox(commentID, body string) {
+	issueID := a.composeDraftIssueID
+	if issueID == "" || commentID == "" || a.detailsEditArea == nil {
+		return
+	}
+	if a.composeEditing == nil {
+		a.composeEditing = make(map[string]string)
+	}
+	a.composeEditing[issueID] = commentID
+	fillWritingBox(a.detailsEditArea, body)
+
+	// Rendered before the focus moves, for the reason openReplyBox gives: the
+	// box has no stop in the ring until the page has been written with it in.
+	a.renderDetailsPage()
+	a.commentsFocus, a.focusedCommentID = commentsFocusEdit, commentID
+	a.updateFocus()
+	if index := a.commentSpanIndex(commentID); index >= 0 {
+		a.scrollCommentIntoView(a.commentSpans[index])
+	}
+}
+
+// closeEditBox puts the card back and drops what was in the box. The ring lands
+// on the comment that was being rewritten, which is where the reader was.
+func (a *App) closeEditBox() {
+	commentID := a.editingCommentID()
+	if commentID == "" {
+		return
+	}
+	delete(a.composeEditing, a.composeDraftIssueID)
+	a.detailsEditArea.SetText("", false)
+	a.commentsFocus = commentsFocusCards
+	a.focusedCommentID = commentID
+	a.renderDetailsPage()
+	a.updateFocus()
 }
 
 // closeReplyBox takes the box off the page, keeping what was written against
@@ -157,9 +202,13 @@ func (a *App) copyText(text string) {
 	a.flashSuccess("Copied")
 }
 
-// postLabel is what the button says, padded out either side: a filled surface
-// reads as something to press where a bare word reads as a caption.
-const postLabel = "  Post  "
+// postLabel and saveLabel are what the buttons say, padded out either side: a
+// filled surface reads as something to press where a bare word reads as a
+// caption. An edit says Save because it is not adding anything to the page.
+const (
+	postLabel = "  Post  "
+	saveLabel = "  Save  "
+)
 
 // commentsFocus names what on the details page holds the keyboard. The braces
 // step the cards and the boxes; Tab moves between a box and its button.
@@ -171,11 +220,13 @@ const (
 	commentsFocusReplyPost
 	commentsFocusText
 	commentsFocusPost
+	commentsFocusEdit
+	commentsFocusEditPost
 )
 
-// isWriting reports whether a focus is one of the two writing boxes.
+// isWriting reports whether a focus is one of the writing boxes.
 func (f commentsFocus) isWriting() bool {
-	return f == commentsFocusReply || f == commentsFocusText
+	return f == commentsFocusReply || f == commentsFocusText || f == commentsFocusEdit
 }
 
 // postFocusFor is the button that sends what a box holds, and whether the focus
@@ -186,16 +237,19 @@ func postFocusFor(f commentsFocus) (commentsFocus, bool) {
 		return commentsFocusPost, true
 	case commentsFocusReply:
 		return commentsFocusReplyPost, true
+	case commentsFocusEdit:
+		return commentsFocusEditPost, true
 	}
 	return 0, false
 }
 
-// buildDetailsPage builds the page and the two boxes drawn in it. The panel
+// buildDetailsPage builds the page and the three boxes drawn in it. The panel
 // around it owns the border, the title and the density padding; the page is
 // borderless.
 func (a *App) buildDetailsPage() {
-	a.detailsComposeArea, a.detailsComposePost = a.newWritingBox(commentsFocusText, commentsFocusPost)
-	a.detailsReplyArea, a.detailsReplyPost = a.newWritingBox(commentsFocusReply, commentsFocusReplyPost)
+	a.detailsComposeArea, a.detailsComposePost = a.newWritingBox(commentsFocusText, commentsFocusPost, postLabel)
+	a.detailsReplyArea, a.detailsReplyPost = a.newWritingBox(commentsFocusReply, commentsFocusReplyPost, postLabel)
+	a.detailsEditArea, a.detailsEditPost = a.newWritingBox(commentsFocusEdit, commentsFocusEditPost, saveLabel)
 	a.detailsPageView.SetFocusFunc(func() { a.enterCommentsFocus(commentsFocusCards) })
 	a.applyComposeTheme()
 
@@ -206,9 +260,9 @@ func (a *App) buildDetailsPage() {
 // newWritingBox builds one box: the writing area and the button that sends it.
 // Both are drawn inside a card on the page rather than mounted in a layout, so
 // neither carries a frame of its own.
-func (a *App) newWritingBox(text, post commentsFocus) (*tview.TextArea, *tview.Button) {
+func (a *App) newWritingBox(text, post commentsFocus, label string) (*tview.TextArea, *tview.Button) {
 	area := tview.NewTextArea()
-	button := tview.NewButton(postLabel)
+	button := tview.NewButton(label)
 	button.SetSelectedFunc(func() { a.postFrom(text) })
 
 	// A box takes the keyboard by mouse as well as by key, and a click never
@@ -217,14 +271,42 @@ func (a *App) newWritingBox(text, post commentsFocus) (*tview.TextArea, *tview.B
 	area.SetFocusFunc(func() { a.enterCommentsFocus(text) })
 	button.SetFocusFunc(func() { a.enterCommentsFocus(post) })
 	// The button greys out with nothing to send, so the control does not appear
-	// and disappear as you type.
-	area.SetChangedFunc(a.applyPostButtonTheme)
+	// and disappear as you type, and the box grows to hold what is typed into
+	// it.
+	area.SetChangedFunc(func() {
+		a.applyPostButtonTheme()
+		a.refitWritingBox(text, area)
+	})
 	// Copy reaches the system clipboard rather than a buffer inside the widget,
 	// which is what tview gives a box with no clipboard of its own: text copied
 	// out of a comment could not be pasted anywhere else. Paste is left to the
 	// terminal, which sends what it holds as a paste event.
 	area.SetClipboard(func(text string) { a.copyText(text) }, nil)
 	return area, button
+}
+
+// refitWritingBox redraws the page when what has been typed no longer fits the
+// rows the box was drawn with, which is how a box grows and shrinks with its
+// own text.
+//
+// Only for the box holding the keyboard, and only on the keystroke that changes
+// the count. The page re-renders the whole issue, which is not work to do on
+// every letter, and every programmatic fill happens while the focus is
+// somewhere else — including the one inside updateDetailsView, which would
+// otherwise render a page the caller is halfway through rebuilding.
+func (a *App) refitWritingBox(focus commentsFocus, area *tview.TextArea) {
+	if a.detailsPage == nil || area == nil || !a.detailsHaveFocus() || a.commentsFocus != focus {
+		return
+	}
+	for _, slot := range a.detailsPage.slots {
+		if slot.primitive != area {
+			continue
+		}
+		if writingBoxRows(area, slot.width) != slot.height {
+			a.renderDetailsPage()
+		}
+		return
+	}
 }
 
 // writingBox returns the widgets behind a focus, and whether that focus is a
@@ -235,6 +317,8 @@ func (a *App) writingBox(focus commentsFocus) (*tview.TextArea, *tview.Button, b
 		return a.detailsComposeArea, a.detailsComposePost, true
 	case commentsFocusReply, commentsFocusReplyPost:
 		return a.detailsReplyArea, a.detailsReplyPost, true
+	case commentsFocusEdit, commentsFocusEditPost:
+		return a.detailsEditArea, a.detailsEditPost, true
 	}
 	return nil, nil, false
 }
@@ -243,7 +327,7 @@ func (a *App) writingBox(focus commentsFocus) (*tview.TextArea, *tview.Button, b
 // the tview globals at construction but exposes setters for all of them, so a
 // box is restyled rather than rebuilt: a rebuild would drop a draft.
 func (a *App) applyComposeTheme() {
-	for _, focus := range []commentsFocus{commentsFocusText, commentsFocusReply} {
+	for _, focus := range []commentsFocus{commentsFocusText, commentsFocusReply, commentsFocusEdit} {
 		area, _, _ := a.writingBox(focus)
 		if area == nil {
 			continue
@@ -270,7 +354,7 @@ func (a *App) applyComposeTheme() {
 // surface in every state, because it is a button in every state: an empty
 // buffer greys the label without taking the surface away.
 func (a *App) applyPostButtonTheme() {
-	for _, focus := range []commentsFocus{commentsFocusText, commentsFocusReply} {
+	for _, focus := range []commentsFocus{commentsFocusText, commentsFocusReply, commentsFocusEdit} {
 		area, button, _ := a.writingBox(focus)
 		if area == nil || button == nil {
 			continue
@@ -322,7 +406,11 @@ func (a *App) composeBoxActive() bool {
 // it is in neither. Key path only, for the reason above.
 func (a *App) activeWritingBox() commentsFocus {
 	focus := a.app.GetFocus()
-	for _, target := range []commentsFocus{commentsFocusText, commentsFocusPost, commentsFocusReply, commentsFocusReplyPost} {
+	for _, target := range []commentsFocus{
+		commentsFocusText, commentsFocusPost,
+		commentsFocusReply, commentsFocusReplyPost,
+		commentsFocusEdit, commentsFocusEditPost,
+	} {
 		area, button, _ := a.writingBox(target)
 		if target.isWriting() && focus == area {
 			return target
@@ -442,6 +530,10 @@ func (a *App) stepWritingBoxFocus() {
 		a.commentsFocus = commentsFocusReplyPost
 	case commentsFocusReplyPost:
 		a.commentsFocus = commentsFocusReply
+	case commentsFocusEdit:
+		a.commentsFocus = commentsFocusEditPost
+	case commentsFocusEditPost:
+		a.commentsFocus = commentsFocusEdit
 	default:
 		return
 	}
@@ -514,8 +606,15 @@ func (a *App) handleComposeKey(event *tcell.EventKey) *tcell.EventKey {
 		// being answered, and a box left open under a thread nobody is writing
 		// in is a card of empty rows in the middle of the conversation. The
 		// words are kept against the comment, so reopening finds them.
-		if box := a.activeWritingBox(); box == commentsFocusReply || box == commentsFocusReplyPost {
+		switch box := a.activeWritingBox(); box {
+		case commentsFocusReply, commentsFocusReplyPost:
 			a.closeReplyBox()
+			return nil
+		case commentsFocusEdit, commentsFocusEditPost:
+			// The edit is dropped rather than held. A box that always opens on
+			// the comment as it stands cannot show a half-edit from last week
+			// in place of what the comment actually says.
+			a.closeEditBox()
 			return nil
 		}
 		a.leaveComposeBox()
@@ -552,6 +651,12 @@ func (a *App) postFrom(from commentsFocus) {
 	}
 	if from == commentsFocusReplyPost {
 		from = commentsFocusReply
+	}
+	// The edit box writes over a comment rather than adding one, so the chord
+	// and the button reach a different call from the same two controls.
+	if from == commentsFocusEdit || from == commentsFocusEditPost {
+		a.saveCommentEdit()
+		return
 	}
 	area, _, ok := a.writingBox(from)
 	if !ok {
@@ -630,6 +735,79 @@ func (a *App) appendComment(issueID string, comment linearapi.Comment) {
 	a.detailsPageView.ScrollToEnd()
 	// The ring follows the comment that was just written, so the reply it is
 	// under is the card the next key acts on.
+	a.focusComment(comment.ID)
+}
+
+// saveCommentEdit sends what is in the edit box and puts the card back on the
+// answer.
+//
+// The box stays open until Linear answers. A rewrite has nowhere to be held —
+// there is no edit draft, by design — so the only place to keep one that failed
+// to send is where it was written.
+func (a *App) saveCommentEdit() {
+	commentID := a.editingCommentID()
+	if commentID == "" || a.detailsEditArea == nil {
+		return
+	}
+	body := strings.TrimSpace(a.detailsEditArea.GetText())
+	if body == "" {
+		return
+	}
+	issueID := a.composeDraftIssueID
+	if current, ok := a.commentByID(commentID); ok && current.Body == body {
+		// Sending it would light the "edited" byline on a comment nobody edited.
+		a.closeEditBox()
+		return
+	}
+	a.flashStatus("Saving comment...")
+
+	update := a.updateCommentFunc
+	go func() {
+		comment, err := update(context.Background(), linearapi.UpdateCommentInput{
+			ID:      commentID,
+			Body:    body,
+			IssueID: issueID,
+		})
+		a.QueueUpdateDraw(func() {
+			if err != nil {
+				logger.ErrorWithErr(err, "tui.details_compose: update comment failed comment=%s", commentID)
+				a.updateStatusBarWithError(err)
+				return
+			}
+			logger.Info("tui.details_compose: comment updated comment=%s", commentID)
+			a.closeEditBox()
+			a.replaceComment(issueID, comment)
+			a.flashSuccess("Comment updated")
+		})
+	}()
+}
+
+// replaceComment puts a rewritten comment back where it was. CreatedAt does not
+// move, so neither does the card; the updatedAt that came back is what lights
+// the "edited" byline.
+//
+// A fetch already out was answering about the old body, so it is invalidated
+// here rather than left to land on top of this.
+func (a *App) replaceComment(issueID string, comment linearapi.Comment) {
+	a.cancelDetailFetch()
+
+	a.issuesMu.Lock()
+	selected := a.selectedIssue
+	if selected == nil || selected.ID != issueID {
+		a.issuesMu.Unlock()
+		return
+	}
+	for i, held := range selected.Comments {
+		if held.ID == comment.ID {
+			selected.Comments[i] = comment
+			break
+		}
+	}
+	comments := selected.Comments
+	a.issuesMu.Unlock()
+
+	a.detailsCommentsSource = comments
+	a.renderDetailsPage()
 	a.focusComment(comment.ID)
 }
 
@@ -714,6 +892,14 @@ func (a *App) syncComposeDraft(issueID string) {
 	if a.detailsComposeArea == nil || a.composeDraftIssueID == issueID {
 		return
 	}
+	// Leaving the issue drops an open edit the way Esc does. Nothing holds a
+	// rewrite, and one widget over a changing selection would carry it to
+	// whichever comment the next page draws a box for. Dropped here, while the
+	// fields still say which issue it belonged to.
+	delete(a.composeEditing, a.composeDraftIssueID)
+	if a.detailsEditArea != nil {
+		a.detailsEditArea.SetText("", false)
+	}
 	// Both boxes are one widget over a changing selection, so both have to be
 	// put away and reloaded. Held against its own thread first, while the
 	// fields still say which issue that was.
@@ -727,7 +913,10 @@ func (a *App) syncComposeDraft(issueID string) {
 	// would keep routing every keystroke into a box this page never drew, which
 	// is the lockup with no way out that releaseStrandedCompose cannot see —
 	// the panel is mounted, so it reads as on screen.
-	if a.replyParentID() == "" && (a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost) {
+	strandedReply := a.replyParentID() == "" &&
+		(a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost)
+	strandedEdit := a.commentsFocus == commentsFocusEdit || a.commentsFocus == commentsFocusEditPost
+	if strandedReply || strandedEdit {
 		a.commentsFocus = commentsFocusCards
 		a.focusedCommentID = ""
 		if a.focusedPane == FocusDetails {
@@ -759,10 +948,12 @@ func (a *App) clearComposeDrafts() {
 	a.composeDrafts = nil
 	a.composeReplyTo = nil
 	a.replyDrafts = nil
+	a.composeEditing = nil
 	a.composeDraftIssueID = ""
 	if a.detailsComposeArea != nil {
 		a.detailsComposeArea.SetText("", false)
 		a.detailsReplyArea.SetText("", false)
+		a.detailsEditArea.SetText("", false)
 		a.applyComposePlaceholder()
 	}
 }

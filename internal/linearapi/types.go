@@ -87,6 +87,20 @@ func (c CommentCreateInput) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}(c))
 }
 
+// CommentUpdateInput is a custom scalar type for Linear's CommentUpdateInput.
+// The Go type name must match the GraphQL type name exactly.
+type CommentUpdateInput map[string]interface{}
+
+// GetGraphQLType returns the GraphQL type name for the input.
+func (CommentUpdateInput) GetGraphQLType() string {
+	return "CommentUpdateInput"
+}
+
+// MarshalJSON implements json.Marshaler for CommentUpdateInput.
+func (c CommentUpdateInput) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}(c))
+}
+
 // IssueRelationCreateInput is a custom scalar type for Linear's IssueRelationCreateInput.
 type IssueRelationCreateInput map[string]interface{}
 
@@ -561,6 +575,16 @@ type CreateCommentInput struct {
 	Body    string
 	// ParentID makes the comment a reply. Empty posts at top level.
 	ParentID string
+}
+
+// UpdateCommentInput contains input for rewriting a comment's body.
+type UpdateCommentInput struct {
+	ID   string
+	Body string
+	// IssueID is the issue the comment sits on. The mutation finds the comment
+	// by id alone; this is stamped onto the returned Comment, which the payload
+	// is not asked for.
+	IssueID string
 }
 
 // CreateIssueRelationInput contains input for creating an issue relation.

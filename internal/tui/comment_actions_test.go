@@ -200,9 +200,16 @@ func TestAPickedCardCarriesItsKeysInItsBorder(t *testing.T) {
 	card := cardTextFor(t, app, "root-1")
 	footer := strings.Split(card, "\n")
 	last := footer[len(footer)-1]
-	for _, want := range []string{"r reply", "Q quote", "y copy link", "o open"} {
+	for _, want := range []string{"r reply", "Q quote"} {
 		if !strings.Contains(last, want) {
 			t.Errorf("the border under the card = %q, want it to name %q", last, want)
+		}
+	}
+	// The keys that leave for a browser or a clipboard still answer, and the
+	// border does not spend its width saying so.
+	for _, gone := range []string{"copy link", "o open"} {
+		if strings.Contains(last, gone) {
+			t.Errorf("the border under the card = %q, want it to leave out %q", last, gone)
 		}
 	}
 	if !strings.HasSuffix(strings.TrimRight(last, " "), "─╯[-:-:-]") {

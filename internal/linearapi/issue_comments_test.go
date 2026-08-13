@@ -143,3 +143,128 @@ func TestCreateCommentSendsItsParent(t *testing.T) {
 		})
 	}
 }
+
+// TestUpdateCommentReturnsWhatLinearRecorded covers the answer the card is
+// redrawn from. The updatedAt in it is what lights the "edited" byline, so a
+// response read wrong leaves an edit looking like it never happened.
+func TestUpdateCommentReturnsWhatLinearRecorded(t *testing.T) {
+	var sent map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables struct {
+				ID    string         `json:"id"`
+				Input map[string]any `json:"input"`
+			} `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decoding request: %v", err)
+		}
+		sent = body.Variables.Input
+		if body.Variables.ID != "comment-1" {
+			t.Errorf("variable id = %q, want comment-1", body.Variables.ID)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data": {"commentUpdate": {"success": true, "comment": {
+			"id": "comment-1",
+			"body": "second thoughts",
+			"createdAt": "2026-08-10T19:05:04Z",
+			"updatedAt": "2026-08-10T19:41:52Z",
+			"parentId": "root",
+			"url": "https://linear.app/c/comment-1",
+			"user": {"id": "u1", "displayName": "Drew", "isMe": true}
+		}}}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{Endpoint: server.URL})
+	comment, err := client.UpdateComment(context.Background(), UpdateCommentInput{
+		ID: "comment-1", Body: "second thoughts", IssueID: "issue-1",
+	})
+	if err != nil {
+		t.Fatalf("UpdateComment() error: %v", err)
+	}
+
+	if got := sent["body"]; got != "second thoughts" {
+		t.Errorf("input body = %v, want the new body", got)
+	}
+	if comment.Body != "second thoughts" {
+		t.Errorf("comment.Body = %q, want the new body", comment.Body)
+	}
+	if !comment.UpdatedAt.After(comment.CreatedAt) {
+		t.Errorf("timestamps = %v/%v, want updatedAt after createdAt", comment.CreatedAt, comment.UpdatedAt)
+	}
+	if comment.ParentID != "root" {
+		t.Errorf("comment.ParentID = %q, want root", comment.ParentID)
+	}
+	if comment.IssueID != "issue-1" {
+		t.Errorf("comment.IssueID = %q, want the issue the caller named", comment.IssueID)
+	}
+	if !comment.Author.IsMe {
+		t.Error("comment.Author.IsMe = false, want the flag the keys are gated on")
+	}
+}
+
+// TestDeleteCommentSendsItsID pins the variable, which is the whole of the call.
+func TestDeleteCommentSendsItsID(t *testing.T) {
+	var sent string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables struct {
+				ID string `json:"id"`
+			} `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decoding request: %v", err)
+		}
+		sent = body.Variables.ID
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data": {"commentDelete": {"success": true}}}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{Endpoint: server.URL})
+	if err := client.DeleteComment(context.Background(), "comment-1"); err != nil {
+		t.Fatalf("DeleteComment() error: %v", err)
+	}
+	if sent != "comment-1" {
+		t.Errorf("variable id = %q, want comment-1", sent)
+	}
+}
+
+// A refused write answers 200 with success false. Reading only the transport
+// error would report a comment edited or deleted that Linear left alone.
+func TestCommentWritesReportARefusedOperation(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		call     func(*Client) error
+	}{
+		{
+			name:     "update",
+			response: `{"data": {"commentUpdate": {"success": false, "comment": {"id": "comment-1", "user": {"id": "u1"}}}}}`,
+			call: func(c *Client) error {
+				_, err := c.UpdateComment(context.Background(), UpdateCommentInput{ID: "comment-1", Body: "hi"})
+				return err
+			},
+		},
+		{
+			name:     "delete",
+			response: `{"data": {"commentDelete": {"success": false}}}`,
+			call:     func(c *Client) error { return c.DeleteComment(context.Background(), "comment-1") },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tt.response))
+			}))
+			defer server.Close()
+
+			if err := tt.call(NewClient(ClientConfig{Endpoint: server.URL})); err == nil {
+				t.Fatal("call succeeded against a refused mutation")
+			}
+		})
+	}
+}

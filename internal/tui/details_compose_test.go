@@ -328,9 +328,10 @@ func TestComposeBoxAlignsWithTheCards(t *testing.T) {
 	}
 }
 
-// TestComposeBoxIsAFixedHeight covers the box not growing with what is typed,
-// which would push the card stack around mid-sentence.
-func TestComposeBoxIsAFixedHeight(t *testing.T) {
+// TestTheComposeBoxGrowsWithWhatIsTyped covers a box sized to its own text. In
+// a fixed frame the top of a long draft goes behind a scroll inside the card,
+// on a page that already scrolls.
+func TestTheComposeBoxGrowsWithWhatIsTyped(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	// The box is the last thing on the page, so the bottom-most frame is its.
 	frameRows := func() int {
@@ -350,22 +351,26 @@ func TestComposeBoxIsAFixedHeight(t *testing.T) {
 		return bottom - top + 1
 	}
 
-	// The writing, the button row under it, and the card's own frame and byline
+	// The button row under the writing, and the card's own frame and byline
 	// around both.
-	const composeCardRows = composeRows + 5
-	empty := frameRows()
-	if empty != composeCardRows {
-		t.Errorf("box draws %d rows, want %d", empty, composeCardRows)
+	const chrome = 5
+	if empty := frameRows(); empty != composeRows+chrome {
+		t.Errorf("an empty box draws %d rows, want %d", empty, composeRows+chrome)
 	}
 
+	const written = 11
 	typeRunes(t, app, "one")
-	for i := 0; i < 10; i++ {
+	for i := 0; i < written-1; i++ {
 		typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModNone))
 		typeRunes(t, app, "more")
 	}
+	if got := frameRows(); got != written+chrome {
+		t.Errorf("box draws %d rows for %d lines, want %d", got, written, written+chrome)
+	}
 
-	if got := frameRows(); got != empty {
-		t.Errorf("box draws %d rows after typing and %d empty, want a fixed height", got, empty)
+	fillWritingBox(app.detailsComposeArea, "")
+	if got := frameRows(); got != composeRows+chrome {
+		t.Errorf("box draws %d rows once emptied, want back to %d", got, composeRows+chrome)
 	}
 }
 
@@ -697,13 +702,30 @@ func TestPostedCommentSurvivesAnInFlightRefetch(t *testing.T) {
 	app.createCommentFunc = func(_ context.Context, input linearapi.CreateCommentInput) (linearapi.Comment, error) {
 		return linearapi.Comment{ID: "comment-3", Body: input.Body, CreatedAt: time.Now()}, nil
 	}
-	app.fetchIssueByID = func(context.Context, string) (linearapi.Issue, error) { return stale, nil }
+	// The fetch goes out first and is held there, so the comment is posted
+	// while it is still waiting. The merge keeps a comment by its age against
+	// when the request went out, so a fetch started after the post would be
+	// entitled to drop it and this would test nothing.
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	app.fetchIssueByID = func(context.Context, string) (linearapi.Issue, error) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+		return stale, nil
+	}
+	app.loadIssueDetailsByID(issue.ID)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the detail fetch never went out")
+	}
 
 	typeRunes(t, app, "must not vanish")
 	postAndWait(t, app, drawn)
 
-	// The fetch that was already out answers now, with pre-post comments.
-	app.loadIssueDetailsByID(issue.ID)
+	close(release)
 	waitForDraw(t, drawn)
 
 	if got := len(app.selectedIssue.Comments); got != 3 {

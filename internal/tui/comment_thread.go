@@ -36,14 +36,21 @@ const (
 )
 
 // commentBlocks lays out the page: every comment in thread order, the reply box
-// at the end of the thread it answers, and the compose card last of all.
+// at the end of the thread it answers, and the compose card last of all. The
+// comment being edited is a box in the place its card had, so a rewrite happens
+// where the words already are.
 func (a *App) commentBlocks() []commentBlock {
 	rows := buildCommentRows(a.detailsCommentsSource)
 	reply := a.replyParentID()
+	editing := a.editingCommentID()
 
 	blocks := make([]commentBlock, 0, len(rows)+2)
 	for i, row := range rows {
-		blocks = append(blocks, commentBlock{comment: row.Comment, depth: row.Depth, id: row.Comment.ID})
+		focus := commentsFocusCards
+		if row.Comment.ID == editing {
+			focus = commentsFocusEdit
+		}
+		blocks = append(blocks, commentBlock{comment: row.Comment, depth: row.Depth, focus: focus, id: row.Comment.ID})
 		// The box goes after the last comment of its thread, which is the row
 		// before the next root, and it takes the thread's own indent.
 		if reply != "" && threadRootID(a.detailsCommentsSource, row.Comment.ID) == reply &&
