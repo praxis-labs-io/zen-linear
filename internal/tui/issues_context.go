@@ -14,12 +14,6 @@ const (
 	contextSeparator   = " | "
 )
 
-// contextSegment is one fact on the context line and the color it is said in.
-type contextSegment struct {
-	text string
-	tag  string
-}
-
 // attachIssuesContext writes how the list is ordered and filtered along the top
 // border of a pane standing in for the issues list, right of the title. It
 // reads live state on every draw, so nothing has to remember to refresh it.
@@ -55,13 +49,13 @@ func (a *App) issuesContextText(maxWidth int) string {
 		return ""
 	}
 
-	sorted := contextSegment{"Sort: " + sortChainLabel(a.effectiveSortFields()), a.themeTags.SecondaryText}
-	filtered := contextSegment{}
+	sorted := "Sort: " + sortChainLabel(a.effectiveSortFields())
+	filtered := ""
 	if !a.richFilters.Empty() {
-		filtered = contextSegment{"Filters: " + a.richFilters.Summary(), a.themeTags.Warning}
+		filtered = "Filters: " + a.richFilters.Summary()
 	}
 
-	for _, line := range [][]contextSegment{
+	for _, line := range [][]string{
 		{sorted, filtered},
 		{filtered},
 		{sorted},
@@ -107,10 +101,10 @@ func (a *App) teamKey(teamID string) string {
 	return ""
 }
 
-func withoutEmptySegments(line []contextSegment) []contextSegment {
-	kept := make([]contextSegment, 0, len(line))
+func withoutEmptySegments(line []string) []string {
+	kept := make([]string, 0, len(line))
 	for _, segment := range line {
-		if segment.text != "" {
+		if segment != "" {
 			kept = append(kept, segment)
 		}
 	}
@@ -119,25 +113,27 @@ func withoutEmptySegments(line []contextSegment) []contextSegment {
 
 // contextWidth measures a line as drawn, including the separators and the space
 // that keeps each end off the border.
-func contextWidth(line []contextSegment) int {
+func contextWidth(line []string) int {
 	width := 2
 	for index, segment := range line {
 		if index > 0 {
 			width += runewidth.StringWidth(contextSeparator)
 		}
-		width += runewidth.StringWidth(segment.text)
+		width += runewidth.StringWidth(segment)
 	}
 	return width
 }
 
-func (a *App) renderContext(line []contextSegment) string {
+// renderContext says the whole line in the secondary color. It is context, not
+// a warning: the border it sits in already sets it apart from the rows.
+func (a *App) renderContext(line []string) string {
 	parts := make([]string, 0, len(line))
 	for _, segment := range line {
 		// Project, cycle and label names are Linear's, and this line is built
 		// from color tags: a project called [red] would be read as one instead
 		// of printed. The width is measured off the text as it stands, since
 		// the escape is not drawn.
-		parts = append(parts, segment.tag+tview.Escape(segment.text)+"[-]")
+		parts = append(parts, a.themeTags.SecondaryText+tview.Escape(segment)+"[-]")
 	}
 	return " " + strings.Join(parts, a.themeTags.Border+contextSeparator+"[-]") + " "
 }
