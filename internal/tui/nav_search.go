@@ -95,6 +95,20 @@ func (a *App) applyNavSearchStyles() {
 	a.applyNavSelectionStyle(a.navigationTree.GetRoot())
 }
 
+// navSelectionIsLit reports whether the tree's cursor paints as a selection.
+// It goes out while search results hold the issues pane, since a lit row there
+// claims to name what is on screen and a workspace-wide search takes no list.
+//
+// Holding the keyboard puts it back on, whatever the pane is showing: an
+// unlit cursor is one nobody can steer, which is the whole tree gone dead. The
+// next node picked drops the search anyway.
+func (a *App) navSelectionIsLit() bool {
+	if a.activeIssuesSection != IssuesSectionSearch {
+		return true
+	}
+	return a.focusedPane == FocusNavigation && !a.navSearchFocused
+}
+
 // applyNavSelectionStyle sets how the tree's current row paints. Every node
 // gets it, not just the current one, so arrowing around while results are up
 // cannot light the row the cursor lands on.
@@ -103,7 +117,7 @@ func (a *App) applyNavSelectionStyle(node *tview.TreeNode) {
 		return
 	}
 	style := selectionStyle(a.theme)
-	if a.activeIssuesSection == IssuesSectionSearch {
+	if !a.navSelectionIsLit() {
 		style = tcell.StyleDefault.Foreground(node.GetColor()).Background(a.theme.Background)
 	}
 	node.SetSelectedTextStyle(style)

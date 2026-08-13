@@ -116,26 +116,32 @@ func TestUpOffTheTopOfTheTreeReachesTheQueryBox(t *testing.T) {
 
 // TestSearchResultsPutOutTheTreeSelection covers a lit row claiming to name the
 // list on screen while what is on screen is a workspace-wide search, which
-// takes no list.
+// takes no list. Stepping into the tree relights it: an unlit cursor is one
+// nobody can steer.
 func TestSearchResultsPutOutTheTreeSelection(t *testing.T) {
 	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me"})
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
 	current := app.navigationTree.GetRoot().GetChildren()[0]
 	app.navigationTree.SetCurrentNode(current)
-	app.applyNavSearchStyles()
+	app.focusNavSearch()
 
-	lit := current.GetSelectedTextStyle()
-	if lit != selectionStyle(app.theme) {
-		t.Fatalf("the tree row is not lit to start with: %v", lit)
+	lit := selectionStyle(app.theme)
+	if got := current.GetSelectedTextStyle(); got != lit {
+		t.Fatalf("the tree row is not lit to start with: %v", got)
 	}
 
 	app.performIssueSearch("found")
 	waitForResults()
-
 	if got := current.GetSelectedTextStyle(); got == lit {
 		t.Error("the tree row stayed lit while search results held the pane")
 	}
 
+	app.focusNavigationTree()
+	if got := current.GetSelectedTextStyle(); got != lit {
+		t.Error("the tree took the keyboard with its cursor still out, so nothing on screen says where the arrows are")
+	}
+
+	app.focusNavSearch()
 	app.performIssueSearch("")
 	if got := current.GetSelectedTextStyle(); got != lit {
 		t.Error("the tree row stayed out after the list came back")

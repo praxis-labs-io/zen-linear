@@ -103,11 +103,13 @@ func TestSearchRunsTheSpinner(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.SearchDebounce = time.Hour
 	started := make(chan struct{}, 1)
-	release := make(chan struct{})
-	t.Cleanup(func() { close(release) })
+	// Canceling is what frees the parked fetch, and it bumps the generation
+	// too, so what the fetch delivers on its way out is discarded rather than
+	// painted into the next test's app.
+	t.Cleanup(func() { app.cancelSearchFetch() })
 	app.fetchIssuesPage = func(ctx context.Context, _ linearapi.FetchIssuesParams, _ *string) (linearapi.IssuePage, error) {
 		started <- struct{}{}
-		<-release
+		<-ctx.Done()
 		return linearapi.IssuePage{}, ctx.Err()
 	}
 
