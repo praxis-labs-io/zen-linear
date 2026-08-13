@@ -211,7 +211,7 @@ func (a *App) updateAllPaneTitles() {
 	// The workspace name is the user's, and the title is built from color tags:
 	// a workspace called [red] would be read as one instead of printed.
 	navLabel := tview.Escape(a.navigationPaneLabel())
-	a.navigationPanel.SetTitle(a.paneTitle(paneNumberNavigation, a.tabSegment(navLabel, true, isNavFocused), isNavFocused))
+	a.navigationPanel.SetTitle(a.paneTitle(paneNumberNavigation, a.paneLabel(navLabel, isNavFocused), isNavFocused))
 	a.navigationPanel.SetTitleColor(a.theme.Foreground)
 
 	// Update Issues pane title

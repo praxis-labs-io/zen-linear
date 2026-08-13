@@ -44,6 +44,36 @@ func TestPaneTitlesCarryTheirNumber(t *testing.T) {
 	}
 }
 
+// A pane that names one thing has nothing to contrast a middle shade against,
+// so its label dims and lights with the number beside it. Left on the tab
+// strip's active-tab color it reads as lit from across the screen.
+func TestASinglePaneLabelDimsWithItsNumber(t *testing.T) {
+	app := newUXTestApp(t)
+	app.detailsHidden = false
+
+	titleFor := map[FocusTarget]func() string{
+		FocusNavigation: app.navigationPanel.GetTitle,
+		FocusIssues:     app.listIssuesTable.GetTitle,
+	}
+
+	for pane, title := range titleFor {
+		app.focusedPane = pane
+		app.updateAllPaneTitles()
+		if got := title(); strings.Count(got, app.themeTags.Accent) != 2 {
+			t.Errorf("focused %v title = %q, want the number and the label both accented", pane, got)
+		}
+
+		app.focusedPane = FocusPalette
+		app.updateAllPaneTitles()
+		if got := title(); strings.Contains(got, app.themeTags.Foreground) {
+			t.Errorf("idle %v title = %q, want the label dimmed rather than lit", pane, got)
+		}
+		if got := title(); strings.Count(got, app.themeTags.SecondaryText) != 2 {
+			t.Errorf("idle %v title = %q, want the number and the label both dim", pane, got)
+		}
+	}
+}
+
 // TestPaneTitlesDropTheFocusCaret covers focus no longer being spelled with a
 // caret: the border color and the active tab carry it instead.
 func TestPaneTitlesDropTheFocusCaret(t *testing.T) {

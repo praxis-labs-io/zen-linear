@@ -118,6 +118,17 @@ func paneTitleWidth(label string) int {
 	return runewidth.StringWidth(label) + 6
 }
 
+// paneLabel colors the name of a pane that has one thing to name, so the label
+// dims and lights with the number beside it. tabSegment is for the panes that
+// still carry tabs, where the middle shade means "the active one of several".
+func (a *App) paneLabel(label string, focused bool) string {
+	tag := a.themeTags.SecondaryText
+	if focused {
+		tag = a.themeTags.Accent
+	}
+	return tag + label + "[-]"
+}
+
 // issuesTitleLabel names what the issues pane is showing, untagged. The context
 // line shares the same border row and measures against this to know how much of
 // it is already spoken for, so the text has one source and both callers use it.
@@ -139,7 +150,7 @@ func (a *App) issuesTitleLabel() string {
 // Linear's and this title is built from color tags, so one called [red] would
 // be read as one instead of printed.
 func (a *App) issuesPaneTitle(focused bool) string {
-	return a.tabSegment(tview.Escape(a.issuesTitleLabel()), true, focused)
+	return a.paneLabel(tview.Escape(a.issuesTitleLabel()), focused)
 }
 
 // detailsTabsTitle renders the tab strip for the details pane border.
