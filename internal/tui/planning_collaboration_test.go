@@ -90,7 +90,7 @@ func TestUpdateDetailsView_IncludesPlanningAndCollaboration(t *testing.T) {
 	app.issuesMu.Unlock()
 
 	app.updateDetailsView()
-	text := app.detailsDescriptionView.GetText(true)
+	text := app.detailsPageView.GetText(true)
 	for _, want := range []string{
 		"Due date:", "2026-06-15",
 		"Estimate:", "8",

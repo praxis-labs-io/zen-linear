@@ -219,24 +219,29 @@ func bindingApp(t *testing.T, bindings map[string]string) *App {
 	}, nil)
 	stopBackgroundWorkOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
+	// A rendered page, or the ring these tests read has no stop to move to and
+	// they would agree with each other over an empty pane.
+	app.selectedIssue = detailsFixture()
+	app.selectedIssue.Comments = threadedComments()
+	app.updateDetailsView()
+	focusCommentCards(app)
+	drawComments(t, app, 80)
 	return app
 }
 
 // TestCommandBindingBeatsADefaultActionKey covers ZNL-31: a command bound to a
 // rune an action holds by default never fired, with nothing said about it.
 func TestCommandBindingBeatsADefaultActionKey(t *testing.T) {
-	app := bindingApp(t, map[string]string{"toggle_navigation_pane": "]"})
-	app.focusedPane = FocusDetails
-	app.detailsCommentsVisible = true
-	tab := app.focusedDetailsView
+	app := bindingApp(t, map[string]string{"toggle_navigation_pane": "}"})
+	lit := app.focusedCommentID
 
-	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, ']', tcell.ModNone))
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '}', tcell.ModNone))
 
 	if !app.navigationHidden {
-		t.Error("] did not run the command bound to it")
+		t.Error("} did not run the command bound to it")
 	}
-	if app.focusedDetailsView != tab {
-		t.Error("] also cycled the details tabs, want the command to own the key")
+	if got := app.focusedCommentID; got != lit {
+		t.Errorf("} also stepped the ring to %q, want the command to own the key", got)
 	}
 }
 
@@ -244,15 +249,13 @@ func TestCommandBindingBeatsADefaultActionKey(t *testing.T) {
 // precedence. A navigation command holds the rune nowhere else, so the action
 // still answers in the details pane.
 func TestActionKeyStandsWhenTheBoundCommandIsOutOfScope(t *testing.T) {
-	app := bindingApp(t, map[string]string{"toggle_favorite": "]"})
-	app.focusedPane = FocusDetails
-	app.detailsCommentsVisible = true
-	tab := app.focusedDetailsView
+	app := bindingApp(t, map[string]string{"toggle_favorite": "}"})
+	lit := app.focusedCommentID
 
-	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, ']', tcell.ModNone))
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '}', tcell.ModNone))
 
-	if app.focusedDetailsView == tab {
-		t.Error("] did not cycle the tabs, want the action to answer out of the command's scope")
+	if got := app.focusedCommentID; got == lit {
+		t.Error("} did not step the ring, want the action to answer out of the command's scope")
 	}
 }
 

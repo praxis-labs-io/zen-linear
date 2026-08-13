@@ -175,8 +175,8 @@ func (a *App) loadingFrameInterval() time.Duration {
 // nothing of its own to show. UI thread only.
 func (a *App) paintLoadingSurfaces() {
 	a.updateIssuesPlaceholder()
-	if a.detailsDescriptionView != nil && a.GetSelectedIssue() == nil {
-		a.detailsDescriptionView.SetText(a.emptyDetailsMessage())
+	if a.detailsPageView != nil && a.GetSelectedIssue() == nil {
+		a.detailsPageView.SetText(a.emptyDetailsMessage())
 	}
 	if a.navLoadingNode != nil {
 		a.navLoadingNode.SetText(a.navLoadingText())

@@ -5,11 +5,12 @@ import (
 	"github.com/rivo/tview"
 )
 
-// The Comments tab is one page: the cards, the box a reply is being written in
-// under the thread it answers, and the compose card at the end of everything
-// said. All of it scrolls together. A box pinned to the foot of the pane is a
-// box that covers the conversation it is about, and a reply written down there
-// is written away from the thread it belongs to.
+// The details pane is one page: the issue's metadata, its description, the
+// comment cards, the box a reply is being written in under the thread it
+// answers, and the compose card at the end of everything said. All of it
+// scrolls together. Reading an issue and reading what people said about it are
+// one act, and a box pinned to the foot of the pane is a box that covers the
+// conversation it is about.
 //
 // The page is text with holes in it. The cards and the boxes' frames are
 // rendered into the text view underneath; the text areas are real widgets drawn
@@ -26,8 +27,8 @@ type pageSlot struct {
 	width     int
 }
 
-// commentsPage draws the card stack and the widgets that sit inside it.
-type commentsPage struct {
+// detailsPage draws the issue and the widgets that sit inside it.
+type detailsPage struct {
 	*tview.Box
 
 	// view holds the page's text and owns the scrolling, so a card's rows and
@@ -35,24 +36,23 @@ type commentsPage struct {
 	view  *tview.TextView
 	slots []pageSlot
 
-	// refit re-renders the page when the measure changes, the same way the
-	// description tab re-renders on a resize.
+	// refit re-renders the page at a new measure. The draw is the only place
+	// the live width is known; refit itself skips a width it already laid out
+	// at, so this can be called on every frame.
 	refit func(width int)
-
-	fitted int
 }
 
-func newCommentsPage(view *tview.TextView, refit func(int)) *commentsPage {
-	page := &commentsPage{Box: tview.NewBox(), view: view, refit: refit, fitted: -1}
+func newDetailsPage(view *tview.TextView, refit func(int)) *detailsPage {
+	page := &detailsPage{Box: tview.NewBox(), view: view, refit: refit}
 	page.SetBackgroundColor(view.GetBackgroundColor())
 	return page
 }
 
 // setSlots records where the live widgets landed in the page just rendered.
-func (p *commentsPage) setSlots(slots []pageSlot) { p.slots = slots }
+func (p *detailsPage) setSlots(slots []pageSlot) { p.slots = slots }
 
 // Draw paints the text and then the widgets over the holes it left for them.
-func (p *commentsPage) Draw(screen tcell.Screen) {
+func (p *detailsPage) Draw(screen tcell.Screen) {
 	p.DrawForSubclass(screen, p)
 	x, y, width, height := p.GetInnerRect()
 	if width <= 0 || height <= 0 {
@@ -60,10 +60,7 @@ func (p *commentsPage) Draw(screen tcell.Screen) {
 	}
 
 	measure, gutter := readingMeasure(width)
-	if measure != p.fitted {
-		p.fitted = measure
-		p.refit(measure)
-	}
+	p.refit(measure)
 
 	p.view.SetRect(x+gutter, y, measure, height)
 	p.view.Draw(screen)
@@ -105,10 +102,10 @@ func (p *commentsPage) Draw(screen tcell.Screen) {
 // Focus hands the keyboard to the text view, which is the page's own content.
 // A box is focused by the app directly, so this is only the fallback for a
 // focus tview delegates on its own.
-func (p *commentsPage) Focus(delegate func(tview.Primitive)) { delegate(p.view) }
+func (p *detailsPage) Focus(delegate func(tview.Primitive)) { delegate(p.view) }
 
 // HasFocus reports focus on the page or on anything drawn in it.
-func (p *commentsPage) HasFocus() bool {
+func (p *detailsPage) HasFocus() bool {
 	if p.view.HasFocus() {
 		return true
 	}
@@ -128,7 +125,7 @@ func (p *commentsPage) HasFocus() bool {
 // answers with one child's handler is a container the other children can never
 // be typed in: the box takes the focus, the border lights, and every keystroke
 // lands in the text view and is dropped.
-func (p *commentsPage) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
+func (p *detailsPage) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	return p.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
 		if focused := p.focusedSlot(); focused != nil {
 			if handler := focused.InputHandler(); handler != nil {
@@ -144,7 +141,7 @@ func (p *commentsPage) InputHandler() func(*tcell.EventKey, func(tview.Primitive
 
 // PasteHandler follows the same chain: a paste belongs to the box being written
 // in, not to the page under it.
-func (p *commentsPage) PasteHandler() func(string, func(tview.Primitive)) {
+func (p *detailsPage) PasteHandler() func(string, func(tview.Primitive)) {
 	return p.WrapPasteHandler(func(text string, setFocus func(tview.Primitive)) {
 		if focused := p.focusedSlot(); focused != nil {
 			if handler := focused.PasteHandler(); handler != nil {
@@ -155,7 +152,7 @@ func (p *commentsPage) PasteHandler() func(string, func(tview.Primitive)) {
 }
 
 // focusedSlot is the widget on the page holding the keyboard, or nil.
-func (p *commentsPage) focusedSlot() tview.Primitive {
+func (p *detailsPage) focusedSlot() tview.Primitive {
 	for _, slot := range p.slots {
 		if slot.primitive.HasFocus() {
 			return slot.primitive
@@ -166,7 +163,7 @@ func (p *commentsPage) focusedSlot() tview.Primitive {
 
 // MouseHandler offers the mouse to the widgets on the page before the text
 // under them, so a click lands on the box it looks like it landed on.
-func (p *commentsPage) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
+func (p *detailsPage) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
 	return func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
 		if !p.InRect(event.Position()) {
 			return false, nil

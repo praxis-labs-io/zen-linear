@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -29,15 +31,30 @@ func detailsFixture() *linearapi.Issue {
 	}
 }
 
-// drawDetails renders the description tab at a width and returns its lines.
+// drawDetails renders the details pane at a width and returns its lines.
 func drawDetails(t *testing.T, app *App, width int) []string {
 	t.Helper()
-	return drawTextView(t, app.detailsDescriptionView, width)
+	return drawTextView(t, app.detailsView, width)
 }
 
-// drawTextView renders a bordered text view at a width and returns what landed
+// descriptionEnd is the row the description stops on: the second rule down the
+// page, the first closing the metadata and this one closing the description.
+// A page with only one rule has no comments under it and runs to the end.
+func descriptionEnd(lines []string) int {
+	rules := 0
+	for i, line := range lines {
+		if trimmed := strings.TrimSpace(line); trimmed != "" && strings.Trim(trimmed, "─") == "" {
+			if rules++; rules == 2 {
+				return i
+			}
+		}
+	}
+	return len(lines)
+}
+
+// drawTextView renders a bordered primitive at a width and returns what landed
 // on the screen, one string per row, with the border columns taken off.
-func drawTextView(t *testing.T, view *tview.TextView, width int) []string {
+func drawTextView(t *testing.T, view tview.Primitive, width int) []string {
 	t.Helper()
 	lines := drawPrimitive(t, view, width)
 	// Columns 0 and width-1 are the pane border, which would otherwise sit on
@@ -57,6 +74,14 @@ func drawTextView(t *testing.T, view *tview.TextView, width int) []string {
 // what landed on the screen, one string per row.
 func drawPrimitive(t *testing.T, primitive tview.Primitive, width int) []string {
 	t.Helper()
+	return drawPrimitiveAt(t, primitive, width, 40)
+}
+
+// drawPrimitiveAt renders at an explicit height, for a page too long to fit the
+// default: the details pane draws the issue, its description and its comments
+// as one scroll, so the cards start well down it.
+func drawPrimitiveAt(t *testing.T, primitive tview.Primitive, width, height int) []string {
+	t.Helper()
 
 	screen := tcell.NewSimulationScreen("UTF-8")
 	if err := screen.Init(); err != nil {
@@ -64,7 +89,6 @@ func drawPrimitive(t *testing.T, primitive tview.Primitive, width int) []string 
 	}
 	t.Cleanup(screen.Fini)
 
-	const height = 40
 	screen.SetSize(width, height)
 	primitive.SetRect(0, 0, width, height)
 	primitive.Draw(screen)
@@ -191,7 +215,7 @@ func TestDetailsPaneContentSitsInsideItsBorder(t *testing.T) {
 			app := newDetailsTestApp(t)
 			app.density = ResolveDensity(density.id)
 			padding := app.density.DetailsPadding
-			app.detailsDescriptionView.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+			app.applyDensityToComponents()
 			app.updateDetailsView()
 
 			const width = 60
@@ -207,6 +231,62 @@ func TestDetailsPaneContentSitsInsideItsBorder(t *testing.T) {
 				t.Errorf("fitted width = %d, want %d", got, width-2-padding.Left-padding.Right)
 			}
 		})
+	}
+}
+
+// TestDetailsFieldOrder pins the metadata grid: what the issue is and who has
+// it, then where it sits in the plan, then its dates.
+func TestDetailsFieldOrder(t *testing.T) {
+	app := newDetailsTestApp(t)
+	lines := drawDetails(t, app, 90)
+
+	want := []string{
+		"State:", "Assignee:", "Priority:", "Labels:",
+		"Project:", "Milestone:", "Cycle:",
+		"Due date:", "Estimate:", "Branch:",
+	}
+	at := make([]int, len(want))
+	for i, field := range want {
+		at[i] = indexOfLine(lines, findLine(t, lines, field))
+	}
+	for i := 1; i < len(at); i++ {
+		if at[i] <= at[i-1] {
+			t.Errorf("%s at line %d, want it below %s at line %d", want[i], at[i], want[i-1], at[i-1])
+		}
+	}
+}
+
+// TestStateAndPriorityReadInWords covers the two fields that used to be a bare
+// string and a bare number. Each carries the list's own glyph, so one issue
+// reads the same in both places, and the color the list gives it.
+func TestStateAndPriorityReadInWords(t *testing.T) {
+	app := newDetailsTestApp(t)
+	app.selectedIssue.State = "In Progress"
+	app.selectedIssue.Priority = 1
+	app.updateDetailsView()
+
+	stateIcon, stateColor := formatStateIcon("In Progress", app.theme)
+	priorityIcon, priorityColor := formatPriority(1, app.theme)
+
+	for _, want := range []struct {
+		field string
+		line  string
+	}{
+		{"State", fmt.Sprintf("State:[-]      %s%s In Progress[-]", colorTag(stateColor), stateIcon)},
+		{"Priority", fmt.Sprintf("Priority:[-]   %s%s Urgent[-]", colorTag(priorityColor), priorityIcon)},
+	} {
+		if !slices.ContainsFunc(app.detailsHeaderLines, func(line string) bool {
+			return strings.Contains(line, want.line)
+		}) {
+			t.Errorf("no %s line reads %q, header:\n%s", want.field, want.line, strings.Join(app.detailsHeaderLines, "\n"))
+		}
+	}
+
+	// Drawn as well as built: a tag the renderer swallowed would leave the
+	// glyph and the word uncolored with nothing to show for it.
+	drawn := findLine(t, drawDetails(t, app, 90), "Priority:")
+	if !strings.Contains(drawn, priorityIcon+" Urgent") {
+		t.Errorf("the drawn priority line = %q, want the glyph and the word", drawn)
 	}
 }
 
@@ -267,7 +347,7 @@ func TestDetailsPaneSurvivesAPaneNarrowerThanItsBorder(t *testing.T) {
 			t.Fatalf("width %d drew nothing", width)
 		}
 		// The draw func's return value is what GetInnerRect reports back.
-		_, _, innerWidth, innerHeight := app.detailsDescriptionView.GetInnerRect()
+		_, _, innerWidth, innerHeight := app.detailsView.GetInnerRect()
 		if innerWidth < 0 || innerHeight < 0 {
 			t.Errorf("width %d gave a content rect of %dx%d", width, innerWidth, innerHeight)
 		}
@@ -335,8 +415,12 @@ func TestDescriptionTablesFitTheReadingMeasure(t *testing.T) {
 		// The table spans from its first gutter line to its last. A cell that
 		// spilled past the width lands in that span as a line with no gutter
 		// at all, which is exactly what the broken render looks like.
+		//
+		// The scan stops at the rule closing the description: the comment cards
+		// below it are drawn from the same gutter rune and would otherwise read
+		// as the far end of the table.
 		first, last := -1, -1
-		for i, line := range lines {
+		for i, line := range lines[:descriptionEnd(lines)] {
 			if strings.Contains(line, "│") || strings.Contains(line, "┼") {
 				if first < 0 {
 					first = i
@@ -460,8 +544,8 @@ func TestTheReadingGutterMatchesThePaneBackground(t *testing.T) {
 			}
 			t.Cleanup(screen.Fini)
 			screen.SetSize(width, 40)
-			app.detailsDescriptionView.SetRect(0, 0, width, 40)
-			app.detailsDescriptionView.Draw(screen)
+			app.detailsView.SetRect(0, 0, width, 40)
+			app.detailsView.Draw(screen)
 			screen.Show()
 
 			cells, screenWidth, _ := screen.GetContents()

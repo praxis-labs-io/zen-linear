@@ -36,7 +36,6 @@ func newThreadedTestApp(t *testing.T) *App {
 func focusCommentCards(app *App) {
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails
-	app.focusedDetailsView = true
 	app.commentsFocus = commentsFocusCards
 	// Mounted, not just flagged: a key is delivered from the root down the
 	// focus chain, so a pane that is not in the layout is a pane no key can
@@ -50,76 +49,74 @@ func pressInComments(t *testing.T, app *App, r rune) {
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 }
 
-// tabComments sends Tab, or Shift+Tab backwards, the way the running app does.
-func tabComments(t *testing.T, app *App, backward bool) {
+// stepComments sends } , or { backwards, the way the running app does.
+func stepComments(t *testing.T, app *App, backward bool) {
 	t.Helper()
-	key := tcell.KeyTab
+	key := '}'
 	if backward {
-		key = tcell.KeyBacktab
+		key = '{'
 	}
-	app.handleGlobalKey(tcell.NewEventKey(key, 0, tcell.ModNone))
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, key, tcell.ModNone))
 }
 
-// TestTheCommentsTabOpensWithNothingPicked covers the stack taking the keyboard
-// without lighting a card. Nothing is picked until Tab says so, and until then
-// the pane's own keys are the issue's.
-func TestTheCommentsTabOpensWithNothingPicked(t *testing.T) {
+// TestTheDetailsPageOpensWithNothingPicked covers the page taking the keyboard
+// without lighting a card. Nothing is picked until a brace says so, and until
+// then the pane's own keys are the issue's.
+func TestTheDetailsPageOpensWithNothingPicked(t *testing.T) {
 	app := newThreadedTestApp(t)
 
 	if got := app.focusedCommentID; got != "" {
-		t.Errorf("the tab opened with %q picked, want nothing", got)
+		t.Errorf("the page opened with %q picked, want nothing", got)
 	}
 }
 
-// TestTabStepsThroughTheThreadIntoTheBox covers the ring: every card in the
+// TestBracesStepThroughTheThreadIntoTheBox covers the ring: every card in the
 // order it is drawn, replies included, then the compose box and its button.
-func TestTabStepsThroughTheThreadIntoTheBox(t *testing.T) {
+func TestBracesStepThroughTheThreadIntoTheBox(t *testing.T) {
 	app := newThreadedTestApp(t)
 
 	for _, want := range []string{"root-1", "reply-1", "reply-2", "root-2", "orphan"} {
-		tabComments(t, app, false)
+		stepComments(t, app, false)
 		if got := app.focusedCommentID; got != want {
-			t.Fatalf("Tab picked %q, want %q", got, want)
+			t.Fatalf("} picked %q, want %q", got, want)
 		}
 		if a := app.commentsFocus; a != commentsFocusCards {
-			t.Fatalf("Tab left the stack at %q", want)
+			t.Fatalf("} left the stack at %q", want)
 		}
 	}
 
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 	if !app.composeBoxActive() {
-		t.Fatal("Tab past the last card did not reach the compose box")
+		t.Fatal("} past the last card did not reach the compose box")
 	}
-	tabComments(t, app, false)
+	// From here the braces are prose: the box owns every letter typed into it,
+	// and Tab is what reaches the button that sends them.
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 	if app.commentsFocus != commentsFocusPost {
 		t.Errorf("Tab from the box went to %v, want the Post button", app.commentsFocus)
 	}
 }
 
-// TestBacktabWalksTheRingTheOtherWay covers coming back: out of the box onto
-// the card Tab left, and up the stack to the first, where it stops.
-func TestBacktabWalksTheRingTheOtherWay(t *testing.T) {
+// TestBracesWalkTheRingTheOtherWay covers coming back up the stack to the first
+// card, where the ring stops rather than wrapping or leaving the pane.
+func TestBracesWalkTheRingTheOtherWay(t *testing.T) {
 	app := newThreadedTestApp(t)
-	for i := 0; i < 6; i++ {
-		tabComments(t, app, false)
+	for i := 0; i < 5; i++ {
+		stepComments(t, app, false)
 	}
-	if !app.composeBoxActive() {
-		t.Fatal("six tabs did not reach the compose box")
+	if got := app.focusedCommentID; got != "orphan" {
+		t.Fatalf("five } landed on %q, want the last card", got)
 	}
 
-	tabComments(t, app, true)
-	if got := app.focusedCommentID; got != "orphan" {
-		t.Errorf("Shift+Tab out of the box picked %q, want the card it left", got)
-	}
 	for _, want := range []string{"root-2", "reply-2", "reply-1", "root-1"} {
-		tabComments(t, app, true)
+		stepComments(t, app, true)
 		if got := app.focusedCommentID; got != want {
-			t.Fatalf("Shift+Tab picked %q, want %q", got, want)
+			t.Fatalf("{ picked %q, want %q", got, want)
 		}
 	}
-	tabComments(t, app, true)
+	stepComments(t, app, true)
 	if got := app.focusedCommentID; got != "root-1" {
-		t.Errorf("Shift+Tab before the first card picked %q, want it to stay", got)
+		t.Errorf("{ before the first card picked %q, want it to stay", got)
 	}
 }
 
@@ -128,7 +125,7 @@ func TestBacktabWalksTheRingTheOtherWay(t *testing.T) {
 func TestScrollKeysStayWithTheStack(t *testing.T) {
 	app := newThreadedTestApp(t)
 	showComments(t, app, 80, 12)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 
 	pressInComments(t, app, 'j')
 
@@ -141,7 +138,7 @@ func TestScrollKeysStayWithTheStack(t *testing.T) {
 // pane, which is the other half of nothing being picked by default.
 func TestEscapeLetsGoOfTheCard(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 	if app.focusedCommentID == "" {
 		t.Fatal("Tab picked nothing")
 	}
@@ -151,8 +148,8 @@ func TestEscapeLetsGoOfTheCard(t *testing.T) {
 	if got := app.focusedCommentID; got != "" {
 		t.Errorf("Esc left %q picked", got)
 	}
-	if app.focusedPane != FocusDetails || !app.focusedDetailsView {
-		t.Error("Esc left the Comments tab as well as the card")
+	if app.focusedPane != FocusDetails {
+		t.Error("Esc left the details pane as well as the card")
 	}
 }
 
@@ -168,8 +165,8 @@ func showComments(t *testing.T, app *App, width, height int) []string {
 	}
 	t.Cleanup(screen.Fini)
 	screen.SetSize(width, height)
-	app.detailsCommentsPage.SetRect(0, 0, width, height)
-	app.detailsCommentsPage.Draw(screen)
+	app.detailsPage.SetRect(0, 0, width, height)
+	app.detailsPage.Draw(screen)
 	screen.Show()
 
 	cells, screenWidth, screenHeight := screen.GetContents()
@@ -198,7 +195,7 @@ func TestAPickedCardCarriesItsKeysInItsBorder(t *testing.T) {
 		t.Errorf("a card nobody picked names keys in its border:\n%s", picked)
 	}
 
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 
 	card := cardTextFor(t, app, "root-1")
 	footer := strings.Split(card, "\n")
@@ -217,7 +214,7 @@ func TestAPickedCardCarriesItsKeysInItsBorder(t *testing.T) {
 // hints ride on the button's own row rather than in the border.
 func TestABoxNamesItsKeysBesideThePostButton(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 	pressInComments(t, app, 'r')
 
 	rows := strings.Split(cardTextFor(t, app, blockIDReply), "\n")
@@ -252,11 +249,11 @@ func TestThePaddingIsTheEndOfTheScroll(t *testing.T) {
 		return strings.TrimSpace(lines[len(lines)-1])
 	}
 
-	app.detailsCommentsView.ScrollToBeginning()
+	app.detailsPageView.ScrollToBeginning()
 	if bottomRow() == "" {
 		t.Error("the pane's last row is blank mid-scroll, want the conversation running to it")
 	}
-	app.detailsCommentsView.ScrollToEnd()
+	app.detailsPageView.ScrollToEnd()
 	if got := bottomRow(); got != "" {
 		t.Errorf("the last row at the end of the scroll = %q, want the padding", got)
 	}
@@ -268,7 +265,7 @@ func TestThePaddingIsTheEndOfTheScroll(t *testing.T) {
 func TestTheComposeCardScrollsWithThePage(t *testing.T) {
 	app := newThreadedTestApp(t)
 	showComments(t, app, 80, 12)
-	app.detailsCommentsView.ScrollToBeginning()
+	app.detailsPageView.ScrollToBeginning()
 	showComments(t, app, 80, 12)
 
 	compose := app.commentSpans[app.commentSpanIndex(blockIDCompose)]
@@ -294,14 +291,14 @@ func TestTabScrollsTheCardIntoView(t *testing.T) {
 	showComments(t, app, 80, 12)
 
 	for i := 0; i < 5; i++ {
-		tabComments(t, app, false)
+		stepComments(t, app, false)
 	}
 	if got := app.focusedCommentID; got != "orphan" {
 		t.Fatalf("Tab picked %q, want the last card", got)
 	}
 
 	span := app.commentSpans[app.commentSpanIndex("orphan")]
-	row, _ := app.detailsCommentsView.GetScrollOffset()
+	row, _ := app.detailsPageView.GetScrollOffset()
 	if span.start < row || span.end >= row+12 {
 		t.Errorf("card at rows %d..%d is off a pane showing %d..%d", span.start, span.end, row, row+11)
 	}
@@ -313,21 +310,21 @@ func TestTabScrollsTheCardIntoView(t *testing.T) {
 func TestTheRingReanchorsAfterAFreeScroll(t *testing.T) {
 	app := newThreadedTestApp(t)
 	showComments(t, app, 80, 12)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlD, 0, tcell.ModCtrl))
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlD, 0, tcell.ModCtrl))
-	scrolled, _ := app.detailsCommentsView.GetScrollOffset()
+	scrolled, _ := app.detailsPageView.GetScrollOffset()
 	if scrolled == 0 {
 		t.Fatal("Ctrl+D did not scroll the stack")
 	}
 
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 
 	if got := app.focusedCommentID; got == "root-1" {
 		t.Error("Tab went back to the card it was left on, want the one on screen")
 	}
-	if row, _ := app.detailsCommentsView.GetScrollOffset(); row != scrolled {
+	if row, _ := app.detailsPageView.GetScrollOffset(); row != scrolled {
 		t.Errorf("Tab scrolled the pane to row %d, want it left at %d", row, scrolled)
 	}
 }
@@ -359,7 +356,7 @@ func TestAnActionNeedsAPickedCard(t *testing.T) {
 // screen, where the harness has already dropped the styling.
 func TestTheFocusedCardWearsTheFocusBorder(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 
 	focused := cardTextFor(t, app, "root-1")
 	if !strings.Contains(focused, app.themeTags.BorderFocus) {
@@ -375,7 +372,7 @@ func TestTheFocusedCardWearsTheFocusBorder(t *testing.T) {
 // ring left painted says the keys are somewhere they are not.
 func TestTheRingGivesUpTheBorderWithTheKeyboard(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 
 	app.focusPane(FocusIssues)
 
@@ -391,10 +388,10 @@ func cardTextFor(t *testing.T, app *App, id string) string {
 	t.Helper()
 	index := app.commentSpanIndex(id)
 	if index < 0 {
-		t.Fatalf("comment %q drew no card:\n%s", id, app.detailsCommentsView.GetText(false))
+		t.Fatalf("comment %q drew no card:\n%s", id, app.detailsPageView.GetText(false))
 	}
 	span := app.commentSpans[index]
-	lines := strings.Split(app.detailsCommentsView.GetText(false), "\n")
+	lines := strings.Split(app.detailsPageView.GetText(false), "\n")
 	return strings.Join(lines[span.start:span.end+1], "\n")
 }
 
@@ -417,7 +414,7 @@ func composeCue(t *testing.T, area *tview.TextArea) string {
 func TestReplyOpensABoxInsideTheThread(t *testing.T) {
 	app := newThreadedTestApp(t)
 	for i := 0; i < 3; i++ {
-		tabComments(t, app, false) // reply-2, a reply to a reply
+		stepComments(t, app, false) // reply-2, a reply to a reply
 	}
 
 	pressInComments(t, app, 'r')
@@ -485,8 +482,8 @@ func TestReplyPostsWithItsParent(t *testing.T) {
 		}, nil
 	}
 
-	tabComments(t, app, false)
-	tabComments(t, app, false) // reply-1
+	stepComments(t, app, false)
+	stepComments(t, app, false) // reply-1
 	pressInComments(t, app, 'r')
 	typeRunes(t, app, "the debounce")
 	postAndWait(t, app, drawn)
@@ -513,7 +510,7 @@ func TestReplyPostsWithItsParent(t *testing.T) {
 // own box as markdown quote.
 func TestQuoteFillsTheBoxWithTheComment(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 
 	pressInComments(t, app, 'Q')
 
@@ -528,7 +525,7 @@ func TestQuoteFillsTheBoxWithTheComment(t *testing.T) {
 	// drawn thinks it is one row tall, so a quote put in with the cursor at the
 	// end scrolled itself out of view: the words were all there and the box was
 	// blank, and an assertion on GetText alone called that a pass.
-	drawn := strings.Join(showComments(t, app, 80, 30), "\n")
+	drawn := strings.Join(showComments(t, app, 80, 80), "\n")
 	if !strings.Contains(drawn, "> The debounce is the problem.") {
 		t.Errorf("the quote is in the box and not on the screen:\n%s", drawn)
 	}
@@ -564,7 +561,7 @@ func TestQuoteBody(t *testing.T) {
 // is rows of nothing between two comments; the words stay against the thread.
 func TestEscapeClosesTheReplyBoxAndKeepsTheWords(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 	pressInComments(t, app, 'r')
 	typeRunes(t, app, "half a thought")
 
@@ -596,8 +593,8 @@ func TestCopyAndOpenActOnTheFocusedCard(t *testing.T) {
 	app.copyToClipboardFunc = func(text string) error { copied <- text; return nil }
 	app.openURLFunc = func(url string) error { opened <- url; return nil }
 
-	tabComments(t, app, false)
-	tabComments(t, app, false) // reply-1
+	stepComments(t, app, false)
+	stepComments(t, app, false) // reply-1
 	pressInComments(t, app, 'y')
 	if got := <-copied; got != "https://linear.app/c/reply-1" {
 		t.Errorf("copied %q, want the focused comment's link", got)
@@ -609,18 +606,17 @@ func TestCopyAndOpenActOnTheFocusedCard(t *testing.T) {
 	}
 }
 
-// TestCommentKeysStayOutOfTheDescriptionTab covers the shadow being scoped: r
-// refreshes everywhere the ring is not.
-func TestCommentKeysStayOutOfTheDescriptionTab(t *testing.T) {
+// TestCommentKeysStayOffAnUnlitPage covers the shadow being scoped: r refreshes
+// everywhere the ring is not lit, the details pane included.
+func TestCommentKeysStayOffAnUnlitPage(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
-	app.focusedDetailsView = false
-	app.updateFocus()
+	stepComments(t, app, false)
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 
 	pressInComments(t, app, 'r')
 
 	if got := app.replyParentID(); got != "" {
-		t.Errorf("r aimed the box at %q from the description tab", got)
+		t.Errorf("r aimed the box at %q with no card lit", got)
 	}
 }
 
@@ -633,7 +629,7 @@ func TestCommentKeysDoNothingWithoutComments(t *testing.T) {
 	focusCommentCards(app)
 	drawComments(t, app, 80)
 
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 	for _, key := range []rune{'r', 'Q', 'y', 'o'} {
 		pressInComments(t, app, key)
 	}
@@ -653,7 +649,7 @@ func TestCommentKeysDoNothingWithoutComments(t *testing.T) {
 // the next issue's box and posts to a thread it was never written for.
 func TestAReplyStaysWithItsOwnIssue(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 	pressInComments(t, app, 'r')
 	typeRunes(t, app, "meant for the first issue")
 
@@ -694,7 +690,7 @@ func TestAReplyStaysWithItsOwnIssue(t *testing.T) {
 func TestAnUndrawnBoxIsNoMouseTarget(t *testing.T) {
 	app := newThreadedTestApp(t)
 	showComments(t, app, 80, 12)
-	app.detailsCommentsView.ScrollToEnd()
+	app.detailsPageView.ScrollToEnd()
 	showComments(t, app, 80, 12)
 
 	_, _, width, height := app.detailsComposeArea.GetRect()
@@ -702,7 +698,7 @@ func TestAnUndrawnBoxIsNoMouseTarget(t *testing.T) {
 		t.Fatal("the compose area was not drawn at the end of the page")
 	}
 
-	app.detailsCommentsView.ScrollToBeginning()
+	app.detailsPageView.ScrollToBeginning()
 	showComments(t, app, 80, 12)
 
 	if _, _, width, height := app.detailsComposeArea.GetRect(); width != 0 || height != 0 {
@@ -718,14 +714,14 @@ func TestABoxCutOffAtTheTopIsNotRedrawn(t *testing.T) {
 	// The reply box, because it sits in the middle of the page: the compose
 	// card is the last thing on it, and the scroll clamps before its top can
 	// pass the top of the pane.
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 	pressInComments(t, app, 'r')
 	showComments(t, app, 80, 12)
 
 	// Scrolled one row past the writing area's own first row, so its top is
 	// above the pane and its tail is in it: the case a crop reads wrong.
 	var area pageSlot
-	for _, slot := range app.detailsCommentsPage.slots {
+	for _, slot := range app.detailsPage.slots {
 		if slot.primitive == app.detailsReplyArea {
 			area = slot
 		}
@@ -733,7 +729,7 @@ func TestABoxCutOffAtTheTopIsNotRedrawn(t *testing.T) {
 	if area.height == 0 {
 		t.Fatal("the compose area has no slot on the page")
 	}
-	app.detailsCommentsView.ScrollTo(area.row+1, 0)
+	app.detailsPageView.ScrollTo(area.row+1, 0)
 	showComments(t, app, 80, 12)
 
 	if _, _, width, height := app.detailsReplyArea.GetRect(); width != 0 || height != 0 {
@@ -747,8 +743,8 @@ func TestABoxCutOffAtTheTopIsNotRedrawn(t *testing.T) {
 // once and neither was where the keys were going.
 func TestOnlyOneCardIsLitAtATime(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
-	tabComments(t, app, false) // reply-1, inside root-1's thread
+	stepComments(t, app, false)
+	stepComments(t, app, false) // reply-1, inside root-1's thread
 
 	pressInComments(t, app, 'r')
 
@@ -777,14 +773,14 @@ func TestOnlyOneCardIsLitAtATime(t *testing.T) {
 // first rather than over the words between them.
 func TestQuotingTwiceKeepsBothQuotes(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 	pressInComments(t, app, 'Q')
 	typeRunes(t, app, "mine")
 
 	// Back to a card, then quote a second one into the same box.
 	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
-	tabComments(t, app, false)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
+	stepComments(t, app, false)
 	pressInComments(t, app, 'Q')
 
 	got := app.detailsReplyArea.GetText()
@@ -809,12 +805,12 @@ func TestQuotingTwiceKeepsBothQuotes(t *testing.T) {
 // does rather than stacking up in front of the next one.
 func TestAnUnwrittenQuoteDoesNotFollowYou(t *testing.T) {
 	app := newThreadedTestApp(t)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
 	pressInComments(t, app, 'Q')
 	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 
-	tabComments(t, app, false)
-	tabComments(t, app, false)
+	stepComments(t, app, false)
+	stepComments(t, app, false)
 	pressInComments(t, app, 'Q')
 
 	got := app.detailsReplyArea.GetText()

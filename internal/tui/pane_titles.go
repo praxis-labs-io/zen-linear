@@ -7,11 +7,9 @@ import (
 	"github.com/rivo/tview"
 )
 
-// The details pane renders lazygit-style tabs: one view fills the pane and the
-// border title lists every tab, highlighting the active one. The [ and ] keys
-// cycle them; { and } belong to the pane toggles. Both pairs are remappable, so
-// read them through actionKey. The issues pane has no tabs: it shows the list
-// the tree picked, or search results.
+// No pane carries tabs. Each shows one thing and names it in its border: the
+// issues pane shows the list the tree picked or the search results, and the
+// details pane shows the issue, its description and its comments as one page.
 
 // tableForSection returns the table widget backing a section.
 func (a *App) tableForSection(section IssuesSection) *tview.Table {
@@ -105,9 +103,6 @@ const (
 	paneNumberDetails    = 3
 )
 
-// tabSeparator sits between tab labels in a pane title.
-const tabSeparator = " - "
-
 // paneTitle wraps a pane's label with its number, which goes accent colored
 // while the pane holds focus.
 func (a *App) paneTitle(number int, label string, focused bool) string {
@@ -124,9 +119,8 @@ func paneTitleWidth(label string) int {
 	return runewidth.StringWidth(label) + 6
 }
 
-// paneLabel colors the name of a pane that has one thing to name, so the label
-// dims and lights with the number beside it. tabSegment is for the panes that
-// still carry tabs, where the middle shade means "the active one of several".
+// paneLabel colors a pane's name, so the label dims and lights with the number
+// beside it.
 func (a *App) paneLabel(label string, focused bool) string {
 	tag := a.themeTags.SecondaryText
 	if focused {
@@ -159,26 +153,6 @@ func (a *App) issuesPaneTitle(focused bool) string {
 	return a.paneLabel(tview.Escape(a.issuesTitleLabel()), focused)
 }
 
-// detailsTabsTitle renders the tab strip for the details pane border.
-func (a *App) detailsTabsTitle(focused bool) string {
-	if !a.detailsCommentsVisible {
-		return a.tabSegment("Details", true, focused)
-	}
-	details := a.tabSegment("Details", !a.focusedDetailsView, focused)
-	comments := a.tabSegment(fmt.Sprintf("Comments (%d)", a.selectedIssueCommentCount()), a.focusedDetailsView, focused)
-	return details + tabSeparator + comments
-}
-
-// selectedIssueCommentCount returns how many comments the selected issue has.
-func (a *App) selectedIssueCommentCount() int {
-	a.issuesMu.RLock()
-	defer a.issuesMu.RUnlock()
-	if a.selectedIssue == nil {
-		return 0
-	}
-	return len(a.selectedIssue.Comments)
-}
-
 // visibleRowCount counts rows excluding gap spacers, so a title's number stays
 // unchanged by group spacing.
 func visibleRowCount(rows []IssueRow) int {
@@ -189,30 +163,4 @@ func visibleRowCount(rows []IssueRow) int {
 		}
 	}
 	return count
-}
-
-// tabSegment colors one tab label: the active tab follows focus, inactive
-// tabs stay muted.
-func (a *App) tabSegment(label string, active bool, focused bool) string {
-	tag := a.themeTags.SecondaryText
-	if active {
-		tag = a.themeTags.Foreground
-		if focused {
-			tag = a.themeTags.Accent
-		}
-	}
-	return tag + label + "[-]"
-}
-
-// updateDetailsLayout shows the active details tab at full height.
-func (a *App) updateDetailsLayout() {
-	if a.detailsView == nil || a.detailsDescriptionView == nil || a.detailsCommentsPanel == nil {
-		return
-	}
-	a.detailsView.Clear()
-	if a.detailsCommentsVisible && a.focusedDetailsView {
-		a.detailsView.AddItem(a.detailsCommentsPanel, 0, 1, true)
-	} else {
-		a.detailsView.AddItem(a.detailsDescriptionView, 0, 1, true)
-	}
 }

@@ -6,7 +6,7 @@ import "github.com/zen-linear/zen-linear/internal/logger"
 // palette command, each with the panes it answers from. An action collides with
 // a command the same way two commands do, so the scope has to be as honest here
 // as it is on a Command: the favorite keys reach the navigation tree only, and
-// the tab and column keys the issue panes only.
+// the comment and column keys the issue panes only.
 // TestUIActionScopesCoverEveryActionKeyCallSite keeps this in step with the code.
 var uiActionScopes = map[string]CommandScope{
 	"quit":               ScopeGlobal,
@@ -15,8 +15,8 @@ var uiActionScopes = map[string]CommandScope{
 	"focus_navigation":   ScopeGlobal,
 	"focus_issues":       ScopeGlobal,
 	"focus_details":      ScopeGlobal,
-	"tab_next":           ScopeIssue,
-	"tab_prev":           ScopeIssue,
+	"comment_next":       ScopeIssue,
+	"comment_prev":       ScopeIssue,
 	"columns_left":       ScopeIssue,
 	"columns_right":      ScopeIssue,
 	"favorite_move_up":   ScopeNavigation,

@@ -97,8 +97,11 @@ func TestFocusNavSearchFocusesTheQueryBox(t *testing.T) {
 	}
 }
 
-func TestDetailsCommentsTabAlwaysVisibleWithCount(t *testing.T) {
+// TestClearingTheSelectionEmptiesTheDetailsPage covers the page going back to
+// its empty state: no cards, no compose card, and no ring left aimed at one.
+func TestClearingTheSelectionEmptiesTheDetailsPage(t *testing.T) {
 	app := newUXTestApp(t)
+	app.detailsHidden = false
 
 	issue := linearapi.Issue{ID: "issue-1", Identifier: "ABC-1", Title: "First", State: "Todo"}
 	app.issuesMu.Lock()
@@ -106,25 +109,20 @@ func TestDetailsCommentsTabAlwaysVisibleWithCount(t *testing.T) {
 	app.issuesMu.Unlock()
 	app.updateDetailsView()
 
-	if !app.detailsCommentsVisible {
-		t.Fatal("comments tab hidden for an issue without comments")
-	}
-	if title := app.detailsTabsTitle(false); !strings.Contains(title, "Comments (0)") {
-		t.Fatalf("details tab strip = %q, want a Comments (0) segment", title)
-	}
-
-	issue.Comments = []linearapi.Comment{{ID: "c-1", Body: "hi"}, {ID: "c-2", Body: "again"}}
-	app.updateDetailsView()
-	if title := app.detailsTabsTitle(false); !strings.Contains(title, "Comments (2)") {
-		t.Fatalf("details tab strip = %q, want a Comments (2) segment", title)
+	if !app.composeBoxOnScreen() {
+		t.Fatal("an issue with no comments drew no compose card")
 	}
 
 	app.issuesMu.Lock()
 	app.selectedIssue = nil
 	app.issuesMu.Unlock()
 	app.updateDetailsView()
-	if app.detailsCommentsVisible {
-		t.Fatal("comments tab shown with no issue selected")
+
+	if app.composeBoxOnScreen() {
+		t.Error("the compose card outlived the selection")
+	}
+	if got := app.focusedCommentID; got != "" {
+		t.Errorf("the ring is still on %q with no issue selected", got)
 	}
 }
 

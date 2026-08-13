@@ -147,8 +147,8 @@ func TestDefaultShortcutsMatchTheShippedSet(t *testing.T) {
 	// elsewhere, and the command answers by name.
 	want := map[string]rune{
 		"switch_workspace":       'w',
-		"toggle_navigation_pane": '{',
-		"toggle_details_pane":    '}',
+		"toggle_navigation_pane": '<',
+		"toggle_details_pane":    '>',
 		"edit_labels":            't',
 		"change_team":            'T',
 		"add_comment":            'c',

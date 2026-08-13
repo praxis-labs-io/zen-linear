@@ -16,7 +16,7 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		return modal.HandleKey(event)
 	}
 
-	// A layout change can unmount the Comments tab while the compose box still
+	// A layout change can take the compose card off the page while the box still
 	// holds the keyboard. Recover before routing, or every key from then on
 	// disappears into a box that is not on the screen.
 	a.releaseStrandedCompose()
@@ -48,14 +48,13 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		// and the pane numbers, so Tab is swallowed rather than handed to
 		// tview, whose focus delegation would land it on an arbitrary
 		// primitive. The palette never reaches here; it returned above.
-		backward := event.Key() == tcell.KeyBacktab || event.Modifiers()&tcell.ModShift != 0
 		if a.focusedPane == FocusNavigation {
 			// Two controls under one border, so either direction is the other
 			// one. Tab out of the query box is handled with its own keys.
 			a.focusNavSearch()
 			return nil
 		}
-		a.stepCommentsFocus(backward)
+		a.stepWritingBoxFocus()
 		return nil
 	case tcell.KeyRune:
 		// A command bound by id beats the action holding that rune by default.
@@ -238,7 +237,7 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyEnter, tcell.KeyEscape:
 		// Escape lets go of a card before it does anything larger, the way it
 		// drops a reply's aim before leaving the compose box.
-		if event.Key() == tcell.KeyEscape && a.commentsHaveFocus() && a.clearCommentFocus() {
+		if event.Key() == tcell.KeyEscape && a.detailsHaveFocus() && a.clearCommentFocus() {
 			return nil
 		}
 		// Zoomed, the way back is the issues list itself; unzoomed, Enter
@@ -267,12 +266,11 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 		case 'h':
 			a.stepPane(-1)
 			return nil
-		case a.actionKey("tab_prev", '['), a.actionKey("tab_next", ']'):
-			// Cycle the Details/Comments tabs, lazygit-style.
-			if a.detailsCommentsVisible {
-				a.focusedDetailsView = !a.focusedDetailsView
-				a.updateFocus()
-			}
+		case a.actionKey("comment_prev", '{'):
+			a.stepCommentsFocus(true)
+			return nil
+		case a.actionKey("comment_next", '}'):
+			a.stepCommentsFocus(false)
 			return nil
 		case 'j', 'k', 'g', 'G':
 			// Scrolling keys stay with the text view.

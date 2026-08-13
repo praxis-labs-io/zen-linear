@@ -187,14 +187,14 @@ func TestDetailsPaneSaysLoadingWhileTheListLoads(t *testing.T) {
 
 	app.refreshIssuesWithFocusChange(false)
 
-	if text := app.detailsDescriptionView.GetText(true); !strings.Contains(text, "Loading issue") {
+	if text := app.detailsPageView.GetText(true); !strings.Contains(text, "Loading issue") {
 		t.Fatalf("details pane = %q, want it to name the fetch", text)
 	}
 
 	close(release)
 	waitForRefreshCompletion(t, refreshDone)
 
-	if text := app.detailsDescriptionView.GetText(true); !strings.Contains(text, "ENG-1") {
+	if text := app.detailsPageView.GetText(true); !strings.Contains(text, "ENG-1") {
 		t.Fatalf("details pane = %q, want the selected issue", text)
 	}
 }

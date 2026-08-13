@@ -44,43 +44,41 @@ type App struct {
 	navTeams     []linearapi.Team
 
 	// UI components
-	pages                  *tview.Pages
-	mainLayout             *tview.Flex
-	contentFlex            *tview.Flex
-	navigationHidden       bool
-	detailsHidden          bool
-	detailsZoomed          bool
-	zoomPreviousPane       FocusTarget
-	zoomPreviousHidden     bool
-	layoutMode             layoutMode
-	palettePreviousPane    FocusTarget
-	navigationPanel        *tview.Flex // Navigation pane shell: query box + tree
-	navSearchFrame         *tview.Flex // Bordered frame around the query box
-	navSearchInput         *tview.InputField
-	navigationTree         *tview.TreeView
-	navLoadingNode         *tview.TreeNode // "Loading teams" node, until a tree replaces it
-	navNodeLabels          map[*tview.TreeNode]navNodeLabel
-	favorites              []linearapi.Favorite
-	favoritesGroup         *tview.TreeNode
-	listIssuesTable        *tview.Table
-	searchResultsTable     *tview.Table
-	issuesPlaceholder      *tview.Flex     // Stands in for a table with no rows
-	issuesPlaceholderText  *tview.TextView // Centered loading/empty/error message
-	issuesColumn           *tview.Flex     // Vertical flex holding the active issues tab
-	detailsView            *tview.Flex     // Flex container for details (description + comments)
-	detailsDescriptionView *tview.TextView // Scrollable description/metadata view
-	// detailsHeaderLines is the metadata block untruncated and detailsBody the
-	// description already rendered, so a refit re-joins them without rebuilding
-	// the header. detailsFittedWidth is the width the two were last laid out
-	// at. The raw markdown is kept alongside because a width change has to
+	pages                 *tview.Pages
+	mainLayout            *tview.Flex
+	contentFlex           *tview.Flex
+	navigationHidden      bool
+	detailsHidden         bool
+	detailsZoomed         bool
+	zoomPreviousPane      FocusTarget
+	zoomPreviousHidden    bool
+	layoutMode            layoutMode
+	palettePreviousPane   FocusTarget
+	navigationPanel       *tview.Flex // Navigation pane shell: query box + tree
+	navSearchFrame        *tview.Flex // Bordered frame around the query box
+	navSearchInput        *tview.InputField
+	navigationTree        *tview.TreeView
+	navLoadingNode        *tview.TreeNode // "Loading teams" node, until a tree replaces it
+	navNodeLabels         map[*tview.TreeNode]navNodeLabel
+	favorites             []linearapi.Favorite
+	favoritesGroup        *tview.TreeNode
+	listIssuesTable       *tview.Table
+	searchResultsTable    *tview.Table
+	issuesPlaceholder     *tview.Flex     // Stands in for a table with no rows
+	issuesPlaceholderText *tview.TextView // Centered loading/empty/error message
+	issuesColumn          *tview.Flex     // Vertical flex holding the active issues tab
+	detailsView           *tview.Flex     // The details pane: border, title, and the page
+	detailsPageView       *tview.TextView // The page's text, scrolled as one
+	// detailsHeaderLines is the metadata block untruncated and detailsBodyLines
+	// the description already rendered, so a refit re-joins them without
+	// rebuilding the header. detailsFittedWidth is the width they were last laid
+	// out at. The raw markdown is kept alongside because a width change has to
 	// re-run the renderer: glamour sizes tables to the width it is given.
 	detailsHeaderLines         []string
-	detailsBody                string
+	detailsBodyLines           []string
 	detailsDescriptionMarkdown string
 	detailsFittedWidth         int
-	detailsCommentsView        *tview.TextView // Scrollable comments view
 	detailsCommentsSource      []linearapi.Comment
-	detailsCommentsFittedWidth int
 	// focusedCommentID is the card the ring is on and commentSpans is where
 	// every card landed in the last render. The ring is held by id rather than
 	// by index so a refetch that reorders the stack keeps it on the same card.
@@ -88,13 +86,12 @@ type App struct {
 	commentSpans     []commentSpan
 	// commentPainted is the ring the last render drew, so a focus change
 	// repaints only when it changes something on the page.
-	commentPainted       commentPaint
-	detailsCommentsPanel *tview.Flex     // Comments tab shell: the bordered panel
-	detailsCommentsPage  *commentsPage   // Cards, the reply box, the compose card
-	detailsComposeArea   *tview.TextArea // Where a comment gets written
-	detailsComposePost   *tview.Button   // Sends what is in the compose box
-	detailsReplyArea     *tview.TextArea // Where a reply gets written, inside its thread
-	detailsReplyPost     *tview.Button   // Sends what is in the reply box
+	commentPainted     commentPaint
+	detailsPage        *detailsPage    // The issue, the cards, and the boxes drawn in them
+	detailsComposeArea *tview.TextArea // Where a comment gets written
+	detailsComposePost *tview.Button   // Sends what is in the compose box
+	detailsReplyArea   *tview.TextArea // Where a reply gets written, inside its thread
+	detailsReplyPost   *tview.Button   // Sends what is in the reply box
 	// composeDrafts holds what has been written and not posted, keyed by issue.
 	// The box is one widget over a changing selection, so a draft has to follow
 	// the issue it was written for; left in the box it would be posted to
@@ -266,10 +263,9 @@ type App struct {
 	// UI update mutex (for test safety when queueUpdateDraw executes immediately)
 	uiUpdateMu sync.Mutex
 
-	// Details pane sub-view focus
-	focusedDetailsView     bool          // false = description, true = comments
-	detailsCommentsVisible bool          // Tracks whether comments view is shown
-	commentsFocus          commentsFocus // sub-focus within the Comments tab: cards, text, or button
+	// commentsFocus is what inside the details page holds the keyboard: a card,
+	// one of the writing boxes, or its button.
+	commentsFocus commentsFocus
 }
 
 // FocusTarget indicates which pane has focus.

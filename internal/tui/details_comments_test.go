@@ -48,7 +48,7 @@ func newCommentsTestApp(t *testing.T) *App {
 // card than there are comments.
 func drawComments(t *testing.T, app *App, width int) []string {
 	t.Helper()
-	return drawPrimitive(t, app.detailsCommentsPage, width)
+	return drawPrimitiveAt(t, app.detailsPage, width, 160)
 }
 
 // commentCards groups the drawn rows into cards, each running from its top
@@ -273,8 +273,8 @@ func TestUnwrappedMarkdownIsUntouchedByHardBreaks(t *testing.T) {
 }
 
 // TestCommentsEmptyState covers the issue nobody has written on. It is the one
-// most likely to be written on, so it says so and then gives you the box: the
-// message is a line above the compose card, not the whole page.
+// most likely to be written on, so the count says none and the box is right
+// there under it, rather than an empty state taking the page.
 func TestCommentsEmptyState(t *testing.T) {
 	app := newDetailsTestApp(t)
 
@@ -282,7 +282,7 @@ func TestCommentsEmptyState(t *testing.T) {
 		lines := drawComments(t, app, width)
 		// Normalized because a narrow pane wraps the message across rows.
 		drawn := strings.Join(strings.Fields(strings.Join(lines, " ")), " ")
-		if !strings.Contains(drawn, "No comments yet.") {
+		if !strings.Contains(drawn, "Comments (0)") {
 			t.Errorf("width %d drew no empty state:\n%s", width, strings.Join(lines, "\n"))
 		}
 		if !strings.Contains(drawn, "write a comment") {
@@ -295,7 +295,7 @@ func TestCommentsEmptyState(t *testing.T) {
 	if got := app.commentSpanIndex(blockIDCompose); got < 0 {
 		t.Error("the compose card is not in the ring on an issue with no comments")
 	}
-	if got := len(app.detailsCommentsPage.slots); got != 2 {
+	if got := len(app.detailsPage.slots); got != 2 {
 		t.Errorf("the page mounted %d widgets, want the writing area and its button", got)
 	}
 	if !app.openComposeBox() {

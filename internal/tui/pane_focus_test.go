@@ -51,21 +51,20 @@ func TestStepSkipsTheHiddenNavigationPane(t *testing.T) {
 	}
 }
 
-// Tab belongs to the Comments tab's own controls. It used to leave the pane
-// too, which made the tab strip and pane navigation fight over one key.
+// Tab belongs to a pane's own controls. It used to leave the pane too, which
+// made those controls and pane navigation fight over one key.
 func TestTabDoesNotMoveBetweenPanes(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
-	app.detailsCommentsVisible = true
 	app.focusedPane = FocusDetails
-	app.focusedDetailsView = false
+	app.commentsFocus = commentsFocusCards
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 	if app.focusedPane != FocusDetails {
 		t.Fatalf("Tab from Details landed on %v, want to stay put", app.focusedPane)
 	}
-	if app.focusedDetailsView {
-		t.Fatal("Tab moved the Details/Comments tab")
+	if app.commentsFocus != commentsFocusCards {
+		t.Fatal("Tab moved off the cards, where there is no box to walk")
 	}
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone))
@@ -75,7 +74,7 @@ func TestTabDoesNotMoveBetweenPanes(t *testing.T) {
 }
 
 // The details pane never dispatched command shortcuts, so every palette rune
-// was dead there. { and } are how it showed up: the pane toggles did nothing.
+// was dead there. < and > are how it showed up: the pane toggles did nothing.
 func TestPaneTogglesFireFromTheDetailsPane(t *testing.T) {
 	app := NewApp(linearapi.ClientConfig{}, config.Config{
 		PageSize: 1,
@@ -86,18 +85,18 @@ func TestPaneTogglesFireFromTheDetailsPane(t *testing.T) {
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails
 
-	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '{', tcell.ModNone))
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '<', tcell.ModNone))
 	if !app.navigationHidden {
-		t.Fatal("{ did not hide the navigation pane from the details pane")
+		t.Fatal("< did not hide the navigation pane from the details pane")
 	}
-	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '{', tcell.ModNone))
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '<', tcell.ModNone))
 	if app.navigationHidden {
-		t.Fatal("{ did not restore the navigation pane")
+		t.Fatal("< did not restore the navigation pane")
 	}
 
-	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '}', tcell.ModNone))
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, '>', tcell.ModNone))
 	if !app.detailsHidden {
-		t.Fatal("} did not hide the details pane from inside it")
+		t.Fatal("> did not hide the details pane from inside it")
 	}
 }
 
@@ -114,18 +113,16 @@ func TestDetailsPaneKeepsItsScrollKeys(t *testing.T) {
 	}
 }
 
-func TestDetailsTabKeysStillCycleItsTabs(t *testing.T) {
-	app := newUXTestApp(t)
-	app.detailsHidden = false
-	app.detailsCommentsVisible = true
-	app.focusedPane = FocusDetails
-	app.focusedDetailsView = false
+// TestTheDetailsPaneTitleIsJustDetails covers the tab strip being gone: the
+// pane shows one thing and its border names one thing.
+func TestTheDetailsPaneTitleIsJustDetails(t *testing.T) {
+	app := newThreadedTestApp(t)
 
-	app.handleDetailsKey(tcell.NewEventKey(tcell.KeyRune, app.actionKey("tab_next", ']'), tcell.ModNone))
-	if !app.focusedDetailsView {
-		t.Fatal("the details tab key did not move to Comments")
+	title := stripTags(app.detailsView.GetTitle())
+	if !strings.Contains(title, "Details") || !strings.Contains(title, "[3]") {
+		t.Errorf("details title = %q, want it to name the pane and its number", title)
 	}
-	if !strings.Contains(app.detailsTabsTitle(true), "Comments") {
-		t.Fatalf("details strip %q missing the Comments tab", app.detailsTabsTitle(true))
+	if strings.Contains(title, "Comments") {
+		t.Errorf("details title = %q, want no tab strip", title)
 	}
 }

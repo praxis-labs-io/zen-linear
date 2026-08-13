@@ -70,3 +70,45 @@ func TestRosePineMoonBackgroundTransparent(t *testing.T) {
 		t.Errorf("RosePineMoonTheme.Background = %v, want tcell.ColorDefault", RosePineMoonTheme.Background)
 	}
 }
+
+// TestRosePineMoonStaysInItsPalette is the guard on the borrowed color. The
+// palette has six hues and no green, and a role whose convention is green used
+// to carry a hex from another theme: on screen that read as a color the rest of
+// the app never uses. Every field here has to come from the palette above.
+func TestRosePineMoonStaysInItsPalette(t *testing.T) {
+	palette := map[tcell.Color]bool{
+		tcell.ColorDefault:    true,
+		rosePineBase:          true,
+		rosePineSurface:       true,
+		rosePineOverlay:       true,
+		rosePineMuted:         true,
+		rosePineSubtle:        true,
+		rosePineText:          true,
+		rosePineLove:          true,
+		rosePineGold:          true,
+		rosePineRose:          true,
+		rosePinePine:          true,
+		rosePineFoam:          true,
+		rosePineIris:          true,
+		rosePineHighlightMed:  true,
+		rosePineHighlightHigh: true,
+	}
+
+	theme := RosePineMoonTheme
+	for name, color := range map[string]tcell.Color{
+		"Background": theme.Background, "Foreground": theme.Foreground,
+		"Border": theme.Border, "BorderFocus": theme.BorderFocus,
+		"SelectionText": theme.SelectionText, "SelectionBg": theme.SelectionBg,
+		"HeaderBg": theme.HeaderBg, "HeaderText": theme.HeaderText,
+		"SecondaryText": theme.SecondaryText, "Accent": theme.Accent,
+		"InputBg": theme.InputBg, "InverseText": theme.InverseText,
+		"AssigneeText": theme.AssigneeText, "Success": theme.Success,
+		"StatusTriage": theme.StatusTriage, "StatusTodo": theme.StatusTodo,
+		"StatusInProgress": theme.StatusInProgress, "StatusReview": theme.StatusReview,
+		"StatusDone": theme.StatusDone, "StatusCanceled": theme.StatusCanceled,
+	} {
+		if !palette[color] {
+			t.Errorf("RosePineMoonTheme.%s is %s, which is not in the Rosé Pine Moon palette", name, colorTag(color))
+		}
+	}
+}

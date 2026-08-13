@@ -175,32 +175,57 @@ var ColorBlindTheme = Theme{
 	StatusCanceled:   tcell.NewRGBColor(213, 94, 0),    // #D55E00
 }
 
-// RosePineMoonTheme is the Rosé Pine Moon palette (rosepinetheme.com) with a
-// transparent background: tcell.ColorDefault leaves the terminal's own
-// background (and any transparency/blur) visible.
+// The Rosé Pine Moon palette (rosepinetheme.com), named so the theme below
+// reads as the palette rather than as a column of hexes. Every color the theme
+// uses comes from here: the palette has six hues and no green, so a role with
+// nothing to map to takes one of these rather than borrowing a color from
+// outside it.
+var (
+	rosePineBase          = tcell.NewRGBColor(35, 33, 54)    // #232136
+	rosePineSurface       = tcell.NewRGBColor(42, 39, 63)    // #2A273F
+	rosePineOverlay       = tcell.NewRGBColor(57, 53, 82)    // #393552
+	rosePineMuted         = tcell.NewRGBColor(110, 106, 134) // #6E6A86
+	rosePineSubtle        = tcell.NewRGBColor(144, 140, 170) // #908CAA
+	rosePineText          = tcell.NewRGBColor(224, 222, 244) // #E0DEF4
+	rosePineLove          = tcell.NewRGBColor(235, 111, 146) // #EB6F92
+	rosePineGold          = tcell.NewRGBColor(246, 193, 119) // #F6C177
+	rosePineRose          = tcell.NewRGBColor(234, 154, 151) // #EA9A97
+	rosePinePine          = tcell.NewRGBColor(62, 143, 176)  // #3E8FB0
+	rosePineFoam          = tcell.NewRGBColor(156, 207, 216) // #9CCFD8
+	rosePineIris          = tcell.NewRGBColor(196, 167, 231) // #C4A7E7
+	rosePineHighlightMed  = tcell.NewRGBColor(68, 65, 90)    // #44415A
+	rosePineHighlightHigh = tcell.NewRGBColor(86, 82, 110)   // #56526E
+)
+
+// RosePineMoonTheme is the Rosé Pine Moon palette with a transparent
+// background: tcell.ColorDefault leaves the terminal's own background (and any
+// transparency/blur) visible.
 var RosePineMoonTheme = Theme{
-	Background:    tcell.ColorDefault,               // terminal default (transparent)
-	Foreground:    tcell.NewRGBColor(224, 222, 244), // #E0DEF4 text
-	Border:        tcell.NewRGBColor(86, 82, 110),   // #56526E highlight high
-	BorderFocus:   tcell.NewRGBColor(196, 167, 231), // #C4A7E7 iris
-	SelectionText: tcell.NewRGBColor(224, 222, 244), // #E0DEF4 text
-	SelectionBg:   tcell.NewRGBColor(68, 65, 90),    // #44415A highlight med
-	HeaderBg:      tcell.NewRGBColor(42, 39, 63),    // #2A273F surface
-	HeaderText:    tcell.NewRGBColor(144, 140, 170), // #908CAA subtle
-	SecondaryText: tcell.NewRGBColor(110, 106, 134), // #6E6A86 muted
-	Accent:        tcell.NewRGBColor(196, 167, 231), // #C4A7E7 iris
-	InputBg:       tcell.NewRGBColor(57, 53, 82),    // #393552 overlay
-	InverseText:   tcell.NewRGBColor(35, 33, 54),    // #232136 base
-	AssigneeText:  tcell.NewRGBColor(234, 154, 151), // #EA9A97 rose
+	Background:    tcell.ColorDefault, // terminal default (transparent)
+	Foreground:    rosePineText,
+	Border:        rosePineHighlightHigh,
+	BorderFocus:   rosePineIris,
+	SelectionText: rosePineText,
+	SelectionBg:   rosePineHighlightMed,
+	HeaderBg:      rosePineSurface,
+	HeaderText:    rosePineSubtle,
+	SecondaryText: rosePineMuted,
+	Accent:        rosePineIris,
+	InputBg:       rosePineOverlay,
+	InverseText:   rosePineBase,
+	AssigneeText:  rosePineRose,
 
-	Success: tcell.NewRGBColor(76, 183, 130), // #4CB782 green; Rose Pine has none
+	// Green is the convention for both of these and Rosé Pine has none. Iris is
+	// what is left once the other four hues are spoken for below, and it is
+	// already the palette's own emphasis color.
+	Success:      rosePineIris,
+	StatusReview: rosePineIris,
 
-	StatusTriage:     tcell.NewRGBColor(234, 154, 151), // #EA9A97 rose
-	StatusTodo:       tcell.NewRGBColor(62, 143, 176),  // #3E8FB0 pine
-	StatusInProgress: tcell.NewRGBColor(246, 193, 119), // #F6C177 gold
-	StatusReview:     tcell.NewRGBColor(76, 183, 130),  // #4CB782 green; the Rose Pine palette has no green
-	StatusDone:       tcell.NewRGBColor(156, 207, 216), // #9CCFD8 foam
-	StatusCanceled:   tcell.NewRGBColor(235, 111, 146), // #EB6F92 love
+	StatusTriage:     rosePineRose,
+	StatusTodo:       rosePinePine,
+	StatusInProgress: rosePineGold,
+	StatusDone:       rosePineFoam,
+	StatusCanceled:   rosePineLove,
 }
 
 // ThemeTags provides tview tag strings derived from a theme.

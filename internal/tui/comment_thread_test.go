@@ -224,7 +224,7 @@ func TestEveryPageLineFitsThePane(t *testing.T) {
 			for _, width := range []int{8, 10, 14, 20, 40, 90, 140} {
 				drawComments(t, app, width)
 				measure, _ := readingMeasure(width)
-				for i, line := range strings.Split(app.detailsCommentsView.GetText(false), "\n") {
+				for i, line := range strings.Split(app.detailsPageView.GetText(false), "\n") {
 					if got := tview.TaggedStringWidth(line); got > measure {
 						t.Errorf("width %d: line %d is %d cells in a %d pane: %q", width, i, got, measure, line)
 					}
