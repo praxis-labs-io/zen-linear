@@ -378,6 +378,15 @@ func (a *App) postButtonActive() bool {
 // handing focus down to a child. It repaints the cues but must never move focus
 // itself, or focusing would recurse.
 func (a *App) enterCommentsFocus(target commentsFocus) {
+	// An overlay owns the keys however focus is delegated underneath it. tview
+	// re-delegates down the whole tree on every page add and remove, and that
+	// walk reaches this pane: the palette rebuilds its page on each keystroke,
+	// so without this the first key typed there took focusedPane back and the
+	// palette's own re-show guard then failed silently. Same guard, same
+	// reason, as claimNavFocus.
+	if a.focusedPane == FocusPalette || a.activeModal() != nil {
+		return
+	}
 	// tview delegates focus down the tree on its own during layout rebuilds and
 	// page adds. Acting on one of those would claim the pane for a page holding
 	// nothing to act on.
@@ -418,6 +427,12 @@ func (a *App) stepCommentsFocus(backward bool) {
 // that sends it, which is the whole of what Tab does in this pane. A two-stop
 // walk reads the same in both directions, so there is no direction to pass.
 func (a *App) stepWritingBoxFocus() {
+	// Scoped to the pane that owns the boxes. commentsFocus outlives the pane
+	// being left — nothing resets it on the way out — so an unscoped Tab in the
+	// issues list would step a box nobody is looking at.
+	if !a.detailsHaveFocus() {
+		return
+	}
 	switch a.commentsFocus {
 	case commentsFocusText:
 		a.commentsFocus = commentsFocusPost

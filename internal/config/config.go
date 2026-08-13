@@ -116,7 +116,7 @@ type Config struct {
 	AgentWorkspace string
 
 	// Keybindings remaps palette command shortcuts and UI action keys by
-	// id (e.g. {"refresh": "R", "tab_next": ")"}). Values are single keys.
+	// id (e.g. {"refresh": "R", "comment_next": ")"}). Values are single keys.
 	Keybindings map[string]string
 
 	// DefaultTeam selects the team (by key or name) to open on startup.

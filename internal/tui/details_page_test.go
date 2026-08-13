@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -29,6 +30,48 @@ func TestTheDetailsPaneIsOneScrollingPage(t *testing.T) {
 			t.Fatalf("the page is missing %q after row %d:\n%s", want, at, page)
 		}
 		at += found + len(want)
+	}
+}
+
+// TestThePaletteSurvivesAKeystrokeFromTheDetailsPane is the regression test for
+// what folding the tab in cost. The page's focus func used to be reachable only
+// while the Comments tab was mounted; it is the whole pane now, so tview's
+// focus re-delegation on the palette's per-keystroke page rebuild walked into
+// it and took focusedPane back. The palette then failed its own re-show check
+// and went dead with nothing on screen to say so.
+func TestThePaletteSurvivesAKeystrokeFromTheDetailsPane(t *testing.T) {
+	app := newThreadedTestApp(t)
+	app.openPalette()
+
+	// What tview does on its own: the palette rebuilds its page on every
+	// keystroke, and RemovePage re-delegates focus down the tree to the item
+	// buildLayout flagged, which is this pane. Driven directly because the
+	// delegation itself needs a running Application to fire.
+	app.app.SetFocus(app.detailsPageView)
+
+	if got := app.focusedPane; got != FocusPalette {
+		t.Errorf("focus delegated to the details page took the pane to %v, want the palette to keep it", got)
+	}
+	if got := app.commentsFocus; got != commentsFocusCards {
+		t.Errorf("the delegation moved the box focus to %v, want it untouched", got)
+	}
+}
+
+// TestTabInAnotherPaneLeavesTheWritingBoxesAlone covers the other half of Tab
+// narrowing to a box and its button: commentsFocus outlives the pane being
+// left, so an unscoped Tab elsewhere stepped a box nobody was looking at.
+func TestTabInAnotherPaneLeavesTheWritingBoxesAlone(t *testing.T) {
+	app := newThreadedTestApp(t)
+	app.commentsFocus = commentsFocusText
+	app.focusedPane = FocusIssues
+
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+
+	if got := app.commentsFocus; got != commentsFocusText {
+		t.Errorf("Tab in the issues pane moved the box focus to %v, want it untouched", got)
+	}
+	if got := app.focusedPane; got != FocusIssues {
+		t.Errorf("Tab in the issues pane landed on %v, want it to stay put", got)
 	}
 }
 
