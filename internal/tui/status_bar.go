@@ -210,14 +210,21 @@ func (a *App) updateStatusBar() {
 	comments := a.commentsHint()
 	view := a.commandHint("zoom_details", "view")
 	hideDetails := a.commandHint("toggle_details_pane", "hide details")
+	// The zoom's own keys, decided here rather than in the branches below: those
+	// are picked by what the comment ring is doing, which has nothing to say
+	// about the zoom, so a lit card used to leave the reader with hints for a
+	// layout they were not in.
+	toNav, backToList := hint{}, hint{}
 	if a.detailsZoomed {
-		// Zoomed, the same key closes the view again, and hiding the pane is
-		// inert. Both set here rather than per branch: the branches below are
-		// picked by what the comment ring is doing, which has nothing to say
-		// about the zoom, and one of them offering "view" from inside the view
-		// is how this was found.
+		// The same key closes the view again, and hiding the pane is inert.
 		view = a.commandHint("zoom_details", "close")
 		hideDetails = hint{}
+		// Below the wide breakpoint the zoom leaves no nav tree to step onto,
+		// so offering the key there would be a lie.
+		if a.layoutMode == layoutWide && !a.navigationHidden {
+			toNav = hint{"←/h", "navigation"}
+		}
+		backToList = hint{"Esc", "back to list"}
 	}
 
 	hints := []hint{a.actionHint("open_palette", ':', "palette")}
@@ -257,18 +264,14 @@ func (a *App) updateStatusBar() {
 				note = "Writing a reply"
 			}
 		case a.cardsHaveFocus() && a.focusedCommentID != "":
-			hints = append(hints, hint{"Esc", "let go"}, comments, view, hideDetails)
+			// Esc is a ladder: it lets go of the card first and only the next
+			// press leaves the zoom, so the line names the rung it is on and
+			// backToList waits its turn.
+			hints = append(hints, hint{"Esc", "let go"}, comments, view, hideDetails, toNav)
 		case len(a.commentSpans) > 0 && a.cardsHaveFocus():
-			hints = append(hints, hint{"j/k", "scroll"}, comments, view, hideDetails)
+			hints = append(hints, hint{"j/k", "scroll"}, comments, view, hideDetails, toNav, backToList)
 		case a.detailsZoomed:
-			// Below the wide breakpoint the zoom leaves no nav tree to step
-			// onto, so offering the key there would be a lie.
-			toNav := hint{}
-			if a.layoutMode == layoutWide && !a.navigationHidden {
-				toNav = hint{"←/h", "navigation"}
-			}
-			hints = append(hints, hint{"j/k", "scroll"}, comments, view,
-				toNav, hint{"Esc", "back to list"})
+			hints = append(hints, hint{"j/k", "scroll"}, comments, view, toNav, backToList)
 		default:
 			hints = append(hints, hint{"j/k", "scroll"}, comments, view, hideDetails, hint{"h", "back"})
 		}

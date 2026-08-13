@@ -120,12 +120,27 @@ func TestZoomedHintsDropTheHideKey(t *testing.T) {
 				t.Errorf("zoomed hints = %q, want no hide key while it is inert", got)
 			}
 			// The branches are picked by what the ring is doing, so each of
-			// them has to name the key by what it does from in here.
+			// them has to name the keys by what they do from in here.
 			if !strings.Contains(got, "v close") {
 				t.Errorf("zoomed hints = %q, want the zoom key to read as closing the view", got)
 			}
 			if strings.Contains(got, "v view") {
 				t.Errorf("zoomed hints = %q, want no offer to open a view already open", got)
+			}
+			if !strings.Contains(got, "←/h navigation") {
+				t.Errorf("zoomed hints = %q, want the way off the zoomed pane", got)
+			}
+			// Esc is a ladder, so the line names one rung: let go of the card,
+			// or leave the zoom when there is no card to let go of.
+			wantEscape := "Esc back to list"
+			if tc.lit != "" {
+				wantEscape = "Esc let go"
+			}
+			if !strings.Contains(got, wantEscape) {
+				t.Errorf("zoomed hints = %q, want %q", got, wantEscape)
+			}
+			if tc.lit != "" && strings.Contains(got, "back to list") {
+				t.Errorf("zoomed hints = %q, want Esc to name only the card it lets go of", got)
 			}
 		})
 	}
