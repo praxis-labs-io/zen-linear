@@ -85,15 +85,71 @@ func TestBracesStepThroughTheThreadIntoTheBox(t *testing.T) {
 		}
 	}
 
+	// The compose card is the last stop, and the ring lands on it the way it
+	// lands on a comment: lit, and taking no letters until c says so.
 	stepComments(t, app, false)
+	if got := app.focusedCommentID; got != blockIDCompose {
+		t.Fatalf("} past the last card picked %q, want the compose card", got)
+	}
+	if app.composeBoxActive() {
+		t.Fatal("} armed the box for typing, want it shut until c opens it")
+	}
+
+	pressInComments(t, app, 'c')
 	if !app.composeBoxActive() {
-		t.Fatal("} past the last card did not reach the compose box")
+		t.Fatal("c did not open the box")
 	}
 	// From here the braces are prose: the box owns every letter typed into it,
 	// and Tab is what reaches the button that sends them.
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 	if app.commentsFocus != commentsFocusPost {
 		t.Errorf("Tab from the box went to %v, want the Post button", app.commentsFocus)
+	}
+}
+
+// Esc out of the box and the ring is back on the card it opened from, so a
+// brace steps off it rather than anchoring to whatever is on screen.
+func TestEscLeavesTheComposeCardOnTheRing(t *testing.T) {
+	app := newThreadedTestApp(t)
+	for i := 0; i < 6; i++ {
+		stepComments(t, app, false)
+	}
+	pressInComments(t, app, 'c')
+
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	if app.composeBoxActive() {
+		t.Fatal("esc left the box holding the keyboard")
+	}
+	if got := app.focusedCommentID; got != blockIDCompose {
+		t.Fatalf("esc landed the ring on %q, want the compose card", got)
+	}
+
+	stepComments(t, app, true)
+	if got := app.focusedCommentID; got != "orphan" {
+		t.Errorf("{ off the compose card picked %q, want the last comment", got)
+	}
+}
+
+// A card that takes no typing must not say "Leave a comment", and the key that
+// opens it is read off the bindings rather than written into the string.
+func TestTheShutComposeCardNamesTheKeyThatOpensIt(t *testing.T) {
+	app := newThreadedTestApp(t)
+
+	page := strings.Join(drawComments(t, app, 80), "\n")
+	if !strings.Contains(page, "Press c to leave a comment") {
+		t.Error("the shut card does not name the key that opens it")
+	}
+
+	for i := 0; i < 6; i++ {
+		stepComments(t, app, false)
+	}
+	if page = strings.Join(drawComments(t, app, 80), "\n"); !strings.Contains(page, "c write") {
+		t.Error("the lit card does not name the key along its border")
+	}
+
+	pressInComments(t, app, 'c')
+	if got := composeCue(t, app.detailsComposeArea); got != composePlaceholder {
+		t.Errorf("the open box reads %q, want %q", got, composePlaceholder)
 	}
 }
 
@@ -463,7 +519,8 @@ func TestTheComposeCardEndsThePage(t *testing.T) {
 	if got := spans[len(spans)-1].id; got != blockIDCompose {
 		t.Errorf("the page ends on %q, want the compose card", got)
 	}
-	if got := spans[len(spans)-3].id; got != "orphan" {
+	// One stop, not two: the card is shut, so it has no button to Tab to yet.
+	if got := spans[len(spans)-2].id; got != "orphan" {
 		t.Errorf("the block before the compose card is %q, want the last comment", got)
 	}
 }
@@ -505,8 +562,11 @@ func TestReplyPostsWithItsParent(t *testing.T) {
 	if got := app.replyParentID(); got != "" {
 		t.Errorf("the box is still aimed at %q after posting, want it cleared", got)
 	}
-	if got := composeCue(t, app.detailsComposeArea); got != composePlaceholder {
-		t.Errorf("the compose card reads %q, want it ready for the next comment", got)
+	// The ring lands on the posted comment, so the compose card is shut behind
+	// it and reads as shut. What matters here is that the reply's words did not
+	// end up in it.
+	if got := composeCue(t, app.detailsComposeArea); got != app.composePrompt() {
+		t.Errorf("the compose card reads %q, want it empty and ready", got)
 	}
 	if got := app.focusedCommentID; got != "posted" {
 		t.Errorf("the ring is on %q, want the comment just posted", got)

@@ -374,6 +374,59 @@ func TestTheComposeBoxGrowsWithWhatIsTyped(t *testing.T) {
 	}
 }
 
+// The page scrolls to the box before the key that grows it lands, so the row
+// just gained is below the fold unless the growth scrolls again. Waiting for
+// the next key means Enter drops the line you are about to write off screen.
+func TestANewLineStaysOnThePage(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	const height = 16
+	showComments(t, app, 80, height)
+
+	bottom := func() (span commentSpan, fold int) {
+		t.Helper()
+		index := app.commentSpanIndex(blockIDCompose)
+		if index < 0 {
+			t.Fatal("the compose card is not on the page")
+		}
+		row, _ := app.detailsPageView.GetScrollOffset()
+		return app.commentSpans[index], row + viewHeight(app.detailsPageView)
+	}
+
+	for i := 0; i < 12; i++ {
+		typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModNone))
+		showComments(t, app, 80, height)
+		span, fold := bottom()
+		if span.end-span.start+1 > viewHeight(app.detailsPageView) {
+			// Past this the box is taller than the pane, where it scrolls
+			// inside its own frame rather than growing onto the page.
+			return
+		}
+		if span.end >= fold {
+			t.Fatalf("line %d put the box's last row at %d, below the fold at %d", i+1, span.end, fold)
+		}
+	}
+}
+
+// A growing box must not carry the scroll it took while it was short. The
+// TextArea moves its own offset to keep the cursor on a box that has not grown
+// yet, which leaves the first lines written behind the frame for good.
+func TestAGrownBoxShowsWhatWasWrittenFirst(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	typeRunes(t, app, "first")
+	for i := 0; i < 10; i++ {
+		typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModNone))
+		typeRunes(t, app, "more")
+	}
+	page := strings.Join(drawPrimitive(t, app.detailsView, 100), "\n")
+
+	if row, _ := app.detailsComposeArea.GetOffset(); row != 0 {
+		t.Errorf("the box is scrolled %d rows down, want the top of what was written", row)
+	}
+	if !strings.Contains(page, "first") {
+		t.Error("the first line written is not on the page")
+	}
+}
+
 // The box is measured with the page's wrap and drawn by a TextArea, which
 // prints what it holds. A body carrying anything bracket-shaped measures short
 // on the wrap side and the box comes up too small for what is in it.
@@ -510,9 +563,18 @@ func TestBracesWalkThePageAndStopAtTheEnd(t *testing.T) {
 			t.Fatalf("} through the cards focused %T, want the card stack", got)
 		}
 	}
+	// The compose card is the last stop and it is shut, so the keyboard stays
+	// on the stack until the key that opens it is pressed.
 	next()
-	if got := app.app.GetFocus(); got != app.detailsComposeArea {
-		t.Fatalf("} past the last card focused %T, want the compose area", got)
+	if got := app.focusedCommentID; got != blockIDCompose {
+		t.Fatalf("} past the last card picked %q, want the compose card", got)
+	}
+	if got := app.app.GetFocus(); got != app.detailsPageView {
+		t.Fatalf("} past the last card focused %T, want the card stack", got)
+	}
+	next()
+	if got := app.focusedCommentID; got != blockIDCompose {
+		t.Errorf("} off the end of the ring moved to %q, want it to stay put", got)
 	}
 	if app.focusedPane != FocusDetails {
 		t.Errorf("} left the details pane for %v", app.focusedPane)

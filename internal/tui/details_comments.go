@@ -78,11 +78,18 @@ func (a *App) renderDetailsPage() {
 			slots = append(slots, box)
 		}
 
-		span := commentSpan{id: block.id, focus: block.focus, start: start, end: len(lines) - 1}
+		// The compose card is on every page rather than summoned, so the ring
+		// stops on it the way it stops on a comment and the add_comment key is
+		// what opens it. A reply or edit box was asked for, so the ring arms it.
+		ring := block.focus
+		if block.id == blockIDCompose {
+			ring = commentsFocusCards
+		}
+		span := commentSpan{id: block.id, focus: ring, start: start, end: len(lines) - 1}
 		a.commentSpans = append(a.commentSpans, span)
 		// A box is two stops in the ring, the writing and the button, sharing
 		// the card they are drawn in.
-		if button, ok := postFocusFor(block.focus); ok {
+		if button, ok := postFocusFor(ring); ok {
 			span.focus = button
 			a.commentSpans = append(a.commentSpans, span)
 		}
@@ -107,6 +114,10 @@ func (a *App) blockCard(block commentBlock, width int) ([]string, []pageSlot) {
 	case commentsFocusEdit:
 		area, post = a.detailsEditArea, a.detailsEditPost
 		heading = "edit this comment"
+	case commentsFocusText:
+		// Shut, the card invites a comment it will not take a letter of, so it
+		// says the key that opens it instead.
+		area.SetPlaceholder(a.composePrompt())
 	}
 	return a.writingCard(width, heading, a.commentBorderTag(block.id), block.focus, area, post)
 }
@@ -212,9 +223,12 @@ func buttonWidth(post *tview.Button) int {
 // to it. A box nobody is writing in says nothing: the keys named there would be
 // the reader's, and they are not.
 func (a *App) writingHints(focus commentsFocus, width int) string {
-	button, _ := postFocusFor(focus)
-	if !a.detailsHaveFocus() || (a.commentsFocus != focus && a.commentsFocus != button) {
+	if !a.detailsHaveFocus() {
 		return ""
+	}
+	button, _ := postFocusFor(focus)
+	if a.commentsFocus != focus && a.commentsFocus != button {
+		return a.closedComposeHint(focus, width)
 	}
 	done, verb := "esc done", "post"
 	switch focus {
@@ -230,6 +244,33 @@ func (a *App) writingHints(focus commentsFocus, width int) string {
 		send = "enter " + verb
 	}
 	return a.themeTags.SecondaryText + cardHintLine(width, send, "tab "+verb+" button", done) + "[-]"
+}
+
+// closedComposeHint names the key that opens the compose card, for the stop the
+// ring makes on it while it is shut. The other two boxes exist only while they
+// are open, so this is the one card the ring reaches with nothing to type into.
+func (a *App) closedComposeHint(focus commentsFocus, width int) string {
+	if focus != commentsFocusText || a.commentsFocus != commentsFocusCards || a.focusedCommentID != blockIDCompose {
+		return ""
+	}
+	key, ok := a.commandShortcutLabel("add_comment")
+	if !ok {
+		return ""
+	}
+	return a.themeTags.SecondaryText + cardHintLine(width, key+" write") + "[-]"
+}
+
+// composePrompt is what the empty compose box says: what to write once it is
+// open, and the key that opens it for as long as it is not.
+func (a *App) composePrompt() string {
+	if a.commentsFocus == commentsFocusText || a.commentsFocus == commentsFocusPost {
+		return composePlaceholder
+	}
+	key, ok := a.commandShortcutLabel("add_comment")
+	if !ok {
+		return composePlaceholder
+	}
+	return fmt.Sprintf("Press %s to leave a comment", key)
 }
 
 // cardHintLine joins hints for a card, dropping them from the right until what

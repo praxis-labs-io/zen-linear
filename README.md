@@ -179,14 +179,15 @@ Everything else is in the palette: filters, grouping, sorting, expand and
 collapse all, parent issues, due dates, estimates, milestones, relations,
 attachments, and the agent.
 
-`}` past the last card puts the keyboard in the compose box, where every key
-types. Tab moves between the box and the Post button:
+`}` past the last card lands on the compose box the way it lands on a comment:
+lit, and taking no letters. `c` opens it, and from there every key types. Tab
+moves between the box and the Post button:
 
     Ctrl+Enter  post it         Enter       new line, or post from the button
     Esc         stop writing, keeping what is in the box
 
-The box is always on the page. `c` is what puts the keyboard in it, and the
-`add_comment` keybinding moves that key.
+Esc leaves the ring on the box, so a brace steps off it. The box is always on
+the page, and the `add_comment` keybinding moves the key that opens it.
 
 Zoom widens the details pane over the issues list, keeping the navigation
 tree. Text caps at 90 columns so a wide terminal stays readable.

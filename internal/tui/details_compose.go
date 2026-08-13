@@ -304,8 +304,32 @@ func (a *App) refitWritingBox(focus commentsFocus, area *tview.TextArea) {
 		}
 		if writingBoxRows(area, slot.width) != slot.height {
 			a.renderDetailsPage()
+			// The page scrolled to the box before the key that grew it landed,
+			// so without this the row just gained sits below the fold until
+			// the next key scrolls again.
+			a.scrollToWritingBox(focus)
 		}
 		return
+	}
+}
+
+// writingBoxBlockID names the block a box is drawn in, which is what the page
+// scrolls by. An edit box stands where a card did and keeps the comment's id.
+func (a *App) writingBoxBlockID(focus commentsFocus) string {
+	switch focus {
+	case commentsFocusReply, commentsFocusReplyPost:
+		return blockIDReply
+	case commentsFocusEdit, commentsFocusEditPost:
+		return a.editingCommentID()
+	}
+	return blockIDCompose
+}
+
+// scrollToWritingBox brings a box's card back onto the page, and does nothing
+// when it is already there.
+func (a *App) scrollToWritingBox(focus commentsFocus) {
+	if index := a.commentSpanIndex(a.writingBoxBlockID(focus)); index >= 0 {
+		a.scrollCommentIntoView(a.commentSpans[index])
 	}
 }
 
@@ -439,19 +463,11 @@ func (a *App) releaseStrandedCompose() {
 // showWritingBox scrolls the card of the box holding the keyboard back onto the
 // page, and does nothing when it is already there.
 func (a *App) showWritingBox() {
-	id := blockIDCompose
-	switch a.activeWritingBox() {
-	case commentsFocusCards:
+	focus := a.activeWritingBox()
+	if focus == commentsFocusCards {
 		return
-	case commentsFocusReply, commentsFocusReplyPost:
-		id = blockIDReply
-	case commentsFocusEdit, commentsFocusEditPost:
-		// The edit box stands where the card did and keeps the comment's id.
-		id = a.editingCommentID()
 	}
-	if index := a.commentSpanIndex(id); index >= 0 {
-		a.scrollCommentIntoView(a.commentSpans[index])
-	}
+	a.scrollToWritingBox(focus)
 }
 
 // postButtonActive reports whether a button is the thing with the keyboard,
