@@ -496,7 +496,7 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 
 	a.favoritesGroup = group
 	root.SetChildren(rebuilt)
-	a.applySelectionStyleToTree(root)
+	a.applyNavSelectionStyle(root)
 	a.restoreNavigationCursor(root, group, preferFavoriteID)
 	// The disk copy is what the next launch paints, so a toggle or a reorder
 	// has to reach it too, or the tree comes back wrong for a moment.

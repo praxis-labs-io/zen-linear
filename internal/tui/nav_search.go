@@ -116,7 +116,9 @@ func (a *App) navSelectionIsLit() bool {
 
 // applyNavSelectionStyle sets how the tree's current row paints. Every node
 // gets it, not just the current one, so arrowing around while results are up
-// cannot light the row the cursor lands on.
+// cannot light the row the cursor lands on. It is also what a tree rebuild, a
+// team expanding, and a favorites refresh go through, or any of those would
+// relight a cursor the results had put out.
 func (a *App) applyNavSelectionStyle(node *tview.TreeNode) {
 	if node == nil {
 		return

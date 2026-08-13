@@ -17,7 +17,13 @@ import (
 
 // currentVersion is the schema version this build reads and writes. A file at
 // any other version is discarded rather than migrated.
-const currentVersion = 1
+//
+// 2 dropped Section and changed what Search means. Version 1 wrote the query
+// box's contents whatever tab was open, and the reader guarded it with
+// Section; version 2 reads a saved query as "the pane was showing results", so
+// a version 1 record would launch into a search for a query its owner had
+// tabbed away from.
+const currentVersion = 2
 
 // fileName is the session file under the application directory.
 const fileName = "session.json"

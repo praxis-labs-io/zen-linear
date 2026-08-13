@@ -114,6 +114,8 @@ func TestViewParentFallsBackToTheListFromSearchResults(t *testing.T) {
 	app.rebuildIssuesTables("child-1")
 	holdDetailFetches(t, app)
 
+	app.searchQuery = "child"
+	app.navSearchInput.SetText("child")
 	app.searchIssues = []linearapi.Issue{child}
 	app.searchIssueRows, app.searchIDToIssue = buildFlatSearchRows(app.searchIssues)
 	app.activeIssuesSection = IssuesSectionSearch
@@ -132,6 +134,12 @@ func TestViewParentFallsBackToTheListFromSearchResults(t *testing.T) {
 	wantRow := app.getRowForIssueInSection("parent-1", IssuesSectionList)
 	if row, _ := app.listIssuesTable.GetSelection(); row != wantRow {
 		t.Fatalf("list selection = row %d, want the parent at row %d", row, wantRow)
+	}
+	// Leaving the results for the list is leaving the search. A query left in
+	// the box describes a pane showing something else, and the session then
+	// saves a query alongside a list issue.
+	if got := app.navSearchInput.GetText(); got != "" {
+		t.Errorf("the query survived the jump to the list: %q", got)
 	}
 }
 

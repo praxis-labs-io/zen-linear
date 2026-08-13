@@ -2,6 +2,7 @@ package tui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -209,6 +210,56 @@ func TestSearchResultsPutOutTheTreeSelection(t *testing.T) {
 	}
 }
 
+// Every path that restyles the tree has to honor the mute. A rebuild, a team
+// expanding, or a favorites refresh landing while results are up would
+// otherwise relight the cursor, which is the whole thing the mute prevents.
+func TestATreeRebuildKeepsTheCursorOutWhileResultsShow(t *testing.T) {
+	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me"})
+	teams := []linearapi.Team{{ID: "team-1", Name: "Engineering"}}
+	app.rebuildNavigationTree(teams, nil)
+	app.focusNavSearch()
+	app.performIssueSearch("found")
+	waitForResults()
+
+	app.rebuildNavigationTree(teams, nil)
+
+	current := app.navigationTree.GetRoot().GetChildren()[0]
+	if got := current.GetSelectedTextStyle(); got == selectionStyle(app.theme) {
+		t.Error("rebuilding the tree relit the cursor while search results held the pane")
+	}
+}
+
+// Emptying the box fires its change handler, which arms a debounce. Canceled
+// before the clear rather than after, a stray search for the empty string lands
+// a quarter second later and calls updateFocus, which can put the keyboard on a
+// pane while a modal is still on screen.
+func TestResetCachedStateLeavesNoArmedSearch(t *testing.T) {
+	app := newUXTestApp(t)
+	app.config.SearchDebounce = 10 * time.Millisecond
+	fired := make(chan struct{}, 4)
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		select {
+		case fired <- struct{}{}:
+		default:
+		}
+	}
+	app.navSearchInput.SetText("auth")
+
+	app.resetCachedState()
+	// Drain whatever the reset itself queued, then watch the window a timer
+	// armed by the clear would fire in.
+	for len(fired) > 0 {
+		<-fired
+	}
+
+	select {
+	case <-fired:
+		t.Fatal("a search fired after the reset, so emptying the box armed a debounce nothing cancels")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 // TestEscClearsThenLetsGo covers both stops. Esc on a live query is a clear,
 // not an exit: leaving with the words still there strands results nobody asked
 // to keep.
@@ -255,6 +306,11 @@ func TestPickingANavigationNodeDropsTheSearch(t *testing.T) {
 	}
 	if len(app.searchIssueRows) != 0 {
 		t.Errorf("search rows = %d, want the results dropped", len(app.searchIssueRows))
+	}
+	// The swap happens now, not when the fetch answers. Deferred, the results
+	// stay on screen for a whole round trip of showing the wrong list.
+	if got := app.issuesColumn.GetItem(0); got == tview.Primitive(app.searchResultsTable) {
+		t.Error("the results table is still mounted while the picked list loads")
 	}
 }
 

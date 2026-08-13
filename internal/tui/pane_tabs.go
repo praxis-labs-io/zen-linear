@@ -87,6 +87,12 @@ func (a *App) jumpToParent(parentID string) bool {
 	if row < 1 {
 		return false
 	}
+	if section == IssuesSectionList {
+		// Leaving the results for the list is leaving the search. A query left
+		// in the box would describe a pane showing something else, and the
+		// session would save both.
+		a.clearNavSearch()
+	}
 	a.jumpToSection(section, row)
 	return true
 }

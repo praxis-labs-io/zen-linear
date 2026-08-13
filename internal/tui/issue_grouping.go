@@ -186,7 +186,10 @@ func (a *App) onNavigationSelected(node *NavigationNode, issueID ...string) {
 	// and the saved query together, and the query is what the user left up.
 	if a.searchQuery != "" && !a.restoringSession {
 		a.clearNavSearch()
-		a.activeIssuesSection = IssuesSectionList
+		// Mount the list now rather than when the fetch answers: the results
+		// are still on screen until something swaps them, and that is a whole
+		// round trip of showing the wrong list.
+		a.jumpToSection(IssuesSectionList, 0)
 	}
 
 	// A new list starts fresh: its own view settings apply again until the

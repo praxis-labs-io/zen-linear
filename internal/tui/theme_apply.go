@@ -218,15 +218,3 @@ func (a *App) listSelectionStyle() tcell.Style {
 		Background(a.theme.Accent).
 		Bold(true)
 }
-
-// applySelectionStyleToTree sets the shared selection style on a node subtree
-// without touching node colors.
-func (a *App) applySelectionStyleToTree(node *tview.TreeNode) {
-	if node == nil {
-		return
-	}
-	node.SetSelectedTextStyle(selectionStyle(a.theme))
-	for _, child := range node.GetChildren() {
-		a.applySelectionStyleToTree(child)
-	}
-}

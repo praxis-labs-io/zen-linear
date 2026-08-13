@@ -630,12 +630,16 @@ func (a *App) resetCachedState() {
 	a.viewPrefs = nil
 	a.groupingOverridden = false
 	a.sortOverridden = false
-	a.cancelSearchDebounce()
-	a.clearSearchResults()
-	a.searchQuery = ""
+	// Emptying the box fires its change handler, which arms a debounce, so the
+	// cancel has to come after it. Canceled first, a stray search for the
+	// empty string lands a quarter second later and calls updateFocus, which
+	// can put the keyboard on a pane while a modal is still on screen.
 	if a.navSearchInput != nil {
 		a.navSearchInput.SetText("")
 	}
+	a.cancelSearchDebounce()
+	a.clearSearchResults()
+	a.searchQuery = ""
 	a.navSearchFocused = false
 	a.pendingSearchIssueID = ""
 	a.activeIssuesSection = IssuesSectionList

@@ -183,6 +183,77 @@ func TestPerformIssueSearch_OwnsWhatTheIssuesPaneShows(t *testing.T) {
 	}
 }
 
+// A failed query used to leave the last one's rows up, so the pane silently
+// showed results for a query nobody typed and the failure never surfaced: the
+// placeholder that says so only mounts when there is nothing to show.
+func TestAFailedSearchDropsTheRowsItReplaces(t *testing.T) {
+	app := newUXTestApp(t)
+	app.config.SearchDebounce = time.Hour
+	drawn := make(chan struct{}, 8)
+	app.queueUpdateDraw = func(f func()) {
+		f()
+		select {
+		case drawn <- struct{}{}:
+		default:
+		}
+	}
+	fail := false
+	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
+		if fail {
+			return linearapi.IssuePage{}, errNotReachable
+		}
+		return linearapi.IssuePage{Issues: []linearapi.Issue{{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me"}}}, nil
+	}
+
+	app.performIssueSearch("found")
+	waitForDraw(t, drawn)
+	if len(app.searchIssueRows) != 1 {
+		t.Fatalf("search rows = %d, want the first query's result", len(app.searchIssueRows))
+	}
+
+	fail = true
+	app.performIssueSearch("boom")
+	waitForDraw(t, drawn)
+
+	if got := len(app.searchIssueRows); got != 0 {
+		t.Errorf("search rows = %d after a failure, want the stale results dropped", got)
+	}
+	if message, _ := app.issuesPlaceholderMessage(); !strings.Contains(message, "Search failed") {
+		t.Errorf("the pane says %q, want the failure named", message)
+	}
+}
+
+// The row the render lights is a claim about what the pane has selected. Left
+// unsaid, the details pane keeps describing the list issue underneath and every
+// issue command acts on that one instead of the row on screen.
+func TestResultsLandAsTheSelection(t *testing.T) {
+	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-9", Identifier: "ZNL-9", Title: "Found me"})
+	holdDetailFetches(t, app)
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "The list issue"}
+	app.issuesMu.Unlock()
+
+	app.performIssueSearch("found")
+	waitForResults()
+
+	if got := app.GetSelectedIssue(); got == nil || got.ID != "issue-9" {
+		t.Errorf("selected issue = %v, want the result the pane lit", got)
+	}
+}
+
+// The restored issue belongs to the query being dropped. Left set, it outlives
+// that query and the next unrelated search lands on it.
+func TestClearingResultsDropsTheRestoredIssue(t *testing.T) {
+	app := newUXTestApp(t)
+	app.pendingSearchIssueID = "issue-1"
+
+	app.clearSearchResults()
+
+	if app.pendingSearchIssueID != "" {
+		t.Errorf("pendingSearchIssueID = %q, want it dropped with the results", app.pendingSearchIssueID)
+	}
+}
+
 // TestSearchStatesReachThePlaceholder covers the messages that used to live in
 // the Search tab's own panel. They belong to the shared placeholder now, so a
 // failed or empty search still says what happened.

@@ -54,6 +54,13 @@ func (a *App) performIssueSearch(query string) {
 			}
 			a.setSearchLoading(false)
 			if err != nil {
+				// Drop the rows the last query found. Left up, the failed
+				// query silently shows the previous one's results and the
+				// pane never says it failed, because the placeholder that
+				// would say so only mounts when there is nothing to show.
+				a.searchIssues = nil
+				a.searchIssueRows = nil
+				a.searchIDToIssue = make(map[string]*linearapi.Issue)
 				a.searchErr = err
 				a.updateIssuesColumnLayout()
 				return
@@ -75,6 +82,13 @@ func (a *App) performIssueSearch(query string) {
 			}
 			renderIssuesTableModel(a.searchResultsTable, a.searchIssueRows, a.searchIDToIssue, selectedID, a.theme, a.issueColumns())
 			a.updateIssuesColumnLayout()
+			// The row the render lit is a claim about what the pane has
+			// selected, so make it true. Left unsaid, the details pane keeps
+			// describing the list issue underneath and every issue command
+			// acts on that one instead of the row on screen.
+			if issue := a.searchIDToIssue[selectedID]; issue != nil {
+				a.onIssueSelected(*issue)
+			}
 		})
 	}()
 }
@@ -99,6 +113,9 @@ func (a *App) clearSearchResults() {
 	a.searchIssues = nil
 	a.searchIssueRows = nil
 	a.searchIDToIssue = make(map[string]*linearapi.Issue)
+	// The restored issue belongs to the query being dropped. Left set, it
+	// outlives that query and the next unrelated search lands on it.
+	a.pendingSearchIssueID = ""
 	a.setSearchLoading(false)
 	a.searchErr = nil
 }
