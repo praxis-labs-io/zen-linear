@@ -154,7 +154,7 @@ func (a *App) copyText(text string) {
 		a.updateStatusBarWithError(err)
 		return
 	}
-	a.flashStatus("Copied")
+	a.flashSuccess("Copied")
 }
 
 // postLabel is what the button says, padded out either side: a filled surface
@@ -599,7 +599,7 @@ func (a *App) postFrom(from commentsFocus) {
 			}
 			logger.Info("tui.details_compose: comment posted issue=%s", issueID)
 			a.appendComment(issueID, comment)
-			a.flashStatus("Comment added")
+			a.flashSuccess("Comment added")
 		})
 	}()
 }

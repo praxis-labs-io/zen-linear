@@ -87,7 +87,7 @@ func (a *App) createIssueFromForm(input linearapi.CreateIssueInput, onDone func(
 				noun = "sub-issue"
 			}
 			logger.Info("tui.app: created %s issue=%s title=%s", noun, issue.Identifier, input.Title)
-			a.flashStatus(fmt.Sprintf("Created %s %s", noun, issue.Identifier))
+			a.flashSuccess(fmt.Sprintf("Created %s %s", noun, issue.Identifier))
 			a.applyIssueInsert(issue)
 			if onDone != nil {
 				onDone(nil)
@@ -135,7 +135,7 @@ func (a *App) ShowEditDescriptionModal() {
 					return
 				}
 				logger.Info("tui.app: updated issue description issue=%s", issue.Identifier)
-				a.flashStatus(fmt.Sprintf("Updated description for %s", issue.Identifier))
+				a.flashSuccess(fmt.Sprintf("Updated description for %s", issue.Identifier))
 
 				// Refetch the full issue so the details pane shows the new
 				// description without losing comments.

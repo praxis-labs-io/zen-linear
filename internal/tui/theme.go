@@ -30,6 +30,12 @@ type Theme struct {
 	// falls back to Foreground.
 	AssigneeText tcell.Color
 
+	// Success is what a finished action is said in. Separate from the status
+	// palette on purpose: StatusReview happens to be green in every theme
+	// shipped today, and borrowing it would recolor every success toast the
+	// day one of them makes review orange. Zero value falls back to it.
+	Success tcell.Color
+
 	// Status Colors
 	StatusTriage     tcell.Color // zero value falls back to StatusTodo
 	StatusTodo       tcell.Color
@@ -85,6 +91,15 @@ func (t Theme) StatusReviewColor() tcell.Color {
 	return t.StatusDone
 }
 
+// SuccessColor returns the color a finished action is said in, falling back to
+// the review color for themes that predate the field.
+func (t Theme) SuccessColor() tcell.Color {
+	if t.Success != tcell.ColorDefault {
+		return t.Success
+	}
+	return t.StatusReviewColor()
+}
+
 // LinearTheme is the default dark theme inspired by Linear.
 var LinearTheme = Theme{
 	Background:    tcell.NewRGBColor(18, 18, 18),    // #121212
@@ -99,6 +114,8 @@ var LinearTheme = Theme{
 	Accent:        tcell.NewRGBColor(94, 106, 210),  // #5E6AD2
 	InputBg:       tcell.ColorDarkGray,
 	AssigneeText:  tcell.NewRGBColor(242, 153, 74), // #F2994A orange
+
+	Success: tcell.NewRGBColor(76, 183, 130), // #4CB782 green
 
 	StatusTriage:     tcell.NewRGBColor(242, 153, 74),  // #F2994A orange
 	StatusTodo:       tcell.NewRGBColor(140, 140, 140), // Gray
@@ -123,6 +140,8 @@ var HighContrastTheme = Theme{
 	InputBg:       tcell.NewRGBColor(30, 30, 30),    // #1E1E1E
 	AssigneeText:  tcell.NewRGBColor(255, 128, 0),   // #FF8000 orange
 
+	Success: tcell.NewRGBColor(0, 255, 0), // #00FF00 green
+
 	StatusTriage:     tcell.NewRGBColor(255, 128, 0),   // #FF8000 orange
 	StatusTodo:       tcell.NewRGBColor(255, 255, 255), // White
 	StatusInProgress: tcell.NewRGBColor(255, 255, 0),   // Yellow
@@ -145,6 +164,8 @@ var ColorBlindTheme = Theme{
 	Accent:        tcell.NewRGBColor(0, 114, 178),   // #0072B2
 	InputBg:       tcell.NewRGBColor(42, 42, 42),    // #2A2A2A
 	AssigneeText:  tcell.NewRGBColor(230, 159, 0),   // #E69F00 orange
+
+	Success: tcell.NewRGBColor(0, 158, 115), // #009E73 bluish green
 
 	StatusTriage:     tcell.NewRGBColor(230, 159, 0),   // #E69F00 orange
 	StatusTodo:       tcell.NewRGBColor(153, 153, 153), // Gray
@@ -172,6 +193,8 @@ var RosePineMoonTheme = Theme{
 	InverseText:   tcell.NewRGBColor(35, 33, 54),    // #232136 base
 	AssigneeText:  tcell.NewRGBColor(234, 154, 151), // #EA9A97 rose
 
+	Success: tcell.NewRGBColor(76, 183, 130), // #4CB782 green; Rose Pine has none
+
 	StatusTriage:     tcell.NewRGBColor(234, 154, 151), // #EA9A97 rose
 	StatusTodo:       tcell.NewRGBColor(62, 143, 176),  // #3E8FB0 pine
 	StatusInProgress: tcell.NewRGBColor(246, 193, 119), // #F6C177 gold
@@ -190,6 +213,7 @@ type ThemeTags struct {
 	Border        string
 	BorderFocus   string
 	Warning       string
+	Success       string
 	Error         string
 }
 
@@ -222,6 +246,7 @@ func NewThemeTags(theme Theme) ThemeTags {
 		Border:       colorTag(theme.Border),
 		BorderFocus:  colorTag(theme.BorderFocus),
 		Warning:      colorTag(theme.StatusInProgress),
+		Success:      colorTag(theme.SuccessColor()),
 		Error:        colorTag(theme.StatusCanceled),
 	}
 }

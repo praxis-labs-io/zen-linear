@@ -166,6 +166,7 @@ type App struct {
 	configuredSortFields []SortField
 	collapsedGroups      map[string]bool
 	statusMessage        string
+	statusLevel          statusLevel
 
 	// Display settings of the active custom view, overriding config until
 	// the user picks another list. The overridden flags keep in-session
@@ -518,7 +519,7 @@ func (a *App) rebuildAroundCurrentPlace(ctx context.Context, pending *session.St
 			// the configured default the way a launch does would move them a
 			// second time, for something they did not do.
 			a.QueueUpdateDraw(func() {
-				a.flashStatus("That list is no longer in this workspace")
+				a.flashError("That list is no longer in this workspace")
 				a.refreshIssuesWithFocusChange(false)
 			})
 		}()

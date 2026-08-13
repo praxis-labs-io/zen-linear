@@ -80,7 +80,7 @@ func (a *App) runIssueUpdateWithResult(input linearapi.UpdateIssueInput, success
 				}
 				return
 			}
-			a.flashStatus(successMessage)
+			a.flashSuccess(successMessage)
 			a.applyIssueUpdate(updated)
 			if onDone != nil {
 				onDone(nil)
@@ -100,7 +100,7 @@ func (a *App) runIssueDetailAction(issueID string, action func(context.Context) 
 				a.updateStatusBarWithError(err)
 				return
 			}
-			a.flashStatus(successMessage)
+			a.flashSuccess(successMessage)
 			a.loadIssueDetailsByID(issueID)
 		})
 	}()
@@ -656,7 +656,7 @@ func (a *App) openSelectedAttachment() {
 			a.updateStatusBarWithError(err)
 			return
 		}
-		a.flashStatus("Opened attachment")
+		a.flashSuccess("Opened attachment")
 	})
 }
 
@@ -670,7 +670,7 @@ func (a *App) copySelectedAttachmentURL() {
 			a.updateStatusBarWithError(err)
 			return
 		}
-		a.flashStatus("Copied attachment URL")
+		a.flashSuccess("Copied attachment URL")
 	})
 }
 
