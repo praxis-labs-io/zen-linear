@@ -374,6 +374,42 @@ func TestTheComposeBoxGrowsWithWhatIsTyped(t *testing.T) {
 	}
 }
 
+// The box is measured with the page's wrap and drawn by a TextArea, which
+// prints what it holds. A body carrying anything bracket-shaped measures short
+// on the wrap side and the box comes up too small for what is in it.
+func TestABracketedBodyIsMeasuredAsItIsDrawn(t *testing.T) {
+	area := tview.NewTextArea()
+	area.SetText("See the [docs](https://example.com/a/very/long/path/that/keeps/going) for the rest of it.", false)
+
+	const measure = 20
+	drawn := len(drawPrimitiveAt(t, area, measure, 40))
+	rows := writingBoxRows(area, measure)
+	// The primitive is drawn taller than it needs, so its blank tail is not a
+	// row of text. Count what it actually put on screen.
+	written := 0
+	for _, line := range drawPrimitiveAt(t, area, measure, drawn) {
+		if strings.TrimSpace(line) != "" {
+			written++
+		}
+	}
+	if rows < written {
+		t.Errorf("the box is sized to %d rows for text the TextArea draws in %d", rows, written)
+	}
+}
+
+// A cursor at the end of a line that exactly fills the measure sits on the row
+// after it, and a TextArea scrolls itself to keep it: the top of the box goes.
+func TestAFullLastLineLeavesTheCursorARow(t *testing.T) {
+	area := tview.NewTextArea()
+	const measure = 20
+	full := strings.Repeat("a", measure)
+	area.SetText(strings.Repeat(full+"\n", 4)+full, false)
+
+	if got := writingBoxRows(area, measure); got != 6 {
+		t.Errorf("five full lines measure %d rows, want 6: one spare for the cursor", got)
+	}
+}
+
 // TestDraftFollowsItsIssue covers the box being one widget over a changing
 // selection. A comment written for one issue must not be posted to whichever
 // one happens to be on screen when the chord lands.

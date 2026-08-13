@@ -171,13 +171,29 @@ func (a *App) writingPlain(width int, heading string, focus commentsFocus, area 
 // what has been written is on the page beside what it answers. That is what
 // keeps the edit box the size of the card it replaced: it opens holding the
 // comment, so it opens at the comment's height.
+//
+// The text is escaped before it is measured. A TextArea prints what it holds,
+// and WordWrap reads a color tag, so an unescaped "[docs](url)" measures four
+// cells short of what is drawn and the box comes up a row too small.
 func writingBoxRows(area *tview.TextArea, inner int) int {
 	if area == nil || inner <= 0 {
 		return composeRows
 	}
-	rows := 0
+	rows, tail := 0, ""
 	for _, line := range strings.Split(area.GetText(), "\n") {
-		rows += max(1, len(tview.WordWrap(line, inner)))
+		wrapped := tview.WordWrap(tview.Escape(line), inner)
+		rows += max(1, len(wrapped))
+		if len(wrapped) > 0 {
+			tail = wrapped[len(wrapped)-1]
+		} else {
+			tail = ""
+		}
+	}
+	// A cursor at the end of a line that exactly fills the measure sits on the
+	// row after it, and a TextArea scrolls itself to keep it (findCursor). One
+	// row spare is what keeps the top of the box from going.
+	if tview.TaggedStringWidth(tail) >= inner {
+		rows++
 	}
 	return max(composeRows, rows)
 }

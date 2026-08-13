@@ -113,6 +113,11 @@ type App struct {
 	// opens on the comment as it stands, so nobody is shown a half-edit from
 	// last week in place of what the comment actually says.
 	composeEditing map[string]string
+	// deletingComments holds the comments whose delete is still in flight. The
+	// card stays on the page until Linear answers, so without this a second
+	// confirm inside the round trip sends the mutation twice and the loser
+	// reports a failure for a comment that went.
+	deletingComments map[string]struct{}
 	// statusBar holds the pane hints; statusToast is the message corner it
 	// shares the statusRow strip with, and statusRowWidth is what the last
 	// draw measured that strip at.

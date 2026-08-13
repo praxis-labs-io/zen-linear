@@ -17,6 +17,7 @@ import (
 const (
 	mineID       = "root-1"
 	mineBody     = "The debounce is the problem."
+	mineReplyID  = "reply-2"
 	somebodyElse = "reply-1"
 	elseBody     = "Which one?"
 )
@@ -325,5 +326,145 @@ func TestConfirmingDeleteTakesTheCardOffThePage(t *testing.T) {
 	}
 	if !strings.Contains(page, elseBody) {
 		t.Error("a reply left the page with the root it answered")
+	}
+}
+
+// The edit box stands mid-page, so scrolling puts it off screen while it still
+// holds the keyboard. A key that scrolls somewhere else leaves the user typing
+// blind into a box they cannot see.
+func TestTypingBringsTheEditBoxBackOnScreen(t *testing.T) {
+	app, _ := newEditableCommentsApp(t)
+	stepToComment(t, app, mineID)
+	pressInComments(t, app, 'e')
+	// Short enough that the box mid-page and the compose card at the end of it
+	// cannot both be on screen.
+	drawPrimitiveAt(t, app.detailsPage, 80, 14)
+	app.detailsPageView.ScrollToEnd()
+	drawPrimitiveAt(t, app.detailsPage, 80, 14)
+
+	index := app.commentSpanIndex(mineID)
+	if index < 0 {
+		t.Fatal("the edit box is not on the page")
+	}
+	if app.commentSpanVisible(app.commentSpans[index]) {
+		t.Fatal("the page never scrolled off the box, so there is nothing to bring back")
+	}
+
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
+	drawPrimitiveAt(t, app.detailsPage, 80, 14)
+
+	index = app.commentSpanIndex(mineID)
+	if index < 0 || !app.commentSpanVisible(app.commentSpans[index]) {
+		t.Error("typing scrolled to a box other than the one being typed in")
+	}
+}
+
+// A save is slow enough to Esc out of and start another. The answer belongs to
+// the edit that sent it, not to whatever box is open when it lands.
+func TestASlowSaveLeavesALaterEditAlone(t *testing.T) {
+	app, drawn := newEditableCommentsApp(t)
+	release := make(chan struct{})
+	app.updateCommentFunc = func(_ context.Context, input linearapi.UpdateCommentInput) (linearapi.Comment, error) {
+		<-release
+		return linearapi.Comment{
+			ID:        input.ID,
+			Body:      input.Body,
+			CreatedAt: time.Now().Add(-time.Hour),
+			UpdatedAt: time.Now(),
+			Author:    linearapi.User{ID: "u1", DisplayName: "drew", IsMe: true},
+		}, nil
+	}
+
+	stepToComment(t, app, mineID)
+	pressInComments(t, app, 'e')
+	fillWritingBox(app.detailsEditArea, "Sent, and slow.")
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModCtrl))
+
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	stepToComment(t, app, mineReplyID)
+	pressInComments(t, app, 'e')
+	const later = "Written while the first was still out."
+	fillWritingBox(app.detailsEditArea, later)
+
+	close(release)
+	waitForDraw(t, drawn)
+
+	if got := app.editingCommentID(); got != mineReplyID {
+		t.Fatalf("the open box is on %q, want %s: the first save closed a box it did not open", got, mineReplyID)
+	}
+	if got := app.detailsEditArea.GetText(); got != later {
+		t.Errorf("the box holds %q, want the words written after the save went out", got)
+	}
+}
+
+// Linear reads leading whitespace as an indented code block, so trimming the
+// body would rewrite a comment its author only looked at.
+func TestOpeningAndSavingAnIndentedCommentSendsNothing(t *testing.T) {
+	app, _ := newEditableCommentsApp(t)
+	sent := make(chan string, 1)
+	app.updateCommentFunc = func(_ context.Context, input linearapi.UpdateCommentInput) (linearapi.Comment, error) {
+		sent <- input.Body
+		return linearapi.Comment{ID: input.ID, Body: input.Body}, nil
+	}
+	app.issuesMu.Lock()
+	app.selectedIssue.Comments[0].Body = "    code := run()\n    return code\n"
+	app.issuesMu.Unlock()
+	app.updateDetailsView()
+	drawComments(t, app, 80)
+
+	stepToComment(t, app, mineID)
+	pressInComments(t, app, 'e')
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModCtrl))
+
+	select {
+	case body := <-sent:
+		t.Fatalf("sent %q, want nothing sent: nobody changed the comment", body)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if app.editingCommentID() != "" {
+		t.Error("the box stayed open on a save with nothing to send")
+	}
+}
+
+// The card stays on the page until Linear answers, so it can be confirmed twice
+// inside one round trip. The loser reports a failure for a comment that went.
+func TestASecondDeleteWaitsForTheFirst(t *testing.T) {
+	app, drawn := newEditableCommentsApp(t)
+	release := make(chan struct{})
+	calls := make(chan string, 4)
+	app.deleteCommentFunc = func(_ context.Context, id string) error {
+		calls <- id
+		<-release
+		return nil
+	}
+	stepToComment(t, app, mineID)
+
+	pressInComments(t, app, 'd')
+	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModNone))
+	<-calls
+
+	pressInComments(t, app, 'd')
+	if app.pages.HasPage("confirmation") {
+		t.Fatal("a second delete was offered while the first was still out")
+	}
+
+	close(release)
+	waitForDraw(t, drawn)
+	if extra := len(calls); extra != 0 {
+		t.Errorf("the mutation ran %d more times than the one confirmation asked for", extra)
+	}
+}
+
+// A write that lands after the user has moved on belongs to nobody. Canceling
+// there would kill the fetch filling in the issue they moved to.
+func TestAWriteForAnIssueLeftBehindLeavesTheLiveFetchAlone(t *testing.T) {
+	app, _ := newEditableCommentsApp(t)
+	before := app.detailFetchGeneration.Load()
+
+	app.replaceComment("some-other-issue", linearapi.Comment{ID: mineID, Body: "Rewritten."})
+	app.removeComment("some-other-issue", mineID)
+
+	if got := app.detailFetchGeneration.Load(); got != before {
+		t.Errorf("the fetch generation moved to %d from %d, so a live fetch was canceled by a write for an issue nobody is looking at", got, before)
 	}
 }

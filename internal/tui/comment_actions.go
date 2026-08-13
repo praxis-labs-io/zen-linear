@@ -396,6 +396,10 @@ func (a *App) deleteFocusedComment() {
 		a.flashStatus("No issue selected")
 		return
 	}
+	if _, sent := a.deletingComments[comment.ID]; sent {
+		a.flashStatus("Already deleting this comment")
+		return
+	}
 
 	del := a.deleteCommentFunc
 	a.confirmationModal.Show(
@@ -403,10 +407,15 @@ func (a *App) deleteFocusedComment() {
 		fmt.Sprintf("Delete this comment?\n\n%s", tview.Escape(commentPreview(comment.Body))),
 		"Delete",
 		func() {
+			if a.deletingComments == nil {
+				a.deletingComments = make(map[string]struct{})
+			}
+			a.deletingComments[comment.ID] = struct{}{}
 			a.flashStatus("Deleting comment...")
 			go func() {
 				err := del(context.Background(), comment.ID)
 				a.QueueUpdateDraw(func() {
+					delete(a.deletingComments, comment.ID)
 					if err != nil {
 						logger.ErrorWithErr(err, "tui.comment_actions: delete comment failed comment=%s", comment.ID)
 						a.updateStatusBarWithError(err)
@@ -448,10 +457,10 @@ func commentPreview(body string) string {
 // card before it, or on the first one left when it was the first.
 //
 // A fetch already out was answering about a page that still had this comment on
-// it, so it is invalidated here rather than left to put the card back.
+// it, so it is invalidated here rather than left to put the card back. The
+// cancel comes after the issue check: a delete that lands once the user has
+// moved on has no business killing the fetch filling in the issue they moved to.
 func (a *App) removeComment(issueID, commentID string) {
-	a.cancelDetailFetch()
-
 	a.issuesMu.Lock()
 	selected := a.selectedIssue
 	if selected == nil || selected.ID != issueID {
@@ -480,6 +489,7 @@ func (a *App) removeComment(issueID, commentID string) {
 	}
 	a.issuesMu.Unlock()
 
+	a.cancelDetailFetch()
 	a.detailsCommentsSource = comments
 	a.renderDetailsPage()
 	// Rendered before the ring is aimed: the spans still hold the card that

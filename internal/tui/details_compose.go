@@ -445,6 +445,9 @@ func (a *App) showWritingBox() {
 		return
 	case commentsFocusReply, commentsFocusReplyPost:
 		id = blockIDReply
+	case commentsFocusEdit, commentsFocusEditPost:
+		// The edit box stands where the card did and keeps the comment's id.
+		id = a.editingCommentID()
 	}
 	if index := a.commentSpanIndex(id); index >= 0 {
 		a.scrollCommentIntoView(a.commentSpans[index])
@@ -749,8 +752,10 @@ func (a *App) saveCommentEdit() {
 	if commentID == "" || a.detailsEditArea == nil {
 		return
 	}
-	body := strings.TrimSpace(a.detailsEditArea.GetText())
-	if body == "" {
+	// Sent as written. Leading whitespace is an indented code block to Linear,
+	// so trimming it would rewrite a comment the user only looked at.
+	body := a.detailsEditArea.GetText()
+	if strings.TrimSpace(body) == "" {
 		return
 	}
 	issueID := a.composeDraftIssueID
@@ -775,7 +780,11 @@ func (a *App) saveCommentEdit() {
 				return
 			}
 			logger.Info("tui.details_compose: comment updated comment=%s", commentID)
-			a.closeEditBox()
+			// The box may have moved on while this was in flight. Closing it
+			// then would throw away words written against another comment.
+			if a.editingCommentID() == commentID {
+				a.closeEditBox()
+			}
 			a.replaceComment(issueID, comment)
 			a.flashSuccess("Comment updated")
 		})
@@ -787,10 +796,10 @@ func (a *App) saveCommentEdit() {
 // the "edited" byline.
 //
 // A fetch already out was answering about the old body, so it is invalidated
-// here rather than left to land on top of this.
+// here rather than left to land on top of this. The cancel comes after the
+// issue check: a rewrite that lands once the user has moved on has no business
+// killing the fetch that is filling in the issue they moved to.
 func (a *App) replaceComment(issueID string, comment linearapi.Comment) {
-	a.cancelDetailFetch()
-
 	a.issuesMu.Lock()
 	selected := a.selectedIssue
 	if selected == nil || selected.ID != issueID {
@@ -806,6 +815,7 @@ func (a *App) replaceComment(issueID string, comment linearapi.Comment) {
 	comments := selected.Comments
 	a.issuesMu.Unlock()
 
+	a.cancelDetailFetch()
 	a.detailsCommentsSource = comments
 	a.renderDetailsPage()
 	a.focusComment(comment.ID)
