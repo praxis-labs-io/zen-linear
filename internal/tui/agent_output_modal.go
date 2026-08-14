@@ -46,6 +46,8 @@ const (
 	// gives back whatever the terminal is short.
 	agentOutputMaxWidth  = 110
 	agentOutputMaxHeight = 32
+	// agentOutputFooterRows is the resume line, the rule, and the hint.
+	agentOutputFooterRows = 3
 )
 
 // NewAgentOutputModal creates a new agent output modal.
@@ -101,10 +103,13 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 	om.helpView.SetBackgroundColor(app.theme.ModalBackground())
 	om.helpView.SetTextAlign(tview.AlignCenter)
 
+	// The resume command sits above the rule because it is about the run; the
+	// hint below it is about the keys, the same split every other modal has.
 	om.footerView = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(om.helpView, 1, 0, false).
-		AddItem(om.resumeView, 1, 0, false)
+		AddItem(om.resumeView, 1, 0, false).
+		AddItem(app.modalRule(), 1, 0, false).
+		AddItem(om.helpView, 1, 0, false)
 	om.footerView.SetBackgroundColor(app.theme.ModalBackground())
 
 	om.headerView = tview.NewFlex().
@@ -117,15 +122,13 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		AddItem(om.headerView, 1, 0, false).
 		AddItem(om.streamView, 0, 1, false)
 
-	om.modalContent = tview.NewFlex().
-		SetDirection(tview.FlexRow).
+	// The panel carries the run's name; the two views inside it are titled for
+	// what they hold, and their borders are the Tab cue.
+	om.modalContent = app.modalPanel("Agent")
+	om.modalContent.
 		AddItem(streamSection, 0, 2, false).
 		AddItem(om.finalView, 0, 3, false).
-		AddItem(om.footerView, 1, 0, false)
-	om.modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
-	om.modalContent.SetBackgroundColor(app.theme.ModalBackground())
-	padding := app.density.ModalPadding
-	om.modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
+		AddItem(om.footerView, agentOutputFooterRows, 0, false)
 
 	// Filled by layout on every Show. The wrapper pointer is not replaced:
 	// pages hold it for as long as the run does.
@@ -174,18 +177,12 @@ func (om *AgentOutputModal) ApplyTheme(theme Theme) {
 	}
 	om.applyFocusBorders()
 	if om.modalContent != nil {
-		om.modalContent.SetBackgroundColor(theme.ModalBackground())
+		om.modalContent.SetBackgroundColor(theme.ModalBackground()).
+			SetBorderColor(theme.BorderFocus).
+			SetTitleColor(theme.Accent)
 	}
 	if om.modal != nil {
 		om.modal.SetBackgroundColor(theme.Background)
-	}
-}
-
-// ApplyDensity updates modal padding based on the density profile.
-func (om *AgentOutputModal) ApplyDensity(density DensityProfile) {
-	if om.modalContent != nil {
-		padding := density.ModalPadding
-		om.modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 	}
 }
 
@@ -197,7 +194,8 @@ func (om *AgentOutputModal) Show(title string, onCancel func()) {
 	om.resumeView.Clear()
 	om.sessionView.Clear()
 	om.resumeCommand = ""
-	om.streamView.SetTitle(fmt.Sprintf(" Stream - %s ", title))
+	om.modalContent.SetTitle(" " + title + " ")
+	om.streamView.SetTitle(" Stream ")
 	om.finalView.SetTitle(" Final ")
 	om.statusView.SetText("Status: Running")
 	om.buffer = NewAgentStreamBuffer()

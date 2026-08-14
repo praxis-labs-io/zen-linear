@@ -116,9 +116,6 @@ func (a *App) applyDensityToComponents() {
 	if a.statusRow != nil {
 		a.applyStatusBarPadding()
 	}
-	if a.agentOutputModal != nil {
-		a.agentOutputModal.ApplyDensity(a.density)
-	}
 }
 
 func (a *App) rebuildModals() {
@@ -142,7 +139,6 @@ func (a *App) rebuildModals() {
 		a.agentOutputModal = NewAgentOutputModal(a)
 	} else {
 		a.agentOutputModal.ApplyTheme(a.theme)
-		a.agentOutputModal.ApplyDensity(a.density)
 	}
 	a.confirmationModal = NewConfirmationModal(a)
 }

@@ -227,12 +227,12 @@ func TestEditLabelsTogglesWithSpaceAndT(t *testing.T) {
 	if got := modal.contextView.GetText(true); !strings.Contains(got, "ZEN-1") {
 		t.Fatalf("context line = %q, want the issue named", got)
 	}
-	if first, _ := modal.list.GetItemText(0); first != "◻ Bug" {
+	if first, _ := modal.list.GetItemText(0); markOf(first) != '◻' {
 		t.Fatalf("initial first row = %q, want an unchecked row", first)
 	}
 
 	modal.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
-	if first, _ := modal.list.GetItemText(0); first != "◼ Bug" {
+	if first, _ := modal.list.GetItemText(0); markOf(first) != '◼' {
 		t.Fatalf("after space first row = %q, want a checked row", first)
 	}
 
@@ -240,7 +240,7 @@ func TestEditLabelsTogglesWithSpaceAndT(t *testing.T) {
 	modal.HandleKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
 	first, _ := modal.list.GetItemText(0)
 	second, _ := modal.list.GetItemText(1)
-	if first != "◼ Bug" || second != "◻ Feature" {
+	if markOf(first) != '◼' || markOf(second) != '◻' {
 		t.Fatalf("rows after moving = %q / %q, want the marks unchanged", first, second)
 	}
 	if modal.list.GetCurrentItem() != 1 {
@@ -248,7 +248,7 @@ func TestEditLabelsTogglesWithSpaceAndT(t *testing.T) {
 	}
 
 	modal.HandleKey(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone))
-	if second, _ = modal.list.GetItemText(1); second != "◼ Feature" {
+	if second, _ = modal.list.GetItemText(1); markOf(second) != '◼' {
 		t.Fatalf("after t second row = %q, want a checked row", second)
 	}
 

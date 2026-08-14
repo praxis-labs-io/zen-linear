@@ -18,13 +18,15 @@ type MultiSelectItem struct {
 	Label string
 }
 
-// multiSelectRow is one toggle row. Filled and hollow blocks mark the two
-// states; square brackets are out, tview reads them as a color tag.
-func multiSelectRow(label string, on bool) string {
+// multiSelectRow is one toggle row: a filled block in the color a finished
+// action is said in, or a hollow one sitting back in the muted text. Square
+// brackets are out as the box, tview reads them as a color tag.
+func (a *App) multiSelectRow(label string, on bool) string {
+	mark := a.themeTags.SecondaryText + "◻[-]"
 	if on {
-		return "◼ " + label
+		mark = a.themeTags.Success + "◼[-]"
 	}
-	return "◻ " + label
+	return mark + " " + label
 }
 
 // MultiSelectModal manages a reusable multi-select picker. Editing an issue's
@@ -74,7 +76,7 @@ func (mm *MultiSelectModal) fillList() {
 
 	mm.beginRows(len(mm.items))
 	for _, item := range mm.items {
-		mm.list.AddItem(multiSelectRow(item.Label, mm.selected[item.ID]), "", 0, nil)
+		mm.list.AddItem(mm.app.multiSelectRow(item.Label, mm.selected[item.ID]), "", 0, nil)
 	}
 	mm.list.SetCurrentItem(0)
 }
@@ -91,7 +93,7 @@ func (mm *MultiSelectModal) toggleCurrentItem() {
 	} else {
 		mm.selected[item.ID] = true
 	}
-	mm.list.SetItemText(index, multiSelectRow(item.Label, mm.selected[item.ID]), "")
+	mm.list.SetItemText(index, mm.app.multiSelectRow(item.Label, mm.selected[item.ID]), "")
 }
 
 func (mm *MultiSelectModal) selectedIDs() []string {

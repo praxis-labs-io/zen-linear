@@ -198,6 +198,11 @@ func (lm *listModal) layout(title string) {
 		panel.AddItem(lm.contextView, 1, 0, false)
 		panel.AddItem(nil, 1, 0, false)
 		chrome += 2
+	} else {
+		// Without a context line the list would sit against the top border while
+		// the footer keeps its gap, and the panel reads lopsided.
+		panel.AddItem(nil, app.density.ModalSpacerLines, 0, false)
+		chrome += app.density.ModalSpacerLines
 	}
 	panel.AddItem(lm.list, 0, 1, true)
 	panel.AddItem(nil, app.density.ModalSpacerLines, 0, false)

@@ -213,10 +213,10 @@ func TestMultiSelectRewritesOneRowPerToggle(t *testing.T) {
 	app.multiSelectModal.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
 	first, _ := app.multiSelectModal.list.GetItemText(0)
 	second, _ := app.multiSelectModal.list.GetItemText(1)
-	if first != "◻ Bug" {
+	if markOf(first) != '◻' {
 		t.Errorf("first row = %q, want it untouched by the second row's toggle", first)
 	}
-	if second != "◻ Chore" {
+	if markOf(second) != '◻' {
 		t.Errorf("second row = %q, want it unticked", second)
 	}
 }
@@ -269,4 +269,14 @@ func TestAgentOutputLightsTheViewTabLandsOn(t *testing.T) {
 	if got := modal.streamView.GetBorderColor(); got != app.theme.Border {
 		t.Errorf("stream border = %v, want the resting color after Tab", got)
 	}
+}
+
+// markOf is the toggle box a row drew, past the color tag in front of it.
+func markOf(row string) rune {
+	for _, r := range row {
+		if r == '◼' || r == '◻' {
+			return r
+		}
+	}
+	return 0
 }
