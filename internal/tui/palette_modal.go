@@ -1,15 +1,33 @@
 package tui
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/mattn/go-runewidth"
 	"github.com/rivo/tview"
 )
 
-// paletteMaxVisibleRows caps how many commands the palette shows at once;
-// longer lists scroll.
-const paletteMaxVisibleRows = 12
+const (
+	// paletteMaxVisibleRows caps how many commands the palette shows at once;
+	// longer lists scroll.
+	paletteMaxVisibleRows = 12
+	// paletteMinVisibleRows keeps the panel from resizing under every
+	// keystroke as the match count falls.
+	paletteMinVisibleRows = 4
+	// paletteQueryBoxRows is the framed field: the input plus its border.
+	paletteQueryBoxRows = 3
+	// paletteGutter is the column of padding each side of the panel's content,
+	// without which the query box's frame sits on the panel's own border.
+	paletteGutter = 1
+	paletteWidth  = 60
+	// paletteRowWidth is what a command row has to lay out in: the panel less
+	// its border and both gutters.
+	paletteRowWidth = paletteWidth - 2 - (2 * paletteGutter)
+	// paletteRowGap is the least space kept between a title and its shortcut,
+	// so a long title is truncated rather than run into one.
+	paletteRowGap = 2
+)
 
 // newThemedInputField creates an InputField whose inner text area fills with
 // the given background. tview captures the global primitive background at
@@ -24,77 +42,166 @@ func newThemedInputField(fill tcell.Color) *tview.InputField {
 	return field
 }
 
-// buildPaletteModal creates and configures the command palette modal overlay.
-func (a *App) buildPaletteModal() *tview.Flex {
-	// Create input field for query with improved styling
-	a.paletteInput = newThemedInputField(a.theme.InputBg)
+// buildPaletteQueryBox creates the palette's query box: the navigation pane's
+// framed field, on the modal panel. It always holds the keyboard, so the frame
+// takes the focused border outright.
+func (a *App) buildPaletteQueryBox() {
+	panel := a.theme.ModalBackground()
+
+	a.paletteInput = newThemedInputField(panel)
 	a.paletteInput.
 		SetLabel("> ").
 		SetLabelColor(a.theme.Accent).
-		SetFieldWidth(0). // Use full available width
-		SetPlaceholder("Type to filter commands...").
-		SetFieldStyle(tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.InputBg)).
-		SetPlaceholderStyle(tcell.StyleDefault.Foreground(a.theme.SecondaryText).Background(a.theme.InputBg)).
-		SetBackgroundColor(a.theme.ModalBackground())
+		SetFieldWidth(0).
+		SetPlaceholder("Search commands").
+		SetFieldBackgroundColor(panel).
+		SetFieldTextColor(a.theme.Foreground).
+		SetPlaceholderTextColor(a.theme.SecondaryText)
+	a.paletteInput.SetBackgroundColor(panel)
 
-	// Create list for filtered commands
+	a.paletteSearchFrame = tview.NewFlex().SetDirection(tview.FlexRow)
+	// Flex sets dontClear and never paints its own background; restore the
+	// fill so the layer beneath cannot bleed through.
+	a.paletteSearchFrame.Box = tview.NewBox().SetBackgroundColor(panel)
+	a.paletteSearchFrame.
+		SetBorder(true).
+		SetBorderColor(a.theme.BorderFocus).
+		SetBackgroundColor(panel)
+	a.paletteSearchFrame.AddItem(a.paletteInput, 0, 1, true)
+}
+
+// paletteChromeLines counts the panel's non-list lines inside its border: the
+// query box, the footer rule and its hint line, and the density spacer above
+// them.
+func (a *App) paletteChromeLines() int {
+	return paletteQueryBoxRows + 2 + a.density.PaletteSpacerLines
+}
+
+// paletteFooterRule is the hint line's top border. It runs out past the gutter
+// to the panel's own border on each side, so the rule meets it in a tee rather
+// than stopping short of it.
+func (a *App) paletteFooterRule() *tview.Box {
+	rule := tview.NewBox()
+	rule.SetBackgroundColor(a.theme.ModalBackground())
+	rule.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		style := tcell.StyleDefault.
+			Background(a.theme.ModalBackground()).
+			Foreground(a.theme.BorderFocus)
+		left, right := x-paletteGutter-1, x+width+paletteGutter
+		screen.SetContent(left, y, tview.Borders.LeftT, nil, style)
+		for col := left + 1; col < right; col++ {
+			screen.SetContent(col, y, tview.Borders.Horizontal, nil, style)
+		}
+		screen.SetContent(right, y, tview.Borders.RightT, nil, style)
+		return x, y, width, height
+	})
+	return rule
+}
+
+// buildPaletteModal creates and configures the command palette modal overlay.
+func (a *App) buildPaletteModal() *tview.Flex {
+	a.buildPaletteQueryBox()
+
 	a.paletteList = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextStyle(tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.ModalBackground())).
-		SetSelectedStyle(a.listSelectionStyle()).
+		// Unselected rows sit back in the muted text color; the selection is
+		// what brings a title up to the foreground.
+		SetMainTextStyle(tcell.StyleDefault.Foreground(a.theme.SecondaryText).Background(a.theme.ModalBackground())).
+		// The same selection the tree and the issue tables paint, so a focused
+		// row reads the same wherever it is.
+		SetSelectedStyle(selectionStyle(a.theme)).
 		SetHighlightFullLine(true)
 	a.paletteList.SetBackgroundColor(a.theme.ModalBackground())
 
-	// Create help text with better formatting
-	helpText := tview.NewTextView()
-	helpText.SetText("↑↓ Navigate  •  Enter Execute  •  Esc Close").
-		SetTextColor(a.theme.SecondaryText).
-		SetBackgroundColor(a.theme.ModalBackground())
-	helpText.SetTextAlign(tview.AlignCenter)
+	return a.layoutPaletteModal(paletteMinVisibleRows)
+}
 
-	// Build modal content with better spacing
-	// Add a small spacer before input for visual breathing room
-	spacerTop := tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
-	spacerBottom := tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
+// layoutPaletteModal rebuilds the panel around a list of the given height and
+// centers it. Every keystroke resizes the list, so this runs again on each one;
+// the input, its frame, and the list are reused, the wrappers are not.
+func (a *App) layoutPaletteModal(listRows int) *tview.Flex {
+	panel := a.theme.ModalBackground()
+
+	hint := tview.NewTextView()
+	hint.SetText("↑↓ move   ↵ run   esc close").
+		SetTextColor(a.theme.SecondaryText).
+		SetBackgroundColor(panel)
+	hint.SetTextAlign(tview.AlignCenter)
+
+	spacer := tview.NewBox().SetBackgroundColor(panel)
 
 	a.paletteModalContent = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(spacerTop, a.density.PaletteSpacerLines, 0, false).
-		AddItem(a.paletteInput, 1, 0, true).
-		AddItem(a.paletteList, 0, 1, false).
-		AddItem(spacerBottom, a.density.PaletteSpacerLines, 0, false).
-		AddItem(helpText, 1, 0, false)
-	a.paletteModalContent.Box = tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
-	// Set border and styling - must be set after creating the flex but before adding to parent
+		AddItem(a.paletteSearchFrame, paletteQueryBoxRows, 0, true).
+		AddItem(a.paletteList, listRows, 0, false).
+		AddItem(spacer, a.density.PaletteSpacerLines, 0, false).
+		AddItem(a.paletteFooterRule(), 1, 0, false).
+		AddItem(hint, 1, 0, false)
+	a.paletteModalContent.Box = tview.NewBox().SetBackgroundColor(panel)
 	a.paletteModalContent.
-		SetBackgroundColor(a.theme.ModalBackground()).
+		SetBackgroundColor(panel).
 		SetBorder(true).
-		SetBorderColor(a.theme.Accent).
-		SetBorderPadding(0, 0, 0, 0). // No padding - content uses full width
+		SetBorderColor(a.theme.BorderFocus).
+		// One column of gutter each side, or the query box's frame sits on the
+		// panel's own border.
+		SetBorderPadding(0, 0, paletteGutter, paletteGutter).
 		SetTitle(" Commands ").
-		SetTitleColor(a.theme.Accent) // Use accent color for title to match border
+		SetTitleColor(a.theme.Foreground)
 
-	// Center the modal on screen with wider width (60 instead of 50) for better readability
-	centeredContent := tview.NewFlex().
+	column := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(nil, 0, 1, false).
-		AddItem(a.paletteModalContent, 15, 0, true).
+		AddItem(a.paletteModalContent, listRows+a.paletteChromeLines()+2, 0, true).
 		AddItem(nil, 0, 1, false)
 
-	horizontalCentered := tview.NewFlex().
+	centered := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
-		AddItem(centeredContent, 60, 0, true).
+		AddItem(column, paletteWidth, 0, true).
 		AddItem(nil, 0, 1, false)
 
-	// Use darker background to create dimming effect (darker than main background)
-	modalBg := a.theme.Background
 	modal := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
-		AddItem(horizontalCentered, 0, 1, true).
+		AddItem(centered, 0, 1, true).
 		AddItem(nil, 0, 1, false)
-	modal.SetBackgroundColor(modalBg)
+	modal.SetBackgroundColor(a.theme.Background)
 
 	return modal
+}
+
+// paletteListRows is how many command rows fit: the match count, capped by the
+// palette's own limit and by what the screen leaves.
+func (a *App) paletteListRows(matches int) int {
+	rows := matches
+	if rows > paletteMaxVisibleRows {
+		rows = paletteMaxVisibleRows
+	}
+	chrome := a.paletteChromeLines() + 2 // + border
+	if _, _, _, screenH := a.pages.GetRect(); screenH > chrome+4 {
+		if fits := screenH - chrome - 2; rows > fits {
+			rows = fits
+		}
+	}
+	if rows < paletteMinVisibleRows {
+		rows = paletteMinVisibleRows
+	}
+	return rows
+}
+
+// paletteRow lays one command across the row: the title on the left edge, its
+// shortcut against the right. A command with no shortcut leaves that end blank.
+func (a *App) paletteRow(cmd Command) string {
+	shortcut := cmd.ShortcutDisplay
+	if shortcut == "" {
+		shortcut = FormatShortcut(cmd.ShortcutRune)
+	}
+
+	room := paletteRowWidth - runewidth.StringWidth(shortcut) - paletteRowGap
+	title := runewidth.Truncate(cmd.Title, room, "…")
+	pad := room - runewidth.StringWidth(title) + paletteRowGap
+	if shortcut == "" {
+		return title
+	}
+	return title + strings.Repeat(" ", pad) + a.themeTags.Accent + shortcut + "[-]"
 }
 
 // updatePaletteList updates the palette list with filtered commands.
@@ -103,25 +210,8 @@ func (a *App) updatePaletteList() {
 	filtered := a.paletteCtrl.Filtered()
 	cursor := a.paletteCtrl.Cursor()
 
-	// Add all filtered commands to the list with shortcut hints
-	// Format: [shortcut] Command Title - with shortcut right-aligned in a fixed column
 	for _, cmd := range filtered {
-		var shortcutHint string
-		if cmd.ShortcutDisplay != "" {
-			// Use custom display text (e.g., "/" or "Esc")
-			shortcutHint = cmd.ShortcutDisplay
-		} else if cmd.ShortcutRune != 0 {
-			shortcutHint = FormatShortcut(cmd.ShortcutRune)
-		}
-		var displayText string
-		if shortcutHint != "" {
-			// Use fixed width shortcut column (8 chars) followed by command title
-			displayText = fmt.Sprintf("%s%8s[-]  %s", a.themeTags.SecondaryText, shortcutHint, cmd.Title)
-		} else {
-			// No shortcut - pad with spaces for alignment
-			displayText = fmt.Sprintf("%s%8s[-]  %s", a.themeTags.SecondaryText, "", cmd.Title)
-		}
-		a.paletteList.AddItem(displayText, "", 0, nil)
+		a.paletteList.AddItem(a.paletteRow(cmd), "", 0, nil)
 	}
 
 	// Set selected item to match cursor position
@@ -135,75 +225,7 @@ func (a *App) updatePaletteList() {
 		a.paletteList.SetCurrentItem(cursor)
 	}
 
-	// Keep the palette compact like a typical command palette: show at most
-	// paletteMaxVisibleRows commands (fewer on short screens) and scroll the
-	// rest.
-	listRows := len(filtered)
-	if listRows > paletteMaxVisibleRows {
-		listRows = paletteMaxVisibleRows
-	}
-	chromeRows := 2 + (2 * a.density.PaletteSpacerLines) + 2 // input + help + spacers + border
-	if _, _, _, pagesHeight := a.pages.GetRect(); pagesHeight > chromeRows+4 {
-		if maxRows := pagesHeight - chromeRows - 2; listRows > maxRows {
-			listRows = maxRows
-		}
-	}
-	contentHeight := listRows + 2 + (2 * a.density.PaletteSpacerLines)
-	if contentHeight < 6 {
-		contentHeight = 6 // Minimum height for usability
-	}
-	// Border adds 2 lines (top and bottom), so total height = contentHeight + 2
-	requiredHeight := contentHeight + 2
-
-	// Rebuild modalContent with correct list height
-	// Create help text with improved formatting
-	helpText := tview.NewTextView()
-	helpText.SetText("↑↓ Navigate  •  Enter Execute  •  Esc Close").
-		SetTextColor(a.theme.SecondaryText).
-		SetBackgroundColor(a.theme.ModalBackground())
-	helpText.SetTextAlign(tview.AlignCenter)
-
-	// Add spacers for visual breathing room
-	spacerTop := tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
-	spacerBottom := tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
-
-	// Rebuild modalContent with the capped list height
-	a.paletteModalContent = tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(spacerTop, a.density.PaletteSpacerLines, 0, false).
-		AddItem(a.paletteInput, 1, 0, true).
-		AddItem(a.paletteList, listRows, 0, false).
-		AddItem(spacerBottom, a.density.PaletteSpacerLines, 0, false).
-		AddItem(helpText, 1, 0, false)
-	a.paletteModalContent.Box = tview.NewBox().SetBackgroundColor(a.theme.ModalBackground())
-	// Set border and styling - must be set after creating the flex but before adding to parent
-	a.paletteModalContent.
-		SetBackgroundColor(a.theme.ModalBackground()).
-		SetBorder(true).
-		SetBorderColor(a.theme.Accent).
-		SetBorderPadding(0, 0, 0, 0). // No padding - content uses full width
-		SetTitle(" Commands ").
-		SetTitleColor(a.theme.Accent) // Use accent color for title to match border
-
-	// Rebuild the entire modal with updated height (including border)
-	centeredContent := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(nil, 0, 1, false).
-		AddItem(a.paletteModalContent, requiredHeight, 0, true).
-		AddItem(nil, 0, 1, false)
-
-	horizontalCentered := tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(centeredContent, 60, 0, true).
-		AddItem(nil, 0, 1, false)
-
-	// Use darker background to create dimming effect (darker than main background)
-	modalBg := a.theme.Background
-	a.paletteModal = tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(horizontalCentered, 0, 1, true).
-		AddItem(nil, 0, 1, false)
-	a.paletteModal.SetBackgroundColor(modalBg)
+	a.paletteModal = a.layoutPaletteModal(a.paletteListRows(len(filtered)))
 
 	// Replace the modal in pages
 	a.pages.RemovePage("palette")

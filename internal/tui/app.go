@@ -135,6 +135,7 @@ type App struct {
 	loadingMessage      string
 	paletteModal        *tview.Flex
 	paletteInput        *tview.InputField
+	paletteSearchFrame  *tview.Flex
 	paletteList         *tview.List
 	paletteModalContent *tview.Flex
 	paletteCtrl         *PaletteController

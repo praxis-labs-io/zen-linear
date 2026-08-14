@@ -229,8 +229,6 @@ func (a *App) openPalette() {
 	a.paletteCtrl.SetScope(a.paneScope())
 	a.paletteCtrl.Reset()
 	a.paletteInput.SetText("")
-	a.paletteInput.SetLabel("> ")
-	a.paletteInput.SetPlaceholder("Type to filter commands...")
 	a.updatePaletteList()
 	a.pages.ShowPage("palette")
 	a.pages.SendToFront("palette")
