@@ -1,0 +1,1 @@
+mutation($id:String!$input:CommentUpdateInput!){commentUpdate(id: $id, input: $input){success,comment{id,body,createdAt,updatedAt,parentId,url,user{id,name,displayName,email,isMe}}}}

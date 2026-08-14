@@ -78,11 +78,18 @@ func (a *App) renderDetailsPage() {
 			slots = append(slots, box)
 		}
 
-		span := commentSpan{id: block.id, focus: block.focus, start: start, end: len(lines) - 1}
+		// The compose card is on every page rather than summoned, so the ring
+		// stops on it the way it stops on a comment and the add_comment key is
+		// what opens it. A reply or edit box was asked for, so the ring arms it.
+		ring := block.focus
+		if block.id == blockIDCompose {
+			ring = commentsFocusCards
+		}
+		span := commentSpan{id: block.id, focus: ring, start: start, end: len(lines) - 1}
 		a.commentSpans = append(a.commentSpans, span)
 		// A box is two stops in the ring, the writing and the button, sharing
 		// the card they are drawn in.
-		if button, ok := postFocusFor(block.focus); ok {
+		if button, ok := postFocusFor(ring); ok {
 			span.focus = button
 			a.commentSpans = append(a.commentSpans, span)
 		}
@@ -100,33 +107,43 @@ func (a *App) blockCard(block commentBlock, width int) ([]string, []pageSlot) {
 	}
 	area, post := a.detailsComposeArea, a.detailsComposePost
 	heading := "write a comment"
-	if block.focus == commentsFocusReply {
+	switch block.focus {
+	case commentsFocusReply:
 		area, post = a.detailsReplyArea, a.detailsReplyPost
 		heading = "write a reply"
+	case commentsFocusEdit:
+		area, post = a.detailsEditArea, a.detailsEditPost
+		heading = "edit this comment"
+	case commentsFocusText:
+		// Shut, the card invites a comment it will not take a letter of, so it
+		// says the key that opens it instead.
+		area.SetPlaceholder(a.composePrompt())
 	}
 	return a.writingCard(width, heading, a.commentBorderTag(block.id), block.focus, area, post)
 }
 
 // writingCard frames a box the way a comment is framed, so what is being
 // written sits among what has been said rather than beside it. The interior
-// rows are left blank for the text area drawn over them.
+// rows are left blank for the text area drawn over them, as many as what is in
+// the box needs.
 func (a *App) writingCard(width int, heading, border string, focus commentsFocus, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
 	if width < commentCardMinWidth {
 		return a.writingPlain(width, heading, focus, area, post)
 	}
 	inner := width - commentCardChrome
+	rows := writingBoxRows(area, inner)
 	lines := []string{
 		cardEdge("╭", "╮", width, border),
 		cardRow(a.writingByline(heading), inner, border),
 		cardEdge("├", "┤", width, border),
 	}
-	for i := 0; i < composeRows; i++ {
+	for i := 0; i < rows; i++ {
 		lines = append(lines, cardRow("", inner, border))
 	}
 	// The hint rides beside the button rather than in the border below it: it
 	// names what sends the words, and it belongs on the row with the control
 	// that does the sending.
-	label := len([]rune(postLabel))
+	label := buttonWidth(post)
 	lines = append(lines,
 		cardRow(a.writingHints(focus, max(inner-label-1, 0)), inner, border),
 		cardEdge("╰", "╯", width, border))
@@ -134,8 +151,8 @@ func (a *App) writingCard(width int, heading, border string, focus commentsFocus
 	// The chrome is a border cell and a pad cell, so the writing starts two in.
 	const cardInset = commentCardChrome / 2
 	return lines, []pageSlot{
-		{primitive: area, row: 3, height: composeRows, column: cardInset, width: max(inner, 0)},
-		{primitive: post, row: 3 + composeRows, height: 1, column: cardInset + max(inner-label, 0), width: min(label, max(inner, 0))},
+		{primitive: area, row: 3, height: rows, column: cardInset, width: max(inner, 0)},
+		{primitive: post, row: 3 + rows, height: 1, column: cardInset + max(inner-label, 0), width: min(label, max(inner, 0))},
 	}
 }
 
@@ -144,36 +161,116 @@ func (a *App) writingCard(width int, heading, border string, focus commentsFocus
 // because two border cells and two pad cells out of a pane this size leave
 // nothing to write in.
 func (a *App) writingPlain(width int, heading string, focus commentsFocus, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
+	rows := writingBoxRows(area, width)
 	lines := []string{truncateTagged(a.writingByline(heading), width)}
-	for i := 0; i < composeRows; i++ {
+	for i := 0; i < rows; i++ {
 		lines = append(lines, "")
 	}
-	label := min(len([]rune(postLabel)), max(width, 0))
+	label := min(buttonWidth(post), max(width, 0))
 	lines = append(lines, truncateTagged(a.writingHints(focus, max(width-label-1, 0)), width))
 
 	return lines, []pageSlot{
-		{primitive: area, row: 1, height: composeRows, column: 0, width: max(width, 0)},
-		{primitive: post, row: 1 + composeRows, height: 1, column: max(width-label, 0), width: label},
+		{primitive: area, row: 1, height: rows, column: 0, width: max(width, 0)},
+		{primitive: post, row: 1 + rows, height: 1, column: max(width-label, 0), width: label},
 	}
+}
+
+// writingBoxRows is how many rows a box needs for what is in it, never fewer
+// than composeRows: an empty box is still something to write in.
+//
+// A box grows with its own text rather than scrolling inside a fixed frame, so
+// what has been written is on the page beside what it answers. That is what
+// keeps the edit box the size of the card it replaced: it opens holding the
+// comment, so it opens at the comment's height.
+//
+// The text is escaped before it is measured. A TextArea prints what it holds,
+// and WordWrap reads a color tag, so an unescaped "[docs](url)" measures four
+// cells short of what is drawn and the box comes up a row too small.
+func writingBoxRows(area *tview.TextArea, inner int) int {
+	if area == nil || inner <= 0 {
+		return composeRows
+	}
+	rows, tail := 0, ""
+	for _, line := range strings.Split(area.GetText(), "\n") {
+		wrapped := tview.WordWrap(tview.Escape(line), inner)
+		rows += max(1, len(wrapped))
+		if len(wrapped) > 0 {
+			tail = wrapped[len(wrapped)-1]
+		} else {
+			tail = ""
+		}
+	}
+	// A cursor at the end of a line that exactly fills the measure sits on the
+	// row after it, and a TextArea scrolls itself to keep it (findCursor). One
+	// row spare is what keeps the top of the box from going.
+	if tview.TaggedStringWidth(tail) >= inner {
+		rows++
+	}
+	return max(composeRows, rows)
+}
+
+// buttonWidth is how many cells the button's label draws in. It is read off the
+// button rather than a constant because the boxes do not all say Post, and a
+// width taken from the wrong word puts the slot out of true with the frame.
+func buttonWidth(post *tview.Button) int {
+	if post == nil {
+		return len([]rune(postLabel))
+	}
+	return len([]rune(post.GetLabel()))
 }
 
 // writingHints names what a box answers to, for as long as the keys are going
 // to it. A box nobody is writing in says nothing: the keys named there would be
 // the reader's, and they are not.
 func (a *App) writingHints(focus commentsFocus, width int) string {
-	button, _ := postFocusFor(focus)
-	if !a.detailsHaveFocus() || (a.commentsFocus != focus && a.commentsFocus != button) {
+	if !a.detailsHaveFocus() {
 		return ""
 	}
-	done := "esc done"
-	if focus == commentsFocusReply {
+	button, _ := postFocusFor(focus)
+	if a.commentsFocus != focus && a.commentsFocus != button {
+		return a.closedComposeHint(focus, width)
+	}
+	done, verb := "esc done", "post"
+	switch focus {
+	case commentsFocusReply:
 		done = "esc close"
+	case commentsFocusEdit:
+		// Not "close": nothing is kept, and the key that drops a rewrite should
+		// say so before it is pressed.
+		done, verb = "esc discard", "save"
 	}
-	post := "ctrl+enter post"
+	send := "ctrl+enter " + verb
 	if a.commentsFocus == button {
-		post = "enter post"
+		send = "enter " + verb
 	}
-	return a.themeTags.SecondaryText + cardHintLine(width, post, "tab post button", done) + "[-]"
+	return a.themeTags.SecondaryText + cardHintLine(width, send, "tab "+verb+" button", done) + "[-]"
+}
+
+// closedComposeHint names the key that opens the compose card, for the stop the
+// ring makes on it while it is shut. The other two boxes exist only while they
+// are open, so this is the one card the ring reaches with nothing to type into.
+func (a *App) closedComposeHint(focus commentsFocus, width int) string {
+	if focus != commentsFocusText || a.commentsFocus != commentsFocusCards || a.focusedCommentID != blockIDCompose {
+		return ""
+	}
+	key, ok := a.commandShortcutLabel("add_comment")
+	if !ok {
+		return ""
+	}
+	return a.themeTags.SecondaryText + cardHintLine(width, key+" write") + "[-]"
+}
+
+// composePrompt is what the empty compose box says: what to write once it is
+// open, and the key that opens it for as long as it is not.
+func (a *App) composePrompt() string {
+	if a.commentsFocus == commentsFocusText || a.commentsFocus == commentsFocusPost {
+		return composePlaceholder
+	}
+	key, ok := a.commandShortcutLabel("add_comment")
+	if !ok {
+		return composePlaceholder
+	}
+	return fmt.Sprintf("Press %s to leave a comment", key)
 }
 
 // cardHintLine joins hints for a card, dropping them from the right until what
@@ -266,19 +363,19 @@ func (a *App) commentCard(comment linearapi.Comment, width int) []string {
 			lines = append(lines, cardRow(row, inner, border))
 		}
 	}
-	return append(lines, a.cardFooter(comment.ID, width, border))
+	return append(lines, a.cardFooter(comment, width, border))
 }
 
 // cardFooter closes a card, carrying the keys it answers to when the ring is on
 // it. The hints ride in the border rather than above it: they are chrome, and a
 // row of them inside the card would be a line of the comment's own space spent
 // on the reader's keys.
-func (a *App) cardFooter(id string, width int, border string) string {
+func (a *App) cardFooter(comment linearapi.Comment, width int, border string) string {
 	hints := ""
-	if id != "" && id == a.focusedCommentID && a.cardsHaveFocus() {
+	if comment.ID != "" && comment.ID == a.focusedCommentID && a.cardsHaveFocus() {
 		// One cell in from each corner, and one more so the run to the right of
 		// the hints is a border rather than a gap.
-		hints = cardHintLine(width-4, a.commentActionHints()...)
+		hints = cardHintLine(width-4, a.commentActionHints(comment)...)
 	}
 	if hints == "" {
 		return cardEdge("╰", "╯", width, border)

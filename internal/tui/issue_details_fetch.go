@@ -115,6 +115,7 @@ func (a *App) loadIssueDetailsByID(issueID string) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.detailFetchCancel = cancel
+	requestedAt := time.Now()
 	go func() {
 		defer cancel()
 		logger.Debug("tui.issue_details_fetch: fetching full issue details issue_id=%s", issueID)
@@ -141,7 +142,7 @@ func (a *App) loadIssueDetailsByID(issueID string) {
 			// the selection. Assigning wholesale would take the card off screen
 			// again a moment after it landed.
 			if a.selectedIssue != nil {
-				fullIssue.Comments = mergeComments(fullIssue.Comments, a.selectedIssue.Comments)
+				fullIssue.Comments = mergeComments(fullIssue.Comments, a.selectedIssue.Comments, requestedAt)
 			}
 			a.selectedIssue = &fullIssue
 			a.issuesMu.Unlock()
@@ -150,11 +151,20 @@ func (a *App) loadIssueDetailsByID(issueID string) {
 	}()
 }
 
-// mergeComments folds any comment the fetch did not return back into its
-// result, in timestamp order. Held comments the server already knows about are
-// matched by id and the fetched copy wins, so an edit made elsewhere still
-// lands.
-func mergeComments(fetched, held []linearapi.Comment) []linearapi.Comment {
+// mergeComments folds back the comments the fetch could not have seen, in
+// timestamp order. since is when the request went out, so a held comment newer
+// than that is one written after the server answered the question.
+//
+// Anything older is the fetch's to answer for. A held comment absent from a
+// result that could have carried it is a comment somebody deleted, and folding
+// that one back is what used to leave it on screen until a restart. Held
+// comments the fetch did return are matched by id and the fetched copy wins, so
+// an edit made elsewhere still lands.
+//
+// since is this machine's clock and CreatedAt is Linear's. A skew wider than
+// the round trip holds a deleted comment for one refresh, or drops a
+// just-posted one for one refresh; the next fetch settles either.
+func mergeComments(fetched, held []linearapi.Comment, since time.Time) []linearapi.Comment {
 	if len(held) == 0 {
 		return fetched
 	}
@@ -163,9 +173,10 @@ func mergeComments(fetched, held []linearapi.Comment) []linearapi.Comment {
 		known[comment.ID] = struct{}{}
 	}
 	for _, comment := range held {
-		if _, ok := known[comment.ID]; !ok {
-			fetched = insertCommentInOrder(fetched, comment)
+		if _, ok := known[comment.ID]; ok || comment.CreatedAt.Before(since) {
+			continue
 		}
+		fetched = insertCommentInOrder(fetched, comment)
 	}
 	return fetched
 }

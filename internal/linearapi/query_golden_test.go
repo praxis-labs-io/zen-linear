@@ -85,6 +85,10 @@ func goldenQueryCases() []goldenCase {
 		{"create_comment", func(ctx context.Context, c *Client) {
 			_, _ = c.CreateComment(ctx, CreateCommentInput{IssueID: "issue-1", Body: "body"})
 		}},
+		{"update_comment", func(ctx context.Context, c *Client) {
+			_, _ = c.UpdateComment(ctx, UpdateCommentInput{ID: "comment-1", Body: "body", IssueID: "issue-1"})
+		}},
+		{"delete_comment", func(ctx context.Context, c *Client) { _ = c.DeleteComment(ctx, "comment-1") }},
 		{"list_favorites", func(ctx context.Context, c *Client) { _, _ = c.ListFavorites(ctx) }},
 		{"create_favorite", func(ctx context.Context, c *Client) {
 			_, _ = c.CreateFavorite(ctx, FavoriteTarget{ProjectID: "project-1"})

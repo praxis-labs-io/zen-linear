@@ -328,9 +328,10 @@ func TestComposeBoxAlignsWithTheCards(t *testing.T) {
 	}
 }
 
-// TestComposeBoxIsAFixedHeight covers the box not growing with what is typed,
-// which would push the card stack around mid-sentence.
-func TestComposeBoxIsAFixedHeight(t *testing.T) {
+// TestTheComposeBoxGrowsWithWhatIsTyped covers a box sized to its own text. In
+// a fixed frame the top of a long draft goes behind a scroll inside the card,
+// on a page that already scrolls.
+func TestTheComposeBoxGrowsWithWhatIsTyped(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	// The box is the last thing on the page, so the bottom-most frame is its.
 	frameRows := func() int {
@@ -350,22 +351,115 @@ func TestComposeBoxIsAFixedHeight(t *testing.T) {
 		return bottom - top + 1
 	}
 
-	// The writing, the button row under it, and the card's own frame and byline
+	// The button row under the writing, and the card's own frame and byline
 	// around both.
-	const composeCardRows = composeRows + 5
-	empty := frameRows()
-	if empty != composeCardRows {
-		t.Errorf("box draws %d rows, want %d", empty, composeCardRows)
+	const chrome = 5
+	if empty := frameRows(); empty != composeRows+chrome {
+		t.Errorf("an empty box draws %d rows, want %d", empty, composeRows+chrome)
 	}
 
+	const written = 11
 	typeRunes(t, app, "one")
+	for i := 0; i < written-1; i++ {
+		typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModNone))
+		typeRunes(t, app, "more")
+	}
+	if got := frameRows(); got != written+chrome {
+		t.Errorf("box draws %d rows for %d lines, want %d", got, written, written+chrome)
+	}
+
+	fillWritingBox(app.detailsComposeArea, "")
+	if got := frameRows(); got != composeRows+chrome {
+		t.Errorf("box draws %d rows once emptied, want back to %d", got, composeRows+chrome)
+	}
+}
+
+// The page scrolls to the box before the key that grows it lands, so the row
+// just gained is below the fold unless the growth scrolls again. Waiting for
+// the next key means Enter drops the line you are about to write off screen.
+func TestANewLineStaysOnThePage(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	const height = 16
+	showComments(t, app, 80, height)
+
+	bottom := func() (span commentSpan, fold int) {
+		t.Helper()
+		index := app.commentSpanIndex(blockIDCompose)
+		if index < 0 {
+			t.Fatal("the compose card is not on the page")
+		}
+		row, _ := app.detailsPageView.GetScrollOffset()
+		return app.commentSpans[index], row + viewHeight(app.detailsPageView)
+	}
+
+	for i := 0; i < 12; i++ {
+		typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModNone))
+		showComments(t, app, 80, height)
+		span, fold := bottom()
+		if span.end-span.start+1 > viewHeight(app.detailsPageView) {
+			// Past this the box is taller than the pane, where it scrolls
+			// inside its own frame rather than growing onto the page.
+			return
+		}
+		if span.end >= fold {
+			t.Fatalf("line %d put the box's last row at %d, below the fold at %d", i+1, span.end, fold)
+		}
+	}
+}
+
+// A growing box must not carry the scroll it took while it was short. The
+// TextArea moves its own offset to keep the cursor on a box that has not grown
+// yet, which leaves the first lines written behind the frame for good.
+func TestAGrownBoxShowsWhatWasWrittenFirst(t *testing.T) {
+	app, _ := newComposeTestApp(t)
+	typeRunes(t, app, "first")
 	for i := 0; i < 10; i++ {
 		typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModNone))
 		typeRunes(t, app, "more")
 	}
+	page := strings.Join(drawPrimitive(t, app.detailsView, 100), "\n")
 
-	if got := frameRows(); got != empty {
-		t.Errorf("box draws %d rows after typing and %d empty, want a fixed height", got, empty)
+	if row, _ := app.detailsComposeArea.GetOffset(); row != 0 {
+		t.Errorf("the box is scrolled %d rows down, want the top of what was written", row)
+	}
+	if !strings.Contains(page, "first") {
+		t.Error("the first line written is not on the page")
+	}
+}
+
+// The box is measured with the page's wrap and drawn by a TextArea, which
+// prints what it holds. A body carrying anything bracket-shaped measures short
+// on the wrap side and the box comes up too small for what is in it.
+func TestABracketedBodyIsMeasuredAsItIsDrawn(t *testing.T) {
+	area := tview.NewTextArea()
+	area.SetText("See the [docs](https://example.com/a/very/long/path/that/keeps/going) for the rest of it.", false)
+
+	const measure = 20
+	drawn := len(drawPrimitiveAt(t, area, measure, 40))
+	rows := writingBoxRows(area, measure)
+	// The primitive is drawn taller than it needs, so its blank tail is not a
+	// row of text. Count what it actually put on screen.
+	written := 0
+	for _, line := range drawPrimitiveAt(t, area, measure, drawn) {
+		if strings.TrimSpace(line) != "" {
+			written++
+		}
+	}
+	if rows < written {
+		t.Errorf("the box is sized to %d rows for text the TextArea draws in %d", rows, written)
+	}
+}
+
+// A cursor at the end of a line that exactly fills the measure sits on the row
+// after it, and a TextArea scrolls itself to keep it: the top of the box goes.
+func TestAFullLastLineLeavesTheCursorARow(t *testing.T) {
+	area := tview.NewTextArea()
+	const measure = 20
+	full := strings.Repeat("a", measure)
+	area.SetText(strings.Repeat(full+"\n", 4)+full, false)
+
+	if got := writingBoxRows(area, measure); got != 6 {
+		t.Errorf("five full lines measure %d rows, want 6: one spare for the cursor", got)
 	}
 }
 
@@ -469,9 +563,18 @@ func TestBracesWalkThePageAndStopAtTheEnd(t *testing.T) {
 			t.Fatalf("} through the cards focused %T, want the card stack", got)
 		}
 	}
+	// The compose card is the last stop and it is shut, so the keyboard stays
+	// on the stack until the key that opens it is pressed.
 	next()
-	if got := app.app.GetFocus(); got != app.detailsComposeArea {
-		t.Fatalf("} past the last card focused %T, want the compose area", got)
+	if got := app.focusedCommentID; got != blockIDCompose {
+		t.Fatalf("} past the last card picked %q, want the compose card", got)
+	}
+	if got := app.app.GetFocus(); got != app.detailsPageView {
+		t.Fatalf("} past the last card focused %T, want the card stack", got)
+	}
+	next()
+	if got := app.focusedCommentID; got != blockIDCompose {
+		t.Errorf("} off the end of the ring moved to %q, want it to stay put", got)
 	}
 	if app.focusedPane != FocusDetails {
 		t.Errorf("} left the details pane for %v", app.focusedPane)
@@ -697,13 +800,30 @@ func TestPostedCommentSurvivesAnInFlightRefetch(t *testing.T) {
 	app.createCommentFunc = func(_ context.Context, input linearapi.CreateCommentInput) (linearapi.Comment, error) {
 		return linearapi.Comment{ID: "comment-3", Body: input.Body, CreatedAt: time.Now()}, nil
 	}
-	app.fetchIssueByID = func(context.Context, string) (linearapi.Issue, error) { return stale, nil }
+	// The fetch goes out first and is held there, so the comment is posted
+	// while it is still waiting. The merge keeps a comment by its age against
+	// when the request went out, so a fetch started after the post would be
+	// entitled to drop it and this would test nothing.
+	started, release := make(chan struct{}, 1), make(chan struct{})
+	app.fetchIssueByID = func(context.Context, string) (linearapi.Issue, error) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+		return stale, nil
+	}
+	app.loadIssueDetailsByID(issue.ID)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the detail fetch never went out")
+	}
 
 	typeRunes(t, app, "must not vanish")
 	postAndWait(t, app, drawn)
 
-	// The fetch that was already out answers now, with pre-post comments.
-	app.loadIssueDetailsByID(issue.ID)
+	close(release)
 	waitForDraw(t, drawn)
 
 	if got := len(app.selectedIssue.Comments); got != 3 {

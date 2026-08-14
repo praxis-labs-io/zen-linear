@@ -276,6 +276,60 @@ func TestEnterLoadsDetailsWithoutWaiting(t *testing.T) {
 	}
 }
 
+// TestMergeCommentsHoldsOnlyWhatTheFetchCouldNotSee covers both halves of the
+// merge at once: a comment written while the request was out has to survive,
+// and a comment the request could have carried and did not is one somebody
+// deleted. Folding that second one back is what used to leave a deleted comment
+// on screen until a restart.
+func TestMergeCommentsHoldsOnlyWhatTheFetchCouldNotSee(t *testing.T) {
+	since := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
+	comment := func(id string, at time.Time) linearapi.Comment {
+		return linearapi.Comment{ID: id, Body: id, CreatedAt: at}
+	}
+	older := comment("older", since.Add(-time.Hour))
+	newer := comment("newer", since.Add(time.Second))
+
+	tests := []struct {
+		name    string
+		fetched []linearapi.Comment
+		held    []linearapi.Comment
+		want    []string
+	}{
+		{
+			name:    "a comment posted while the fetch was out survives",
+			fetched: []linearapi.Comment{older},
+			held:    []linearapi.Comment{older, newer},
+			want:    []string{"older", "newer"},
+		},
+		{
+			name:    "a comment the fetch dropped stays gone",
+			fetched: nil,
+			held:    []linearapi.Comment{older},
+			want:    nil,
+		},
+		{
+			name:    "the fetched copy wins over the held one",
+			fetched: []linearapi.Comment{{ID: "older", Body: "edited elsewhere", CreatedAt: older.CreatedAt}},
+			held:    []linearapi.Comment{older},
+			want:    []string{"edited elsewhere"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mergeComments(tt.fetched, tt.held, since)
+			if len(got) != len(tt.want) {
+				t.Fatalf("merged %d comments, want %d: %+v", len(got), len(tt.want), got)
+			}
+			for i, body := range tt.want {
+				if got[i].Body != body {
+					t.Errorf("comment %d body = %q, want %q", i, got[i].Body, body)
+				}
+			}
+		})
+	}
+}
+
 func waitForFetch(t *testing.T, started <-chan string, want string) {
 	t.Helper()
 	select {

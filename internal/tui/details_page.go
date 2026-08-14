@@ -87,6 +87,14 @@ func (p *detailsPage) Draw(screen tcell.Screen) {
 			continue
 		}
 		slot.primitive.SetRect(x+gutter+slot.column, y+start, slot.width, rows)
+		// A box drawn in full has no business scrolling: it grows with its text
+		// instead. It scrolls itself anyway, moving the offset to keep the
+		// cursor while it is still the height it was before it grew, and
+		// nothing puts that back. Type eleven lines and the first seven sit
+		// behind the frame.
+		if area, ok := slot.primitive.(*tview.TextArea); ok && rows == slot.height {
+			area.SetOffset(0, 0)
+		}
 		slot.primitive.Draw(screen)
 		shown = shown || slot.primitive.HasFocus()
 	}

@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // The page carries a focus ring: the braces step it card by card, through the
@@ -53,8 +56,13 @@ func (a *App) focusedComment() (linearapi.Comment, bool) {
 	if index < 0 || !a.commentSpanVisible(a.commentSpans[index]) {
 		return linearapi.Comment{}, false
 	}
+	return a.commentByID(a.focusedCommentID)
+}
+
+// commentByID finds a comment among the ones the page was rendered from.
+func (a *App) commentByID(id string) (linearapi.Comment, bool) {
 	for _, comment := range a.detailsCommentsSource {
-		if comment.ID == a.focusedCommentID {
+		if comment.ID == id {
 			return comment, true
 		}
 	}
@@ -261,10 +269,31 @@ func (a *App) handleCommentKey(event *tcell.EventKey) bool {
 		a.copyFocusedCommentLink()
 	case a.actionKey("comment_open", 'o'):
 		a.openFocusedComment()
+	case a.actionKey("comment_edit", 'e'):
+		a.editFocusedComment()
+	case a.actionKey("comment_delete", 'd'):
+		a.deleteFocusedComment()
 	default:
 		return false
 	}
 	return true
+}
+
+// editFocusedComment turns the focused card into a box holding what it says.
+//
+// Linear refuses to rewrite somebody else's comment, and the card offers no
+// hint for the key, so a press here is a reader trying it anyway rather than
+// one about to succeed.
+func (a *App) editFocusedComment() {
+	comment, ok := a.focusedComment()
+	if !ok {
+		return
+	}
+	if !comment.Author.IsMe {
+		a.flashStatus("You can only edit your own comments")
+		return
+	}
+	a.openEditBox(comment.ID, comment.Body)
 }
 
 // replyToFocusedComment opens a box at the end of the focused card's thread and
@@ -345,6 +374,144 @@ func (a *App) openFocusedComment() {
 	}
 	a.runIssueValueAction(comment.URL, "No link for this comment",
 		openFn, fmt.Sprintf("Opened comment by %s", commentAuthorLabel(comment)))
+}
+
+// deleteFocusedComment takes the focused card off the page, behind the same
+// confirmation every other destructive action goes through.
+//
+// Linear keeps the replies under a deleted comment, and the page draws a reply
+// whose parent it does not have as a root, so a thread outlives its root rather
+// than going with it.
+func (a *App) deleteFocusedComment() {
+	comment, ok := a.focusedComment()
+	if !ok {
+		return
+	}
+	if !comment.Author.IsMe {
+		a.flashStatus("You can only delete your own comments")
+		return
+	}
+	issueID := a.composeDraftIssueID
+	if issueID == "" {
+		a.flashStatus("No issue selected")
+		return
+	}
+	if _, sent := a.deletingComments[comment.ID]; sent {
+		a.flashStatus("Already deleting this comment")
+		return
+	}
+
+	del := a.deleteCommentFunc
+	a.confirmationModal.Show(
+		"Delete Comment",
+		fmt.Sprintf("Delete this comment?\n\n%s", tview.Escape(commentPreview(comment.Body))),
+		"Delete",
+		func() {
+			if a.deletingComments == nil {
+				a.deletingComments = make(map[string]struct{})
+			}
+			a.deletingComments[comment.ID] = struct{}{}
+			a.flashStatus("Deleting comment...")
+			go func() {
+				err := del(context.Background(), comment.ID)
+				a.QueueUpdateDraw(func() {
+					delete(a.deletingComments, comment.ID)
+					if err != nil {
+						logger.ErrorWithErr(err, "tui.comment_actions: delete comment failed comment=%s", comment.ID)
+						a.updateStatusBarWithError(err)
+						return
+					}
+					logger.Info("tui.comment_actions: comment deleted comment=%s", comment.ID)
+					// A box open on this thread is answering a card that is
+					// about to leave the page. Closed here rather than left to
+					// go missing: the render places it by its parent, and with
+					// the parent gone it would simply stop being drawn.
+					if a.replyParentID() == comment.ID {
+						a.closeReplyBox()
+					}
+					// The card stayed actionable while this was out, so a box
+					// can have been opened on it. Left open, the render would
+					// pull its slot away from a widget still holding the keys.
+					if a.editingCommentID() == comment.ID {
+						a.closeEditBox()
+					}
+					a.removeComment(issueID, comment.ID)
+					a.flashSuccess("Comment deleted")
+				})
+			}()
+		},
+	)
+}
+
+// commentPreviewWidth is how much of a body the prompt shows. Enough to tell
+// one comment from another, short enough that the modal stays a modal.
+const commentPreviewWidth = 60
+
+// commentPreview is the opening line of a body, cut to fit a prompt.
+func commentPreview(body string) string {
+	line := strings.TrimSpace(body)
+	if at := strings.IndexByte(line, '\n'); at >= 0 {
+		line = strings.TrimSpace(line[:at])
+	}
+	if runes := []rune(line); len(runes) > commentPreviewWidth {
+		return string(runes[:commentPreviewWidth-1]) + "…"
+	}
+	return line
+}
+
+// removeComment takes a deleted comment off the page and lands the ring on the
+// card before it, or on the first one left when it was the first.
+//
+// A fetch already out was answering about a page that still had this comment on
+// it, so it is invalidated here rather than left to put the card back. The
+// cancel comes after the issue check: a delete that lands once the user has
+// moved on has no business killing the fetch filling in the issue they moved to.
+func (a *App) removeComment(issueID, commentID string) {
+	a.issuesMu.Lock()
+	selected := a.selectedIssue
+	if selected == nil || selected.ID != issueID {
+		a.issuesMu.Unlock()
+		return
+	}
+	at := -1
+	for i, comment := range selected.Comments {
+		if comment.ID == commentID {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		a.issuesMu.Unlock()
+		return
+	}
+	selected.Comments = append(selected.Comments[:at], selected.Comments[at+1:]...)
+	comments := selected.Comments
+	neighbor := ""
+	switch {
+	case at > 0:
+		neighbor = comments[at-1].ID
+	case len(comments) > 0:
+		neighbor = comments[0].ID
+	}
+	a.issuesMu.Unlock()
+
+	// Read before the render, which is what takes the card off the page.
+	held := a.commentsFocus == commentsFocusCards && a.focusedCommentID == commentID
+	a.cancelDetailFetch()
+	a.detailsCommentsSource = comments
+	a.renderDetailsPage()
+	// The ring moves only when the card that left was the one holding it. A
+	// reader who stepped away, or started writing, keeps where they are.
+	if !held {
+		return
+	}
+	// Rendered before the ring is aimed: the spans still hold the card that
+	// just left, and a stop looked up in those would be the deleted one.
+	if neighbor == "" {
+		a.clearCommentFocus()
+		return
+	}
+	a.focusComment(neighbor)
 }
 
 // commentAuthorLabel names a comment for a status line, falling back to the
