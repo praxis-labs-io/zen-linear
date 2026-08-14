@@ -217,5 +217,27 @@ func (n issueDetailNode) toIssue() Issue {
 		return a.CreatedAt.Compare(b.CreatedAt)
 	})
 
+	issue.Activity = make([]IssueActivity, 0, len(n.History.Nodes)+1)
+	// Creating an issue writes no history entry; Linear records it on the issue.
+	// A zero time means the response never carried one, and an event without a
+	// time would head the feed reading as though it just happened.
+	if !issue.CreatedAt.IsZero() {
+		issue.Activity = append(issue.Activity, IssueActivity{
+			ID:        issue.ID,
+			Kind:      IssueActivityCreated,
+			CreatedAt: issue.CreatedAt,
+			Actor:     actorUser(n.Creator, n.BotActor),
+		})
+	}
+	for _, node := range n.History.Nodes {
+		issue.Activity = append(issue.Activity, node.toActivity()...)
+	}
+	// Oldest first, for the same reason the comments are: the query takes the
+	// fifty newest on purpose. The sort is stable, so the several events one
+	// entry produced keep the order they were emitted in.
+	slices.SortStableFunc(issue.Activity, func(a, b IssueActivity) int {
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+
 	return issue
 }

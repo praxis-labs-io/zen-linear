@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -75,23 +74,26 @@ func TestTabInAnotherPaneLeavesTheWritingBoxesAlone(t *testing.T) {
 	}
 }
 
-// TestTheCommentCountHeadsTheSection covers the number the tab strip used to
-// carry. It heads the comments the way Description: heads the description, and
-// it counts what was drawn rather than a total held somewhere else.
-func TestTheCommentCountHeadsTheSection(t *testing.T) {
+// TestTheActivityLabelHeadsTheSection covers the label the comment count used
+// to be. It heads the feed the way Description: heads the description, and it
+// carries no number: comments and events share the section, so a count could
+// not say which it meant.
+func TestTheActivityLabelHeadsTheSection(t *testing.T) {
 	app := newThreadedTestApp(t)
 
 	page := strings.Join(drawComments(t, app, 90), "\n")
-	want := fmt.Sprintf("Comments (%d)", len(app.detailsCommentsSource))
-	if !strings.Contains(page, want) {
-		t.Errorf("the page does not head the comments with %q:\n%s", want, page)
+	if !strings.Contains(page, "Activity") {
+		t.Errorf("the page does not head the feed with Activity:\n%s", page)
+	}
+	if strings.Contains(page, "Comments (") {
+		t.Errorf("the heading still carries a comment count:\n%s", page)
 	}
 
 	app.appendComment(app.selectedIssue.ID, linearapi.Comment{ID: "new", Body: "one more"})
 
 	page = strings.Join(drawComments(t, app, 90), "\n")
-	if got := fmt.Sprintf("Comments (%d)", len(app.detailsCommentsSource)); !strings.Contains(page, got) {
-		t.Errorf("the count did not follow the posted comment, want %q:\n%s", got, page)
+	if !strings.Contains(page, "one more") {
+		t.Errorf("a posted comment did not reach the feed:\n%s", page)
 	}
 }
 

@@ -190,6 +190,7 @@ func TestApplyIssueUpdate_ReflectsEditToAnIssueOutsideTheList(t *testing.T) {
 	app.selectedIssue = &linearapi.Issue{
 		ID: "search-1", Identifier: "LIN-9", Title: "Old title",
 		Comments: []linearapi.Comment{{ID: "comment-1", Body: "keep"}},
+		Activity: []linearapi.IssueActivity{{ID: "h1", Kind: linearapi.IssueActivityCreated, CreatedAt: time.Now()}},
 	}
 	app.issuesMu.Unlock()
 
@@ -203,6 +204,11 @@ func TestApplyIssueUpdate_ReflectsEditToAnIssueOutsideTheList(t *testing.T) {
 	}
 	if len(selected.Comments) != 1 {
 		t.Fatalf("comments = %#v, want kept", selected.Comments)
+	}
+	// The mutation response carries no history, so an edit that dropped this
+	// would empty the feed until a refetch landed.
+	if len(selected.Activity) != 1 {
+		t.Fatalf("activity = %#v, want kept", selected.Activity)
 	}
 	if app.searchIssues[0].Title != "New title" {
 		t.Fatalf("search model title = %q, want %q", app.searchIssues[0].Title, "New title")

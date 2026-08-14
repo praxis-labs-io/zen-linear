@@ -329,7 +329,7 @@ func TestDetailsSectionLabelsKeepTheirOwnLine(t *testing.T) {
 	app.updateDetailsView()
 
 	lines := drawComments(t, app, 60)
-	for _, label := range []string{"Description:", "Comments ("} {
+	for _, label := range []string{"Description:", "Activity"} {
 		for _, line := range lines {
 			if strings.Contains(line, "────") && strings.Contains(line, label) {
 				t.Errorf("the rule and %q share a line: %q", label, line)

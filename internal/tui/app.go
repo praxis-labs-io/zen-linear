@@ -79,6 +79,7 @@ type App struct {
 	detailsDescriptionMarkdown string
 	detailsFittedWidth         int
 	detailsCommentsSource      []linearapi.Comment
+	detailsActivitySource      []linearapi.IssueActivity
 	// focusedCommentID is the card the ring is on and commentSpans is where
 	// every card landed in the last render. The ring is held by id rather than
 	// by index so a refetch that reorders the stack keeps it on the same card.

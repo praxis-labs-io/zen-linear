@@ -327,6 +327,7 @@ func (a *App) updateDetailsView() {
 		a.detailsBodyLines = nil
 		a.detailsDescriptionMarkdown = ""
 		a.detailsCommentsSource = nil
+		a.detailsActivitySource = nil
 		a.renderDetailsPage()
 		if a.focusedPane == FocusDetails {
 			a.updateFocus()
@@ -477,6 +478,7 @@ func (a *App) updateDetailsView() {
 	// is laid out at can change without the issue changing.
 	a.detailsDescriptionMarkdown = issue.Description
 	a.detailsCommentsSource = issue.Comments
+	a.detailsActivitySource = issue.Activity
 	a.dropEditForMissingComment()
 	a.renderDetailsBody(a.detailsMeasureWidth())
 	a.renderDetailsPage()
