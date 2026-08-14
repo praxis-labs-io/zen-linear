@@ -18,11 +18,17 @@ const (
 const (
 	navWeight            = 5 // nav and issues, with details toggled off
 	navWeightWithDetails = 6 // all three panes
-	navWeightMedium      = 3 // the two-pane responsive layout
 	navWeightZoomed      = 3 // the zoomed details view, with the nav kept as a spine
 	issuesWeight         = 15
 	detailsWeight        = 10
 )
+
+// navWidthMedium fixes the nav pane's width in the two-pane layout rather than
+// giving it a share. A share of a terminal that narrow ran from 18 columns down
+// to 11 across the range, and 11 is a tree of ellipses. It is a column of names,
+// so it needs a width, not a fraction. Matches the 21 a share gives it at the
+// wide breakpoint, so crossing that line does not jump.
+const navWidthMedium = 22
 
 // layoutModeForWidth picks the layout mode for a terminal width in cells.
 func layoutModeForWidth(width int) layoutMode {
@@ -49,6 +55,7 @@ func (a *App) rebuildContentLayout() {
 	showDetails := !a.detailsHidden
 	showIssues := true
 	nav := navWeight
+	navFixed := 0
 	if a.detailsZoomed && showDetails {
 		// The zoom drops the issues list. The nav tree is the spine you keep
 		// your place on, so it survives on a wide terminal; below that
@@ -72,7 +79,7 @@ func (a *App) rebuildContentLayout() {
 		} else {
 			showDetails = false
 		}
-		nav = navWeightMedium
+		navFixed = navWidthMedium
 	case layoutNarrow:
 		showNav = showNav && a.focusedPane == FocusNavigation
 		showDetails = showDetails && a.focusedPane == FocusDetails
@@ -81,7 +88,8 @@ func (a *App) rebuildContentLayout() {
 
 	a.contentFlex.Clear()
 	if showNav {
-		a.contentFlex.AddItem(a.navigationPanel, 0, nav, a.focusedPane == FocusNavigation)
+		// A fixed size wins over the weight; only the medium layout sets one.
+		a.contentFlex.AddItem(a.navigationPanel, navFixed, nav, a.focusedPane == FocusNavigation)
 	}
 	if showIssues {
 		a.contentFlex.AddItem(a.issuesColumn, 0, issuesWeight, a.focusedPane == FocusIssues)
