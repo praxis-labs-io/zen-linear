@@ -207,7 +207,11 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 				a.finishIssuesLoad(generation, err)
 				logger.ErrorWithErr(err, "tui.app: failed to fetch issues")
 				a.updateStatusBarWithError(err)
-				a.updateIssuesColumnLayout()
+				// The same Flex write as the first page's closure, and stale for
+				// the same reason. The rest still runs, or the queue never drains.
+				if generation == a.refreshGeneration.Load() {
+					a.updateIssuesColumnLayout()
+				}
 				a.notifyRefreshCompleted()
 				a.runQueuedIssuesRefresh()
 			})
@@ -227,6 +231,11 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		merge := &pageMerge{seen: make(map[string]bool, len(page.Issues))}
 		lastPaint := time.Now()
 		a.QueueUpdateDraw(func() {
+			// This closure rebuilds the tables, so a superseded refresh reaching
+			// it writes the issues Flex out from under whoever owns it now.
+			if generation != a.refreshGeneration.Load() {
+				return
+			}
 			logger.Debug("tui.app: fetched issues page=%d count=%d", pageCount, len(page.Issues))
 			// Install (or clear) the active view's display settings with
 			// the list they belong to.
