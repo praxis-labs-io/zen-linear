@@ -53,6 +53,7 @@ type App struct {
 	zoomPreviousPane      FocusTarget
 	zoomPreviousHidden    bool
 	layoutMode            layoutMode
+	layoutFocusStale      bool // a breakpoint moved the panes; the keyboard has yet to follow
 	palettePreviousPane   FocusTarget
 	navigationPanel       *tview.Flex // Navigation pane shell: query box + tree
 	navSearchFrame        *tview.Flex // Bordered frame around the query box

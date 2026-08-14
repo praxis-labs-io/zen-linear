@@ -12,7 +12,10 @@ func (a *App) issuesPaneHasFocus() bool {
 	}
 	for _, candidate := range []tview.Primitive{
 		a.listIssuesTable,
+		// The placeholder is a Flex, so a click lands on its text rather than on
+		// it, and a refresh that read only the Flex dropped the keyboard.
 		a.issuesPlaceholder,
+		a.issuesPlaceholderText,
 		a.searchResultsTable,
 	} {
 		if focus == candidate {
@@ -94,8 +97,10 @@ func (a *App) stepPane(direction int) {
 	a.updateFocus()
 }
 
-// updateFocus updates the focus state of all panes.
-func (a *App) updateFocus() {
+// resolveFocusedPane moves focusedPane off a pane the layout is not showing.
+// It reads and writes App fields only, taking no tview lock, which is what lets
+// the before-draw hook call it where updateFocus would deadlock.
+func (a *App) resolveFocusedPane() {
 	// Hidden panes cannot take focus; fall back to the issues column.
 	if (a.focusedPane == FocusNavigation && a.navigationHidden) ||
 		(a.focusedPane == FocusDetails && a.detailsHidden) {
@@ -109,6 +114,38 @@ func (a *App) updateFocus() {
 			(a.focusedPane == FocusNavigation && a.layoutMode != layoutWide)) {
 		a.focusedPane = FocusDetails
 	}
+}
+
+// applyPaneBorders colors every pane's border and retitles them for whichever
+// pane focusedPane names. It sets primitive state and never moves focus, so the
+// before-draw hook can reach it.
+func (a *App) applyPaneBorders() {
+	a.navigationPanel.SetBorderColor(a.theme.Border)
+	a.listIssuesTable.SetBorderColor(a.theme.Border)
+	a.searchResultsTable.SetBorderColor(a.theme.Border)
+	a.setIssuesPlaceholderBorder(a.theme.Border)
+	a.detailsView.SetBorderColor(a.theme.Border)
+	switch a.focusedPane {
+	case FocusNavigation:
+		a.navigationPanel.SetBorderColor(a.theme.BorderFocus)
+	case FocusIssues:
+		// Whatever the column mounts is what takes the focus border. Lighting
+		// the detached table leaves the pane looking unfocused.
+		if a.issuesPaneIsEmpty() && a.issuesPlaceholder != nil {
+			a.setIssuesPlaceholderBorder(a.theme.BorderFocus)
+		} else if table := a.tableForSection(a.activeIssuesSection); table != nil {
+			table.SetBorderColor(a.theme.BorderFocus)
+		}
+	case FocusDetails:
+		a.detailsView.SetBorderColor(a.theme.BorderFocus)
+	case FocusPalette:
+	}
+	a.updateAllPaneTitles()
+}
+
+// updateFocus updates the focus state of all panes.
+func (a *App) updateFocus() {
+	a.resolveFocusedPane()
 	// In responsive modes the focused pane decides what is visible.
 	if a.layoutMode != layoutWide {
 		a.rebuildContentLayout()
@@ -122,32 +159,13 @@ func (a *App) updateFocus() {
 		} else {
 			a.app.SetFocus(a.navigationTree)
 		}
-		a.navigationPanel.SetBorderColor(a.theme.BorderFocus)
-		a.listIssuesTable.SetBorderColor(a.theme.Border)
-		a.searchResultsTable.SetBorderColor(a.theme.Border)
-		a.setIssuesPlaceholderBorder(a.theme.Border)
-		a.detailsView.SetBorderColor(a.theme.Border)
-		// Update all pane titles
-		a.updateAllPaneTitles()
 	case FocusIssues:
-		// Focus the visible issues section
-		a.listIssuesTable.SetBorderColor(a.theme.Border)
-		a.searchResultsTable.SetBorderColor(a.theme.Border)
-		a.setIssuesPlaceholderBorder(a.theme.Border)
 		if a.issuesPaneIsEmpty() && a.issuesPlaceholder != nil {
-			// The placeholder is what is mounted, so it is what takes the focus
-			// border. Highlighting the detached table leaves the pane looking
-			// unfocused and sends keys to something off screen.
+			// Focus the mounted primitive, or the keys go to something off screen.
 			a.app.SetFocus(a.issuesPlaceholder)
-			a.issuesPlaceholder.SetBorderColor(a.theme.BorderFocus)
 		} else if table := a.tableForSection(a.activeIssuesSection); table != nil {
 			a.app.SetFocus(table)
-			table.SetBorderColor(a.theme.BorderFocus)
 		}
-		// Update all pane titles
-		a.updateAllPaneTitles()
-		a.navigationPanel.SetBorderColor(a.theme.Border)
-		a.detailsView.SetBorderColor(a.theme.Border)
 	case FocusDetails:
 		// The page has two kinds of stop: a card reads, and a box writes with a
 		// button that sends.
@@ -160,25 +178,14 @@ func (a *App) updateFocus() {
 		} else {
 			a.app.SetFocus(a.detailsPage)
 		}
-		a.detailsView.SetBorderColor(a.theme.BorderFocus)
-		a.navigationPanel.SetBorderColor(a.theme.Border)
-		a.listIssuesTable.SetBorderColor(a.theme.Border)
-		a.searchResultsTable.SetBorderColor(a.theme.Border)
-		a.setIssuesPlaceholderBorder(a.theme.Border)
-		// Update all pane titles
-		a.updateAllPaneTitles()
 	case FocusPalette:
 		a.app.SetFocus(a.paletteInput)
-		a.navigationPanel.SetBorderColor(a.theme.Border)
-		a.listIssuesTable.SetBorderColor(a.theme.Border)
-		a.searchResultsTable.SetBorderColor(a.theme.Border)
-		a.setIssuesPlaceholderBorder(a.theme.Border)
-		a.detailsView.SetBorderColor(a.theme.Border)
-		// Update all pane titles
-		a.updateAllPaneTitles()
 	}
+	// After the focus moves, not before: SetFocus runs the focus callbacks, and
+	// those repaint cues of their own.
+	a.applyPaneBorders()
 	// The nav pane's two controls share one border, so which of them is live
-	// has to be said in the query box's own colors, from every branch above.
+	// has to be said in the query box's own colors.
 	a.applyNavSearchStyles()
 	// The comment ring's border is in the card text, not on a primitive, so it
 	// takes a rewrite rather than a color set.
