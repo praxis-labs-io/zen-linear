@@ -33,14 +33,15 @@ func (a *App) selectIssueNow(issue linearapi.Issue) {
 
 // setSelectedIssue takes the list model's copy of an issue, carrying over the
 // connections only the detail fetch selects. Assigning the list copy straight
-// over a hydrated selection empties comments, relations, subscribers, and
-// attachments out of the pane until the refetch lands, which reads as a flicker
-// every time a tab switch reselects the issue already on screen.
+// over a hydrated selection empties comments, activity, relations, subscribers,
+// and attachments out of the pane until the refetch lands, which reads as a
+// flicker every time a tab switch reselects the issue already on screen.
 func (a *App) setSelectedIssue(issue linearapi.Issue) {
 	a.issuesMu.Lock()
 	defer a.issuesMu.Unlock()
 	if a.selectedIssue != nil && a.selectedIssue.ID == issue.ID {
 		issue.Comments = a.selectedIssue.Comments
+		issue.Activity = a.selectedIssue.Activity
 		issue.Relations = a.selectedIssue.Relations
 		issue.Subscribers = a.selectedIssue.Subscribers
 		issue.Attachments = a.selectedIssue.Attachments

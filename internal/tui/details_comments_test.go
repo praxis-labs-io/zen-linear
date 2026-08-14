@@ -273,8 +273,8 @@ func TestUnwrappedMarkdownIsUntouchedByHardBreaks(t *testing.T) {
 }
 
 // TestCommentsEmptyState covers the issue nobody has written on. It is the one
-// most likely to be written on, so the count says none and the box is right
-// there under it, rather than an empty state taking the page.
+// most likely to be written on, so the section heads itself and the box is
+// right there under it, rather than an empty state taking the page.
 func TestCommentsEmptyState(t *testing.T) {
 	app := newDetailsTestApp(t)
 
@@ -282,7 +282,7 @@ func TestCommentsEmptyState(t *testing.T) {
 		lines := drawComments(t, app, width)
 		// Normalized because a narrow pane wraps the message across rows.
 		drawn := strings.Join(strings.Fields(strings.Join(lines, " ")), " ")
-		if !strings.Contains(drawn, "Comments (0)") {
+		if !strings.Contains(drawn, "Activity") {
 			t.Errorf("width %d drew no empty state:\n%s", width, strings.Join(lines, "\n"))
 		}
 		if !strings.Contains(drawn, "write a comment") {

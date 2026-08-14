@@ -209,15 +209,33 @@ func TestEveryPageLineFitsThePane(t *testing.T) {
 	for _, fixture := range []struct {
 		name     string
 		comments []linearapi.Comment
+		activity []linearapi.IssueActivity
 	}{
 		{name: "a thread", comments: threadedComments()},
 		{name: "nothing written yet"},
 		{name: "a line nothing can break", comments: []linearapi.Comment{unbreakable}},
+		{
+			name:     "a feed with activity",
+			comments: threadedComments(),
+			activity: []linearapi.IssueActivity{
+				{
+					Kind: linearapi.IssueActivityStateChanged, CreatedAt: now.Add(-time.Hour),
+					Actor:     linearapi.User{ID: "u1", DisplayName: "a-display-name-nobody-would-choose"},
+					FromState: &linearapi.WorkflowState{Name: "In Review, Pending Second Approval"},
+					ToState:   &linearapi.WorkflowState{Name: "Blocked On Somebody Else Entirely"},
+				},
+				{
+					Kind: linearapi.IssueActivityRelationAdded, CreatedAt: now.Add(-30 * time.Minute),
+					Relation: "blocked by", RelatedIssue: "ZNL-108",
+				},
+			},
+		},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			app := newDetailsTestApp(t)
 			issue := detailsFixture()
 			issue.Comments = fixture.comments
+			issue.Activity = fixture.activity
 			app.selectedIssue = issue
 			app.updateDetailsView()
 

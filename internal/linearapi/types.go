@@ -381,6 +381,77 @@ type Comment struct {
 	URL string
 }
 
+// IssueActivityKind names the change an activity event records. The details
+// pane switches on it for the icon and the phrase.
+type IssueActivityKind string
+
+const (
+	IssueActivityCreated            IssueActivityKind = "created"
+	IssueActivityStateChanged       IssueActivityKind = "stateChanged"
+	IssueActivityAssigned           IssueActivityKind = "assigned"
+	IssueActivitySelfAssigned       IssueActivityKind = "selfAssigned"
+	IssueActivityUnassigned         IssueActivityKind = "unassigned"
+	IssueActivityCycleAdded         IssueActivityKind = "cycleAdded"
+	IssueActivityCycleRemoved       IssueActivityKind = "cycleRemoved"
+	IssueActivityProjectSet         IssueActivityKind = "projectSet"
+	IssueActivityProjectRemoved     IssueActivityKind = "projectRemoved"
+	IssueActivityMilestoneSet       IssueActivityKind = "milestoneSet"
+	IssueActivityMilestoneRemoved   IssueActivityKind = "milestoneRemoved"
+	IssueActivityParentSet          IssueActivityKind = "parentSet"
+	IssueActivityParentRemoved      IssueActivityKind = "parentRemoved"
+	IssueActivityLabelsAdded        IssueActivityKind = "labelsAdded"
+	IssueActivityLabelsRemoved      IssueActivityKind = "labelsRemoved"
+	IssueActivityRelationAdded      IssueActivityKind = "relationAdded"
+	IssueActivityRelationRemoved    IssueActivityKind = "relationRemoved"
+	IssueActivityPriorityChanged    IssueActivityKind = "priorityChanged"
+	IssueActivityTitleChanged       IssueActivityKind = "titleChanged"
+	IssueActivityDescriptionUpdated IssueActivityKind = "descriptionUpdated"
+)
+
+// IssueActivity is one entry in an issue's activity feed: who changed what, and
+// when. The fields below are populated according to Kind, the way a Favorite's
+// are by Type; everything else stays zero.
+//
+// The entities named here are partial on purpose. The feed names a state, a
+// cycle, a project; it does not open one, so Position, TeamID and the cycle's
+// scheduling flags stay zero.
+type IssueActivity struct {
+	// ID is the history entry this came from, or the issue id on the derived
+	// creation event. One entry can record several changes, so this is not
+	// unique across the slice and nothing may key a map on it alone.
+	ID   string
+	Kind IssueActivityKind
+	// CreatedAt is the merge key the feed sorts on. Never zero: an event with
+	// no time would sort above the issue's own creation.
+	CreatedAt time.Time
+	// Actor is who made the change, zero when Linear records none.
+	Actor User
+	// IsBot marks an integration acting in place of a person, in which case
+	// Actor carries the bot's name.
+	IsBot bool
+
+	FromState *WorkflowState
+	ToState   *WorkflowState
+	// Assignee is who the issue went to on assigned and selfAssigned, and who
+	// it came off on unassigned.
+	Assignee  *User
+	Cycle     *CycleRef
+	Project   *Project
+	Milestone *ProjectMilestoneRef
+	Parent    *IssueRef
+	Labels    []IssueLabel
+	// RelatedIssue is the identifier a relation change named. It is a bare
+	// identifier, not an id, so nothing in the feed can navigate to it, and it
+	// may name an issue the reader cannot open.
+	RelatedIssue string
+	// Relation reads from the fetched issue's perspective, matching
+	// IssueRelation.DisplayType: related, blocking, blocked by, duplicate,
+	// duplicate of.
+	Relation     string
+	FromPriority int
+	ToPriority   int
+}
+
 // IssueRelation represents a Linear issue relation.
 type IssueRelation struct {
 	ID           string
@@ -453,6 +524,7 @@ type Issue struct {
 	Parent           *IssueRef       // Parent issue reference (nil if top-level)
 	Children         []IssueChildRef // Child/sub-issue references
 	Comments         []Comment       // Comments on this issue
+	Activity         []IssueActivity // Oldest first; nil outside the detail fetch
 	Relations        []IssueRelation
 	Subscribers      []User
 	Attachments      []Attachment

@@ -26,6 +26,9 @@ type commentBlock struct {
 	// id names the block to the ring and to the border colors: a comment's own
 	// id, and a stable name for each box.
 	id string
+	// event is set on an activity line and nil on every other block. One row,
+	// no widget, no stop in the ring.
+	event *linearapi.IssueActivity
 }
 
 // blockIDReply and blockIDCompose name the boxes wherever a comment id is what
@@ -35,10 +38,10 @@ const (
 	blockIDCompose = "\x00compose"
 )
 
-// commentBlocks lays out the page: every comment in thread order, the reply box
-// at the end of the thread it answers, and the compose card last of all. The
-// comment being edited is a box in the place its card had, so a rewrite happens
-// where the words already are.
+// commentBlocks lays out the page: the activity and the comments in one stream
+// ordered by time, the reply box at the end of the thread it answers, and the
+// compose card last of all. The comment being edited is a box in the place its
+// card had, so a rewrite happens where the words already are.
 func (a *App) commentBlocks() []commentBlock {
 	rows := buildCommentRows(a.detailsCommentsSource)
 	reply := a.replyParentID()
@@ -58,7 +61,48 @@ func (a *App) commentBlocks() []commentBlock {
 			blocks = append(blocks, commentBlock{depth: 1, focus: commentsFocusReply, id: blockIDReply})
 		}
 	}
+	blocks = mergeActivityBlocks(blocks, a.detailsActivitySource)
 	return append(blocks, commentBlock{focus: commentsFocusText, id: blockIDCompose})
+}
+
+// mergeActivityBlocks folds the activity into the comment blocks by time. Both
+// arrive oldest first, so this is one walk.
+//
+// A thread is placed as a whole, by its root: events drain only where a root
+// starts, so an event stamped between a root and its reply lands after the last
+// reply rather than inside the thread. Splitting a thread would break the rail's
+// corner and leave it trailing into a line that is not a card.
+func mergeActivityBlocks(blocks []commentBlock, events []linearapi.IssueActivity) []commentBlock {
+	if len(events) == 0 {
+		return blocks
+	}
+
+	merged := make([]commentBlock, 0, len(blocks)+len(events))
+	next := 0
+	for _, block := range blocks {
+		if block.depth == 0 {
+			for next < len(events) && !events[next].CreatedAt.After(block.comment.CreatedAt) {
+				merged = append(merged, activityBlock(events[next]))
+				next++
+			}
+		}
+		merged = append(merged, block)
+	}
+	for ; next < len(events); next++ {
+		merged = append(merged, activityBlock(events[next]))
+	}
+	return merged
+}
+
+// activityBlock wraps an event as a page block. Always depth 0: the gap line
+// and the thread's closing corner both read depth, and an event at depth 1
+// would take a rail it has no thread to hang from.
+//
+// It carries no id. Nothing addresses an event, and one history entry can
+// produce several events, so an id here would be a name that is neither unique
+// nor used.
+func activityBlock(event linearapi.IssueActivity) commentBlock {
+	return commentBlock{event: &event, focus: commentsFocusCards}
 }
 
 // buildCommentRows orders comments into threads: every root in the order it

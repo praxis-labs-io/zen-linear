@@ -51,14 +51,16 @@ func (a *App) renderDetailsPage() {
 	blocks := a.commentBlocks()
 	var slots []pageSlot
 	lines := append(a.detailsHeaderBlock(width), a.detailsSeam(width)...)
-	// The count heads the section the way Description: heads the one above it.
-	// It is the whole of the empty state too: an issue nobody has written on
-	// says so in the number, and the compose card under it says what to do.
+	// The label heads the section the way Description: heads the one above it.
+	// It carries no count: the feed holds the issue's own creation, so there is
+	// no empty state for a number to report, and a count over comments and
+	// events together could not say which it meant.
 	lines = append(lines,
-		truncateTagged(fmt.Sprintf("%sComments (%d)[-]", a.themeTags.SecondaryText, len(a.detailsCommentsSource)), width),
+		truncateTagged(a.themeTags.SecondaryText+"Activity[-]", width),
 		"")
 	for i, block := range blocks {
-		if i > 0 {
+		// A run of events reads as a group without the blank rows between them.
+		if i > 0 && (blocks[i-1].event == nil || block.event == nil) {
 			// The rail runs through the gap above a reply, which is what joins
 			// it to the card it answers rather than leaving it floating.
 			lines = append(lines, a.threadGapLine(blocks, i))
@@ -76,6 +78,13 @@ func (a *App) renderDetailsPage() {
 			box.row += start
 			box.column += inset
 			slots = append(slots, box)
+		}
+
+		// An activity line is not a stop. Recording no span is the whole of
+		// that: the ring walks spans, and the keys a card answers to are looked
+		// up from the span the ring is on.
+		if block.event != nil {
+			continue
 		}
 
 		// The compose card is on every page rather than summoned, so the ring
@@ -102,6 +111,9 @@ func (a *App) renderDetailsPage() {
 // the holes it left: a comment's card has none, a box's card has its writing
 // area and its button.
 func (a *App) blockCard(block commentBlock, width int) ([]string, []pageSlot) {
+	if block.event != nil {
+		return []string{a.activityLine(*block.event, width)}, nil
+	}
 	if block.focus == commentsFocusCards {
 		return a.commentCard(block.comment, width), nil
 	}
