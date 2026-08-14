@@ -3,7 +3,6 @@ package tui
 import (
 	"slices"
 	"sort"
-	"strings"
 )
 
 // PaletteRow is one line of the palette: a group heading, or a command. The
@@ -140,7 +139,7 @@ func (p *PaletteController) Reset() {
 // filterCommands rebuilds the rows for the current query and scope, and puts
 // the cursor on the first command of the new list.
 func (p *PaletteController) filterCommands() {
-	matched := p.inScope(p.matching())
+	matched := rankCommands(p.inScope(p.commands), p.query)
 	if p.query == "" {
 		p.rows = groupedPaletteRows(matched)
 	} else {
@@ -160,32 +159,7 @@ func (p *PaletteController) filterCommands() {
 	}
 }
 
-// matching returns the commands the query selects, in registry order. Every
-// whitespace-separated token has to appear somewhere in the title or keywords.
-func (p *PaletteController) matching() []Command {
-	if p.query == "" {
-		return p.commands
-	}
-
-	tokens := strings.Fields(strings.ToLower(p.query))
-	matched := make([]Command, 0)
-	for _, cmd := range p.commands {
-		searchable := strings.ToLower(cmd.Title + " " + strings.Join(cmd.Keywords, " "))
-		hit := true
-		for _, token := range tokens {
-			if !strings.Contains(searchable, token) {
-				hit = false
-				break
-			}
-		}
-		if hit {
-			matched = append(matched, cmd)
-		}
-	}
-	return matched
-}
-
-// flatPaletteRows lists commands in registry order under no heading.
+// flatPaletteRows lists commands in the order given, under no heading.
 func flatPaletteRows(commands []Command) []PaletteRow {
 	rows := make([]PaletteRow, 0, len(commands))
 	for _, cmd := range commands {
