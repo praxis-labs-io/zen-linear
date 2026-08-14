@@ -5,14 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 // paletteRowsFor renders the given commands through the palette and returns
 // the rows the list drew, so the assertions read what a user sees.
-func paletteRowsFor(t *testing.T, commands []Command) []string {
+func paletteRowsFor(t *testing.T, commands []Command) (*App, []string) {
 	t.Helper()
-	app := newUXTestApp(t)
+	app := openPaletteOn(t, 100, 30)
 	app.paletteCtrl = NewPaletteController(commands)
 	app.updatePaletteList()
 
@@ -20,11 +21,11 @@ func paletteRowsFor(t *testing.T, commands []Command) []string {
 	for i := range rows {
 		rows[i], _ = app.paletteList.GetItemText(i)
 	}
-	return rows
+	return app, rows
 }
 
 func TestPaletteRowsSpreadTitleAndShortcut(t *testing.T) {
-	rows := paletteRowsFor(t, []Command{
+	app, rows := paletteRowsFor(t, []Command{
 		{ID: "refresh", Title: "Refresh issues", ShortcutRune: 'r'},
 		{ID: "search", Title: "Search issues", ShortcutDisplay: "/"},
 		{ID: "sort", Title: "Sort issues by…"},
@@ -55,20 +56,20 @@ func TestPaletteRowsSpreadTitleAndShortcut(t *testing.T) {
 		if !strings.HasSuffix(tt.row, tt.key+"[-]") {
 			t.Errorf("row %q does not end in its shortcut %q", tt.row, tt.key)
 		}
-		if got := tview.TaggedStringWidth(tt.row); got != paletteRowWidth {
-			t.Errorf("row %q is %d columns, want the full %d", tt.row, got, paletteRowWidth)
+		if got := tview.TaggedStringWidth(tt.row); got != app.paletteRowWidth() {
+			t.Errorf("row %q is %d columns, want the full %d", tt.row, got, app.paletteRowWidth())
 		}
 	}
 }
 
 func TestPaletteRowTruncatesATitleThatWouldReachTheShortcut(t *testing.T) {
-	rows := paletteRowsFor(t, []Command{
+	app, rows := paletteRowsFor(t, []Command{
 		{ID: "long", Title: strings.Repeat("wide ", 20), ShortcutRune: 'x'},
 	})
 
 	row := rows[0]
-	if got := tview.TaggedStringWidth(row); got != paletteRowWidth {
-		t.Fatalf("row is %d columns, want %d", got, paletteRowWidth)
+	if got := tview.TaggedStringWidth(row); got != app.paletteRowWidth() {
+		t.Fatalf("row is %d columns, want %d", got, app.paletteRowWidth())
 	}
 	if !strings.Contains(row, "…") {
 		t.Errorf("row %q was not truncated", row)
@@ -152,5 +153,112 @@ func TestPaletteCursorStepsOverHeadings(t *testing.T) {
 	pc.MoveCursorUp()
 	if got := pc.Cursor(); got != 1 {
 		t.Errorf("stepping past the top moved to %d, want to hold at 1", got)
+	}
+}
+
+// openPaletteOn draws the palette on a screen of the given size and hands back
+// the app, so a test reads the panel where it actually landed.
+func openPaletteOn(t *testing.T, width, height int) *App {
+	t.Helper()
+	app := newUXTestApp(t)
+	screen := tcell.NewSimulationScreen("UTF-8")
+	app.app.SetScreen(screen)
+	screen.SetSize(width, height)
+	app.app.SetRoot(app.pages, true)
+	// The panel sizes itself against the screen, and the screen is only known
+	// once something has been drawn on it.
+	app.app.ForceDraw()
+	app.focusedPane = FocusIssues
+	app.openPalette()
+	app.app.ForceDraw()
+	return app
+}
+
+// panelRect is where the palette's bordered panel was drawn, worked back from
+// the list inside it: the panel is the list plus a gutter and a border each
+// side, and opens a border and a query box above it.
+func panelRect(t *testing.T, app *App) (x, y, width int) {
+	t.Helper()
+	listX, listY, listWidth, _ := app.paletteList.GetRect()
+	if listWidth == 0 {
+		t.Fatal("the palette was never drawn")
+	}
+	return listX - paletteGutter - 1, listY - paletteQueryBoxRows - 1, listWidth + 2*(paletteGutter+1)
+}
+
+// TestPaletteFitsASmallScreen pins the panel inside the terminal. Laid out at
+// its natural size it was drawn from a negative origin, which took the query
+// box off the top on a short screen and the first columns of every row off the
+// left on a narrow one.
+func TestPaletteFitsASmallScreen(t *testing.T) {
+	sizes := []struct{ width, height int }{
+		{100, 12},
+		{44, 24},
+		{40, 10},
+		{100, 30},
+	}
+	for _, size := range sizes {
+		app := openPaletteOn(t, size.width, size.height)
+		x, y, width := panelRect(t, app)
+		if x < 0 || x+width > size.width {
+			t.Errorf("on a %dx%d screen the panel spans %d..%d", size.width, size.height, x, x+width)
+		}
+		if y < 0 {
+			t.Errorf("on a %dx%d screen the panel starts at row %d", size.width, size.height, y)
+		}
+		if rows := app.paletteListRows(paletteMaxVisibleRows); rows+app.paletteChromeLines()+2 > size.height {
+			t.Errorf("on a %dx%d screen the panel wants %d rows", size.width, size.height, rows+app.paletteChromeLines()+2)
+		}
+	}
+}
+
+// TestClickingAPaletteRowRunsIt covers the whole click path: the centering has
+// to give the list a rect the pointer is in, and the palette has to answer the
+// click itself rather than let tview move a highlight the controller cannot see.
+func TestClickingAPaletteRowRunsIt(t *testing.T) {
+	app := openPaletteOn(t, 100, 30)
+	ran := ""
+	app.paletteCtrl = NewPaletteController([]Command{
+		{ID: "zoom", Title: "Zoom details", Group: GroupView, Run: func(*App) { ran = "zoom" }},
+		{ID: "settings", Title: "Settings", Group: GroupApp, Run: func(*App) { ran = "settings" }},
+	})
+	app.updatePaletteList()
+	app.app.ForceDraw()
+
+	// Rows are: View, Zoom details, App, Settings.
+	x, top, _, _ := app.paletteList.GetInnerRect()
+	clickAt(t, app, x+2, top+3)
+
+	if ran != "settings" {
+		t.Errorf("clicking the fourth row ran %q, want settings", ran)
+	}
+	if app.focusedPane == FocusPalette {
+		t.Error("running a command left the palette open")
+	}
+}
+
+func TestClickingAPaletteHeadingRunsNothing(t *testing.T) {
+	app := openPaletteOn(t, 100, 30)
+	ran := ""
+	app.paletteCtrl = NewPaletteController([]Command{
+		{ID: "zoom", Title: "Zoom details", Group: GroupView, Run: func(*App) { ran = "zoom" }},
+	})
+	app.updatePaletteList()
+	app.app.ForceDraw()
+
+	x, top, _, _ := app.paletteList.GetInnerRect()
+	clickAt(t, app, x+2, top)
+
+	if ran != "" {
+		t.Errorf("clicking the heading ran %q", ran)
+	}
+	if app.focusedPane != FocusPalette {
+		t.Error("clicking the heading closed the palette")
+	}
+	if got := app.paletteCtrl.Cursor(); got != 1 {
+		t.Errorf("the cursor moved to %d, want it to hold at 1", got)
+	}
+	if got := app.app.GetFocus(); got != app.paletteInput {
+		t.Errorf("the click took the keyboard off the query box")
 	}
 }

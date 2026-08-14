@@ -132,13 +132,12 @@ type App struct {
 	statusRowWidth int
 	// loadingMessage is a fetch's progress, shown in the same corner when
 	// nothing has been flashed over it.
-	loadingMessage      string
-	paletteModal        *tview.Flex
-	paletteInput        *tview.InputField
-	paletteSearchFrame  *tview.Flex
-	paletteList         *tview.List
-	paletteModalContent *tview.Flex
-	paletteCtrl         *PaletteController
+	loadingMessage     string
+	paletteModal       *tview.Flex
+	paletteInput       *tview.InputField
+	paletteSearchFrame *tview.Flex
+	paletteList        *tview.List
+	paletteCtrl        *PaletteController
 	// bindings is config.Keybindings after validation, set when the command
 	// registry is built. Nil until then, and every read is nil-safe.
 	bindings             *resolvedKeybindings

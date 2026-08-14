@@ -19,17 +19,49 @@ const (
 	paletteQueryBoxRows = 3
 	// paletteGutter is the column of padding each side of the panel's content,
 	// without which the query box's frame sits on the panel's own border.
-	paletteGutter = 1
-	paletteWidth  = 60
-	// paletteRowWidth is what a command row has to lay out in: the panel less
-	// its border and both gutters.
-	paletteRowWidth = paletteWidth - 2 - (2 * paletteGutter)
+	paletteGutter   = 1
+	paletteMaxWidth = 60
+	// paletteMinWidth is the narrowest panel worth drawing. A terminal below it
+	// cannot hold the palette whatever it is given, and the row arithmetic
+	// stops meaning anything once the shortcut column runs past the title.
+	paletteMinWidth = 24
+	// The panel gives back this much of a screen too small to hold it at full
+	// size, matching what FormModal leaves around its own shell.
+	paletteScreenWMargin = 8
+	paletteScreenHMargin = 4
 	// paletteRowGap is the least space kept between a title and its shortcut,
 	// so a long title is truncated rather than run into one.
 	paletteRowGap = 2
 	// paletteRowIndent sets a command in from the heading above it.
 	paletteRowIndent = "  "
 )
+
+// paletteScreen is the size the panel lays itself out against.
+func (a *App) paletteScreen() (width, height int) {
+	_, _, w, h := a.pages.GetRect()
+	return w, h
+}
+
+// paletteWidth is the panel's width: its natural size, clamped to a screen too
+// narrow to hold it. Fixed at the full width, the panel is drawn off the left
+// edge and every row loses its first columns.
+func (a *App) paletteWidth() int {
+	screenW, _ := a.paletteScreen()
+	width := screenW - paletteScreenWMargin
+	if width > paletteMaxWidth {
+		width = paletteMaxWidth
+	}
+	if width < paletteMinWidth {
+		width = paletteMinWidth
+	}
+	return width
+}
+
+// paletteRowWidth is what a command row has to lay out in: the panel less its
+// border and both gutters.
+func (a *App) paletteRowWidth() int {
+	return a.paletteWidth() - 2 - (2 * paletteGutter)
+}
 
 // newThemedInputField creates an InputField whose inner text area fills with
 // the given background. tview captures the global primitive background at
@@ -114,8 +146,44 @@ func (a *App) buildPaletteModal() *tview.Flex {
 		SetSelectedStyle(selectionStyle(a.theme)).
 		SetHighlightFullLine(true)
 	a.paletteList.SetBackgroundColor(a.theme.ModalBackground())
+	// tview's own click handler takes focus for the list and moves a highlight
+	// the controller knows nothing about, and it does both after the callbacks
+	// it fires, so nothing a callback sets survives it. Answer the click here
+	// and swallow it, and the query box keeps the keyboard and the cursor.
+	a.paletteList.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action != tview.MouseLeftClick {
+			return action, event
+		}
+		x, y := event.Position()
+		if !a.paletteList.InRect(x, y) {
+			return action, event
+		}
+		a.runPaletteRowAt(x, y)
+		return action, nil
+	})
 
 	return a.layoutPaletteModal(paletteMinVisibleRows)
+}
+
+// runPaletteRowAt runs the command clicked at the given screen cell. A click
+// on a heading or past the last row is not something to run, and leaves the
+// palette exactly as it was.
+func (a *App) runPaletteRowAt(x, y int) {
+	left, top, width, height := a.paletteList.GetInnerRect()
+	if x < left || x >= left+width || y < top || y >= top+height {
+		return
+	}
+	offset, _ := a.paletteList.GetOffset()
+	index := y - top + offset
+
+	rows := a.paletteCtrl.Rows()
+	if index < 0 || index >= len(rows) || rows[index].IsHeader {
+		return
+	}
+	a.paletteCtrl.SetCursor(index)
+	command := rows[index].Command
+	a.closePalette()
+	command.Run(a)
 }
 
 // layoutPaletteModal rebuilds the panel around a list of the given height and
@@ -132,15 +200,15 @@ func (a *App) layoutPaletteModal(listRows int) *tview.Flex {
 
 	spacer := tview.NewBox().SetBackgroundColor(panel)
 
-	a.paletteModalContent = tview.NewFlex().
+	content := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(a.paletteSearchFrame, paletteQueryBoxRows, 0, true).
 		AddItem(a.paletteList, listRows, 0, false).
 		AddItem(spacer, a.density.PaletteSpacerLines, 0, false).
 		AddItem(a.paletteFooterRule(), 1, 0, false).
 		AddItem(hint, 1, 0, false)
-	a.paletteModalContent.Box = tview.NewBox().SetBackgroundColor(panel)
-	a.paletteModalContent.
+	content.Box = tview.NewBox().SetBackgroundColor(panel)
+	content.
 		SetBackgroundColor(panel).
 		SetBorder(true).
 		SetBorderColor(a.theme.BorderFocus).
@@ -150,20 +218,19 @@ func (a *App) layoutPaletteModal(listRows int) *tview.Flex {
 		SetTitle(" Commands ").
 		SetTitleColor(a.theme.Foreground)
 
+	// Two Flexes, not three. A third only looks centered because tview hands
+	// its spacers a negative width when the panel is wider than the slot they
+	// share, which puts the panel where it belongs and its rect somewhere else
+	// — and a rect the pointer is not in takes no clicks.
 	column := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(nil, 0, 1, false).
-		AddItem(a.paletteModalContent, listRows+a.paletteChromeLines()+2, 0, true).
-		AddItem(nil, 0, 1, false)
-
-	centered := tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(column, paletteWidth, 0, true).
+		AddItem(content, listRows+a.paletteChromeLines()+2, 0, true).
 		AddItem(nil, 0, 1, false)
 
 	modal := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
-		AddItem(centered, 0, 1, true).
+		AddItem(column, a.paletteWidth(), 0, true).
 		AddItem(nil, 0, 1, false)
 	modal.SetBackgroundColor(a.theme.Background)
 
@@ -177,14 +244,26 @@ func (a *App) paletteListRows(matches int) int {
 	if rows > paletteMaxVisibleRows {
 		rows = paletteMaxVisibleRows
 	}
-	chrome := a.paletteChromeLines() + 2 // + border
-	if _, _, _, screenH := a.pages.GetRect(); screenH > chrome+4 {
-		if fits := screenH - chrome - 2; rows > fits {
-			rows = fits
-		}
-	}
 	if rows < paletteMinVisibleRows {
 		rows = paletteMinVisibleRows
+	}
+
+	// The screen has the last word. A panel taller than the terminal is drawn
+	// off the top, taking the query box and the footer with it, so the margin
+	// is what gets dropped first and the rows only after that.
+	_, screenH := a.paletteScreen()
+	if screenH <= 0 {
+		return rows
+	}
+	fits := screenH - a.paletteChromeLines() - 2
+	if roomy := fits - paletteScreenHMargin; roomy >= paletteMinVisibleRows {
+		fits = roomy
+	}
+	if fits < 1 {
+		fits = 1
+	}
+	if rows > fits {
+		rows = fits
 	}
 	return rows
 }
@@ -202,12 +281,18 @@ func (a *App) paletteRow(row PaletteRow) string {
 		shortcut = FormatShortcut(row.Command.ShortcutRune)
 	}
 
-	room := paletteRowWidth - len(paletteRowIndent) - runewidth.StringWidth(shortcut) - paletteRowGap
-	title := runewidth.Truncate(row.Command.Title, room, "…")
+	room := a.paletteRowWidth() - len(paletteRowIndent)
 	if shortcut == "" {
-		return paletteRowIndent + title
+		return paletteRowIndent + runewidth.Truncate(row.Command.Title, room, "…")
 	}
+	room -= runewidth.StringWidth(shortcut) + paletteRowGap
+	title := runewidth.Truncate(row.Command.Title, room, "…")
 	pad := room - runewidth.StringWidth(title) + paletteRowGap
+	if pad < 1 {
+		// Truncate keeps its ellipsis even when the room is gone, so a panel at
+		// the minimum width can still leave the title wider than it was given.
+		pad = 1
+	}
 	return paletteRowIndent + title + strings.Repeat(" ", pad) + a.themeTags.Accent + shortcut + "[-]"
 }
 

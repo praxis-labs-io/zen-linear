@@ -150,7 +150,7 @@ The panel is rebuilt on every keystroke — the query box, its frame and the lis
 
 `PaletteRow` is a heading or a command, the way `IssueRow` is. **The cursor never rests on a heading**: `step` walks past them, so `Selected` cannot answer with one, and `filterCommands` lands the cursor on the first command rather than row zero. Headings only appear under an empty query; a query lists matches flat, since grouping would fight the ranking.
 
-`rankCommands` scores a command by where the query sits — the start of the title, the start of a word in it, anywhere in it, then the same three over the keywords — and a command has to score against every whitespace-separated token to be listed at all. A second pass matches the token's characters scattered through the title and keywords, and **runs only when the first found nothing**, so it can never dilute a real result. `commandGroupOrder` is the heading order; a command whose group is missing from it lists last under no heading, which `TestEveryCommandFilesUnderAHeading` is what stops happening by accident.
+`rankCommands` scores a command by where the query sits — the start of the title, the start of a word in it, anywhere in it, then the start of a word in a keyword and anywhere in one — and a command has to score against every whitespace-separated token to be listed at all. A second pass matches the token's characters scattered through the title and keywords, and **runs only when the first found nothing**, so it can never dilute a real result. `commandGroupOrder` is the heading order; a command whose group is missing from it lists last under no heading, which `TestEveryCommandFilesUnderAHeading` is what stops happening by accident.
 
 ### Issues list
 
