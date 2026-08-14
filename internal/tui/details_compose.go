@@ -499,32 +499,30 @@ func (a *App) postButtonActive() bool {
 	return false
 }
 
-// enterCommentsFocus records that something on the page took the keyboard, for
-// the paths that take it without calling updateFocus: a mouse click, and tview
+// enterCommentsFocus records which stop on the page took the keyboard, for the
+// paths that take it without calling updateFocus: a mouse click, and tview
 // handing focus down to a child. It repaints the cues but must never move focus
 // itself, or focusing would recurse.
+//
+// It records the stop and nothing else. handleMouse owns focusedPane and sets
+// it before the click is delivered, so claiming the pane here as well let
+// anything that focuses these widgets claim it too. Same rule, same reason, as
+// claimNavFocus.
 func (a *App) enterCommentsFocus(target commentsFocus) {
-	// An overlay owns the keys however focus is delegated underneath it. tview
-	// re-delegates down the whole tree on every page add and remove, and that
-	// walk reaches this pane: the palette rebuilds its page on each keystroke,
-	// so without this the first key typed there took focusedPane back and the
-	// palette's own re-show guard then failed silently. Same guard, same
-	// reason, as claimNavFocus.
+	// An overlay owns the keys however focus is delegated underneath it.
 	if a.focusedPane == FocusPalette || a.activeModal() != nil {
 		return
 	}
 	// tview delegates focus down the tree on its own during layout rebuilds and
-	// page adds. Acting on one of those would claim the pane for a page holding
+	// page adds. Acting on one of those would move the ring for a page holding
 	// nothing to act on.
 	if !a.composeBoxOnScreen() {
 		return
 	}
-	a.focusedPane = FocusDetails
 	a.commentsFocus = target
-	if a.detailsView != nil {
-		a.detailsView.SetBorderColor(a.theme.BorderFocus)
-	}
-	a.updateAllPaneTitles()
+	// The border follows focusedPane rather than being lit outright, or a
+	// delegation walk would light this pane while another one holds the keys.
+	a.applyPaneBorders()
 	a.updateStatusBar()
 }
 

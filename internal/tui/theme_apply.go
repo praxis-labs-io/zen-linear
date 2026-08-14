@@ -133,7 +133,6 @@ func (a *App) rebuildModals() {
 	a.pickerModal = NewPickerModal(a)
 	a.issueFormModal = NewIssueFormModal(a)
 	a.editDescriptionModal = NewEditDescriptionModal(a)
-	a.editLabelsModal = NewEditLabelsModal(a)
 	a.textInputModal = NewTextInputModal(a)
 	a.multiSelectModal = NewMultiSelectModal(a)
 	a.settingsModal = NewSettingsModal(a)

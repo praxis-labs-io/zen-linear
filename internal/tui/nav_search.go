@@ -138,22 +138,25 @@ func (a *App) navSearchActive() bool {
 	return a.focusedPane == FocusNavigation && a.navSearchFocused
 }
 
-// claimNavFocus records that one of the navigation pane's two controls has the
+// claimNavFocus records which of the navigation pane's two controls has the
 // keyboard. It is what a mouse click goes through, since a click never reaches
 // updateFocus.
+//
+// It records the control and nothing else. handleMouse owns focusedPane and
+// sets it before the click is delivered, and claiming the pane here as well
+// let anything that focuses these widgets claim it too: tview re-delegates
+// focus down the whole tree on every page add and remove, and that walk reaches
+// this pane. Opening the palette rebuilds its page before it records the pane
+// to go back to, and closing a modal drops its page before the fallback reads
+// one, so both windows recorded the nav pane and Escape landed there.
 //
 // It must not call updateFocus itself: that calls SetFocus, which calls the
 // focus callbacks that call this, and the app spins.
 func (a *App) claimNavFocus(searchBox bool) {
-	// An overlay owns the keys however focus is delegated underneath it. tview
-	// re-delegates down the whole tree on every page add and remove, and that
-	// walk reaches this pane: the palette rebuilds its page on each keystroke,
-	// so without this the first key typed there took the pane back and the
-	// palette's own re-show guard then failed silently.
+	// An overlay owns the keys however focus is delegated underneath it.
 	if a.focusedPane == FocusPalette || a.activeModal() != nil {
 		return
 	}
-	a.focusedPane = FocusNavigation
 	a.navSearchFocused = searchBox
 	a.applyNavSearchStyles()
 	a.updateStatusBar()

@@ -17,18 +17,7 @@ const (
 	paletteMinVisibleRows = 4
 	// paletteQueryBoxRows is the framed field: the input plus its border.
 	paletteQueryBoxRows = 3
-	// paletteGutter is the column of padding each side of the panel's content,
-	// without which the query box's frame sits on the panel's own border.
-	paletteGutter   = 1
-	paletteMaxWidth = 60
-	// paletteMinWidth is the narrowest panel worth drawing. A terminal below it
-	// cannot hold the palette whatever it is given, and the row arithmetic
-	// stops meaning anything once the shortcut column runs past the title.
-	paletteMinWidth = 24
-	// The panel gives back this much of a screen too small to hold it at full
-	// size, matching what FormModal leaves around its own shell.
-	paletteScreenWMargin = 8
-	paletteScreenHMargin = 4
+	paletteMaxWidth     = 60
 	// paletteRowGap is the least space kept between a title and its shortcut,
 	// so a long title is truncated rather than run into one.
 	paletteRowGap = 2
@@ -36,31 +25,10 @@ const (
 	paletteRowIndent = "  "
 )
 
-// paletteScreen is the size the panel lays itself out against.
-func (a *App) paletteScreen() (width, height int) {
-	_, _, w, h := a.pages.GetRect()
-	return w, h
-}
-
-// paletteWidth is the panel's width: its natural size, clamped to a screen too
-// narrow to hold it. Fixed at the full width, the panel is drawn off the left
-// edge and every row loses its first columns.
-func (a *App) paletteWidth() int {
-	screenW, _ := a.paletteScreen()
-	width := screenW - paletteScreenWMargin
-	if width > paletteMaxWidth {
-		width = paletteMaxWidth
-	}
-	if width < paletteMinWidth {
-		width = paletteMinWidth
-	}
-	return width
-}
-
 // paletteRowWidth is what a command row has to lay out in: the panel less its
 // border and both gutters.
 func (a *App) paletteRowWidth() int {
-	return a.paletteWidth() - 2 - (2 * paletteGutter)
+	return a.modalWidth(paletteMaxWidth) - 2 - (2 * modalGutter)
 }
 
 // newThemedInputField creates an InputField whose inner text area fills with
@@ -108,28 +76,7 @@ func (a *App) buildPaletteQueryBox() {
 // query box, the footer rule and its hint line, and the density spacer above
 // them.
 func (a *App) paletteChromeLines() int {
-	return paletteQueryBoxRows + 2 + a.density.PaletteSpacerLines
-}
-
-// paletteFooterRule is the hint line's top border. It runs out past the gutter
-// to the panel's own border on each side, so the rule meets it in a tee rather
-// than stopping short of it.
-func (a *App) paletteFooterRule() *tview.Box {
-	rule := tview.NewBox()
-	rule.SetBackgroundColor(a.theme.ModalBackground())
-	rule.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
-		style := tcell.StyleDefault.
-			Background(a.theme.ModalBackground()).
-			Foreground(a.theme.BorderFocus)
-		left, right := x-paletteGutter-1, x+width+paletteGutter
-		screen.SetContent(left, y, tview.Borders.LeftT, nil, style)
-		for col := left + 1; col < right; col++ {
-			screen.SetContent(col, y, tview.Borders.Horizontal, nil, style)
-		}
-		screen.SetContent(right, y, tview.Borders.RightT, nil, style)
-		return x, y, width, height
-	})
-	return rule
+	return paletteQueryBoxRows + 2 + a.density.ModalSpacerLines
 }
 
 // buildPaletteModal creates and configures the command palette modal overlay.
@@ -200,39 +147,17 @@ func (a *App) layoutPaletteModal(listRows int) *tview.Flex {
 
 	spacer := tview.NewBox().SetBackgroundColor(panel)
 
-	content := tview.NewFlex().
-		SetDirection(tview.FlexRow).
+	content := a.modalPanel("Commands")
+	content.
 		AddItem(a.paletteSearchFrame, paletteQueryBoxRows, 0, true).
 		AddItem(a.paletteList, listRows, 0, false).
-		AddItem(spacer, a.density.PaletteSpacerLines, 0, false).
-		AddItem(a.paletteFooterRule(), 1, 0, false).
+		AddItem(spacer, a.density.ModalSpacerLines, 0, false).
+		AddItem(a.modalRule(), 1, 0, false).
 		AddItem(hint, 1, 0, false)
-	content.Box = tview.NewBox().SetBackgroundColor(panel)
-	content.
-		SetBackgroundColor(panel).
-		SetBorder(true).
-		SetBorderColor(a.theme.BorderFocus).
-		// One column of gutter each side, or the query box's frame sits on the
-		// panel's own border.
-		SetBorderPadding(0, 0, paletteGutter, paletteGutter).
-		SetTitle(" Commands ").
-		SetTitleColor(a.theme.Foreground)
 
-	// Two Flexes, not three. A third only looks centered because tview hands
-	// its spacers a negative width when the panel is wider than the slot they
-	// share, which puts the panel where it belongs and its rect somewhere else
-	// — and a rect the pointer is not in takes no clicks.
-	column := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(nil, 0, 1, false).
-		AddItem(content, listRows+a.paletteChromeLines()+2, 0, true).
-		AddItem(nil, 0, 1, false)
-
-	modal := tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(column, a.paletteWidth(), 0, true).
-		AddItem(nil, 0, 1, false)
+	modal := tview.NewFlex()
 	modal.SetBackgroundColor(a.theme.Background)
+	centerModal(modal, content, a.modalWidth(paletteMaxWidth), listRows+a.paletteChromeLines()+2)
 
 	return modal
 }
@@ -251,12 +176,12 @@ func (a *App) paletteListRows(matches int) int {
 	// The screen has the last word. A panel taller than the terminal is drawn
 	// off the top, taking the query box and the footer with it, so the margin
 	// is what gets dropped first and the rows only after that.
-	_, screenH := a.paletteScreen()
+	_, screenH := a.modalScreen()
 	if screenH <= 0 {
 		return rows
 	}
 	fits := screenH - a.paletteChromeLines() - 2
-	if roomy := fits - paletteScreenHMargin; roomy >= paletteMinVisibleRows {
+	if roomy := fits - modalScreenHMargin; roomy >= paletteMinVisibleRows {
 		fits = roomy
 	}
 	if fits < 1 {

@@ -318,12 +318,14 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "toggle_favorite",
-			Group:        GroupView,
-			Scope:        ScopeNavigation,
-			Title:        "Favorite / unfavorite navigation item",
-			Keywords:     []string{"favorite", "unfavorite", "star", "pin", "bookmark"},
-			ShortcutRune: 'f',
+			ID:       "toggle_favorite",
+			Group:    GroupView,
+			Scope:    ScopeNavigation,
+			Title:    "Favorite / unfavorite navigation item",
+			Keywords: []string{"favorite", "unfavorite", "star", "pin", "bookmark"},
+			// Shifted, because it is destructive from the tree: lowercase f sat
+			// next to the movement keys and unfavorited a view on a mistype.
+			ShortcutRune: 'F',
 			Run:          handleToggleFavorite,
 		},
 		{

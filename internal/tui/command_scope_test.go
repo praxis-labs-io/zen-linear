@@ -33,20 +33,20 @@ func TestIssueShortcutIsDeadInTheNavigationPane(t *testing.T) {
 	}
 }
 
-// TestNavigationShortcutIsDeadInTheIssuesPane is the mirror: f belongs to the
+// TestNavigationShortcutIsDeadInTheIssuesPane is the mirror: F belongs to the
 // tree.
 func TestNavigationShortcutIsDeadInTheIssuesPane(t *testing.T) {
 	app := newUXTestApp(t)
-	favorite := tcell.NewEventKey(tcell.KeyRune, 'f', tcell.ModNone)
+	favorite := tcell.NewEventKey(tcell.KeyRune, 'F', tcell.ModNone)
 
 	app.focusedPane = FocusIssues
 	if got := app.handleIssuesKey(favorite); got == nil {
-		t.Fatal("issues pane swallowed f")
+		t.Fatal("issues pane swallowed F")
 	}
 
 	app.focusedPane = FocusNavigation
 	if got := app.handleNavigationKey(favorite); got != nil {
-		t.Fatal("navigation pane did not take f")
+		t.Fatal("navigation pane did not take F")
 	}
 }
 

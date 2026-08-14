@@ -40,7 +40,13 @@ type AgentOutputModal struct {
 	flushStop   chan struct{}
 }
 
-const maxFlushLines = 200
+const (
+	maxFlushLines = 200
+	// The run needs room to read, so the modal takes what it can up to this and
+	// gives back whatever the terminal is short.
+	agentOutputMaxWidth  = 110
+	agentOutputMaxHeight = 32
+)
 
 // NewAgentOutputModal creates a new agent output modal.
 func NewAgentOutputModal(app *App) *AgentOutputModal {
@@ -76,7 +82,7 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" Stream ").
-		SetTitleColor(app.theme.Foreground)
+		SetTitleColor(app.theme.Accent)
 
 	om.finalView = tview.NewTextView()
 	om.finalView.SetDynamicColors(true).
@@ -87,10 +93,10 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		SetBorder(true).
 		SetBorderColor(app.theme.Accent).
 		SetTitle(" Final ").
-		SetTitleColor(app.theme.Foreground)
+		SetTitleColor(app.theme.Accent)
 
 	om.helpView = tview.NewTextView()
-	om.helpView.SetText("Esc: cancel • c: copy • r: resume cmd • ↑↓/j/k: scroll • g/G: top/bottom • Tab: switch view")
+	om.helpView.SetText("↑↓ scroll   tab switch   c copy   r resume   esc close")
 	om.helpView.SetTextColor(app.theme.SecondaryText)
 	om.helpView.SetBackgroundColor(app.theme.ModalBackground())
 	om.helpView.SetTextAlign(tview.AlignCenter)
@@ -121,17 +127,21 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 	padding := app.density.ModalPadding
 	om.modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 
-	om.modal = tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().
-			SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(om.modalContent, 32, 0, true).
-			AddItem(nil, 0, 1, false), 110, 0, true).
-		AddItem(nil, 0, 1, false)
+	// Filled by layout on every Show. The wrapper pointer is not replaced:
+	// pages hold it for as long as the run does.
+	om.modal = tview.NewFlex()
 	om.modal.SetBackgroundColor(app.theme.Background)
 
 	return om
+}
+
+// layout sizes the modal against the terminal. At a fixed 110x32 it was larger
+// than a 100x30 screen before it drew anything, so the run was read through a
+// panel whose edges were off it.
+func (om *AgentOutputModal) layout() {
+	centerModal(om.modal, om.modalContent,
+		om.app.modalWidth(agentOutputMaxWidth),
+		om.app.fitModalHeight(agentOutputMaxHeight))
 }
 
 // ApplyTheme updates modal colors to match the active theme.
@@ -156,14 +166,13 @@ func (om *AgentOutputModal) ApplyTheme(theme Theme) {
 	}
 	if om.streamView != nil {
 		om.streamView.SetBackgroundColor(theme.ModalBackground()).
-			SetBorderColor(theme.Accent).
-			SetTitleColor(theme.Foreground)
+			SetTitleColor(theme.Accent)
 	}
 	if om.finalView != nil {
 		om.finalView.SetBackgroundColor(theme.ModalBackground()).
-			SetBorderColor(theme.Accent).
-			SetTitleColor(theme.Foreground)
+			SetTitleColor(theme.Accent)
 	}
+	om.applyFocusBorders()
 	if om.modalContent != nil {
 		om.modalContent.SetBackgroundColor(theme.ModalBackground())
 	}
@@ -200,6 +209,7 @@ func (om *AgentOutputModal) Show(title string, onCancel func()) {
 	om.failed = false
 	om.streamMu.Unlock()
 
+	om.layout()
 	om.app.pages.AddPage("agent_output", om.modal, true, true)
 	om.app.pages.SendToFront("agent_output")
 	om.focus(om.streamView)
@@ -273,7 +283,23 @@ func (om *AgentOutputModal) Hide() {
 // UI thread only.
 func (om *AgentOutputModal) focus(p tview.Primitive) {
 	om.focused = p
+	om.applyFocusBorders()
 	om.app.app.SetFocus(p)
+}
+
+// applyFocusBorders lights the view Tab last landed on. It reads the recorded
+// target rather than live focus, so a draw can reach it safely.
+func (om *AgentOutputModal) applyFocusBorders() {
+	for _, view := range []*tview.TextView{om.streamView, om.finalView} {
+		if view == nil {
+			continue
+		}
+		color := om.app.theme.Border
+		if om.focused == tview.Primitive(view) {
+			color = om.app.theme.BorderFocus
+		}
+		view.SetBorderColor(color)
+	}
 }
 
 // Focus returns keyboard focus for when an overlay above this modal closes.

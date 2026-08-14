@@ -2,7 +2,12 @@ package tui
 
 import (
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+)
+
+const (
+	pickerMaxWidth = 50
+	// pickerMaxVisibleRows caps the panel's height; a longer list scrolls.
+	pickerMaxVisibleRows = 12
 )
 
 // PickerItem represents an item in a picker.
@@ -13,74 +18,16 @@ type PickerItem struct {
 
 // PickerModal manages a picker overlay for selecting from a list of items.
 type PickerModal struct {
-	app         *App
-	modal       *tview.Flex
-	content     *tview.Flex
-	list        *tview.List
-	titleView   *tview.TextView
-	contextView *tview.TextView
-	items       []PickerItem
-	onSelect    func(item PickerItem)
+	*listModal
+	items    []PickerItem
+	onSelect func(item PickerItem)
 }
 
 // NewPickerModal creates a new picker modal.
 func NewPickerModal(app *App) *PickerModal {
-	pm := &PickerModal{
-		app: app,
+	return &PickerModal{
+		listModal: newListModal(app, "picker", "↑↓ move   ↵ select   esc close", pickerMaxWidth, pickerMaxVisibleRows),
 	}
-
-	// Create list
-	pm.list = tview.NewList().
-		ShowSecondaryText(false).
-		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.ModalBackground())).
-		SetSelectedStyle(app.listSelectionStyle()).
-		SetHighlightFullLine(true)
-	pm.list.SetBackgroundColor(app.theme.ModalBackground())
-
-	// Create title
-	pm.titleView = tview.NewTextView()
-	pm.titleView.SetTextColor(app.theme.Accent)
-	pm.titleView.SetBackgroundColor(app.theme.ModalBackground())
-
-	// Issue context line, shown only when a Show passes one.
-	pm.contextView = tview.NewTextView()
-	pm.contextView.SetDynamicColors(true)
-	pm.contextView.SetBackgroundColor(app.theme.ModalBackground())
-
-	// Create help text
-	helpText := tview.NewTextView()
-	helpText.SetText("↑↓/j/k: navigate | Enter: select | Esc: cancel")
-	helpText.SetTextColor(app.theme.SecondaryText)
-	helpText.SetBackgroundColor(app.theme.ModalBackground())
-
-	// Build modal content
-	modalContent := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(pm.titleView, 1, 0, false).
-		AddItem(pm.contextView, 0, 0, false).
-		AddItem(pm.list, 0, 1, true).
-		AddItem(helpText, 1, 0, false)
-	modalContent.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
-	modalContent.SetBackgroundColor(app.theme.ModalBackground()).
-		SetBorder(true).
-		SetBorderColor(app.theme.Accent).
-		SetTitleColor(app.theme.Foreground)
-	padding := app.density.ModalPadding
-	modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-	pm.content = modalContent
-
-	// Center the modal on screen
-	pm.modal = tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().
-			SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(modalContent, 15, 0, true).
-			AddItem(nil, 0, 1, false), 50, 0, true).
-		AddItem(nil, 0, 1, false)
-	pm.modal.SetBackgroundColor(app.theme.ModalBackground())
-
-	return pm
 }
 
 // Show displays the picker modal with the given title and items.
@@ -88,46 +35,47 @@ func (pm *PickerModal) Show(title string, items []PickerItem, onSelect func(item
 	pm.ShowWithContext(title, "", items, onSelect)
 }
 
-// ShowWithContext also pins an issue context line between title and list.
+// ShowWithContext also pins an issue context line above the list.
 func (pm *PickerModal) ShowWithContext(title, contextLine string, items []PickerItem, onSelect func(item PickerItem)) {
 	pm.items = items
 	pm.onSelect = onSelect
 
-	pm.titleView.SetText(title)
-	pm.contextView.SetText(contextLine)
-	contextHeight := 0
-	if contextLine != "" {
-		contextHeight = 1
-	}
-	pm.content.ResizeItem(pm.contextView, contextHeight, 0)
-	pm.list.Clear()
+	pm.fillList()
+	pm.open(title, contextLine)
+}
 
-	for index, item := range items {
+// fillList rewrites the options, or the placeholder standing in for none.
+func (pm *PickerModal) fillList() {
+	if len(pm.items) == 0 {
+		pm.showPlaceholder("No options")
+		return
+	}
+
+	pm.beginRows(len(pm.items))
+	for index, item := range pm.items {
 		// Number shortcuts select the first nine entries directly.
 		var shortcut rune
 		if index < 9 {
 			shortcut = rune('1' + index)
 		}
-		pm.list.AddItem(item.Label, "", shortcut, nil)
+		// The selected func only ever fires on a click: HandleKey answers Enter
+		// and the number keys before the list sees either.
+		pm.list.AddItem(item.Label, "", shortcut, func() { pm.choose(index) })
 	}
-
-	if len(items) > 0 {
-		pm.list.SetCurrentItem(0)
-	}
-
-	pm.app.pages.AddPage("picker", pm.modal, true, true)
-	pm.app.pages.SendToFront("picker")
-	pm.app.app.SetFocus(pm.list)
+	pm.list.SetCurrentItem(0)
 }
 
-// Hide hides the picker modal.
-func (pm *PickerModal) Hide() {
-	pm.app.pages.RemovePage("picker")
-	pm.app.restoreModalFocus()
+// choose closes the picker and reports the item at the given index.
+func (pm *PickerModal) choose(index int) {
+	if index < 0 || index >= len(pm.items) {
+		return
+	}
+	item := pm.items[index]
+	pm.Hide()
+	if pm.onSelect != nil {
+		pm.onSelect(item)
+	}
 }
-
-// Focus returns keyboard focus to the list, for when an overlay closes.
-func (pm *PickerModal) Focus() { pm.app.app.SetFocus(pm.list) }
 
 // HandleKey handles keyboard input for the picker.
 func (pm *PickerModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
@@ -136,58 +84,26 @@ func (pm *PickerModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		pm.Hide()
 		return nil
 	case tcell.KeyEnter:
-		idx := pm.list.GetCurrentItem()
-		if idx >= 0 && idx < len(pm.items) {
-			item := pm.items[idx]
-			pm.Hide()
-			if pm.onSelect != nil {
-				pm.onSelect(item)
-			}
-		}
+		pm.choose(pm.list.GetCurrentItem())
 		return nil
 	case tcell.KeyUp:
-		idx := pm.list.GetCurrentItem()
-		if idx > 0 {
-			pm.list.SetCurrentItem(idx - 1)
-		}
+		pm.move(-1)
 		return nil
 	case tcell.KeyDown:
-		idx := pm.list.GetCurrentItem()
-		if idx < pm.list.GetItemCount()-1 {
-			pm.list.SetCurrentItem(idx + 1)
-		}
+		pm.move(1)
 		return nil
 	case tcell.KeyRune:
 		switch event.Rune() {
 		case 'j':
-			idx := pm.list.GetCurrentItem()
-			if idx < pm.list.GetItemCount()-1 {
-				pm.list.SetCurrentItem(idx + 1)
-			}
+			pm.move(1)
 			return nil
 		case 'k':
-			idx := pm.list.GetCurrentItem()
-			if idx > 0 {
-				pm.list.SetCurrentItem(idx - 1)
-			}
+			pm.move(-1)
 			return nil
 		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			// Number shortcuts select the first nine entries directly.
-			idx := int(event.Rune() - '1')
-			if idx < len(pm.items) {
-				item := pm.items[idx]
-				pm.Hide()
-				if pm.onSelect != nil {
-					pm.onSelect(item)
-				}
-			}
+			pm.choose(int(event.Rune() - '1'))
 			return nil
 		}
 	}
 	return event
-}
-
-// GetModal returns the modal flex for adding to pages.
-func (pm *PickerModal) GetModal() *tview.Flex {
-	return pm.modal
 }

@@ -6,7 +6,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 	"github.com/zen-linear/zen-linear/internal/config"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // modalDispatchGolden is the priority the global key handler gives modals,
@@ -17,7 +16,6 @@ var modalDispatchGolden = []string{
 	"picker",
 	"issue_form",
 	"edit_description",
-	"edit_labels",
 	"text_input",
 	"multi_select",
 	"settings",
@@ -55,8 +53,6 @@ func openModal(t *testing.T, app *App, page string) {
 		app.issueFormModal.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-1"})
 	case "edit_description":
 		app.editDescriptionModal.Show("issue-1", "Body", "ZNL-1", func(issueID, description string) {})
-	case "edit_labels":
-		app.editLabelsModal.Show("issue-1", nil, []linearapi.IssueLabel{{ID: "label-1", Name: "Bug"}}, "ZNL-1", func(issueID string, labelIDs []string) {})
 	case "text_input":
 		app.textInputModal.Show("Related Issue", "Issue ID: ", "", func(string) {})
 	case "multi_select":
@@ -160,7 +156,6 @@ var modalFocusTargets = []struct {
 	{"picker", func(a *App) tview.Primitive { return a.pickerModal.list }},
 	{"issue_form", func(a *App) tview.Primitive { return a.issueFormModal.fm.focusedPrimitive() }},
 	{"edit_description", func(a *App) tview.Primitive { return a.editDescriptionModal.fm.focusedPrimitive() }},
-	{"edit_labels", func(a *App) tview.Primitive { return a.editLabelsModal.list }},
 	{"text_input", func(a *App) tview.Primitive { return a.textInputModal.input }},
 	{"multi_select", func(a *App) tview.Primitive { return a.multiSelectModal.list }},
 	{"settings", func(a *App) tview.Primitive { return a.settingsModal.fm.focusedPrimitive() }},
