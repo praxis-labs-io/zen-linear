@@ -204,10 +204,16 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		page, err := fetchPage(ctx, params, nil)
 		if err != nil {
 			a.QueueUpdateDraw(func() {
-				a.finishIssuesLoad(generation, err)
 				logger.ErrorWithErr(err, "tui.app: failed to fetch issues")
-				a.updateStatusBarWithError(err)
-				a.updateIssuesColumnLayout()
+				// A superseded refresh reports nothing but still settles its own
+				// loading, or the refresh waiting on it never starts.
+				if generation != a.refreshGeneration.Load() {
+					a.finishIssuesLoad(generation, nil)
+				} else {
+					a.finishIssuesLoad(generation, err)
+					a.updateStatusBarWithError(err)
+					a.updateIssuesColumnLayout()
+				}
 				a.notifyRefreshCompleted()
 				a.runQueuedIssuesRefresh()
 			})
@@ -227,6 +233,11 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		merge := &pageMerge{seen: make(map[string]bool, len(page.Issues))}
 		lastPaint := time.Now()
 		a.QueueUpdateDraw(func() {
+			// This closure rebuilds the tables, so a superseded refresh reaching
+			// it writes the issues Flex out from under whoever owns it now.
+			if generation != a.refreshGeneration.Load() {
+				return
+			}
 			logger.Debug("tui.app: fetched issues page=%d count=%d", pageCount, len(page.Issues))
 			// Install (or clear) the active view's display settings with
 			// the list they belong to.
@@ -255,7 +266,10 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			if err != nil {
 				a.QueueUpdateDraw(func() {
 					logger.ErrorWithErr(err, "tui.app: failed to fetch more issues page=%d", pageCount+1)
-					a.updateStatusBarWithError(err)
+					// Same rule as the first page's failure.
+					if generation == a.refreshGeneration.Load() {
+						a.updateStatusBarWithError(err)
+					}
 				})
 				break
 			}

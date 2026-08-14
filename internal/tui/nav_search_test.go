@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -337,6 +339,16 @@ func TestPickingANavigationNodeDropsTheSearch(t *testing.T) {
 	app.performIssueSearch("found")
 	waitForResults()
 
+	// Hold the refresh open: letting the fetch answer here races the Flex the
+	// last assertion reads.
+	release, done := make(chan struct{}), make(chan struct{})
+	var finished sync.Once
+	app.refreshCompleted = func() { finished.Do(func() { close(done) }) }
+	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
+		<-release
+		return linearapi.IssuePage{}, nil
+	}
+
 	app.onNavigationSelected(&NavigationNode{ID: "team-1", Text: "Zen Linear", TeamID: "team-1", IsTeam: true})
 
 	if app.navSearchInput.GetText() != "" {
@@ -352,6 +364,13 @@ func TestPickingANavigationNodeDropsTheSearch(t *testing.T) {
 	// stay on screen for a whole round trip of showing the wrong list.
 	if got := app.issuesColumn.GetItem(0); got == tview.Primitive(app.searchResultsTable) {
 		t.Error("the results table is still mounted while the picked list loads")
+	}
+
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the refresh never finished")
 	}
 }
 
