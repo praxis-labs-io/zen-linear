@@ -17,9 +17,24 @@ func (a *App) handleMouse(event *tcell.EventMouse, action tview.MouseAction) (*t
 	// tview reuses one event across the actions it fires for a single report and
 	// hands back whatever a capture returned, so a swallowed one arrives here as
 	// nil on the next action.
-	if event == nil || action != tview.MouseLeftDown {
+	if event == nil {
 		return event, action
 	}
+	switch action {
+	case tview.MouseLeftUp, tview.MouseLeftClick, tview.MouseLeftDoubleClick:
+		// A press and its release are separate reports, so the release arrives
+		// live however the press went. Swallowing the press alone would drop the
+		// half that only focuses and keep the half that selects.
+		if a.swallowingClick {
+			a.swallowingClick = action == tview.MouseLeftUp
+			return nil, action
+		}
+		return event, action
+	case tview.MouseLeftDown:
+	default:
+		return event, action
+	}
+	a.swallowingClick = false
 	// An overlay owns the keys however focus is delegated underneath it, the
 	// same guard claimNavFocus keeps. The repair belongs behind it: it moves the
 	// keyboard, and a modal is holding it.
@@ -31,14 +46,16 @@ func (a *App) handleMouse(event *tcell.EventMouse, action tview.MouseAction) (*t
 	pane, ok := a.paneAt(event.Position())
 	if !ok {
 		// The status row is a text view, and tview would give it the keyboard on
-		// a click. Nothing down there is a target, so the press stops here rather
+		// a click. Nothing down there is a target, so the click stops here rather
 		// than stranding the keys off the panes.
+		a.swallowingClick = true
 		return nil, action
 	}
 	if a.claimPaneFocus(pane) {
 		// The claim reflowed the panes. Their rects are a frame behind, so
-		// forwarding now delivers the press to whatever used to be under the
-		// pointer. A click that rearranges the layout only rearranges it.
+		// forwarding hands the click to whatever moved in under the pointer. A
+		// click that rearranges the layout only rearranges it.
+		a.swallowingClick = true
 		return nil, action
 	}
 	return event, action

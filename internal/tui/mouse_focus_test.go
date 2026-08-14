@@ -47,34 +47,32 @@ func layOut(t *testing.T, app *App, width, height int, start FocusTarget) tcell.
 	return screen
 }
 
-// clickAt drives a whole left click the way tview's event loop does: the capture
-// runs once per action, and an action it swallows leaves the event nil for the
-// rest of them.
+// clickAt drives a whole left click the way tview's event loop does.
+//
+// The press and the release are separate reports, so a capture that swallowed
+// the press gets the release live all the same. Only within one report does
+// tview reuse the event, which is what carries a swallowed up into its click.
 func clickAt(t *testing.T, app *App, x, y int) {
 	t.Helper()
 	press := tcell.NewEventMouse(x, y, tcell.ButtonPrimary, tcell.ModNone)
+	deliver(t, app, press, tview.MouseLeftDown)
+
 	release := tcell.NewEventMouse(x, y, tcell.ButtonNone, tcell.ModNone)
-	steps := []struct {
-		event  *tcell.EventMouse
-		action tview.MouseAction
-	}{
-		{press, tview.MouseLeftDown},
-		{release, tview.MouseLeftUp},
-		{release, tview.MouseLeftClick},
+	if deliver(t, app, release, tview.MouseLeftUp) == nil {
+		release = nil
 	}
-	swallowed := false
-	for _, step := range steps {
-		event := step.event
-		if swallowed {
-			event = nil
-		}
-		event, action := app.handleMouse(event, step.action)
-		if event == nil {
-			swallowed = true
-			continue
-		}
-		app.pages.MouseHandler()(action, event, func(p tview.Primitive) { app.app.SetFocus(p) })
+	deliver(t, app, release, tview.MouseLeftClick)
+}
+
+// deliver runs one action through the capture and hands on whatever survives.
+func deliver(t *testing.T, app *App, event *tcell.EventMouse, action tview.MouseAction) *tcell.EventMouse {
+	t.Helper()
+	event, action = app.handleMouse(event, action)
+	if event == nil {
+		return nil
 	}
+	app.pages.MouseHandler()(action, event, func(p tview.Primitive) { app.app.SetFocus(p) })
+	return event
 }
 
 // paneCenter is a cell inside a pane's body, clear of its border.
@@ -198,8 +196,9 @@ func TestClickingAPaneThatReflowsTheLayoutOnlyReflowsIt(t *testing.T) {
 	}
 
 	before := app.navigationTree.GetCurrentNode()
-	x, y := paneCenter(t, app.issuesColumn)
-	clickAt(t, app, x, y)
+	// Near the left edge and high up: inside the issues list now, and inside the
+	// navigation tree's first rows once the claim brings that pane back.
+	clickAt(t, app, 5, 5)
 
 	if app.focusedPane != FocusIssues {
 		t.Fatalf("clicking the issues list left the pane on %v", app.focusedPane)
@@ -231,6 +230,14 @@ func TestAClickCannotTakeThePaneFromAnOverlay(t *testing.T) {
 	clickAt(t, app, x, y)
 	if app.focusedPane != before {
 		t.Errorf("a click behind a modal moved the pane from %v to %v", before, app.focusedPane)
+	}
+
+	// The press misses the modal's panel and falls through Pages to the pane
+	// beneath, where the widget focuses itself. focusedPane is untouched, but
+	// the next key would type into a tree behind the modal.
+	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
+	if page := app.pages.GetPage("settings"); page != nil && !page.HasFocus() {
+		t.Errorf("the keyboard is on %T, outside the modal that owns it", app.app.GetFocus())
 	}
 }
 

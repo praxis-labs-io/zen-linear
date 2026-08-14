@@ -14,6 +14,7 @@ func (a *App) bindGlobalKeys() {
 // palette and the query box, then global keys, then the focused pane.
 func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if modal := a.activeModal(); modal != nil {
+		a.repairModalFocus()
 		return modal.HandleKey(event)
 	}
 

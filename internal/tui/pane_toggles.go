@@ -113,7 +113,12 @@ func (a *App) watchLayoutWidth(width int) {
 		a.layoutFocusStale = true
 	}
 	a.rebuildContentLayout()
+	// Every cue the moved pane changed, repainted in the frame that moved it.
+	// The comment ring is left out: it rewrites the details page, and the draw
+	// this runs inside has already measured it.
 	a.applyPaneBorders()
+	a.applyNavSearchStyles()
+	a.updateStatusBar()
 }
 
 // repairLayoutFocus puts the keyboard on the pane a breakpoint moved it off.
