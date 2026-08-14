@@ -26,9 +26,10 @@ const (
 // navWidthMedium fixes the nav pane's width in the two-pane layout rather than
 // giving it a share. A share of a terminal that narrow ran from 18 columns down
 // to 11 across the range, and 11 is a tree of ellipses. It is a column of names,
-// so it needs a width, not a fraction. Matches the 21 a share gives it at the
-// wide breakpoint, so crossing that line does not jump.
-const navWidthMedium = 22
+// so it needs a width, not a fraction. It is 21 because that is what the
+// three-pane share gives the pane at the wide breakpoint, so narrowing the
+// terminal one column past that line cannot widen the pane.
+const navWidthMedium = 21
 
 // layoutModeForWidth picks the layout mode for a terminal width in cells.
 func layoutModeForWidth(width int) layoutMode {

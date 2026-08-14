@@ -114,6 +114,23 @@ func TestTheNavPaneKeepsItsWidthAcrossTheTwoPaneRange(t *testing.T) {
 	}
 }
 
+// TestTheNavPaneDoesNotJumpAtTheWideBreakpoint covers the column either side of
+// it. The fixed width is picked to match what the share gives the pane at 110,
+// so dragging the terminal one column narrower must not widen the pane.
+func TestTheNavPaneDoesNotJumpAtTheWideBreakpoint(t *testing.T) {
+	wide := &App{focusedPane: FocusNavigation}
+	navWide, _, _ := paneWidths(t, wide, 110)
+	medium := &App{focusedPane: FocusNavigation}
+	navMedium, _, _ := paneWidths(t, medium, 109)
+
+	if wide.layoutMode != layoutWide || medium.layoutMode != layoutMedium {
+		t.Fatalf("modes = %v then %v; want wide then medium", wide.layoutMode, medium.layoutMode)
+	}
+	if navWide != navMedium {
+		t.Errorf("nav = %d at 110 and %d at 109; narrowing the terminal changed the pane's width", navWide, navMedium)
+	}
+}
+
 // TestNarrowLayoutGivesTheFocusedPaneEverything covers the one-pane layout.
 func TestNarrowLayoutGivesTheFocusedPaneEverything(t *testing.T) {
 	app := &App{focusedPane: FocusNavigation}
