@@ -43,6 +43,35 @@ const (
 	ScopeComment
 )
 
+// CommandGroup is the heading a command files under in the palette's default
+// list. Typing a query drops the headings and lists the matches flat.
+type CommandGroup string
+
+const (
+	GroupIssue     CommandGroup = "Issue"
+	GroupFields    CommandGroup = "Fields"
+	GroupRelations CommandGroup = "Relations"
+	GroupShare     CommandGroup = "Share"
+	GroupList      CommandGroup = "List"
+	GroupView      CommandGroup = "View"
+	GroupAgent     CommandGroup = "Agent"
+	GroupApp       CommandGroup = "App"
+)
+
+// commandGroupOrder is the order the palette stacks the headings in. A command
+// whose group is missing here is listed after them all under no heading, which
+// TestEveryCommandFilesUnderAHeading is what stops happening by accident.
+var commandGroupOrder = []CommandGroup{
+	GroupIssue,
+	GroupFields,
+	GroupRelations,
+	GroupShare,
+	GroupList,
+	GroupView,
+	GroupAgent,
+	GroupApp,
+}
+
 // Command represents a command that can be executed from the palette.
 type Command struct {
 	ID              string
@@ -51,6 +80,7 @@ type Command struct {
 	ShortcutRune    rune   // The rune for the keyboard shortcut (e.g., 'r' for refresh)
 	ShortcutDisplay string // Custom display text for shortcut (e.g., "/" or "Esc"), overrides ShortcutRune display
 	Scope           CommandScope
+	Group           CommandGroup
 	Run             func(a *App)
 }
 
@@ -268,6 +298,7 @@ func DefaultCommands(app *App) []Command {
 	commands := []Command{
 		{
 			ID:           "refresh",
+			Group:        GroupList,
 			Title:        "Refresh issues",
 			Keywords:     []string{"refresh", "reload", "r"},
 			ShortcutRune: 'r',
@@ -278,6 +309,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:              "search",
+			Group:           GroupList,
 			Title:           "Search issues",
 			Keywords:        []string{"search", "find", "s", "/"},
 			ShortcutDisplay: "/", // Handled globally, not via ShortcutRune
@@ -287,6 +319,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "toggle_favorite",
+			Group:        GroupView,
 			Scope:        ScopeNavigation,
 			Title:        "Favorite / unfavorite navigation item",
 			Keywords:     []string{"favorite", "unfavorite", "star", "pin", "bookmark"},
@@ -295,6 +328,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "settings",
+			Group:    GroupApp,
 			Title:    "Settings",
 			Keywords: []string{"settings", "config", "preferences"},
 			Run: func(a *App) {
@@ -303,6 +337,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "switch_workspace",
+			Group:        GroupApp,
 			Title:        "Switch workspace",
 			Keywords:     []string{"workspace", "switch", "account", "organization"},
 			ShortcutRune: 'w',
@@ -312,6 +347,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "toggle_navigation_pane",
+			Group:        GroupView,
 			Title:        "Toggle navigation pane",
 			Keywords:     []string{"navigation", "sidebar", "pane", "hide", "show", "toggle"},
 			ShortcutRune: '<',
@@ -321,6 +357,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "toggle_details_pane",
+			Group:        GroupView,
 			Title:        "Toggle details pane",
 			Keywords:     []string{"details", "pane", "hide", "show", "toggle"},
 			ShortcutRune: '>',
@@ -330,6 +367,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "zoom_details",
+			Group:        GroupView,
 			Title:        "Zoom details",
 			Keywords:     []string{"zoom", "details", "focus", "full", "expand", "read", "view"},
 			ShortcutRune: 'v',
@@ -339,6 +377,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "edit_prompt_templates",
+			Group:    GroupAgent,
 			Title:    "Edit agent prompt templates",
 			Keywords: []string{"agent", "prompt", "prompts", "template", "templates"},
 			Run: func(a *App) {
@@ -347,6 +386,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "sort_by",
+			Group:    GroupList,
 			Title:    "Sort issues by…",
 			Keywords: []string{"sort", "order", "status", "priority", "updated", "created"},
 			Run: func(a *App) {
@@ -355,6 +395,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "group_by",
+			Group:    GroupList,
 			Title:    "Group issues by…",
 			Keywords: []string{"group", "grouping", "status", "priority", "assignee", "cycle"},
 			Run: func(a *App) {
@@ -363,6 +404,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "subgroup_by",
+			Group:    GroupList,
 			Title:    "Subgroup issues by…",
 			Keywords: []string{"subgroup", "group", "grouping", "nested"},
 			Run: func(a *App) {
@@ -371,6 +413,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "open_browser",
+			Group:        GroupShare,
 			Scope:        ScopeIssue,
 			Title:        "Open in browser",
 			Keywords:     []string{"open", "browser", "o", "web"},
@@ -379,6 +422,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "copy_id",
+			Group:        GroupShare,
 			Scope:        ScopeIssue,
 			Title:        "Copy issue ID",
 			Keywords:     []string{"copy", "id", "identifier"},
@@ -387,6 +431,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "open_github",
+			Group:        GroupShare,
 			Scope:        ScopeIssue,
 			Title:        "Open GitHub link",
 			Keywords:     []string{"open", "github", "pull", "pr"},
@@ -397,6 +442,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "copy_branch",
+			Group:        GroupShare,
 			Scope:        ScopeIssue,
 			Title:        "Copy branch name",
 			Keywords:     []string{"copy", "branch", "git", "checkout"},
@@ -407,6 +453,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "copy_url",
+			Group:        GroupShare,
 			Scope:        ScopeIssue,
 			Title:        "Copy issue URL",
 			Keywords:     []string{"copy", "url", "link"},
@@ -415,6 +462,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "ask_agent",
+			Group:    GroupAgent,
 			Scope:    ScopeIssue,
 			Title:    "Ask agent about selected issue",
 			Keywords: []string{"agent", "ai", "claude", "cursor", "assistant"},
@@ -422,6 +470,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "set_due_date",
+			Group:    GroupFields,
 			Scope:    ScopeIssue,
 			Title:    "Set due date",
 			Keywords: []string{"due", "date", "deadline", "set"},
@@ -431,6 +480,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_due_date",
+			Group:    GroupFields,
 			Scope:    ScopeIssue,
 			Title:    "Clear due date",
 			Keywords: []string{"due", "date", "deadline", "clear", "remove"},
@@ -440,6 +490,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "set_priority",
+			Group:        GroupFields,
 			Scope:        ScopeIssue,
 			Title:        "Set priority",
 			Keywords:     []string{"priority", "urgent", "high", "normal", "low", "set"},
@@ -450,6 +501,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "edit_estimate",
+			Group:    GroupFields,
 			Scope:    ScopeIssue,
 			Title:    "Edit estimate",
 			Keywords: []string{"estimate", "points", "edit"},
@@ -459,6 +511,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_estimate",
+			Group:    GroupFields,
 			Scope:    ScopeIssue,
 			Title:    "Clear estimate",
 			Keywords: []string{"estimate", "points", "clear", "remove"},
@@ -468,6 +521,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "set_project",
+			Group:        GroupFields,
 			Scope:        ScopeIssue,
 			Title:        "Set project",
 			Keywords:     []string{"project", "set", "move"},
@@ -478,6 +532,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_project",
+			Group:    GroupFields,
 			Scope:    ScopeIssue,
 			Title:    "Clear project",
 			Keywords: []string{"project", "clear", "remove"},
@@ -487,6 +542,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "list_project_milestones",
+			Group:    GroupFields,
 			Scope:    ScopeIssue,
 			Title:    "List project milestones",
 			Keywords: []string{"project", "milestone", "list"},
@@ -496,6 +552,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "set_milestone",
+			Group:    GroupFields,
 			Scope:    ScopeIssue,
 			Title:    "Set milestone",
 			Keywords: []string{"project", "milestone", "set"},
@@ -505,6 +562,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_milestone",
+			Group:    GroupFields,
 			Scope:    ScopeIssue,
 			Title:    "Clear milestone",
 			Keywords: []string{"project", "milestone", "clear", "remove"},
@@ -514,6 +572,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "filter_issues",
+			Group:    GroupList,
 			Title:    "Filter issues",
 			Keywords: []string{"filter", "issues", "query"},
 			Run: func(a *App) {
@@ -522,6 +581,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_filters",
+			Group:    GroupList,
 			Title:    "Clear filters",
 			Keywords: []string{"filter", "clear", "reset"},
 			Run: func(a *App) {
@@ -530,6 +590,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "filter_assignee",
+			Group:    GroupList,
 			Title:    "Filter by assignee",
 			Keywords: []string{"filter", "assignee", "user"},
 			Run: func(a *App) {
@@ -538,6 +599,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "filter_labels",
+			Group:    GroupList,
 			Title:    "Filter by labels",
 			Keywords: []string{"filter", "labels", "tags"},
 			Run: func(a *App) {
@@ -546,6 +608,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "filter_status",
+			Group:    GroupList,
 			Title:    "Filter by status",
 			Keywords: []string{"filter", "status", "state"},
 			Run: func(a *App) {
@@ -554,6 +617,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "filter_project",
+			Group:    GroupList,
 			Title:    "Filter by project",
 			Keywords: []string{"filter", "project"},
 			Run: func(a *App) {
@@ -562,6 +626,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "filter_cycle",
+			Group:    GroupList,
 			Title:    "Filter by cycle",
 			Keywords: []string{"filter", "cycle", "sprint"},
 			Run: func(a *App) {
@@ -570,6 +635,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "filter_due_date",
+			Group:    GroupList,
 			Title:    "Filter by due date",
 			Keywords: []string{"filter", "due", "date"},
 			Run: func(a *App) {
@@ -578,6 +644,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "filter_estimate",
+			Group:    GroupList,
 			Title:    "Filter by estimate",
 			Keywords: []string{"filter", "estimate", "points"},
 			Run: func(a *App) {
@@ -586,6 +653,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "add_issue_relation",
+			Group:    GroupRelations,
 			Scope:    ScopeIssue,
 			Title:    "Add issue relation",
 			Keywords: []string{"relation", "dependency", "blocking", "blocked", "related", "duplicate", "similar"},
@@ -595,6 +663,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "remove_issue_relation",
+			Group:    GroupRelations,
 			Scope:    ScopeIssue,
 			Title:    "Remove issue relation",
 			Keywords: []string{"relation", "dependency", "remove", "unlink"},
@@ -604,6 +673,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "subscribe_issue",
+			Group:    GroupIssue,
 			Scope:    ScopeIssue,
 			Title:    "Subscribe",
 			Keywords: []string{"subscribe", "watch", "subscriber"},
@@ -613,6 +683,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "unsubscribe_issue",
+			Group:    GroupIssue,
 			Scope:    ScopeIssue,
 			Title:    "Unsubscribe",
 			Keywords: []string{"unsubscribe", "watch", "subscriber"},
@@ -622,6 +693,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "open_attachment",
+			Group:    GroupShare,
 			Scope:    ScopeIssue,
 			Title:    "Open attachment",
 			Keywords: []string{"attachment", "link", "open", "github", "jira", "slack", "url"},
@@ -631,6 +703,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "copy_attachment_url",
+			Group:    GroupShare,
 			Scope:    ScopeIssue,
 			Title:    "Copy attachment URL",
 			Keywords: []string{"attachment", "link", "copy", "url"},
@@ -640,6 +713,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "assign_me",
+			Group:        GroupFields,
 			Scope:        ScopeIssue,
 			Title:        "Assign to me",
 			Keywords:     []string{"assign", "me", "self", "take"},
@@ -659,6 +733,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "unassign",
+			Group:        GroupFields,
 			Scope:        ScopeIssue,
 			Title:        "Unassign issue",
 			Keywords:     []string{"unassign", "remove", "clear assignee"},
@@ -678,6 +753,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "archive",
+			Group:        GroupIssue,
 			Scope:        ScopeIssue,
 			Title:        "Archive issue",
 			Keywords:     []string{"archive", "delete", "remove"},
@@ -719,6 +795,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "change_status",
+			Group:        GroupFields,
 			Scope:        ScopeIssue,
 			Title:        "Change status",
 			Keywords:     []string{"status", "state", "workflow", "todo", "progress", "done"},
@@ -739,6 +816,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "set_cycle",
+			Group:        GroupFields,
 			Scope:        ScopeIssue,
 			Title:        "Set cycle",
 			Keywords:     []string{"cycle", "sprint", "iteration", "set"},
@@ -756,6 +834,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "clear_cycle",
+			Group:    GroupFields,
 			Scope:    ScopeIssue,
 			Title:    "Clear cycle",
 			Keywords: []string{"cycle", "clear", "remove", "unset"},
@@ -778,6 +857,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "assign_user",
+			Group:        GroupFields,
 			Scope:        ScopeIssue,
 			Title:        "Assign to user",
 			Keywords:     []string{"assign", "user", "team", "member"},
@@ -795,6 +875,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "change_team",
+			Group:        GroupFields,
 			Scope:        ScopeIssue,
 			Title:        "Change team",
 			Keywords:     []string{"team", "move", "change", "transfer"},
@@ -805,6 +886,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "create_issue",
+			Group:        GroupIssue,
 			Title:        "Create new issue",
 			Keywords:     []string{"create", "new", "add", "issue"},
 			ShortcutRune: 'n',
@@ -819,6 +901,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "edit_issue",
+			Group:        GroupIssue,
 			Scope:        ScopeIssue,
 			Title:        "Edit issue",
 			Keywords:     []string{"edit", "issue", "form", "properties", "update"},
@@ -834,6 +917,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "edit_description",
+			Group:    GroupIssue,
 			Scope:    ScopeIssue,
 			Title:    "Edit issue description",
 			Keywords: []string{"edit", "description", "body", "details"},
@@ -848,6 +932,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "edit_labels",
+			Group:        GroupIssue,
 			Scope:        ScopeIssue,
 			Title:        "Edit issue labels",
 			Keywords:     []string{"labels", "label", "tag", "tags"},
@@ -863,6 +948,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "toggle_sub_issues",
+			Group:    GroupRelations,
 			Scope:    ScopeIssue,
 			Title:    "Toggle sub-issues",
 			Keywords: []string{"toggle", "expand", "collapse", "sub", "children"},
@@ -878,6 +964,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "view_parent",
+			Group:    GroupRelations,
 			Scope:    ScopeIssue,
 			Title:    "View parent issue",
 			Keywords: []string{"parent", "up", "back"},
@@ -905,6 +992,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "expand_all",
+			Group:    GroupList,
 			Title:    "Expand all sub-issues",
 			Keywords: []string{"expand", "all", "open"},
 			Run: func(a *App) {
@@ -921,6 +1009,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "collapse_all",
+			Group:    GroupList,
 			Title:    "Collapse all sub-issues",
 			Keywords: []string{"collapse", "all", "close"},
 			Run: func(a *App) {
@@ -936,6 +1025,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "create_sub_issue",
+			Group:        GroupIssue,
 			Scope:        ScopeIssue,
 			Title:        "Create sub-issue",
 			Keywords:     []string{"create", "sub", "child", "new"},
@@ -952,6 +1042,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "set_parent",
+			Group:    GroupRelations,
 			Scope:    ScopeIssue,
 			Title:    "Set parent issue",
 			Keywords: []string{"set", "parent", "link"},
@@ -977,6 +1068,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:       "remove_parent",
+			Group:    GroupRelations,
 			Scope:    ScopeIssue,
 			Title:    "Remove parent",
 			Keywords: []string{"remove", "parent", "unlink", "top"},
@@ -1006,6 +1098,7 @@ func DefaultCommands(app *App) []Command {
 		},
 		{
 			ID:           "add_comment",
+			Group:        GroupIssue,
 			Scope:        ScopeIssue,
 			Title:        "Add comment",
 			Keywords:     []string{"add", "comment", "reply"},

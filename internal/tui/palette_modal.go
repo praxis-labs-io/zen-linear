@@ -27,6 +27,8 @@ const (
 	// paletteRowGap is the least space kept between a title and its shortcut,
 	// so a long title is truncated rather than run into one.
 	paletteRowGap = 2
+	// paletteRowIndent sets a command in from the heading above it.
+	paletteRowIndent = "  "
 )
 
 // newThemedInputField creates an InputField whose inner text area fills with
@@ -187,45 +189,41 @@ func (a *App) paletteListRows(matches int) int {
 	return rows
 }
 
-// paletteRow lays one command across the row: the title on the left edge, its
-// shortcut against the right. A command with no shortcut leaves that end blank.
-func (a *App) paletteRow(cmd Command) string {
-	shortcut := cmd.ShortcutDisplay
-	if shortcut == "" {
-		shortcut = FormatShortcut(cmd.ShortcutRune)
+// paletteRow draws one line of the palette: a heading, or a command with its
+// title indented under one and its shortcut against the right edge. A command
+// with no shortcut leaves that end blank.
+func (a *App) paletteRow(row PaletteRow) string {
+	if row.IsHeader {
+		return a.themeTags.Accent + string(row.Heading) + "[-]"
 	}
 
-	room := paletteRowWidth - runewidth.StringWidth(shortcut) - paletteRowGap
-	title := runewidth.Truncate(cmd.Title, room, "…")
-	pad := room - runewidth.StringWidth(title) + paletteRowGap
+	shortcut := row.Command.ShortcutDisplay
 	if shortcut == "" {
-		return title
+		shortcut = FormatShortcut(row.Command.ShortcutRune)
 	}
-	return title + strings.Repeat(" ", pad) + a.themeTags.Accent + shortcut + "[-]"
+
+	room := paletteRowWidth - len(paletteRowIndent) - runewidth.StringWidth(shortcut) - paletteRowGap
+	title := runewidth.Truncate(row.Command.Title, room, "…")
+	if shortcut == "" {
+		return paletteRowIndent + title
+	}
+	pad := room - runewidth.StringWidth(title) + paletteRowGap
+	return paletteRowIndent + title + strings.Repeat(" ", pad) + a.themeTags.Accent + shortcut + "[-]"
 }
 
 // updatePaletteList updates the palette list with filtered commands.
 func (a *App) updatePaletteList() {
 	a.paletteList.Clear()
-	filtered := a.paletteCtrl.Filtered()
-	cursor := a.paletteCtrl.Cursor()
+	rows := a.paletteCtrl.Rows()
 
-	for _, cmd := range filtered {
-		a.paletteList.AddItem(a.paletteRow(cmd), "", 0, nil)
+	for _, row := range rows {
+		a.paletteList.AddItem(a.paletteRow(row), "", 0, nil)
 	}
-
-	// Set selected item to match cursor position
-	if len(filtered) > 0 {
-		if cursor >= len(filtered) {
-			cursor = len(filtered) - 1
-		}
-		if cursor < 0 {
-			cursor = 0
-		}
+	if cursor := a.paletteCtrl.Cursor(); cursor >= 0 && cursor < len(rows) {
 		a.paletteList.SetCurrentItem(cursor)
 	}
 
-	a.paletteModal = a.layoutPaletteModal(a.paletteListRows(len(filtered)))
+	a.paletteModal = a.layoutPaletteModal(a.paletteListRows(len(rows)))
 
 	// Replace the modal in pages
 	a.pages.RemovePage("palette")
