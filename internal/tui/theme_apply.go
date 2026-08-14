@@ -116,9 +116,6 @@ func (a *App) applyDensityToComponents() {
 	if a.statusRow != nil {
 		a.applyStatusBarPadding()
 	}
-	if a.agentOutputModal != nil {
-		a.agentOutputModal.ApplyDensity(a.density)
-	}
 }
 
 func (a *App) rebuildModals() {
@@ -133,7 +130,6 @@ func (a *App) rebuildModals() {
 	a.pickerModal = NewPickerModal(a)
 	a.issueFormModal = NewIssueFormModal(a)
 	a.editDescriptionModal = NewEditDescriptionModal(a)
-	a.editLabelsModal = NewEditLabelsModal(a)
 	a.textInputModal = NewTextInputModal(a)
 	a.multiSelectModal = NewMultiSelectModal(a)
 	a.settingsModal = NewSettingsModal(a)
@@ -143,7 +139,6 @@ func (a *App) rebuildModals() {
 		a.agentOutputModal = NewAgentOutputModal(a)
 	} else {
 		a.agentOutputModal.ApplyTheme(a.theme)
-		a.agentOutputModal.ApplyDensity(a.density)
 	}
 	a.confirmationModal = NewConfirmationModal(a)
 }
@@ -200,9 +195,11 @@ func selectionStyle(theme Theme) tcell.Style {
 		Bold(true)
 }
 
-// listSelectionStyle is the stronger accent selection used by modal lists
-// (command palette, pickers), where the selected row is the primary object on
-// screen and must stand apart from input fields and panel fills.
+// listSelectionStyle is the stronger accent selection, for a list that shares a
+// modal with other controls: the form's inline multi-select and the prompt
+// templates list, where the bar has to read as "the keyboard is in here" rather
+// than "this row is current". A list that is the whole of its modal takes
+// selectionStyle instead, the same bar the panes use.
 func (a *App) listSelectionStyle() tcell.Style {
 	return tcell.StyleDefault.
 		Foreground(a.theme.InverseTextColor()).

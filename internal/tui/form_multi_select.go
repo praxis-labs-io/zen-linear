@@ -11,6 +11,8 @@ import (
 // toggle rows, no overlay. The form owns its keys, so it takes Space, t and
 // Enter through FormModal.HandleKey.
 type FormMultiSelect struct {
+	// app is held for the row marks, which are colored from the theme.
+	app         *App
 	list        *tview.List
 	items       []MultiSelectItem
 	selected    map[string]bool
@@ -23,6 +25,7 @@ func (fm *FormModal) newMultiSelect() *FormMultiSelect {
 	theme := fm.app.theme
 
 	ms := &FormMultiSelect{
+		app:         fm.app,
 		selected:    make(map[string]bool),
 		placeholder: "No options",
 	}
@@ -88,8 +91,8 @@ func (ms *FormMultiSelect) toggle() {
 	ms.list.SetCurrentItem(idx)
 }
 
-// refresh rebuilds the rows. Parentheses mark the boxes because tview reads
-// square brackets as a color tag.
+// refresh rebuilds the rows, marked the same way the multi-select modal marks
+// its own.
 func (ms *FormMultiSelect) refresh() {
 	current := ms.list.GetCurrentItem()
 	ms.list.Clear()
@@ -99,11 +102,7 @@ func (ms *FormMultiSelect) refresh() {
 		return
 	}
 	for _, item := range ms.items {
-		prefix := "( ) "
-		if ms.selected[item.ID] {
-			prefix = "(x) "
-		}
-		ms.list.AddItem(prefix+item.Label, "", 0, nil)
+		ms.list.AddItem(ms.app.multiSelectRow(item.Label, ms.selected[item.ID]), "", 0, nil)
 	}
 	if current < 0 || current >= len(ms.items) {
 		current = 0

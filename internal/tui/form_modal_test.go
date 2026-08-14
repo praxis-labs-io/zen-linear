@@ -211,7 +211,7 @@ func TestFormModalMultiSelectTogglesAndReadsBackSorted(t *testing.T) {
 
 	capture := fm.frame.GetInputCapture()
 	capture(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
-	if first, _ := ms.list.GetItemText(0); first != "(x) Chore" {
+	if first, _ := ms.list.GetItemText(0); markOf(first) != '◼' {
 		t.Fatalf("first row = %q, want it ticked", first)
 	}
 	ms.list.SetCurrentItem(1)
@@ -244,7 +244,7 @@ func TestFormModalMultiSelectKeepsSelectionAcrossSetItems(t *testing.T) {
 	}
 	ms.SetItems([]MultiSelectItem{{ID: "label-bug", Label: "Bug"}, {ID: "label-chore", Label: "Chore"}}, []string{"label-bug"})
 
-	if first, _ := ms.list.GetItemText(0); first != "(x) Bug" {
+	if first, _ := ms.list.GetItemText(0); markOf(first) != '◼' {
 		t.Fatalf("first row = %q, want the prior selection ticked", first)
 	}
 }

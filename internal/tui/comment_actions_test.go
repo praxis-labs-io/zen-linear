@@ -888,3 +888,35 @@ func TestAnUnwrittenQuoteDoesNotFollowYou(t *testing.T) {
 		t.Errorf("the box holds %q, want the comment just quoted", got)
 	}
 }
+
+// TestClosingAnOverlayLeavesTheDetailsPaneWhereItWas is the details half of the
+// pane claims. tview re-delegates focus down the whole tree on every page add
+// and remove, and that walk goes to whichever pane contentFlex has flagged,
+// which goes stale: updateFocus only rebuilds the layout below the wide
+// breakpoint, so stepping off the details pane on a wide terminal leaves the
+// flag on it. enterCommentsFocus used to read that walk as the user having
+// landed here, so closing a picker opened from the issues pane handed the
+// keyboard to the details pane instead of giving it back.
+func TestClosingAnOverlayLeavesTheDetailsPaneWhereItWas(t *testing.T) {
+	app := newCommentsTestApp(t)
+	showComments(t, app, 80, 24)
+	app.detailsHidden = false
+	app.layoutMode = layoutWide
+	app.app.SetRoot(app.pages, true)
+
+	// Land on the details pane so the layout flags it, then step to the issues
+	// pane, which on a wide terminal leaves the flag where it was.
+	app.focusedPane = FocusDetails
+	app.rebuildContentLayout()
+	app.stepPane(-1)
+	if app.focusedPane != FocusIssues {
+		t.Fatalf("the step landed on %v, want the issues pane", app.focusedPane)
+	}
+
+	app.pickerModal.Show("Set Priority", []PickerItem{{ID: "1", Label: "Urgent"}}, func(PickerItem) {})
+	app.pickerModal.Hide()
+
+	if app.focusedPane != FocusIssues {
+		t.Fatalf("closing the picker left the pane on %v, want the issues pane it opened from", app.focusedPane)
+	}
+}

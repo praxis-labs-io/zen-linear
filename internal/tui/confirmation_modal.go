@@ -42,7 +42,7 @@ func (cm *ConfirmationModal) Show(title, message, confirmLabel string, onConfirm
 	cm.modal.SetBorder(true).
 		SetBorderColor(cm.app.theme.BorderFocus).
 		SetTitle(" " + title + " ").
-		SetTitleColor(cm.app.theme.Foreground)
+		SetTitleColor(cm.app.theme.Accent)
 
 	cm.app.pages.AddPage("confirmation", cm.modal, true, true)
 	cm.app.pages.SendToFront("confirmation")

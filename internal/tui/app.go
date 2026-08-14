@@ -144,7 +144,6 @@ type App struct {
 	pickerModal          *PickerModal
 	issueFormModal       *IssueFormModal
 	editDescriptionModal *EditDescriptionModal
-	editLabelsModal      *EditLabelsModal
 	textInputModal       *TextInputModal
 	multiSelectModal     *MultiSelectModal
 	settingsModal        *SettingsModal
@@ -735,7 +734,6 @@ func (a *App) buildLayout() {
 	a.pickerModal = NewPickerModal(a)
 	a.issueFormModal = NewIssueFormModal(a)
 	a.editDescriptionModal = NewEditDescriptionModal(a)
-	a.editLabelsModal = NewEditLabelsModal(a)
 	a.textInputModal = NewTextInputModal(a)
 	a.multiSelectModal = NewMultiSelectModal(a)
 	a.settingsModal = NewSettingsModal(a)

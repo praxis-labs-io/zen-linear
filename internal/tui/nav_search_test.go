@@ -72,10 +72,13 @@ func TestClickingEitherControlMovesTheKeyboardWithIt(t *testing.T) {
 	}
 }
 
-// clickNavPane focuses a primitive the way a mouse click does: straight through
-// tview, with none of the app's own focus bookkeeping.
+// clickNavPane focuses a primitive the way a mouse click does: the app's mouse
+// capture claims the pane first, then tview delivers the press to the widget,
+// which focuses itself. Both halves matter. A bare SetFocus is what a page add
+// or remove does too, and the pane cannot be claimed off one of those.
 func clickNavPane(t *testing.T, app *App, target tview.Primitive) {
 	t.Helper()
+	app.claimPaneFocus(FocusNavigation)
 	app.app.SetFocus(target)
 }
 
@@ -102,6 +105,44 @@ func TestAnOverlayKeepsTheKeysWhileItsPageChurns(t *testing.T) {
 		if app.focusedPane != FocusPalette {
 			t.Fatalf("%v handed the pane to %v while the palette was up", event.Key(), app.focusedPane)
 		}
+	}
+}
+
+// TestClosingAnOverlayGoesBackToThePaneItOpenedFrom is the other half of the
+// churn. Both windows the pane claims used to slip through leave the user in
+// whichever pane tview walked to: opening the palette rebuilds its page before
+// it records the pane to go back to, and closing a modal drops its page before
+// the fallback reads one. The nav pane and the details page each had a claim
+// that answered one of those walks.
+func TestClosingAnOverlayGoesBackToThePaneItOpenedFrom(t *testing.T) {
+	overlays := []struct {
+		name  string
+		open  func(*App)
+		close func(*App)
+	}{
+		{"palette", (*App).openPalette, (*App).closePalette},
+		{"picker", func(a *App) {
+			a.pickerModal.Show("Set Priority", []PickerItem{{ID: "1", Label: "Urgent"}}, func(PickerItem) {})
+		}, func(a *App) { a.pickerModal.Hide() }},
+		{"multi_select", func(a *App) {
+			a.multiSelectModal.Show("Filter Labels", []MultiSelectItem{{ID: "1", Label: "Bug"}}, nil, func([]string) {})
+		}, func(a *App) { a.multiSelectModal.Hide() }},
+	}
+	for _, overlay := range overlays {
+		t.Run(overlay.name, func(t *testing.T) {
+			app := newUXTestApp(t)
+			app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
+			app.app.SetRoot(app.pages, true)
+			app.focusedPane = FocusIssues
+			app.updateFocus()
+
+			overlay.open(app)
+			overlay.close(app)
+
+			if app.focusedPane != FocusIssues {
+				t.Fatalf("closing the %s left the pane on %v, want the issues pane it opened from", overlay.name, app.focusedPane)
+			}
+		})
 	}
 }
 

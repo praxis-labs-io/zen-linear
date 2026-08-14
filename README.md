@@ -170,7 +170,7 @@ On the selected issue, from the issues and details panes:
 
 In the navigation pane:
 
-    f           favorite or unfavorite the item under the cursor
+    F           favorite or unfavorite the item under the cursor
     J/K         move a favorite down or up
     L           move a favorite into the folder above it
     H           move a favorite back out of its folder

@@ -105,7 +105,7 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 		SetBorder(true).
 		SetBorderColor(app.theme.BorderFocus).
 		SetTitle(" Agent Prompts ").
-		SetTitleColor(app.theme.Foreground)
+		SetTitleColor(app.theme.Accent)
 	padding := app.density.ModalPadding
 	modalContent.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
 

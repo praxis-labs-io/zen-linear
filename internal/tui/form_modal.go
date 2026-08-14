@@ -121,7 +121,7 @@ func NewFormModal(app *App, title string) *FormModal {
 		SetBorder(true).
 		SetBorderColor(app.theme.BorderFocus).
 		SetTitle(" " + title + " ").
-		SetTitleColor(app.theme.Foreground)
+		SetTitleColor(app.theme.Accent)
 	// Vertical space comes from the row layout itself; only the horizontal
 	// padding is kept so fields don't touch the border.
 	padding := app.density.ModalPadding

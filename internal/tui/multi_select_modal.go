@@ -4,7 +4,12 @@ import (
 	"sort"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+)
+
+const (
+	multiSelectMaxWidth = 60
+	// multiSelectMaxVisibleRows caps the panel's height; a longer list scrolls.
+	multiSelectMaxVisibleRows = 12
 )
 
 // MultiSelectItem represents an option in a multi-select modal.
@@ -13,119 +18,82 @@ type MultiSelectItem struct {
 	Label string
 }
 
-// MultiSelectModal manages a reusable multi-select picker.
+// multiSelectRow is one toggle row: a filled block in the color a finished
+// action is said in, or a hollow one sitting back in the muted text. Square
+// brackets are out as the box, tview reads them as a color tag.
+func (a *App) multiSelectRow(label string, on bool) string {
+	mark := a.themeTags.SecondaryText + "◻[-]"
+	if on {
+		mark = a.themeTags.Success + "◼[-]"
+	}
+	return mark + " " + label
+}
+
+// MultiSelectModal manages a reusable multi-select picker. Editing an issue's
+// labels is this modal with a context line, not a second copy of it.
 type MultiSelectModal struct {
-	app       *App
-	modal     *tview.Flex
-	list      *tview.List
-	titleView *tview.TextView
-	items     []MultiSelectItem
-	selected  map[string]bool
-	onSave    func([]string)
+	*listModal
+	items    []MultiSelectItem
+	selected map[string]bool
+	onSave   func([]string)
 }
 
 // NewMultiSelectModal creates a new multi-select modal.
 func NewMultiSelectModal(app *App) *MultiSelectModal {
-	mm := &MultiSelectModal{
-		app:      app,
+	return &MultiSelectModal{
+		listModal: newListModal(app, "multi_select",
+			"↑↓ move   space toggle   ↵ apply   esc close",
+			multiSelectMaxWidth, multiSelectMaxVisibleRows),
 		selected: make(map[string]bool),
 	}
-
-	mm.list = tview.NewList().
-		ShowSecondaryText(false).
-		SetMainTextStyle(tcell.StyleDefault.Foreground(app.theme.Foreground).Background(app.theme.ModalBackground())).
-		SetSelectedStyle(app.listSelectionStyle()).
-		SetHighlightFullLine(true)
-	mm.list.SetBackgroundColor(app.theme.ModalBackground())
-
-	mm.titleView = tview.NewTextView()
-	mm.titleView.SetTextColor(app.theme.Accent)
-	mm.titleView.SetBackgroundColor(app.theme.ModalBackground())
-
-	helpView := tview.NewTextView()
-	helpView.SetText("Space: toggle | Enter: apply | Esc: cancel")
-	helpView.SetTextColor(app.theme.SecondaryText)
-	helpView.SetBackgroundColor(app.theme.ModalBackground())
-	helpView.SetTextAlign(tview.AlignCenter)
-
-	content := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(mm.titleView, 1, 0, false).
-		AddItem(mm.list, 0, 1, true).
-		AddItem(helpView, 1, 0, false)
-	content.Box = tview.NewBox().SetBackgroundColor(app.theme.ModalBackground())
-	content.SetBackgroundColor(app.theme.ModalBackground()).
-		SetBorder(true).
-		SetBorderColor(app.theme.Accent).
-		SetTitleColor(app.theme.Foreground)
-	padding := app.density.ModalPadding
-	content.SetBorderPadding(padding.Top, padding.Bottom, padding.Left, padding.Right)
-
-	mm.modal = tview.NewFlex().
-		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().
-			SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(content, 20, 0, true).
-			AddItem(nil, 0, 1, false), 60, 0, true).
-		AddItem(nil, 0, 1, false)
-	mm.modal.SetBackgroundColor(app.theme.ModalBackground())
-
-	return mm
 }
 
 // Show displays the multi-select modal.
 func (mm *MultiSelectModal) Show(title string, items []MultiSelectItem, selectedIDs []string, onSave func([]string)) {
+	mm.ShowWithContext(title, "", items, selectedIDs, onSave)
+}
+
+// ShowWithContext also pins an issue context line above the list, for the
+// modals that toggle something about one issue.
+func (mm *MultiSelectModal) ShowWithContext(title, contextLine string, items []MultiSelectItem, selectedIDs []string, onSave func([]string)) {
 	mm.items = items
 	mm.onSave = onSave
 	mm.selected = make(map[string]bool, len(selectedIDs))
 	for _, id := range selectedIDs {
 		mm.selected[id] = true
 	}
-	mm.titleView.SetText(title)
-	mm.refreshList()
-	mm.app.pages.AddPage("multi_select", mm.modal, true, true)
-	mm.app.pages.SendToFront("multi_select")
-	mm.app.app.SetFocus(mm.list)
+
+	mm.fillList()
+	mm.open(title, contextLine)
 }
 
-func (mm *MultiSelectModal) refreshList() {
-	currentIdx := mm.list.GetCurrentItem()
-	mm.list.Clear()
+// fillList rewrites the options, or the placeholder standing in for none.
+func (mm *MultiSelectModal) fillList() {
 	if len(mm.items) == 0 {
-		mm.list.AddItem("No options available", "", 0, nil)
+		mm.showPlaceholder("No options")
 		return
 	}
-	for idx, item := range mm.items {
-		focusPrefix := "  "
-		if idx == currentIdx {
-			focusPrefix = "> "
-		}
-		prefix := "( ) "
-		if mm.selected[item.ID] {
-			prefix = "(x) "
-		}
-		mm.list.AddItem(focusPrefix+prefix+item.Label, "", 0, nil)
+
+	mm.beginRows(len(mm.items))
+	for _, item := range mm.items {
+		mm.list.AddItem(mm.app.multiSelectRow(item.Label, mm.selected[item.ID]), "", 0, nil)
 	}
-	if currentIdx < 0 || currentIdx >= len(mm.items) {
-		currentIdx = 0
-	}
-	mm.list.SetCurrentItem(currentIdx)
+	mm.list.SetCurrentItem(0)
 }
 
+// toggleCurrentItem flips the highlighted option and rewrites its row alone.
 func (mm *MultiSelectModal) toggleCurrentItem() {
-	idx := mm.list.GetCurrentItem()
-	if idx < 0 || idx >= len(mm.items) {
+	index := mm.list.GetCurrentItem()
+	if index < 0 || index >= len(mm.items) {
 		return
 	}
-	id := mm.items[idx].ID
-	if mm.selected[id] {
-		delete(mm.selected, id)
+	item := mm.items[index]
+	if mm.selected[item.ID] {
+		delete(mm.selected, item.ID)
 	} else {
-		mm.selected[id] = true
+		mm.selected[item.ID] = true
 	}
-	mm.refreshList()
-	mm.list.SetCurrentItem(idx)
+	mm.list.SetItemText(index, mm.app.multiSelectRow(item.Label, mm.selected[item.ID]), "")
 }
 
 func (mm *MultiSelectModal) selectedIDs() []string {
@@ -137,15 +105,6 @@ func (mm *MultiSelectModal) selectedIDs() []string {
 	return ids
 }
 
-// Hide hides the multi-select modal.
-func (mm *MultiSelectModal) Hide() {
-	mm.app.pages.RemovePage("multi_select")
-	mm.app.restoreModalFocus()
-}
-
-// Focus returns keyboard focus to the list, for when an overlay closes.
-func (mm *MultiSelectModal) Focus() { mm.app.app.SetFocus(mm.list) }
-
 // HandleKey handles keyboard input for the multi-select modal.
 func (mm *MultiSelectModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
@@ -153,6 +112,12 @@ func (mm *MultiSelectModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		mm.Hide()
 		return nil
 	case tcell.KeyEnter:
+		// Nothing to apply when there was nothing to pick from. An empty
+		// selection over real options is a choice; over none it is not.
+		if len(mm.items) == 0 {
+			mm.Hide()
+			return nil
+		}
 		ids := mm.selectedIDs()
 		mm.Hide()
 		if mm.onSave != nil {
@@ -160,10 +125,10 @@ func (mm *MultiSelectModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case tcell.KeyUp:
-		mm.moveCurrentItem(-1)
+		mm.move(-1)
 		return nil
 	case tcell.KeyDown:
-		mm.moveCurrentItem(1)
+		mm.move(1)
 		return nil
 	case tcell.KeyRune:
 		switch event.Rune() {
@@ -171,27 +136,12 @@ func (mm *MultiSelectModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 			mm.toggleCurrentItem()
 			return nil
 		case 'j':
-			mm.moveCurrentItem(1)
+			mm.move(1)
 			return nil
 		case 'k':
-			mm.moveCurrentItem(-1)
+			mm.move(-1)
 			return nil
 		}
 	}
 	return event
-}
-
-func (mm *MultiSelectModal) moveCurrentItem(delta int) {
-	if len(mm.items) == 0 {
-		return
-	}
-	idx := mm.list.GetCurrentItem() + delta
-	if idx < 0 {
-		idx = 0
-	}
-	if idx >= len(mm.items) {
-		idx = len(mm.items) - 1
-	}
-	mm.list.SetCurrentItem(idx)
-	mm.refreshList()
 }

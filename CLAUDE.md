@@ -122,6 +122,16 @@ Tab is not pane navigation. It walks a pane's own controls, a writing box to its
 
 Adding a page moves focus. `Pages.AddPage` re-delegates focus to the top visible page whenever the Pages tree holds it, and that walks down to the pane `buildLayout` flagged, not the pane the user is in. Anything that adds or replaces a page mid-session has to end in `restoreModalFocus`; `applySettings` defers it so the restore runs after `resetCachedState` moves the active tab out from under it. `modal_dispatch_test.go` pins the order against its own literal copy, so reordering the registry fails there rather than agreeing with itself.
 
+### The modal shell
+
+`modal_shell.go` is what an overlay panel is made of, and **every new one composes with it rather than picking its own numbers**: `modalWidth(widest)` and `fitModalHeight(want)` clamp to the terminal, `modalPanel(title)` is the bordered box (fill restored, `BorderFocus`, one column of gutter, the title on the border in the accent and never in a content row), `modalRule()` is the line over a footer that meets that border in a tee, and `centerModal` places it. **Every modal title is on the accent and every pane title on the foreground**, so the color is what says overlay. A fixed size is the bug this replaced: the agent output modal was larger than a 100x30 terminal before it drew anything, and a two-option picker cost fifteen rows.
+
+`centerModal` refills the wrapper it is given rather than returning a new one, because pages hold that pointer for as long as the modal is up. **Two Flexes, never three**: a third only looks centered, because tview hands its spacers a negative width when the panel is wider than the slot they share. That puts the panel where it belongs and its rect somewhere else, and a rect the pointer is not in takes no clicks.
+
+`newListModal` builds the shell, and `showPlaceholder` is its empty state: one dim row with the cursor hidden behind it, so nothing reads as pickable when there is nothing to pick. `PickerModal` and `MultiSelectModal` are both built this way, one `layout()` per `Show` since the title and the height come from what the modal was handed.
+
+**Editing an issue's labels is the multi-select with a context line**, not a modal of its own. It was a second copy of the same toggle list until 2026-08-14. The `edit_labels` command id is unchanged; only the type went.
+
 ### Theme system
 
 Themes are structs in `internal/tui/theme.go` registered in `ThemeRegistry`. Optional fields (`InverseText`, `StatusReview`, `StatusTriage`, `AssigneeText`, `Success`) have fallback methods so legacy themes need no changes.
@@ -136,7 +146,11 @@ Modal panels: `tview.NewFlex` (and Grid) set `dontClear`, so a Flex never paints
 
 The pane is `navigationPanel` (`nav_search.go`), a Flex owning the border, the pane title, and one column of border padding: the query box in a bordered frame of its own, and a borderless `navigationTree` beneath. `navSearchFocused` says which of the two controls holds the keyboard, and `navSearchActive()` gates key routing above the global runes in `handleGlobalKey` — without that gate, `q`, `:` and the pane numbers fire while you type. `buildNavigationPanel` rebuilds the box and the frame on a theme change and must end in `rebuildContentLayout`, or `contentFlex` keeps the old pointer.
 
-Both controls call `claimNavFocus` from a `SetFocusFunc`, because a mouse click focuses a widget without ever reaching `updateFocus`. Two rules there. It must **never call `updateFocus`** — that calls `SetFocus`, which calls the callback back. And it **stands down while an overlay is up**: tview re-delegates focus down the whole tree on every page add and remove, that walk reaches this pane, and the palette rebuilds its page on every keystroke. Without the guard the claim took the pane back mid-rebuild and the palette's own re-show check then failed silently, so every key closed it.
+Both controls call `claimNavFocus` from a `SetFocusFunc`, because a mouse click focuses a widget without ever reaching `updateFocus`. Three rules there. It must **never call `updateFocus`** — that calls `SetFocus`, which calls the callback back. It **stands down while an overlay is up**: tview re-delegates focus down the whole tree on every page add and remove, that walk reaches this pane, and the palette rebuilds its page on every keystroke. Without the guard the claim took the pane back mid-rebuild and the palette's own re-show check then failed silently, so every key closed it.
+
+And it **records which of the two controls has the keyboard, never the pane**. `enterCommentsFocus` (`details_compose.go`) is the same primitive for the details page and holds the same rule, for the same reason. `handleMouse` owns `focusedPane` and sets it before the click is delivered, so claiming the pane in a focus callback as well let anything that focuses those widgets claim it. The two windows the overlay guard cannot see are opening the palette, which rebuilds its page before it records the pane to go back to, and closing a modal, which drops its page before `restoreModalFocus` reads one. A walk landing in either window took the pane, and Escape out of a picker or the palette went there instead of back where it came from.
+
+**Which pane the walk reaches is not fixed**: it is whichever child `contentFlex` flagged, and that flag goes stale, because `updateFocus` only rebuilds the layout below the wide breakpoint. On a wide terminal, stepping off a pane leaves the flag on it, so the same bug surfaced first as the nav pane stealing focus and then as the details pane. `TestClosingAnOverlayGoesBackToThePaneItOpenedFrom` and `TestClosingAnOverlayLeavesTheDetailsPaneWhereItWas` are what catch it coming back.
 
 One of the panel's two children must carry the Flex's focus flag. `SetRoot` and every added page delegate focus downward, and a Flex with nothing flagged keeps it on its own Box, which answers no keys: the pane looks focused and the arrows do nothing.
 
@@ -146,7 +160,7 @@ The search is workspace-wide and takes neither the tree's scope, the rich filter
 
 `palette_modal.go` is the panel, `palette_controller.go` is what it draws, `palette_search.go` ranks a query.
 
-The panel is rebuilt on every keystroke — the query box, its frame and the list are reused, the centering wrappers are not — so `layoutPaletteModal` is the only place its shape is written down. The footer rule is drawn a column wider than the padded content each side, so it meets the panel's border in a tee rather than stopping short of it.
+The panel is rebuilt on every keystroke — the query box, its frame and the list are reused, the centering wrappers are not — so `layoutPaletteModal` is the only place its shape is written down. Its chrome is the shared modal shell above; only the query box, the row layout and the row cap are the palette's own.
 
 `PaletteRow` is a heading or a command, the way `IssueRow` is. **The cursor never rests on a heading**: `step` walks past them, so `Selected` cannot answer with one, and `filterCommands` lands the cursor on the first command rather than row zero. Headings only appear under an empty query; a query lists matches flat, since grouping would fight the ranking.
 

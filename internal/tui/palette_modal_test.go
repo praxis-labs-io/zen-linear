@@ -183,7 +183,7 @@ func panelRect(t *testing.T, app *App) (x, y, width int) {
 	if listWidth == 0 {
 		t.Fatal("the palette was never drawn")
 	}
-	return listX - paletteGutter - 1, listY - paletteQueryBoxRows - 1, listWidth + 2*(paletteGutter+1)
+	return listX - modalGutter - 1, listY - paletteQueryBoxRows - 1, listWidth + 2*(modalGutter+1)
 }
 
 // TestPaletteFitsASmallScreen pins the panel inside the terminal. Laid out at

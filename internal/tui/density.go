@@ -4,12 +4,12 @@ import "github.com/zen-linear/zen-linear/internal/config"
 
 // DensityProfile defines spacing values for UI layouts.
 type DensityProfile struct {
-	ID                 string
-	DetailsPadding     Padding
-	ModalPadding       Padding
-	StatusBarPadding   Padding
-	PaletteSpacerLines int
-	DetailsSectionGap  int
+	ID                string
+	DetailsPadding    Padding
+	ModalPadding      Padding
+	StatusBarPadding  Padding
+	ModalSpacerLines  int
+	DetailsSectionGap int
 }
 
 // Padding captures per-side padding values.
@@ -33,8 +33,8 @@ var DensityRegistry = map[string]DensityProfile{
 		StatusBarPadding: Padding{
 			Top: 0, Bottom: 0, Left: 1, Right: 1,
 		},
-		PaletteSpacerLines: 1,
-		DetailsSectionGap:  1,
+		ModalSpacerLines:  1,
+		DetailsSectionGap: 1,
 	},
 	config.DensityCompact: {
 		ID: config.DensityCompact,
@@ -47,8 +47,8 @@ var DensityRegistry = map[string]DensityProfile{
 		StatusBarPadding: Padding{
 			Top: 0, Bottom: 0, Left: 0, Right: 1,
 		},
-		PaletteSpacerLines: 0,
-		DetailsSectionGap:  0,
+		ModalSpacerLines:  0,
+		DetailsSectionGap: 0,
 	},
 }
 

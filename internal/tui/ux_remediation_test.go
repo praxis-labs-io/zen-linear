@@ -210,40 +210,46 @@ func TestSettingsModalShowsAndBuildsDefaultNavigationSettings(t *testing.T) {
 	}
 }
 
-func TestEditLabelsModalShowsFocusAndTogglesWithSpaceAndT(t *testing.T) {
+// TestEditLabelsTogglesWithSpaceAndT covers editing an issue's labels, which is
+// the multi-select with a context line rather than a modal of its own.
+func TestEditLabelsTogglesWithSpaceAndT(t *testing.T) {
 	app := newUXTestApp(t)
-	modal := app.editLabelsModal
+	modal := app.multiSelectModal
 	var saved []string
-	labels := []linearapi.IssueLabel{
-		{ID: "bug", Name: "Bug"},
-		{ID: "feature", Name: "Feature"},
+	labels := []MultiSelectItem{
+		{ID: "bug", Label: "Bug"},
+		{ID: "feature", Label: "Feature"},
 	}
-	modal.Show("issue-1", nil, labels, "ZEN-1 · Test issue", func(_ string, labelIDs []string) {
+	modal.ShowWithContext("Edit Labels", "ZEN-1 · Test issue", labels, nil, func(labelIDs []string) {
 		saved = append([]string(nil), labelIDs...)
 	})
 
-	first, _ := modal.list.GetItemText(0)
-	if first != "> ( ) Bug" {
-		t.Fatalf("initial first row = %q, want focused unchecked row", first)
+	if got := modal.contextView.GetText(true); !strings.Contains(got, "ZEN-1") {
+		t.Fatalf("context line = %q, want the issue named", got)
+	}
+	if first, _ := modal.list.GetItemText(0); markOf(first) != '◻' {
+		t.Fatalf("initial first row = %q, want an unchecked row", first)
 	}
 
 	modal.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
-	first, _ = modal.list.GetItemText(0)
-	if first != "> (x) Bug" {
-		t.Fatalf("after space first row = %q, want focused checked row", first)
+	if first, _ := modal.list.GetItemText(0); markOf(first) != '◼' {
+		t.Fatalf("after space first row = %q, want a checked row", first)
 	}
 
+	// Moving the cursor is the list's own selection, so no row text changes.
 	modal.HandleKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
-	first, _ = modal.list.GetItemText(0)
+	first, _ := modal.list.GetItemText(0)
 	second, _ := modal.list.GetItemText(1)
-	if first != "  (x) Bug" || second != "> ( ) Feature" {
-		t.Fatalf("rows after moving focus = %q / %q, want focus marker on second row", first, second)
+	if markOf(first) != '◼' || markOf(second) != '◻' {
+		t.Fatalf("rows after moving = %q / %q, want the marks unchanged", first, second)
+	}
+	if modal.list.GetCurrentItem() != 1 {
+		t.Fatalf("cursor = %d, want the second row", modal.list.GetCurrentItem())
 	}
 
 	modal.HandleKey(tcell.NewEventKey(tcell.KeyRune, 't', tcell.ModNone))
-	second, _ = modal.list.GetItemText(1)
-	if second != "> (x) Feature" {
-		t.Fatalf("after t second row = %q, want focused checked row", second)
+	if second, _ = modal.list.GetItemText(1); markOf(second) != '◼' {
+		t.Fatalf("after t second row = %q, want a checked row", second)
 	}
 
 	modal.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))

@@ -182,10 +182,15 @@ func (a *App) ShowEditLabelsModal() {
 		}
 		logger.Debug("tui.app: loaded labels issue=%s count=%d", issue.Identifier, len(availableLabels))
 
+		items := make([]MultiSelectItem, len(availableLabels))
+		for i, label := range availableLabels {
+			items[i] = MultiSelectItem{ID: label.ID, Label: label.Name}
+		}
+
 		a.QueueUpdateDraw(func() {
-			a.editLabelsModal.Show(issue.ID, currentLabelIDs, availableLabels, a.issueContextLine(*issue), func(issueID string, labelIDs []string) {
+			a.multiSelectModal.ShowWithContext("Edit Labels", a.issueContextLine(*issue), items, currentLabelIDs, func(labelIDs []string) {
 				a.runIssueUpdate(
-					linearapi.UpdateIssueInput{ID: issueID, LabelIDs: &labelIDs},
+					linearapi.UpdateIssueInput{ID: issue.ID, LabelIDs: &labelIDs},
 					fmt.Sprintf("Updated labels for %s", issue.Identifier),
 				)
 			})

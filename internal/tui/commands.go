@@ -164,7 +164,7 @@ func handleAskAgent(a *App) {
 
 			ctx, cancel := context.WithCancel(context.Background())
 			a.QueueUpdateDraw(func() {
-				title := fmt.Sprintf(" %s Output ", selected.Name())
+				title := fmt.Sprintf("%s Output", selected.Name())
 				a.agentOutputModal.Show(title, cancel)
 				a.agentOutputModal.AppendLine(fmt.Sprintf("Starting %s agent run...", selected.Name()))
 			})
@@ -318,12 +318,14 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
-			ID:           "toggle_favorite",
-			Group:        GroupView,
-			Scope:        ScopeNavigation,
-			Title:        "Favorite / unfavorite navigation item",
-			Keywords:     []string{"favorite", "unfavorite", "star", "pin", "bookmark"},
-			ShortcutRune: 'f',
+			ID:       "toggle_favorite",
+			Group:    GroupView,
+			Scope:    ScopeNavigation,
+			Title:    "Favorite / unfavorite navigation item",
+			Keywords: []string{"favorite", "unfavorite", "star", "pin", "bookmark"},
+			// Shifted, because it is destructive from the tree: lowercase f sat
+			// next to the movement keys and unfavorited a view on a mistype.
+			ShortcutRune: 'F',
 			Run:          handleToggleFavorite,
 		},
 		{
