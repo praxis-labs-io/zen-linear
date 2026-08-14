@@ -43,16 +43,27 @@ func (a *App) modalWidth(widest int) int {
 	return width
 }
 
-// fitModalHeight clamps a panel's content height to the screen, giving back the
-// margin first. A panel taller than the terminal is drawn off the top, taking
-// its title and footer with it.
-func (a *App) fitModalHeight(want int) int {
+// fitModalHeight clamps a panel's content height to the screen. A panel taller
+// than the terminal is drawn off the top, taking its title and footer with it.
+//
+// least is the height below which the panel has no body left, chrome plus a
+// row of content. The margin is given back before that floor is crossed, and
+// the floor before the screen itself: a panel that has to overrun its margin to
+// show one option is worth more than a tidy one showing none. Only a terminal
+// shorter than the floor clips, and there is nothing else to give.
+func (a *App) fitModalHeight(want, least int) int {
 	_, screenH := a.modalScreen()
 	if screenH <= 0 {
 		return want
 	}
-	if fits := screenH - modalScreenHMargin; want > fits {
-		want = fits
+	if roomy := screenH - modalScreenHMargin; want > roomy {
+		want = roomy
+	}
+	if want < least {
+		want = least
+	}
+	if want > screenH {
+		want = screenH
 	}
 	if want < 1 {
 		want = 1
@@ -179,10 +190,10 @@ func (lm *listModal) open(title, contextLine string) {
 
 // layout sizes the panel to what it holds and centers it. The list is the
 // flexible row, so a screen too short takes rows off it rather than clipping
-// the title or the hint.
+// the title or the hint. Below that the gaps go, and only then does the panel
+// overrun its margin: the list is the one part that has to be there.
 func (lm *listModal) layout(title string) {
 	app := lm.app
-	panel := app.modalPanel(title)
 
 	rows := lm.count
 	if rows == 0 {
@@ -192,24 +203,40 @@ func (lm *listModal) layout(title string) {
 		rows = lm.maxRows
 	}
 
-	// Border, the density spacer, and the footer's rule plus its hint line.
-	chrome := 2 + app.density.ModalSpacerLines + 2
-	if lm.contextLine != "" {
+	hasContext := lm.contextLine != ""
+	// The border, the footer's rule and its hint line, and where there is one,
+	// the context line plus the gap it brings with it.
+	fixed := 4
+	if hasContext {
+		fixed += 2
+	}
+
+	// A blank row under the list always, and one above it where no context line
+	// stands there. They are the first thing given up on a short screen, being
+	// the only part nobody reads.
+	gap, slots := app.density.ModalSpacerLines, 1
+	if !hasContext {
+		slots = 2
+	}
+	least := fixed + 1
+	if want := rows + fixed + slots*gap; app.fitModalHeight(want, least) < want {
+		gap = 0
+	}
+	height := app.fitModalHeight(rows+fixed+slots*gap, least)
+
+	panel := app.modalPanel(title)
+	if hasContext {
 		panel.AddItem(lm.contextView, 1, 0, false)
 		panel.AddItem(nil, 1, 0, false)
-		chrome += 2
 	} else {
-		// Without a context line the list would sit against the top border while
-		// the footer keeps its gap, and the panel reads lopsided.
-		panel.AddItem(nil, app.density.ModalSpacerLines, 0, false)
-		chrome += app.density.ModalSpacerLines
+		panel.AddItem(nil, gap, 0, false)
 	}
 	panel.AddItem(lm.list, 0, 1, true)
-	panel.AddItem(nil, app.density.ModalSpacerLines, 0, false)
+	panel.AddItem(nil, gap, 0, false)
 	panel.AddItem(app.modalRule(), 1, 0, false)
 	panel.AddItem(lm.hintView, 1, 0, false)
 
-	centerModal(lm.modal, panel, app.modalWidth(lm.widest), app.fitModalHeight(rows+chrome))
+	centerModal(lm.modal, panel, app.modalWidth(lm.widest), height)
 }
 
 // Hide closes the overlay and hands the keys back to whatever it covered.

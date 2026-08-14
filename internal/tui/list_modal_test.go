@@ -50,15 +50,18 @@ func pickerItems(n int) []PickerItem {
 	return items
 }
 
-// TestListModalsFitASmallScreen pins both panels inside the terminal. Laid out
-// at a fixed 50x15 and 60x20 they were drawn from a negative origin, which took
-// the footer off a short screen and the first columns of every row off a narrow
-// one.
+// TestListModalsFitASmallScreen pins both panels inside the terminal, and pins
+// a row of options inside the panel. Laid out at a fixed 50x15 and 60x20 they
+// were drawn from a negative origin, which took the footer off a short screen
+// and the first columns of every row off a narrow one. Sizing them to the
+// screen then took the other end: the chrome ate the whole panel and the list
+// was drawn at zero rows, or below zero, with the panel edges still tidy.
 func TestListModalsFitASmallScreen(t *testing.T) {
 	sizes := []struct{ width, height int }{
 		{100, 12},
 		{44, 14},
 		{40, 10},
+		{60, 8},
 		{100, 30},
 	}
 	for _, size := range sizes {
@@ -94,6 +97,10 @@ func assertPanelOnScreen(t *testing.T, list *tview.List, hint *tview.TextView, s
 	}
 	if bottom := hintY + 1; bottom >= screenH {
 		t.Errorf("the bottom border lands on row %d of a %d-row screen", bottom, screenH)
+	}
+	// A panel with no room left for an option is chrome around nothing.
+	if _, rows := rowsOf(list); rows < 1 {
+		t.Errorf("the list drew %d rows, want at least one option visible", rows)
 	}
 }
 
@@ -247,6 +254,44 @@ func TestAgentOutputFitsTheScreen(t *testing.T) {
 	}
 }
 
+// TestAgentOutputKeepsBothViewsReadable is the other end of sizing it to the
+// screen: clamped without a floor, the chrome took the whole panel and the
+// stream view was drawn at a negative height while the panel edges stayed tidy.
+func TestAgentOutputKeepsBothViewsReadable(t *testing.T) {
+	// agentOutputLeastHeight is the floor: a border, a status line, a footer and
+	// two bordered views. Under that the terminal cannot hold the modal at all,
+	// and clipping is the only thing left to do.
+	for _, size := range []struct{ width, height int }{{100, agentOutputLeastHeight}, {60, 20}, {120, 40}} {
+		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
+			app := appOnScreen(t, size.width, size.height)
+			app.agentOutputModal.Show("Claude Output", func() {})
+			t.Cleanup(app.agentOutputModal.Hide)
+			app.app.ForceDraw()
+
+			// Inside its own border, which is what the run is printed into. The
+			// rect alone passed on a view that was all border and no content.
+			if _, rows := rowsOf(app.agentOutputModal.streamView); rows-2 < 1 {
+				t.Errorf("the stream view has %d rows inside its border", rows-2)
+			}
+			if _, rows := rowsOf(app.agentOutputModal.finalView); rows-2 < 1 {
+				t.Errorf("the final view has %d rows inside its border", rows-2)
+			}
+		})
+	}
+}
+
+// TestAgentOutputTitleIsPaddedOnce covers the caller already passing a padded
+// title, which the shell then padded again.
+func TestAgentOutputTitleIsPaddedOnce(t *testing.T) {
+	app := appOnScreen(t, 120, 40)
+	app.agentOutputModal.Show("  Claude Output  ", func() {})
+	t.Cleanup(app.agentOutputModal.Hide)
+
+	if got := app.agentOutputModal.modalContent.GetTitle(); got != " Claude Output " {
+		t.Errorf("panel title = %q, want a single space each side", got)
+	}
+}
+
 // TestAgentOutputLightsTheViewTabLandsOn covers the focus cue: both views wore
 // the accent, so nothing said which one the scroll keys reached.
 func TestAgentOutputLightsTheViewTabLandsOn(t *testing.T) {
@@ -279,4 +324,33 @@ func markOf(row string) rune {
 		}
 	}
 	return 0
+}
+
+// TestClickingAPickerRowThatOpensAnother covers the trap tview's List sets: it
+// assigns currentItem after firing the row's callback, and one picker chains
+// into another on the same list, so the second picker was left holding the row
+// index clicked in the first. A two-option picker holding index 2 highlights
+// nothing and answers no keys.
+func TestClickingAPickerRowThatOpensAnother(t *testing.T) {
+	app := appOnScreen(t, 100, 30)
+	app.pickerModal.Show("Filter Issues", []PickerItem{
+		{ID: "a", Label: "Assignee"}, {ID: "b", Label: "Status"}, {ID: "c", Label: "Labels"},
+	}, func(PickerItem) {
+		app.pickerModal.Show("Status", []PickerItem{
+			{ID: "todo", Label: "Todo"}, {ID: "done", Label: "Done"},
+		}, func(PickerItem) {})
+	})
+	app.app.ForceDraw()
+
+	x, y, _, _ := app.pickerModal.list.GetInnerRect()
+	event := tcell.NewEventMouse(x+1, y+2, tcell.Button1, tcell.ModNone)
+	handler := app.pickerModal.list.MouseHandler()
+	handler(tview.MouseLeftClick, event, func(p tview.Primitive) { app.app.SetFocus(p) })
+
+	if got := len(app.pickerModal.items); got != 2 {
+		t.Fatalf("the click left %d options, want the chained picker's 2", got)
+	}
+	if got := app.pickerModal.list.GetCurrentItem(); got < 0 || got >= 2 {
+		t.Fatalf("the chained picker's cursor is %d, off a 2-option list", got)
+	}
 }

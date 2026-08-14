@@ -48,6 +48,11 @@ const (
 	agentOutputMaxHeight = 32
 	// agentOutputFooterRows is the resume line, the rule, and the hint.
 	agentOutputFooterRows = 3
+	// agentOutputLeastHeight is the shortest panel that prints anything in both
+	// views. They split what the border and footer leave 2:3, and the stream
+	// gives a row to the status line first, so the stream is what runs out: it
+	// needs four of that split's ten before its own border stops eating the lot.
+	agentOutputLeastHeight = 2 + agentOutputFooterRows + 10
 )
 
 // NewAgentOutputModal creates a new agent output modal.
@@ -97,8 +102,13 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		SetTitle(" Final ").
 		SetTitleColor(app.theme.Accent)
 
+	// A click focuses a view straight through tview, so each records itself or
+	// the border cue and Focus would answer for the view the user left.
+	om.streamView.SetFocusFunc(func() { om.focused = om.streamView; om.applyFocusBorders() })
+	om.finalView.SetFocusFunc(func() { om.focused = om.finalView; om.applyFocusBorders() })
+
 	om.helpView = tview.NewTextView()
-	om.helpView.SetText("↑↓ scroll   tab switch   c copy   r resume   esc close")
+	om.helpView.SetText("↑↓ scroll   tab switch   c copy   r resume   esc cancel run")
 	om.helpView.SetTextColor(app.theme.SecondaryText)
 	om.helpView.SetBackgroundColor(app.theme.ModalBackground())
 	om.helpView.SetTextAlign(tview.AlignCenter)
@@ -144,7 +154,7 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 func (om *AgentOutputModal) layout() {
 	centerModal(om.modal, om.modalContent,
 		om.app.modalWidth(agentOutputMaxWidth),
-		om.app.fitModalHeight(agentOutputMaxHeight))
+		om.app.fitModalHeight(agentOutputMaxHeight, agentOutputLeastHeight))
 }
 
 // ApplyTheme updates modal colors to match the active theme.
@@ -194,7 +204,7 @@ func (om *AgentOutputModal) Show(title string, onCancel func()) {
 	om.resumeView.Clear()
 	om.sessionView.Clear()
 	om.resumeCommand = ""
-	om.modalContent.SetTitle(" " + title + " ")
+	om.modalContent.SetTitle(" " + strings.TrimSpace(title) + " ")
 	om.streamView.SetTitle(" Stream ")
 	om.finalView.SetTitle(" Final ")
 	om.statusView.SetText("Status: Running")

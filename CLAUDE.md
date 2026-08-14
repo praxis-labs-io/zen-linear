@@ -128,7 +128,7 @@ Adding a page moves focus. `Pages.AddPage` re-delegates focus to the top visible
 
 `centerModal` refills the wrapper it is given rather than returning a new one, because pages hold that pointer for as long as the modal is up. **Two Flexes, never three**: a third only looks centered, because tview hands its spacers a negative width when the panel is wider than the slot they share. That puts the panel where it belongs and its rect somewhere else, and a rect the pointer is not in takes no clicks.
 
-`newModalList` is the list a picker-style overlay draws, and `showListPlaceholder` is its empty state: one dim row with the cursor hidden behind it, so nothing reads as pickable when there is nothing to pick. `PickerModal` and `MultiSelectModal` are both built this way, one `layout()` per `Show` since the title and the height come from what the modal was handed.
+`newListModal` builds the shell, and `showPlaceholder` is its empty state: one dim row with the cursor hidden behind it, so nothing reads as pickable when there is nothing to pick. `PickerModal` and `MultiSelectModal` are both built this way, one `layout()` per `Show` since the title and the height come from what the modal was handed.
 
 **Editing an issue's labels is the multi-select with a context line**, not a modal of its own. It was a second copy of the same toggle list until 2026-08-14. The `edit_labels` command id is unchanged; only the type went.
 

@@ -164,7 +164,7 @@ func handleAskAgent(a *App) {
 
 			ctx, cancel := context.WithCancel(context.Background())
 			a.QueueUpdateDraw(func() {
-				title := fmt.Sprintf(" %s Output ", selected.Name())
+				title := fmt.Sprintf("%s Output", selected.Name())
 				a.agentOutputModal.Show(title, cancel)
 				a.agentOutputModal.AppendLine(fmt.Sprintf("Starting %s agent run...", selected.Name()))
 			})

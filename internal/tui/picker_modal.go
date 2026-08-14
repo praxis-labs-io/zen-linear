@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 const (
@@ -25,9 +26,38 @@ type PickerModal struct {
 
 // NewPickerModal creates a new picker modal.
 func NewPickerModal(app *App) *PickerModal {
-	return &PickerModal{
+	pm := &PickerModal{
 		listModal: newListModal(app, "picker", "↑↓ move   ↵ select   esc close", pickerMaxWidth, pickerMaxVisibleRows),
 	}
+	// Answer the click here and swallow it. tview's own handler assigns
+	// currentItem after firing the row's selected func, and one picker chains
+	// into another on the same list, so that assignment lands on the list the
+	// second picker just filled: a two-option picker left holding the index of
+	// the row clicked in a three-option one, with nothing highlighted and the
+	// keys dead. The palette swallows its clicks for the same reason.
+	pm.list.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
+		if action != tview.MouseLeftClick {
+			return action, event
+		}
+		x, y := event.Position()
+		if !pm.list.InRect(x, y) {
+			return action, event
+		}
+		pm.chooseAt(x, y)
+		return action, nil
+	})
+	return pm
+}
+
+// chooseAt runs the option clicked at the given screen cell. A click past the
+// last row, or on the placeholder standing in for none, picks nothing.
+func (pm *PickerModal) chooseAt(x, y int) {
+	left, top, width, height := pm.list.GetInnerRect()
+	if x < left || x >= left+width || y < top || y >= top+height {
+		return
+	}
+	offset, _ := pm.list.GetOffset()
+	pm.choose(y - top + offset)
 }
 
 // Show displays the picker modal with the given title and items.
@@ -58,9 +88,7 @@ func (pm *PickerModal) fillList() {
 		if index < 9 {
 			shortcut = rune('1' + index)
 		}
-		// The selected func only ever fires on a click: HandleKey answers Enter
-		// and the number keys before the list sees either.
-		pm.list.AddItem(item.Label, "", shortcut, func() { pm.choose(index) })
+		pm.list.AddItem(item.Label, "", shortcut, nil)
 	}
 	pm.list.SetCurrentItem(0)
 }
