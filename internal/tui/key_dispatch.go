@@ -4,15 +4,17 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// bindGlobalKeys sets up global keyboard shortcuts.
+// bindGlobalKeys sets up global keyboard and mouse handling.
 func (a *App) bindGlobalKeys() {
 	a.app.SetInputCapture(a.handleGlobalKey)
+	a.app.SetMouseCapture(a.handleMouse)
 }
 
 // handleGlobalKey is the app's single input capture: modals first, then the
 // palette and the query box, then global keys, then the focused pane.
 func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if modal := a.activeModal(); modal != nil {
+		a.repairModalFocus()
 		return modal.HandleKey(event)
 	}
 
@@ -20,6 +22,7 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	// holds the keyboard. Recover before routing, or every key from then on
 	// disappears into a box that is not on the screen.
 	a.releaseStrandedCompose()
+	a.repairLayoutFocus()
 
 	// Handle palette first if it's open
 	if a.focusedPane == FocusPalette {

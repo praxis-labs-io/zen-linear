@@ -93,20 +93,44 @@ func (a *App) rebuildContentLayout() {
 
 // watchLayoutWidth re-evaluates the responsive layout before every draw and
 // rebuilds the panes when the terminal crosses a breakpoint.
+//
+// It runs inside Application.draw, which holds the app lock for the whole
+// frame, so nothing here may call SetFocus: that takes the same lock and the
+// process freezes with no way out but a kill. Everything below sets App fields
+// and primitive state only.
 func (a *App) watchLayoutWidth(width int) {
 	mode := layoutModeForWidth(width)
 	if mode == a.layoutMode {
 		return
 	}
 	a.layoutMode = mode
-	a.rebuildContentLayout()
-	// The responsive modes mount whatever holds focus, so a plain rebuild
-	// keeps it. The zoom does not: it drops the nav tree below the wide
-	// breakpoint whoever is in it, which would leave the keys on a tree that
-	// is no longer on screen.
+	// The responsive modes mount whatever holds focus, so a plain rebuild keeps
+	// it. The zoom does not: it drops the nav tree below the wide breakpoint
+	// whoever is in it, which leaves the keys on a tree that is no longer on
+	// screen. Correct the pane now, and flag the keyboard to follow.
 	if a.detailsZoomed && a.focusedPane != FocusDetails {
-		a.updateFocus()
+		a.resolveFocusedPane()
+		a.layoutFocusStale = true
 	}
+	a.rebuildContentLayout()
+	// Every cue the moved pane changed, repainted in the frame that moved it.
+	// The comment ring is left out: it rewrites the details page, and the draw
+	// this runs inside has already measured it.
+	a.applyPaneBorders()
+	a.applyNavSearchStyles()
+	a.updateStatusBar()
+}
+
+// repairLayoutFocus puts the keyboard on the pane a breakpoint moved it off.
+// Every event path calls it before routing, the way releaseStrandedCompose
+// does, since the draw that moved the pane could not move focus itself. No
+// event can arrive in between, so nobody sees the gap.
+func (a *App) repairLayoutFocus() {
+	if !a.layoutFocusStale {
+		return
+	}
+	a.layoutFocusStale = false
+	a.updateFocus()
 }
 
 // toggleNavigationPane shows or hides the navigation pane.

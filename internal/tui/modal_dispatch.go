@@ -60,3 +60,20 @@ func (a *App) restoreModalFocus() {
 	}
 	a.updateFocus()
 }
+
+// repairModalFocus takes the keyboard back from a pane a click reached past an
+// overlay. A press that misses the modal's panel falls through Pages to the
+// layer beneath, where the widget focuses itself, and the next key would type
+// into a pane behind the modal. Every modal's Focus lands on the field it was
+// already on, so the repair costs the user nothing.
+func (a *App) repairModalFocus() {
+	for _, binding := range modalBindings {
+		if !a.pages.HasPage(binding.page) {
+			continue
+		}
+		if page := a.pages.GetPage(binding.page); page != nil && !page.HasFocus() {
+			a.restoreModalFocus()
+		}
+		return
+	}
+}
