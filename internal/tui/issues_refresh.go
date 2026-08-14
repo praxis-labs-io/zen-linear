@@ -204,12 +204,14 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 		page, err := fetchPage(ctx, params, nil)
 		if err != nil {
 			a.QueueUpdateDraw(func() {
-				a.finishIssuesLoad(generation, err)
 				logger.ErrorWithErr(err, "tui.app: failed to fetch issues")
-				a.updateStatusBarWithError(err)
-				// The same Flex write as the first page's closure, and stale for
-				// the same reason. The rest still runs, or the queue never drains.
-				if generation == a.refreshGeneration.Load() {
+				// A superseded refresh reports nothing but still settles its own
+				// loading, or the refresh waiting on it never starts.
+				if generation != a.refreshGeneration.Load() {
+					a.finishIssuesLoad(generation, nil)
+				} else {
+					a.finishIssuesLoad(generation, err)
+					a.updateStatusBarWithError(err)
 					a.updateIssuesColumnLayout()
 				}
 				a.notifyRefreshCompleted()
@@ -264,7 +266,10 @@ func (a *App) refreshIssuesWithFocusChange(allowFocusChange bool, issueID ...str
 			if err != nil {
 				a.QueueUpdateDraw(func() {
 					logger.ErrorWithErr(err, "tui.app: failed to fetch more issues page=%d", pageCount+1)
-					a.updateStatusBarWithError(err)
+					// Same rule as the first page's failure.
+					if generation == a.refreshGeneration.Load() {
+						a.updateStatusBarWithError(err)
+					}
 				})
 				break
 			}
