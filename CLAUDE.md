@@ -142,6 +142,16 @@ One of the panel's two children must carry the Flex's focus flag. `SetRoot` and 
 
 The search is workspace-wide and takes neither the tree's scope, the rich filters, nor the sort chain. That is why the issues context line skips it.
 
+### Command palette
+
+`palette_modal.go` is the panel, `palette_controller.go` is what it draws, `palette_search.go` ranks a query.
+
+The panel is rebuilt on every keystroke — the query box, its frame and the list are reused, the centering wrappers are not — so `layoutPaletteModal` is the only place its shape is written down. The footer rule is drawn a column wider than the padded content each side, so it meets the panel's border in a tee rather than stopping short of it.
+
+`PaletteRow` is a heading or a command, the way `IssueRow` is. **The cursor never rests on a heading**: `step` walks past them, so `Selected` cannot answer with one, and `filterCommands` lands the cursor on the first command rather than row zero. Headings only appear under an empty query; a query lists matches flat, since grouping would fight the ranking.
+
+`rankCommands` scores a command by where the query sits — the start of the title, the start of a word in it, anywhere in it, then the same three over the keywords — and a command has to score against every whitespace-separated token to be listed at all. A second pass matches the token's characters scattered through the title and keywords, and **runs only when the first found nothing**, so it can never dilute a real result. `commandGroupOrder` is the heading order; a command whose group is missing from it lists last under no heading, which `TestEveryCommandFilesUnderAHeading` is what stops happening by accident.
+
 ### Issues list
 
 `BuildGroupedIssueRows` (`internal/tui/issue_tree.go`) produces a flat `[]IssueRow` where group/subgroup headers are rows with `IsHeader: true` and no issue. Headers are selectable (Enter/Space/click toggles collapse), so **any code walking table rows or moving selection must skip or special-case headers** (`nextIssueRow`, and the default-selection logic in `rebuildIssuesTables`). Columns are a registry in `issues_table.go` (`issueColumnSpecs`), rendered per the `columns` config.
