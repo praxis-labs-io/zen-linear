@@ -37,18 +37,22 @@ func relationChange(code string) (relation string, added bool, ok bool) {
 // actorUser flattens the two ways Linear names who made a change. A person
 // acting through an integration is still the person, so the user wins when
 // both are recorded.
-func actorUser(user *historyUserNode, bot *actorBotNode) (User, bool) {
+//
+// A bot arrives as a user carrying its own name, which is how it reads in the
+// feed: "Linear moved issue to Cycle 152" wants no marking a name does not
+// already carry.
+func actorUser(user *historyUserNode, bot *actorBotNode) User {
 	if converted := user.toUser(); converted != nil {
-		return *converted, false
+		return *converted
 	}
 	if bot == nil {
-		return User{}, false
+		return User{}
 	}
 	return User{
 		ID:          string(bot.ID),
 		Name:        string(bot.Name),
 		DisplayName: string(bot.UserDisplayName),
-	}, true
+	}
 }
 
 func (n *historyUserNode) toUser() *User {
@@ -139,14 +143,22 @@ func (a IssueActivity) withKind(kind IssueActivityKind) IssueActivity {
 // supported change with an unsupported one still produces its supported line.
 // Siblings share CreatedAt and the sort is stable, so they stay adjacent.
 //
-// An entry recording nothing renderable returns no events.
+// An entry with no time, or recording nothing renderable, returns no events.
 func (n issueHistoryNode) toActivity() []IssueActivity {
-	base := IssueActivity{ID: string(n.ID), CreatedAt: parseTime(string(n.CreatedAt))}
-	base.Actor, base.IsBot = actorUser(n.Actor, n.BotActor)
+	at := parseTime(string(n.CreatedAt))
+	// The feed sorts on this and reads an age off it. A zero time heads the
+	// feed above the issue's own creation and draws no age at all, so an entry
+	// whose time did not parse is dropped rather than shown out of order.
+	if at.IsZero() {
+		return nil
+	}
+	base := IssueActivity{ID: string(n.ID), CreatedAt: at, Actor: actorUser(n.Actor, n.BotActor)}
 
 	events := make([]IssueActivity, 0, 2)
 
-	if n.FromState != nil || n.ToState != nil {
+	// A move needs somewhere it went. Linear records no from side on the first
+	// move out of the initial state, but an issue always lands in a state.
+	if n.ToState != nil {
 		event := base.withKind(IssueActivityStateChanged)
 		event.FromState, event.ToState = n.FromState.toState(), n.ToState.toState()
 		events = append(events, event)

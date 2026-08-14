@@ -32,9 +32,10 @@ const activityBodyFloor = 8
 // because a feed already carries its order in the arrangement of its rows, and
 // what a reader scans for is who and when.
 func (a *App) activityLine(event linearapi.IssueActivity, width int) string {
-	if width <= 0 {
-		// truncateTagged hands back the line untouched at a width of zero, and
-		// an unfitted row would overrun the pane.
+	if width <= 1 {
+		// truncateTagged hands the line back untouched at a width of one: it
+		// wraps at width-1, and a wrap to zero returns nothing to cut on. An
+		// unfitted row would overrun the pane.
 		return ""
 	}
 
@@ -83,8 +84,13 @@ func (a *App) activityIcon(event linearapi.IssueActivity) (string, tcell.Color) 
 
 // activityBody is the actor and the phrase, joined. An event Linear recorded no
 // actor for reads as the change alone rather than opening on a gap.
+//
+// Both are escaped before the theme tags go on. Every name in them comes from
+// the API, the view has dynamic colors on, and a label called "[Bug]" would
+// otherwise be read as a tag: swallowed on screen and four cells short of what
+// the fit measured.
 func (a *App) activityBody(event linearapi.IssueActivity) string {
-	phrase := activityPhrase(event)
+	phrase := tview.Escape(activityPhrase(event))
 	actor := formatUserDisplayName(event.Actor)
 	if actor == "" {
 		return phrase
@@ -92,7 +98,7 @@ func (a *App) activityBody(event linearapi.IssueActivity) string {
 	if event.Actor.IsMe {
 		actor += " (me)"
 	}
-	return a.themeTags.AssigneeText + actor + a.themeTags.SecondaryText + " " + phrase
+	return a.themeTags.AssigneeText + tview.Escape(actor) + a.themeTags.SecondaryText + " " + phrase
 }
 
 // activityPhrase says what changed, in Linear's own wording.

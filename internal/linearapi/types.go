@@ -424,11 +424,9 @@ type IssueActivity struct {
 	// CreatedAt is the merge key the feed sorts on. Never zero: an event with
 	// no time would sort above the issue's own creation.
 	CreatedAt time.Time
-	// Actor is who made the change, zero when Linear records none.
+	// Actor is who made the change, zero when Linear records none. An
+	// integration acting in place of a person arrives here under its own name.
 	Actor User
-	// IsBot marks an integration acting in place of a person, in which case
-	// Actor carries the bot's name.
-	IsBot bool
 
 	FromState *WorkflowState
 	ToState   *WorkflowState

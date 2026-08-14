@@ -67,6 +67,7 @@ func (a *App) applyDetachedIssueEdit(updated linearapi.Issue) {
 	if a.selectedIssue != nil && a.selectedIssue.ID == updated.ID {
 		selected := updated
 		selected.Comments = a.selectedIssue.Comments
+		selected.Activity = a.selectedIssue.Activity
 		selected.Relations = a.selectedIssue.Relations
 		selected.Subscribers = a.selectedIssue.Subscribers
 		selected.Attachments = a.selectedIssue.Attachments

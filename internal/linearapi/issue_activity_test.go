@@ -81,6 +81,13 @@ func TestHistoryEntriesMapToActivityKinds(t *testing.T) {
 			},
 		},
 		{
+			// An entry naming only where the issue came from has nowhere to say
+			// it went, and the phrase would end on a dangling preposition.
+			name: "a state change with no destination is dropped",
+			node: entry(actorDrew + `, "fromState": {"id": "s1", "name": "Backlog", "type": "backlog"}, "toState": null, "toTitle": "kept"`),
+			want: IssueActivityTitleChanged,
+		},
+		{
 			name: "assigned to someone else",
 			node: entry(actorDrew + `, "toAssignee": {"id": "u2", "name": "Mike", "displayName": "mike"}`),
 			want: IssueActivityAssigned,
@@ -326,8 +333,8 @@ func TestTheCreationEventHeadsTheFeed(t *testing.T) {
 		if activity[0].Kind != IssueActivityCreated {
 			t.Fatalf("first event = %q, want created", activity[0].Kind)
 		}
-		if activity[0].Actor.DisplayName != "drew" || activity[0].IsBot {
-			t.Errorf("actor = %+v, want drew and not a bot", activity[0].Actor)
+		if activity[0].Actor.DisplayName != "drew" {
+			t.Errorf("actor = %+v, want drew", activity[0].Actor)
 		}
 	})
 
@@ -337,8 +344,8 @@ func TestTheCreationEventHeadsTheFeed(t *testing.T) {
 		if len(activity) != 1 {
 			t.Fatalf("got %d events, want 1: %+v", len(activity), activity)
 		}
-		if !activity[0].IsBot || activity[0].Actor.DisplayName != "Linear" {
-			t.Errorf("actor = %+v, IsBot = %v, want the bot", activity[0].Actor, activity[0].IsBot)
+		if activity[0].Actor.DisplayName != "Linear" {
+			t.Errorf("actor = %+v, want the bot under its own name", activity[0].Actor)
 		}
 	})
 
@@ -391,7 +398,22 @@ func TestAUserActorWinsOverABotActor(t *testing.T) {
 	if len(activity) != 1 {
 		t.Fatalf("got %d events, want 1", len(activity))
 	}
-	if activity[0].IsBot || activity[0].Actor.DisplayName != "drew" {
-		t.Errorf("actor = %+v, IsBot = %v, want drew", activity[0].Actor, activity[0].IsBot)
+	if activity[0].Actor.DisplayName != "drew" {
+		t.Errorf("actor = %+v, want drew", activity[0].Actor)
+	}
+}
+
+// The feed sorts on the time and reads an age off it, so an entry whose time
+// did not parse would head the feed drawing no age.
+func TestAnEntryWithNoUsableTimeIsDropped(t *testing.T) {
+	nodes := `{"id": "broken", "createdAt": "not a time", "toTitle": "first"},` +
+		`{"id": "h1", "createdAt": "2026-08-10T19:05:04Z", "toTitle": "second"}`
+
+	activity := fetchActivity(t, "", nodes)
+	if len(activity) != 1 {
+		t.Fatalf("got %d events, want 1: %+v", len(activity), activity)
+	}
+	if activity[0].ID != "h1" {
+		t.Errorf("kept %q, want the entry with a usable time", activity[0].ID)
 	}
 }

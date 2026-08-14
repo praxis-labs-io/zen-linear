@@ -222,9 +222,12 @@ func (n issueDetailNode) toIssue() Issue {
 	// A zero time means the response never carried one, and an event without a
 	// time would head the feed reading as though it just happened.
 	if !issue.CreatedAt.IsZero() {
-		created := IssueActivity{ID: issue.ID, Kind: IssueActivityCreated, CreatedAt: issue.CreatedAt}
-		created.Actor, created.IsBot = actorUser(n.Creator, n.BotActor)
-		issue.Activity = append(issue.Activity, created)
+		issue.Activity = append(issue.Activity, IssueActivity{
+			ID:        issue.ID,
+			Kind:      IssueActivityCreated,
+			CreatedAt: issue.CreatedAt,
+			Actor:     actorUser(n.Creator, n.BotActor),
+		})
 	}
 	for _, node := range n.History.Nodes {
 		issue.Activity = append(issue.Activity, node.toActivity()...)

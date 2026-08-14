@@ -348,8 +348,31 @@ func TestANarrowLineKeepsTheActorAndTheAge(t *testing.T) {
 	if got := tview.TaggedStringWidth(app.activityLine(event, 12)); got > 12 {
 		t.Errorf("the line is %d cells in a 12 pane", got)
 	}
-	if app.activityLine(event, 0) != "" {
-		t.Error("a pane with no width drew a line")
+	// truncateTagged wraps at width-1, so a measure of one leaves nothing to
+	// cut on and hands the line back whole.
+	for _, width := range []int{0, 1} {
+		if got := app.activityLine(event, width); got != "" {
+			t.Errorf("width %d drew %q", width, got)
+		}
+	}
+}
+
+// Every name on the line comes from the API and the view has dynamic colors on,
+// so a bracket in one would be read as a tag: swallowed on screen, and short of
+// what the fit measured.
+func TestActivityNamesCannotBeReadAsColorTags(t *testing.T) {
+	app := newDetailsTestApp(t)
+	line := app.activityLine(linearapi.IssueActivity{
+		Kind:      linearapi.IssueActivityLabelsAdded,
+		CreatedAt: time.Now(),
+		Actor:     linearapi.User{ID: "u1", DisplayName: "[red]drew"},
+		Labels:    []linearapi.IssueLabel{{Name: "[Bug]"}},
+	}, 80)
+
+	for _, want := range []string{"[red]drew", "[Bug]"} {
+		if !strings.Contains(line, tview.Escape(want)) {
+			t.Errorf("%q is not escaped on the line: %q", want, line)
+		}
 	}
 }
 
