@@ -78,10 +78,9 @@ func TestWidePaneSplitWithDetailsHidden(t *testing.T) {
 	}
 }
 
-// TestMediumPaneSplitKeepsNavShare covers the two-pane layout, where the nav
-// pane must hold the same sixth of the width it had before the wide ratio
-// changed.
-func TestMediumPaneSplitKeepsNavShare(t *testing.T) {
+// TestMediumPaneSplitLeavesTheDetailsPaneOut covers the two-pane layout, where
+// the details pane appears only when it is the focused one.
+func TestMediumPaneSplitLeavesTheDetailsPaneOut(t *testing.T) {
 	app := &App{focusedPane: FocusNavigation}
 	nav, issues, details := paneWidths(t, app, 90)
 
@@ -91,8 +90,44 @@ func TestMediumPaneSplitKeepsNavShare(t *testing.T) {
 	if details != 0 {
 		t.Errorf("details width = %d, want the pane left out", details)
 	}
-	if nav != 15 || issues != 75 {
-		t.Errorf("split = %d | %d; want 15 | 75", nav, issues)
+	if nav != navWidthMedium || issues != 90-navWidthMedium {
+		t.Errorf("split = %d | %d; want %d | %d", nav, issues, navWidthMedium, 90-navWidthMedium)
+	}
+}
+
+// TestTheNavPaneKeepsItsWidthAcrossTheTwoPaneRange covers what a share did to
+// it. Proportional, the pane ran from 18 columns at the top of the range to 11
+// at the bottom, and a tree that narrow is a column of ellipses.
+func TestTheNavPaneKeepsItsWidthAcrossTheTwoPaneRange(t *testing.T) {
+	for _, width := range []int{70, 90, 109} {
+		app := &App{focusedPane: FocusNavigation}
+		nav, issues, _ := paneWidths(t, app, width)
+		if app.layoutMode != layoutMedium {
+			t.Fatalf("width %d: layoutMode = %v, want layoutMedium", width, app.layoutMode)
+		}
+		if nav != navWidthMedium {
+			t.Errorf("width %d: nav = %d, want %d", width, nav, navWidthMedium)
+		}
+		if issues != width-navWidthMedium {
+			t.Errorf("width %d: issues = %d, want %d", width, issues, width-navWidthMedium)
+		}
+	}
+}
+
+// TestTheNavPaneDoesNotJumpAtTheWideBreakpoint covers the column either side of
+// it. The fixed width is picked to match what the share gives the pane at 110,
+// so dragging the terminal one column narrower must not widen the pane.
+func TestTheNavPaneDoesNotJumpAtTheWideBreakpoint(t *testing.T) {
+	wide := &App{focusedPane: FocusNavigation}
+	navWide, _, _ := paneWidths(t, wide, 110)
+	medium := &App{focusedPane: FocusNavigation}
+	navMedium, _, _ := paneWidths(t, medium, 109)
+
+	if wide.layoutMode != layoutWide || medium.layoutMode != layoutMedium {
+		t.Fatalf("modes = %v then %v; want wide then medium", wide.layoutMode, medium.layoutMode)
+	}
+	if navWide != navMedium {
+		t.Errorf("nav = %d at 110 and %d at 109; narrowing the terminal changed the pane's width", navWide, navMedium)
 	}
 }
 
