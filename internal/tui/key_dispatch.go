@@ -23,6 +23,11 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	// disappears into a box that is not on the screen.
 	a.releaseStrandedCompose()
 	a.repairLayoutFocus()
+	// Edit mode belongs to the pane. A layout change that took the keyboard off
+	// it leaves the mode on with nothing on screen saying so.
+	if a.detailsEdit.on && !a.detailsHaveFocus() {
+		a.leaveDetailsEdit()
+	}
 
 	// Handle palette first if it's open
 	if a.focusedPane == FocusPalette {
@@ -39,6 +44,12 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	// in the middle of one is a letter, not a quit.
 	if a.composeBoxActive() {
 		return a.handleComposeKey(event)
+	}
+
+	// Field edit mode owns the keys for a related reason: it is not a page, so
+	// a rune it does not answer has to stop here rather than quit or move pane.
+	if a.detailsEdit.on {
+		return a.handleDetailsEditKey(event)
 	}
 
 	// Global shortcuts (only when not in palette)
@@ -117,18 +128,25 @@ func (a *App) paneScope() CommandScope {
 	return ScopeGlobal
 }
 
-// runCommandShortcut fires the palette command bound to the rune, if any. A
-// command out of scope for the focused pane never fires: a key that acts on the
-// selected issue has no business answering from the navigation tree.
+// runCommandShortcut fires the palette command bound to the rune, if any.
 func (a *App) runCommandShortcut(r rune) bool {
+	cmd, ok := a.commandForShortcut(r)
+	if ok {
+		cmd.Run(a)
+	}
+	return ok
+}
+
+// commandForShortcut finds the command a rune fires. One out of scope for the
+// focused pane is not one: an issue's keys do not answer from the tree.
+func (a *App) commandForShortcut(r rune) (Command, bool) {
 	scope := a.paneScope()
 	for _, cmd := range a.paletteCtrl.commands {
 		if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r && cmd.appliesIn(scope) {
-			cmd.Run(a)
-			return true
+			return cmd, true
 		}
 	}
-	return false
+	return Command{}, false
 }
 
 // handleNavigationKey handles keyboard input when navigation pane is focused.

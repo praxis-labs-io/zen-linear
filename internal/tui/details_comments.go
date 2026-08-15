@@ -43,6 +43,8 @@ func (a *App) renderDetailsPage() {
 		// No issue: nothing to write on, nothing to write in. The ring is put
 		// back where it starts, or it names a card that is no longer drawn.
 		a.commentsFocus, a.focusedCommentID = commentsFocusCards, ""
+		// The field cursor goes with it: there is no header left to point into.
+		a.detailsEdit = detailsEditState{}
 		a.detailsPageView.SetText(a.emptyDetailsMessage())
 		a.detailsPage.setSlots(nil)
 		return

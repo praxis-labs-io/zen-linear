@@ -260,13 +260,19 @@ type fieldSpan struct {
 func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
 	lines := make([]string, 0, len(a.detailsHeaderRows)+len(a.detailsBodyLines)+3)
 	var spans []fieldSpan
+	// Every row shifts by the cursor gutter together, so the grid reads the same
+	// in both modes rather than jumping a column as the cursor passes.
+	indent := 0
+	if a.detailsEdit.on {
+		indent = detailsCursorGutter
+	}
 	for _, row := range a.detailsHeaderRows {
 		if row.field != "" {
-			spans = append(spans, fieldSpan{field: row.field, row: len(lines), valueColumn: row.valueColumn})
+			spans = append(spans, fieldSpan{field: row.field, row: len(lines), valueColumn: row.valueColumn + indent})
 		}
 		// Cut at what the last draw measured, 0 before the first: a render that
 		// beats the layout must not shorten the header to a box never on screen.
-		lines = append(lines, truncateTagged(row.text, a.detailsFittedWidth))
+		lines = append(lines, truncateTagged(a.fieldCursorMarker(row)+row.text, a.detailsFittedWidth))
 	}
 	if len(lines) > 0 {
 		lines = append(lines, a.detailsSeam(width)...)
@@ -349,13 +355,22 @@ func (a *App) updateDetailsView() {
 	a.issuesMu.RLock()
 	selectedIssue := a.selectedIssue
 	a.issuesMu.RUnlock()
+	issueID := ""
+	if selectedIssue != nil {
+		issueID = selectedIssue.ID
+	}
+	// Read before anything below follows the selection. A rebuild on the same
+	// issue keeps the reader's place; only a different one may move it.
+	issueChanged := issueID != a.detailsIssueID
+	a.detailsIssueID = issueID
+	if issueChanged {
+		// The cursor belongs to the issue it was aimed at. Carried onto another
+		// one it would point at a field of a different issue.
+		a.leaveDetailsEdit()
+	}
 	// A half-written comment belongs to the issue it was written for, not to
 	// the box, which stays put while the selection moves.
-	if selectedIssue == nil {
-		a.syncComposeDraft("")
-	} else {
-		a.syncComposeDraft(selectedIssue.ID)
-	}
+	a.syncComposeDraft(issueID)
 	if selectedIssue == nil {
 		a.detailsHeaderRows = nil
 		a.detailsBodyLines = nil
@@ -543,7 +558,12 @@ func (a *App) updateDetailsView() {
 	a.dropEditForMissingComment()
 	a.renderDetailsBody(a.detailsMeasureWidth())
 	a.renderDetailsPage()
-	a.detailsPageView.ScrollToBeginning()
+	a.resolveFieldCursor()
+	// Only a new issue starts at the top. Every save and every background
+	// refresh comes through here, and a reset on those throws away the scroll.
+	if issueChanged {
+		a.detailsPageView.ScrollToBeginning()
+	}
 	// The ring keeps its card across the async fetch that fills the comments
 	// in, and drops it on an issue whose comments it is not on: ids do not
 	// survive a change of issue, and nothing is lit until a brace says so.

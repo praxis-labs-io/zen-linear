@@ -88,6 +88,10 @@ type App struct {
 	// detailsFieldSpans is where each editable field landed in the last render,
 	// the way commentSpans is for the cards.
 	detailsFieldSpans []fieldSpan
+	// detailsEdit is the field cursor's mode. detailsIssueID is what the page
+	// was last built for, which is what says the issue changed under it.
+	detailsEdit    detailsEditState
+	detailsIssueID string
 	// focusedCommentID is the card the ring is on and commentSpans is where
 	// every card landed in the last render. The ring is held by id rather than
 	// by index so a refetch that reorders the stack keeps it on the same card.

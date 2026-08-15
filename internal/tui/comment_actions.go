@@ -217,16 +217,22 @@ func (a *App) refreshCommentRing() {
 // scrollCommentIntoView scrolls the stack the least it can to show a card,
 // showing the top of one taller than the pane.
 func (a *App) scrollCommentIntoView(span commentSpan) {
+	a.scrollRowsIntoView(span.start, span.end)
+}
+
+// scrollRowsIntoView scrolls the page the least it can to show a run of rows,
+// showing the top of a run taller than the pane.
+func (a *App) scrollRowsIntoView(start, end int) {
 	height := viewHeight(a.detailsPageView)
 	if height <= 0 {
 		return
 	}
 	row, column := a.detailsPageView.GetScrollOffset()
 	switch {
-	case span.start < row:
-		row = span.start
-	case span.end >= row+height:
-		row = min(span.start, span.end-height+1)
+	case start < row:
+		row = start
+	case end >= row+height:
+		row = min(start, end-height+1)
 	default:
 		return
 	}

@@ -900,15 +900,10 @@ func DefaultCommands(app *App) []Command {
 			Group:        GroupIssue,
 			Scope:        ScopeIssue,
 			Title:        "Edit issue",
-			Keywords:     []string{"edit", "issue", "form", "properties", "update"},
+			Keywords:     []string{"edit", "issue", "fields", "properties", "update"},
 			ShortcutRune: 'e',
 			Run: func(a *App) {
-				issue := a.GetSelectedIssue()
-				if issue == nil {
-					a.flashStatus("No issue selected")
-					return
-				}
-				a.ShowEditIssueModal()
+				a.enterDetailsEdit()
 			},
 		},
 		{

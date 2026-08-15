@@ -46,6 +46,8 @@ func (a *App) visiblePanes() []FocusTarget {
 // when it has been toggled off. The numbers are fixed to the pane, so typing
 // one is also how a hidden pane is summoned back.
 func (a *App) focusPane(pane FocusTarget) {
+	// Edit mode is the details pane's, and this is how a pane is left.
+	a.leaveDetailsEdit()
 	switch pane {
 	case FocusNavigation:
 		a.navigationHidden = false
@@ -87,6 +89,7 @@ func (a *App) stepPane(direction int) {
 	if current < 0 || next < 0 || next >= len(panes) {
 		return
 	}
+	a.leaveDetailsEdit()
 	a.focusedPane = panes[next]
 	if a.focusedPane == FocusDetails {
 		// Enter on the cards, never mid-sentence in a box, the same way the pane

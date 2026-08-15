@@ -519,6 +519,11 @@ func (a *App) enterCommentsFocus(target commentsFocus) {
 	if !a.composeBoxOnScreen() {
 		return
 	}
+	// A box and the field cursor are two rings on one page. The box was clicked
+	// into, so the cursor is the one that gives way.
+	if target != commentsFocusCards {
+		a.leaveDetailsEdit()
+	}
 	a.commentsFocus = target
 	// The border follows focusedPane rather than being lit outright, or a
 	// delegation walk would light this pane while another one holds the keys.
