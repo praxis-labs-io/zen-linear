@@ -151,36 +151,37 @@ func (a *App) ShowEditLabelsModal() {
 	if issue == nil {
 		return
 	}
+	// The modal names this issue, so the write targets it even if a refresh
+	// moves the selection while the labels are still loading.
+	target := *issue
 
-	teamID := issue.TeamID
+	teamID := target.TeamID
 	if teamID == "" {
 		teamID = a.GetSelectedTeamID()
 	}
 	if teamID == "" {
-		logger.Warning("tui.app: cannot edit labels, no team context issue=%s", issue.Identifier)
+		logger.Warning("tui.app: cannot edit labels, no team context issue=%s", target.Identifier)
 		a.updateStatusBarWithError(fmt.Errorf("cannot edit labels: no team context"))
 		return
 	}
 
-	// Get current label IDs from the issue
-	currentLabelIDs := make([]string, len(issue.Labels))
-	for i, lbl := range issue.Labels {
+	currentLabelIDs := make([]string, len(target.Labels))
+	for i, lbl := range target.Labels {
 		currentLabelIDs[i] = lbl.ID
 	}
 
-	// Load available labels asynchronously
 	go func() {
-		logger.Debug("tui.app: loading labels for edit modal issue=%s team_id=%s", issue.Identifier, teamID)
+		logger.Debug("tui.app: loading labels for edit modal issue=%s team_id=%s", target.Identifier, teamID)
 		ctx := context.Background()
 		availableLabels, err := a.cache.GetIssueLabels(ctx, teamID)
 		if err != nil {
-			logger.ErrorWithErr(err, "tui.app: failed to load labels issue=%s team_id=%s", issue.Identifier, teamID)
+			logger.ErrorWithErr(err, "tui.app: failed to load labels issue=%s team_id=%s", target.Identifier, teamID)
 			a.QueueUpdateDraw(func() {
 				a.updateStatusBarWithError(err)
 			})
 			return
 		}
-		logger.Debug("tui.app: loaded labels issue=%s count=%d", issue.Identifier, len(availableLabels))
+		logger.Debug("tui.app: loaded labels issue=%s count=%d", target.Identifier, len(availableLabels))
 
 		items := make([]MultiSelectItem, len(availableLabels))
 		for i, label := range availableLabels {
@@ -188,11 +189,8 @@ func (a *App) ShowEditLabelsModal() {
 		}
 
 		a.QueueUpdateDraw(func() {
-			a.multiSelectModal.ShowWithContext("Edit Labels", a.issueContextLine(*issue), items, currentLabelIDs, func(labelIDs []string) {
-				a.runIssueUpdate(
-					linearapi.UpdateIssueInput{ID: issue.ID, LabelIDs: &labelIDs},
-					fmt.Sprintf("Updated labels for %s", issue.Identifier),
-				)
+			a.multiSelectModal.ShowWithContext("Edit Labels", a.issueContextLine(target), items, currentLabelIDs, func(labelIDs []string) {
+				a.saveIssueField(issueFieldLabelsSave(target, labelIDs))
 			})
 		})
 	}()

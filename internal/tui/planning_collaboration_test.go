@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
@@ -441,5 +442,136 @@ func TestAttachmentActionsUseInjectedOpenAndCopyFunctions(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for copy call")
+	}
+}
+
+// fieldWriteApp queues UI updates instead of running them where they were
+// raised, so a fetch filling a modal cannot race the test reading it.
+func fieldWriteApp(t *testing.T, selected linearapi.Issue) (app *App, written <-chan linearapi.UpdateIssueInput, queued <-chan func()) {
+	t.Helper()
+	app = newUXTestApp(t)
+	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
+		t.Error("a single-issue update refetched the whole list")
+		return linearapi.IssuePage{}, nil
+	}
+	pending := make(chan func(), 64)
+	app.queueUpdateDraw = func(f func()) {
+		select {
+		case pending <- f:
+		default:
+			t.Error("more queued UI updates than this test expects")
+		}
+	}
+	app.issuesMu.Lock()
+	app.selectedIssue = &selected
+	app.issuesMu.Unlock()
+	writes := make(chan linearapi.UpdateIssueInput, 1)
+	app.updateIssueFunc = func(ctx context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
+		writes <- input
+		return linearapi.Issue{ID: input.ID}, nil
+	}
+	return app, writes, pending
+}
+
+// runQueuedUpdate runs the next queued UI update here, on the test's goroutine.
+func runQueuedUpdate(t *testing.T, queued <-chan func()) {
+	t.Helper()
+	select {
+	case f := <-queued:
+		f()
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for a queued UI update")
+	}
+}
+
+// moveSelection is the background refresh that lands while an editor is open.
+func moveSelection(app *App) {
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Moved on"}
+	app.issuesMu.Unlock()
+}
+
+func submitTextInput(t *testing.T, app *App, value string) {
+	t.Helper()
+	app.textInputModal.input.SetText(value)
+	app.textInputModal.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+}
+
+func awaitWrite(t *testing.T, written <-chan linearapi.UpdateIssueInput) linearapi.UpdateIssueInput {
+	t.Helper()
+	select {
+	case input := <-written:
+		return input
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the issue update")
+	}
+	return linearapi.UpdateIssueInput{}
+}
+
+// TestFieldEditsTargetTheIssueTheEditorNamed covers the six writes that used to
+// leave the id empty and let the write path read the selection at send time.
+func TestFieldEditsTargetTheIssueTheEditorNamed(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		open func(*App)
+		// fetchesOnOpen is set where opening the editor loads its options on a
+		// goroutine, which the test has to run before it can drive the modal.
+		fetchesOnOpen bool
+		close         func(*testing.T, *App)
+		check         func(*testing.T, linearapi.UpdateIssueInput)
+	}{
+		{
+			name:  "due date",
+			open:  func(a *App) { a.showSetDueDateModal() },
+			close: func(t *testing.T, a *App) { submitTextInput(t, a, "2026-09-01") },
+			check: func(t *testing.T, input linearapi.UpdateIssueInput) {
+				if input.DueDate == nil || *input.DueDate != "2026-09-01" {
+					t.Fatalf("DueDate = %v, want 2026-09-01", input.DueDate)
+				}
+			},
+		},
+		{
+			name:  "estimate",
+			open:  func(a *App) { a.showEditEstimateModal() },
+			close: func(t *testing.T, a *App) { submitTextInput(t, a, "3") },
+			check: func(t *testing.T, input linearapi.UpdateIssueInput) {
+				if input.Estimate == nil || *input.Estimate != 3 {
+					t.Fatalf("Estimate = %v, want 3", input.Estimate)
+				}
+			},
+		},
+		{
+			name:          "milestone",
+			open:          func(a *App) { a.showSetMilestonePicker() },
+			fetchesOnOpen: true,
+			close:         func(t *testing.T, a *App) { selectPickerItem(t, a, "M2") },
+			check: func(t *testing.T, input linearapi.UpdateIssueInput) {
+				if input.ProjectMilestoneID == nil || *input.ProjectMilestoneID != "milestone-2" {
+					t.Fatalf("ProjectMilestoneID = %v, want milestone-2", input.ProjectMilestoneID)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app, written, queued := fieldWriteApp(t, linearapi.Issue{
+				ID: "issue-1", Identifier: "LIN-1", Title: "Current", ProjectID: "project-1",
+			})
+			app.fetchMilestonesFunc = func(ctx context.Context, projectID string) ([]linearapi.ProjectMilestone, error) {
+				return []linearapi.ProjectMilestone{{ID: "milestone-2", Name: "M2"}}, nil
+			}
+
+			tc.open(app)
+			if tc.fetchesOnOpen {
+				runQueuedUpdate(t, queued)
+			}
+			moveSelection(app)
+			tc.close(t, app)
+
+			input := awaitWrite(t, written)
+			if input.ID != "issue-1" {
+				t.Fatalf("issue ID = %q, want issue-1", input.ID)
+			}
+			tc.check(t, input)
+		})
 	}
 }

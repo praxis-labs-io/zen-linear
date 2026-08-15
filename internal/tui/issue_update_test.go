@@ -124,12 +124,13 @@ func TestApplyIssueUpdate_KeepsDetailsThePaneLoaded(t *testing.T) {
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
 	// The pane's full fetch lives only in selectedIssue; the list entry never
-	// carries comments or subscribers.
+	// carries comments, subscribers or history.
 	app.issuesMu.Lock()
 	app.selectedIssue = &linearapi.Issue{
 		ID: "issue-1", Identifier: "LIN-1", Title: "Alpha",
 		Comments:    []linearapi.Comment{{ID: "comment-1", Body: "keep me"}},
 		Subscribers: []linearapi.User{{ID: "user-9"}},
+		Activity:    []linearapi.IssueActivity{{ID: "h1", Kind: linearapi.IssueActivityCreated, CreatedAt: time.Now()}},
 	}
 	app.issuesMu.Unlock()
 
@@ -146,6 +147,11 @@ func TestApplyIssueUpdate_KeepsDetailsThePaneLoaded(t *testing.T) {
 	}
 	if len(selected.Subscribers) != 1 {
 		t.Fatalf("subscribers = %#v, want the loaded subscriber kept", selected.Subscribers)
+	}
+	// The mutation response carries no history, so an edit that dropped this
+	// would empty the feed until a refetch landed.
+	if len(selected.Activity) != 1 {
+		t.Fatalf("activity = %#v, want the loaded history kept", selected.Activity)
 	}
 	assertSelectionNotAliased(t, app)
 }

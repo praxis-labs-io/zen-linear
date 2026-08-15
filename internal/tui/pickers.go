@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 	"github.com/zen-linear/zen-linear/internal/logger"
@@ -68,116 +69,156 @@ func (a *App) presentPicker(title, contextLine string, items []PickerItem, onSel
 	})
 }
 
+// issueFieldOptions loads the rows a field can be set to. The overlay picker
+// and the inline editor share it, so the two cannot offer different options.
+func (a *App) issueFieldOptions(field issueField, onLoaded func(items []PickerItem)) {
+	switch field {
+	case issueFieldState:
+		showCachedPicker(a, "workflow states", a.workflowStates,
+			func(loaded []linearapi.WorkflowState) { a.workflowStates = loaded },
+			a.cache.GetWorkflowStates,
+			func(states []linearapi.WorkflowState) {
+				items := make([]PickerItem, 0, len(states))
+				for _, state := range states {
+					items = append(items, PickerItem{ID: state.ID, Label: state.Name})
+				}
+				onLoaded(items)
+			},
+		)
+	case issueFieldAssignee:
+		showCachedPicker(a, "users for picker", a.teamUsers,
+			func(loaded []linearapi.User) { a.teamUsers = loaded },
+			a.cache.GetUsers,
+			func(users []linearapi.User) {
+				items := make([]PickerItem, 0, len(users))
+				for _, user := range users {
+					label := user.Name
+					if user.IsMe {
+						label += " (me)"
+					}
+					items = append(items, PickerItem{ID: user.ID, Label: label})
+				}
+				onLoaded(items)
+			},
+		)
+	case issueFieldCycle:
+		showCachedPicker(a, "cycles for picker", a.teamCycles,
+			func(loaded []linearapi.Cycle) { a.teamCycles = loaded },
+			func(ctx context.Context, teamID string) ([]linearapi.Cycle, error) {
+				loaded, err := a.cache.GetCycles(ctx, teamID)
+				if err != nil {
+					return nil, err
+				}
+				sortCyclesForNavigation(loaded)
+				return loaded, nil
+			},
+			func(cycles []linearapi.Cycle) {
+				items := make([]PickerItem, 0, len(cycles))
+				for _, cycle := range cycles {
+					items = append(items, PickerItem{ID: cycle.ID, Label: cycleOptionLabel(cycle)})
+				}
+				onLoaded(items)
+			},
+		)
+	case issueFieldProject:
+		showCachedPicker(a, "projects for picker", a.teamProjects,
+			func(loaded []linearapi.Project) { a.teamProjects = loaded },
+			a.cache.GetProjects,
+			func(projects []linearapi.Project) {
+				items := make([]PickerItem, 0, len(projects))
+				for _, project := range projects {
+					items = append(items, PickerItem{ID: project.ID, Label: project.Name})
+				}
+				onLoaded(items)
+			},
+		)
+	case issueFieldPriority:
+		items := make([]PickerItem, 0, len(priorityLabels))
+		for value, label := range priorityLabels {
+			items = append(items, PickerItem{ID: strconv.Itoa(value), Label: label})
+		}
+		onLoaded(items)
+	default:
+		logger.Warning("tui.app: no options for field %q", field)
+	}
+}
+
+// cycleOptionLabel marks where a cycle sits relative to now, which is how a
+// user picks one without knowing its number.
+func cycleOptionLabel(cycle linearapi.Cycle) string {
+	switch {
+	case cycle.IsActive:
+		return cycle.DisplayName() + " (active)"
+	case cycle.IsNext:
+		return cycle.DisplayName() + " (next)"
+	case cycle.IsPrevious:
+		return cycle.DisplayName() + " (previous)"
+	}
+	return cycle.DisplayName()
+}
+
+// issueFieldValueName is what a save calls the option just picked. Empty when
+// the cache cannot name it, which fieldSetMessage answers with "Updated".
+func (a *App) issueFieldValueName(field issueField, id string) string {
+	switch field {
+	case issueFieldState:
+		for _, state := range a.workflowStates {
+			if state.ID == id {
+				return state.Name
+			}
+		}
+	case issueFieldAssignee:
+		for _, user := range a.teamUsers {
+			if user.ID == id {
+				return formatUserDisplayName(user)
+			}
+		}
+	case issueFieldCycle:
+		for _, cycle := range a.teamCycles {
+			if cycle.ID == id {
+				return cycle.DisplayName()
+			}
+		}
+	case issueFieldProject:
+		return projectNameByID(a.teamProjects, id)
+	}
+	return ""
+}
+
 // ShowStatusPicker shows a picker for workflow states. contextLine names the
 // issue being modified; empty for non-issue uses like filters.
 func (a *App) ShowStatusPicker(contextLine string, onSelect func(stateID string)) {
 	logger.Debug("tui.app: showing status picker")
-	showCachedPicker(a, "workflow states", a.workflowStates,
-		func(loaded []linearapi.WorkflowState) { a.workflowStates = loaded },
-		a.cache.GetWorkflowStates,
-		func(states []linearapi.WorkflowState) { a.showStatusPickerWithStates(states, contextLine, onSelect) },
-	)
-}
-
-func (a *App) showStatusPickerWithStates(states []linearapi.WorkflowState, contextLine string, onSelect func(stateID string)) {
-	items := make([]PickerItem, 0, len(states))
-	for _, state := range states {
-		items = append(items, PickerItem{
-			ID:    state.ID,
-			Label: state.Name,
-		})
-	}
-
-	a.presentPicker("Select Status", contextLine, items, onSelect)
+	a.issueFieldOptions(issueFieldState, func(items []PickerItem) {
+		a.presentPicker("Select Status", contextLine, items, onSelect)
+	})
 }
 
 // ShowUserPicker shows a picker for team users. contextLine names the issue
 // being modified; empty for non-issue uses like filters.
 func (a *App) ShowUserPicker(contextLine string, onSelect func(userID string)) {
 	logger.Debug("tui.app: showing user picker")
-	showCachedPicker(a, "users for picker", a.teamUsers,
-		func(loaded []linearapi.User) { a.teamUsers = loaded },
-		a.cache.GetUsers,
-		func(users []linearapi.User) { a.showUserPickerWithUsers(users, contextLine, onSelect) },
-	)
-}
-
-func (a *App) showUserPickerWithUsers(users []linearapi.User, contextLine string, onSelect func(userID string)) {
-	items := make([]PickerItem, 0, len(users))
-	for _, user := range users {
-		label := user.Name
-		if user.IsMe {
-			label += " (me)"
-		}
-		items = append(items, PickerItem{
-			ID:    user.ID,
-			Label: label,
-		})
-	}
-
-	a.presentPicker("Select Assignee", contextLine, items, onSelect)
+	a.issueFieldOptions(issueFieldAssignee, func(items []PickerItem) {
+		a.presentPicker("Select Assignee", contextLine, items, onSelect)
+	})
 }
 
 // ShowCyclePicker shows a picker for team cycles. contextLine names the
 // issue being modified; empty for non-issue uses like filters.
 func (a *App) ShowCyclePicker(contextLine string, onSelect func(cycleID string)) {
 	logger.Debug("tui.app: showing cycle picker")
-	showCachedPicker(a, "cycles for picker", a.teamCycles,
-		func(loaded []linearapi.Cycle) { a.teamCycles = loaded },
-		func(ctx context.Context, teamID string) ([]linearapi.Cycle, error) {
-			loaded, err := a.cache.GetCycles(ctx, teamID)
-			if err != nil {
-				return nil, err
-			}
-			sortCyclesForNavigation(loaded)
-			return loaded, nil
-		},
-		func(cycles []linearapi.Cycle) { a.showCyclePickerWithCycles(cycles, contextLine, onSelect) },
-	)
-}
-
-func (a *App) showCyclePickerWithCycles(cycles []linearapi.Cycle, contextLine string, onSelect func(cycleID string)) {
-	items := make([]PickerItem, 0, len(cycles))
-	for _, cycle := range cycles {
-		label := cycle.DisplayName()
-		switch {
-		case cycle.IsActive:
-			label += " (active)"
-		case cycle.IsNext:
-			label += " (next)"
-		case cycle.IsPrevious:
-			label += " (previous)"
-		}
-		items = append(items, PickerItem{
-			ID:    cycle.ID,
-			Label: label,
-		})
-	}
-
-	a.presentPicker("Select Cycle", contextLine, items, onSelect)
+	a.issueFieldOptions(issueFieldCycle, func(items []PickerItem) {
+		a.presentPicker("Select Cycle", contextLine, items, onSelect)
+	})
 }
 
 // ShowProjectPicker shows a picker for team projects. contextLine names the
 // issue being modified; empty for non-issue uses like filters.
 func (a *App) ShowProjectPicker(contextLine string, onSelect func(projectID string)) {
 	logger.Debug("tui.app: showing project picker")
-	showCachedPicker(a, "projects for picker", a.teamProjects,
-		func(loaded []linearapi.Project) { a.teamProjects = loaded },
-		a.cache.GetProjects,
-		func(projects []linearapi.Project) { a.showProjectPickerWithProjects(projects, contextLine, onSelect) },
-	)
-}
-
-func (a *App) showProjectPickerWithProjects(projects []linearapi.Project, contextLine string, onSelect func(projectID string)) {
-	items := make([]PickerItem, 0, len(projects))
-	for _, project := range projects {
-		items = append(items, PickerItem{
-			ID:    project.ID,
-			Label: project.Name,
-		})
-	}
-
-	a.presentPicker("Select Project", contextLine, items, onSelect)
+	a.issueFieldOptions(issueFieldProject, func(items []PickerItem) {
+		a.presentPicker("Select Project", contextLine, items, onSelect)
+	})
 }
 
 // ShowTeamPicker shows a picker for the workspace's teams. The navigation tree
