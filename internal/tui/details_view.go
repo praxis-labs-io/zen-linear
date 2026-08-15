@@ -233,24 +233,58 @@ func (a *App) detailsMeasureWidth() int {
 	return detailsFallbackWidth
 }
 
-// detailsHeaderBlock is the top of the page: the metadata, the rule under it,
-// and the description. The header lines are single rows of fielded text, so
-// they truncate; the description below is prose and wraps.
-//
-// It returns lines rather than text because the page counts rows, and every
-// card below this block is placed by that count.
-func (a *App) detailsHeaderBlock(width int) []string {
-	lines := make([]string, 0, len(a.detailsHeaderLines)+len(a.detailsBodyLines)+3)
-	for _, line := range a.detailsHeaderLines {
-		// Cut at what the last draw measured, which is 0 and cuts nothing before
-		// the first one: a render that beats the layout must not shorten the
-		// header to a box that was never on screen.
-		lines = append(lines, truncateTagged(line, a.detailsFittedWidth))
+// detailsLabelGutter is the column a gridded metadata value starts at. The
+// label and the padding after it fill everything to its left.
+const detailsLabelGutter = 12
+
+// detailsRow is one line of the metadata header: the text read mode prints and
+// the field it edits, empty on a row that edits nothing.
+type detailsRow struct {
+	text  string
+	field issueField
+	// Recorded here rather than measured at render, which would mean stripping
+	// the color tags first.
+	valueColumn int
+}
+
+// fieldSpan is where an editable field landed on the page, in page rows. The
+// field cursor moves and scrolls by these, as the comment ring does by spans.
+type fieldSpan struct {
+	field       issueField
+	row         int
+	valueColumn int
+}
+
+// detailsHeaderBlock is the metadata, the rule under it, and the description as
+// page lines, plus the row each editable field landed on.
+func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
+	lines := make([]string, 0, len(a.detailsHeaderRows)+len(a.detailsBodyLines)+3)
+	var spans []fieldSpan
+	for _, row := range a.detailsHeaderRows {
+		if row.field != "" {
+			spans = append(spans, fieldSpan{field: row.field, row: len(lines), valueColumn: row.valueColumn})
+		}
+		// Cut at what the last draw measured, 0 before the first: a render that
+		// beats the layout must not shorten the header to a box never on screen.
+		lines = append(lines, truncateTagged(row.text, a.detailsFittedWidth))
 	}
 	if len(lines) > 0 {
 		lines = append(lines, a.detailsSeam(width)...)
 	}
-	return append(lines, a.detailsBodyLines...)
+	return append(lines, a.detailsBodyLines...), spans
+}
+
+// detailsGridRow is one row of the metadata grid: the label padded out to the
+// gutter, then a value that carries its own color.
+func (a *App) detailsGridRow(field issueField, label, value string) detailsRow {
+	// A label too long for the gutter takes one space rather than a negative
+	// repeat, which would panic inside a draw. The gutter test catches it.
+	pad := strings.Repeat(" ", max(1, detailsLabelGutter-len(label)-1))
+	return detailsRow{
+		text:        a.themeTags.SecondaryText + label + ":[-]" + pad + value,
+		field:       field,
+		valueColumn: detailsLabelGutter,
+	}
 }
 
 // detailsSeam is the rule the page changes section on, spaced by the density.
@@ -323,7 +357,7 @@ func (a *App) updateDetailsView() {
 		a.syncComposeDraft(selectedIssue.ID)
 	}
 	if selectedIssue == nil {
-		a.detailsHeaderLines = nil
+		a.detailsHeaderRows = nil
 		a.detailsBodyLines = nil
 		a.detailsDescriptionMarkdown = ""
 		a.detailsCommentsSource = nil
@@ -344,32 +378,38 @@ func (a *App) updateDetailsView() {
 	sectionGap := a.density.DetailsSectionGap
 
 	// ===== Update Description/Metadata View =====
-	var headerLines []string
+	var headerRows []detailsRow
 
 	// Issue header info with styling
-	headerLines = append(headerLines, fmt.Sprintf("%s%s[-]", accentColor, issue.Identifier))
-	headerLines = append(headerLines, fmt.Sprintf("[b]%s%s[-]", valColor, issue.Title))
+	headerRows = append(headerRows, detailsRow{text: fmt.Sprintf("%s%s[-]", accentColor, issue.Identifier)})
+	headerRows = append(headerRows, detailsRow{
+		text:  fmt.Sprintf("[b]%s%s[-]", valColor, issue.Title),
+		field: issueFieldTitle,
+	})
 	for i := 0; i < sectionGap; i++ {
-		headerLines = append(headerLines, "")
+		headerRows = append(headerRows, detailsRow{})
 	}
 
 	// The metadata grid, ordered the way it is read: what the issue is and who
 	// has it, then where it sits in the plan, then its dates.
 	stateIcon, stateColor := formatStateIcon(issue.State, a.theme)
 	stateTag := colorTag(stateColor)
-	headerLines = append(headerLines, fmt.Sprintf("%sState:[-]      %s%s %s[-]", keyColor, stateTag, stateIcon, issue.State))
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldState, "State",
+		fmt.Sprintf("%s%s %s[-]", stateTag, stateIcon, issue.State)))
 
 	assignee := "Unassigned"
 	if issue.Assignee != "" {
 		assignee = issue.Assignee
 	}
-	headerLines = append(headerLines, fmt.Sprintf("%sAssignee:[-]   %s%s[-]", keyColor, valColor, assignee))
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldAssignee, "Assignee",
+		fmt.Sprintf("%s%s[-]", valColor, assignee)))
 
 	// The glyph is the list's, so a priority reads the same in both places; the
 	// word is what the pane has room for and the column does not.
 	priorityIcon, priorityColor := formatPriority(issue.Priority, a.theme)
 	priorityTag := colorTag(priorityColor)
-	headerLines = append(headerLines, fmt.Sprintf("%sPriority:[-]   %s%s %s[-]", keyColor, priorityTag, priorityIcon, priorityLabel(issue.Priority)))
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldPriority, "Priority",
+		fmt.Sprintf("%s%s %s[-]", priorityTag, priorityIcon, priorityLabel(issue.Priority))))
 
 	labelsText := "No labels"
 	if len(issue.Labels) > 0 {
@@ -379,43 +419,53 @@ func (a *App) updateDetailsView() {
 		}
 		labelsText = strings.Join(labelNames, ", ")
 	}
-	headerLines = append(headerLines, fmt.Sprintf("%sLabels:[-]     %s%s[-]", keyColor, valColor, labelsText))
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldLabels, "Labels",
+		fmt.Sprintf("%s%s[-]", valColor, labelsText)))
 
 	project := "No project"
 	if issue.ProjectName != "" {
 		project = issue.ProjectName
 	}
-	headerLines = append(headerLines, fmt.Sprintf("%sProject:[-]    %s%s[-]", keyColor, valColor, project))
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldProject, "Project",
+		fmt.Sprintf("%s%s[-]", valColor, project)))
 
-	headerLines = append(headerLines, fmt.Sprintf("%sMilestone:[-]  %s%s[-]", keyColor, valColor, formatMilestoneName(issue.ProjectMilestone)))
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldMilestone, "Milestone",
+		fmt.Sprintf("%s%s[-]", valColor, formatMilestoneName(issue.ProjectMilestone))))
 
 	cycle := "No cycle"
 	if issue.Cycle != nil {
 		cycle = issue.Cycle.DisplayName()
 	}
-	headerLines = append(headerLines, fmt.Sprintf("%sCycle:[-]      %s%s[-]", keyColor, valColor, cycle))
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldCycle, "Cycle",
+		fmt.Sprintf("%s%s[-]", valColor, cycle)))
 
-	headerLines = append(headerLines, fmt.Sprintf("%sDue date:[-]   %s%s[-]", keyColor, valColor, formatDueDate(issue.DueDate)))
-	headerLines = append(headerLines, fmt.Sprintf("%sEstimate:[-]   %s%s[-]", keyColor, valColor, formatEstimate(issue.Estimate)))
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldDueDate, "Due date",
+		fmt.Sprintf("%s%s[-]", valColor, formatDueDate(issue.DueDate))))
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldEstimate, "Estimate",
+		fmt.Sprintf("%s%s[-]", valColor, formatEstimate(issue.Estimate))))
 
 	branchName := issue.BranchName
 	if branchName == "" {
 		branchName = "-"
 	}
-	headerLines = append(headerLines, fmt.Sprintf("%sBranch:[-]     %s%s[-]", keyColor, valColor, branchName))
+	// Branch and Parent are on the grid and carry no field: one is Linear's to
+	// write, the other has a picker of its own and its cycle checks.
+	headerRows = append(headerRows, a.detailsGridRow("", "Branch",
+		fmt.Sprintf("%s%s[-]", valColor, branchName)))
 
-	// Parent issue (if this is a sub-issue)
 	if issue.Parent != nil {
 		parentText := fmt.Sprintf("%s - %s", issue.Parent.Identifier, issue.Parent.Title)
-		headerLines = append(headerLines, fmt.Sprintf("%sParent:[-]     %s%s[-]", keyColor, accentColor, parentText))
+		headerRows = append(headerRows, a.detailsGridRow("", "Parent",
+			fmt.Sprintf("%s%s[-]", accentColor, parentText)))
 	}
 
 	// Sub-issues (if this is a parent issue)
 	if len(issue.Children) > 0 {
 		for i := 0; i < sectionGap; i++ {
-			headerLines = append(headerLines, "")
+			headerRows = append(headerRows, detailsRow{})
 		}
-		headerLines = append(headerLines, fmt.Sprintf("%sSub-issues:[-] %s%d items[-]", keyColor, valColor, len(issue.Children)))
+		headerRows = append(headerRows, a.detailsGridRow("", "Sub-issues",
+			fmt.Sprintf("%s%d items[-]", valColor, len(issue.Children))))
 		for _, child := range issue.Children {
 			// Show child identifier, state, and title
 			childLine := fmt.Sprintf("  %s└─[-] %s%s[-] %s[%s][-] %s%s[-]",
@@ -423,40 +473,50 @@ func (a *App) updateDetailsView() {
 				accentColor, child.Identifier,
 				keyColor, child.State,
 				valColor, child.Title)
-			headerLines = append(headerLines, childLine)
+			headerRows = append(headerRows, detailsRow{text: childLine})
 		}
 	}
 
+	// The three section labels below outgrow the grid, so they take a single
+	// space and sit outside it.
 	if len(issue.Subscribers) > 0 {
 		for i := 0; i < sectionGap; i++ {
-			headerLines = append(headerLines, "")
+			headerRows = append(headerRows, detailsRow{})
 		}
 		subscribers := make([]string, 0, len(issue.Subscribers))
 		for _, subscriber := range issue.Subscribers {
 			subscribers = append(subscribers, formatUserDisplayName(subscriber))
 		}
-		headerLines = append(headerLines, fmt.Sprintf("%sSubscribers:[-] %s%s[-]", keyColor, valColor, strings.Join(subscribers, ", ")))
+		headerRows = append(headerRows, detailsRow{
+			text: fmt.Sprintf("%sSubscribers:[-] %s%s[-]", keyColor, valColor, strings.Join(subscribers, ", ")),
+		})
 	}
 
 	if len(issue.Relations) > 0 {
 		for i := 0; i < sectionGap; i++ {
-			headerLines = append(headerLines, "")
+			headerRows = append(headerRows, detailsRow{})
 		}
-		headerLines = append(headerLines, fmt.Sprintf("%sRelations:[-] %s%d items[-]", keyColor, valColor, len(issue.Relations)))
+		headerRows = append(headerRows, detailsRow{
+			text: fmt.Sprintf("%sRelations:[-] %s%d items[-]", keyColor, valColor, len(issue.Relations)),
+		})
 		for _, relation := range issue.Relations {
 			ref := relation.RelatedIssue
 			if relation.Inverse {
 				ref = relation.Issue
 			}
-			headerLines = append(headerLines, fmt.Sprintf("  %s%s[-] %s%s[-]", keyColor, relation.DisplayType(), accentColor, formatIssueReference(ref)))
+			headerRows = append(headerRows, detailsRow{
+				text: fmt.Sprintf("  %s%s[-] %s%s[-]", keyColor, relation.DisplayType(), accentColor, formatIssueReference(ref)),
+			})
 		}
 	}
 
 	if len(issue.Attachments) > 0 {
 		for i := 0; i < sectionGap; i++ {
-			headerLines = append(headerLines, "")
+			headerRows = append(headerRows, detailsRow{})
 		}
-		headerLines = append(headerLines, fmt.Sprintf("%sAttachments:[-] %s%d items[-]", keyColor, valColor, len(issue.Attachments)))
+		headerRows = append(headerRows, detailsRow{
+			text: fmt.Sprintf("%sAttachments:[-] %s%d items[-]", keyColor, valColor, len(issue.Attachments)),
+		})
 		for _, attachment := range issue.Attachments {
 			title := attachment.Title
 			if title == "" {
@@ -466,14 +526,15 @@ func (a *App) updateDetailsView() {
 			if source != "" {
 				source = " (" + source + ")"
 			}
-			headerLines = append(headerLines, fmt.Sprintf("  %s%s%s[-] %s%s[-]", accentColor, title, source, keyColor, attachment.URL))
+			headerRows = append(headerRows, detailsRow{
+				text: fmt.Sprintf("  %s%s%s[-] %s%s[-]", accentColor, title, source, keyColor, attachment.URL),
+			})
 		}
 	}
 
-	// The rules between sections are drawn at render time, not baked in here:
-	// they span the measure, and the measure moves. Held nil, these lines are
-	// also what says no issue is selected.
-	a.detailsHeaderLines = headerLines
+	// The rules between sections are drawn at render time, since the measure
+	// moves. Held nil, these rows are what says no issue is selected.
+	a.detailsHeaderRows = headerRows
 	// The raw markdown is kept, not just its rendering, because the width it
 	// is laid out at can change without the issue changing.
 	a.detailsDescriptionMarkdown = issue.Description

@@ -38,7 +38,8 @@ func (a *App) renderDetailsPage() {
 	a.commentSpans = nil
 	a.commentPainted = a.commentRing()
 
-	if a.detailsHeaderLines == nil {
+	a.detailsFieldSpans = nil
+	if a.detailsHeaderRows == nil {
 		// No issue: nothing to write on, nothing to write in. The ring is put
 		// back where it starts, or it names a card that is no longer drawn.
 		a.commentsFocus, a.focusedCommentID = commentsFocusCards, ""
@@ -50,7 +51,9 @@ func (a *App) renderDetailsPage() {
 	width := a.detailsMeasureWidth()
 	blocks := a.commentBlocks()
 	var slots []pageSlot
-	lines := append(a.detailsHeaderBlock(width), a.detailsSeam(width)...)
+	lines, fields := a.detailsHeaderBlock(width)
+	a.detailsFieldSpans = fields
+	lines = append(lines, a.detailsSeam(width)...)
 	// The label heads the section the way Description: heads the one above it.
 	// It carries no count: the feed holds the issue's own creation, so there is
 	// no empty state for a number to report, and a count over comments and
