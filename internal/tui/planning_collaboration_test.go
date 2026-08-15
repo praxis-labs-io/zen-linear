@@ -575,3 +575,145 @@ func TestFieldEditsTargetTheIssueTheEditorNamed(t *testing.T) {
 		})
 	}
 }
+
+// runCommand runs a palette command by id, the way the palette and the
+// keyboard shortcut both reach it.
+func runCommand(t *testing.T, app *App, id string) {
+	t.Helper()
+	for _, cmd := range app.paletteCtrl.commands {
+		if cmd.ID == id {
+			cmd.Run(app)
+			return
+		}
+	}
+	t.Fatalf("no command with id %q", id)
+}
+
+// seedFieldOptions fills the caches a field picker reads, so a picker opens
+// with rows rather than fetching.
+func seedFieldOptions(app *App) {
+	app.currentUser = &linearapi.User{ID: "user-1", Name: "Ada Lovelace", DisplayName: "Ada Lovelace"}
+	app.teamUsers = []linearapi.User{{ID: "user-1", Name: "Ada Lovelace", DisplayName: "Ada Lovelace"}}
+	app.workflowStates = []linearapi.WorkflowState{{ID: "state-1", Name: "In Progress"}}
+	app.teamCycles = []linearapi.Cycle{{ID: "cycle-1", Name: "Launch", Number: 12}}
+	app.teamProjects = []linearapi.Project{{ID: "project-2", Name: "Beta"}}
+}
+
+// TestFieldSaveMessagesNameTheFieldAndItsValue reads the corner the way a user
+// does. The three phrasings are the whole of what a save reports.
+func TestFieldSaveMessagesNameTheFieldAndItsValue(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		act  func(*testing.T, *App, <-chan func())
+		want string
+	}{
+		{
+			name: "status",
+			act: func(t *testing.T, a *App, _ <-chan func()) {
+				runCommand(t, a, "change_status")
+				selectPickerItem(t, a, "In Progress")
+			},
+			want: "Set status: In Progress",
+		},
+		{
+			name: "assignee",
+			act: func(t *testing.T, a *App, _ <-chan func()) {
+				runCommand(t, a, "assign_user")
+				selectPickerItem(t, a, "Ada Lovelace")
+			},
+			want: "Set assignee: Ada Lovelace",
+		},
+		{
+			name: "assign to me",
+			act:  func(t *testing.T, a *App, _ <-chan func()) { runCommand(t, a, "assign_me") },
+			want: "Set assignee: Ada Lovelace",
+		},
+		{
+			name: "unassign",
+			act:  func(t *testing.T, a *App, _ <-chan func()) { runCommand(t, a, "unassign") },
+			want: "Cleared assignee",
+		},
+		{
+			name: "cycle",
+			act: func(t *testing.T, a *App, _ <-chan func()) {
+				runCommand(t, a, "set_cycle")
+				selectPickerItem(t, a, "Launch")
+			},
+			want: "Set cycle: Launch",
+		},
+		{
+			name: "clear cycle",
+			act:  func(t *testing.T, a *App, _ <-chan func()) { runCommand(t, a, "clear_cycle") },
+			want: "Cleared cycle",
+		},
+		{
+			name: "priority",
+			act: func(t *testing.T, a *App, _ <-chan func()) {
+				runCommand(t, a, "set_priority")
+				selectPickerItem(t, a, "Urgent")
+			},
+			want: "Set priority: Urgent",
+		},
+		{
+			name: "project",
+			act: func(t *testing.T, a *App, _ <-chan func()) {
+				runCommand(t, a, "set_project")
+				selectPickerItem(t, a, "Beta")
+			},
+			want: "Set project: Beta",
+		},
+		{
+			name: "due date",
+			act: func(t *testing.T, a *App, _ <-chan func()) {
+				runCommand(t, a, "set_due_date")
+				submitTextInput(t, a, "2026-09-01")
+			},
+			want: "Set due date: 2026-09-01",
+		},
+		{
+			name: "estimate",
+			act: func(t *testing.T, a *App, _ <-chan func()) {
+				runCommand(t, a, "edit_estimate")
+				submitTextInput(t, a, "3")
+			},
+			want: "Set estimate: 3",
+		},
+		{
+			name: "clear estimate",
+			act:  func(t *testing.T, a *App, _ <-chan func()) { runCommand(t, a, "clear_estimate") },
+			want: "Cleared estimate",
+		},
+		{
+			name: "milestone",
+			act: func(t *testing.T, a *App, queued <-chan func()) {
+				runCommand(t, a, "set_milestone")
+				runQueuedUpdate(t, queued)
+				selectPickerItem(t, a, "M2")
+			},
+			want: "Set milestone: M2",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			estimate := 5.0
+			app, written, queued := fieldWriteApp(t, linearapi.Issue{
+				ID: "issue-1", Identifier: "LIN-1", Title: "Current",
+				ProjectID: "project-1",
+				Cycle:     &linearapi.CycleRef{ID: "cycle-9", Name: "Old"},
+				Estimate:  &estimate,
+			})
+			seedFieldOptions(app)
+			app.fetchMilestonesFunc = func(ctx context.Context, projectID string) ([]linearapi.ProjectMilestone, error) {
+				return []linearapi.ProjectMilestone{{ID: "milestone-2", Name: "M2"}}, nil
+			}
+
+			tc.act(t, app, queued)
+
+			awaitWrite(t, written)
+			// The flash is raised where the write lands, which is queued.
+			runQueuedUpdate(t, queued)
+			if got := app.statusToast.GetText(true); got != tc.want {
+				t.Errorf("toast = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
