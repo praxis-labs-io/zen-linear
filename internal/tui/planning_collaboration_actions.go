@@ -46,24 +46,21 @@ func parseEstimateInput(value string) (float64, error) {
 	return estimate, nil
 }
 
-// runIssueUpdate applies an update to the issue named in input.ID, falling
-// back to the current selection. Callers that open a modal first should set
-// the ID when they open it: a background refresh can move the selection while
-// the modal is up, and the write must land on the issue the modal named.
+// runIssueUpdate applies an update to the issue named in input.ID.
 func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage string) {
 	a.runIssueUpdateWithResult(input, successMessage, nil)
 }
 
-// runIssueUpdateWithResult is runIssueUpdate plus the outcome, for a caller
-// holding UI open until the write lands.
+// runIssueUpdateWithResult is runIssueUpdate plus the outcome. An empty ID is
+// refused, never resolved against a selection the caller may have outlived.
 func (a *App) runIssueUpdateWithResult(input linearapi.UpdateIssueInput, successMessage string, onDone func(error)) {
 	if input.ID == "" {
-		issue := a.GetSelectedIssue()
-		if issue == nil {
-			a.flashStatus("No issue selected")
-			return
+		logger.Error("tui.planning: issue update with no id, dropped")
+		a.flashError("No issue to update")
+		if onDone != nil {
+			onDone(fmt.Errorf("issue update with no id"))
 		}
-		input.ID = issue.ID
+		return
 	}
 	updateIssue := a.updateIssueFunc
 	if updateIssue == nil {
@@ -116,27 +113,30 @@ func (a *App) showSetDueDateModal() {
 	if issue.DueDate != nil {
 		initial = *issue.DueDate
 	}
-	a.textInputModal.ShowWithContext("Set Due Date", "YYYY-MM-DD: ", initial, a.issueContextLine(*issue), func(value string) {
-		if err := validateLinearDate(value); err != nil {
-			a.updateStatusBarWithError(err)
-			return
-		}
-		a.setDueDateForSelectedIssue(value)
+	// The modal names this issue, so the write targets it even if a refresh
+	// moves the selection while the modal is up.
+	target := *issue
+	a.textInputModal.ShowWithContext("Set Due Date", "YYYY-MM-DD: ", initial, a.issueContextLine(target), func(value string) {
+		a.setDueDate(target, value)
 	})
 }
 
-func (a *App) setDueDateForSelectedIssue(value string) {
-	value = strings.TrimSpace(value)
-	if err := validateLinearDate(value); err != nil {
+func (a *App) setDueDate(issue linearapi.Issue, value string) {
+	save, err := issueFieldDueDateSave(issue, value)
+	if err != nil {
 		a.updateStatusBarWithError(err)
 		return
 	}
-	a.runIssueUpdate(linearapi.UpdateIssueInput{DueDate: &value}, "Updated due date")
+	a.saveIssueField(save)
 }
 
 func (a *App) clearDueDateForSelectedIssue() {
-	empty := ""
-	a.runIssueUpdate(linearapi.UpdateIssueInput{DueDate: &empty}, "Cleared due date")
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	a.saveIssueField(issueFieldDueDateClear(*issue))
 }
 
 func (a *App) showEditEstimateModal() {
@@ -149,22 +149,30 @@ func (a *App) showEditEstimateModal() {
 	if issue.Estimate != nil {
 		initial = formatEstimate(issue.Estimate)
 	}
-	a.textInputModal.ShowWithContext("Edit Estimate", "Points: ", initial, a.issueContextLine(*issue), func(value string) {
-		a.editEstimateForSelectedIssue(value)
+	// The modal names this issue, so the write targets it even if a refresh
+	// moves the selection while the modal is up.
+	target := *issue
+	a.textInputModal.ShowWithContext("Edit Estimate", "Points: ", initial, a.issueContextLine(target), func(value string) {
+		a.setEstimate(target, value)
 	})
 }
 
-func (a *App) editEstimateForSelectedIssue(value string) {
-	estimate, err := parseEstimateInput(value)
+func (a *App) setEstimate(issue linearapi.Issue, value string) {
+	save, err := issueFieldEstimateSave(issue, value)
 	if err != nil {
 		a.updateStatusBarWithError(err)
 		return
 	}
-	a.runIssueUpdate(linearapi.UpdateIssueInput{Estimate: &estimate}, "Updated estimate")
+	a.saveIssueField(save)
 }
 
 func (a *App) clearEstimateForSelectedIssue() {
-	a.runIssueUpdate(linearapi.UpdateIssueInput{ClearEstimate: true}, "Cleared estimate")
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	a.saveIssueField(issueFieldEstimateClear(*issue))
 }
 
 func (a *App) showSetPriorityPicker() {
@@ -173,20 +181,18 @@ func (a *App) showSetPriorityPicker() {
 		a.flashStatus("No issue selected")
 		return
 	}
-	items := make([]PickerItem, 0, len(priorityLabels))
-	for value, label := range priorityLabels {
-		items = append(items, PickerItem{ID: strconv.Itoa(value), Label: label})
-	}
 	// The picker names this issue, so the write targets it even if a refresh
 	// moves the selection while the picker is open.
-	issueID := issue.ID
-	a.pickerModal.ShowWithContext("Set Priority", a.issueContextLine(*issue), items, func(item PickerItem) {
-		priority, err := strconv.Atoi(item.ID)
-		if err != nil {
-			a.updateStatusBarWithError(err)
-			return
-		}
-		a.runIssueUpdate(linearapi.UpdateIssueInput{ID: issueID, Priority: &priority}, "Set priority: "+item.Label)
+	target := *issue
+	a.issueFieldOptions(issueFieldPriority, func(items []PickerItem) {
+		a.pickerModal.ShowWithContext("Set Priority", a.issueContextLine(target), items, func(item PickerItem) {
+			priority, err := strconv.Atoi(item.ID)
+			if err != nil {
+				a.updateStatusBarWithError(err)
+				return
+			}
+			a.saveIssueField(issueFieldPrioritySave(target, priority))
+		})
 	})
 }
 
@@ -204,9 +210,8 @@ func (a *App) showSetProjectPicker() {
 			a.flashStatus("Already in that project")
 			return
 		}
-		input := linearapi.UpdateIssueInput{ID: target.ID, ProjectID: &projectID}
-		clearMilestoneOnProjectChange(&input, target)
-		a.runIssueUpdate(input, "Set project: "+projectNameByID(a.teamProjects, projectID))
+		name := a.issueFieldValueName(issueFieldProject, projectID)
+		a.saveIssueField(issueFieldProjectSave(target, projectID, name))
 	})
 }
 
@@ -224,13 +229,11 @@ func (a *App) showChangeTeamPicker() {
 			a.flashStatus("Already in that team")
 			return
 		}
-		// The move renumbers the issue, so the message names the identifier
-		// the user picked it by, not the one it now has.
-		message := fmt.Sprintf("Moved %s", target.Identifier)
+		name := ""
 		if team := findTeamByID(a.navTeams, teamID); team != nil {
-			message = fmt.Sprintf("Moved %s to %s", target.Identifier, team.Name)
+			name = team.Name
 		}
-		a.runIssueUpdate(linearapi.UpdateIssueInput{ID: target.ID, TeamID: &teamID}, message)
+		a.saveIssueField(issueFieldTeamSave(target, teamID, name))
 	})
 }
 
@@ -244,10 +247,7 @@ func (a *App) clearProjectForSelectedIssue() {
 		a.flashStatus("Issue has no project")
 		return
 	}
-	empty := ""
-	input := linearapi.UpdateIssueInput{ID: issue.ID, ProjectID: &empty}
-	clearMilestoneOnProjectChange(&input, *issue)
-	a.runIssueUpdate(input, "Cleared project")
+	a.saveIssueField(issueFieldProjectClear(*issue))
 }
 
 // clearMilestoneOnProjectChange nulls the milestone alongside a project change.
@@ -261,30 +261,22 @@ func clearMilestoneOnProjectChange(input *linearapi.UpdateIssueInput, issue line
 	input.ProjectMilestoneID = &empty
 }
 
-func (a *App) selectedIssueProjectID() (string, bool) {
+// The issue is captured before the fetch, not read again in the callback: the
+// id would otherwise be read a round trip and a navigated picker later.
+func (a *App) showProjectMilestonePicker(title string, onSelect func(linearapi.Issue, linearapi.ProjectMilestone)) {
 	issue := a.GetSelectedIssue()
 	if issue == nil {
 		a.flashStatus("No issue selected")
-		return "", false
-	}
-	if strings.TrimSpace(issue.ProjectID) == "" {
-		a.updateStatusBarWithError(fmt.Errorf("issue must have a project"))
-		return "", false
-	}
-	return issue.ProjectID, true
-}
-
-func (a *App) showProjectMilestonePicker(title string, onSelect func(linearapi.ProjectMilestone)) {
-	projectID, ok := a.selectedIssueProjectID()
-	if !ok {
 		return
 	}
-	contextLine := ""
-	if issue := a.GetSelectedIssue(); issue != nil {
-		contextLine = a.issueContextLine(*issue)
+	target := *issue
+	if strings.TrimSpace(target.ProjectID) == "" {
+		a.updateStatusBarWithError(fmt.Errorf("issue must have a project"))
+		return
 	}
+	contextLine := a.issueContextLine(target)
 	go func() {
-		milestones, err := a.cache.GetProjectMilestones(context.Background(), projectID)
+		milestones, err := a.fetchMilestonesFunc(context.Background(), target.ProjectID)
 		a.QueueUpdateDraw(func() {
 			if err != nil {
 				a.updateStatusBarWithError(err)
@@ -306,7 +298,7 @@ func (a *App) showProjectMilestonePicker(title string, onSelect func(linearapi.P
 			}
 			a.pickerModal.ShowWithContext(title, contextLine, items, func(item PickerItem) {
 				if onSelect != nil {
-					onSelect(byID[item.ID])
+					onSelect(target, byID[item.ID])
 				}
 			})
 		})
@@ -314,21 +306,24 @@ func (a *App) showProjectMilestonePicker(title string, onSelect func(linearapi.P
 }
 
 func (a *App) listProjectMilestonesForSelectedIssue() {
-	a.showProjectMilestonePicker("Project Milestones", func(milestone linearapi.ProjectMilestone) {
+	a.showProjectMilestonePicker("Project Milestones", func(_ linearapi.Issue, milestone linearapi.ProjectMilestone) {
 		a.flashStatus(fmt.Sprintf("Milestone: %s", milestone.Name))
 	})
 }
 
 func (a *App) showSetMilestonePicker() {
-	a.showProjectMilestonePicker("Set Milestone", func(milestone linearapi.ProjectMilestone) {
-		milestoneID := milestone.ID
-		a.runIssueUpdate(linearapi.UpdateIssueInput{ProjectMilestoneID: &milestoneID}, "Set milestone")
+	a.showProjectMilestonePicker("Set Milestone", func(issue linearapi.Issue, milestone linearapi.ProjectMilestone) {
+		a.saveIssueField(issueFieldMilestoneSave(issue, milestone.ID, milestone.Name))
 	})
 }
 
 func (a *App) clearMilestoneForSelectedIssue() {
-	empty := ""
-	a.runIssueUpdate(linearapi.UpdateIssueInput{ProjectMilestoneID: &empty}, "Cleared milestone")
+	issue := a.GetSelectedIssue()
+	if issue == nil {
+		a.flashStatus("No issue selected")
+		return
+	}
+	a.saveIssueField(issueFieldMilestoneClear(*issue))
 }
 
 func (a *App) applyFiltersAndRefresh(message string) {

@@ -727,10 +727,7 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue or current user selected")
 					return
 				}
-				a.runIssueUpdate(
-					linearapi.UpdateIssueInput{ID: issue.ID, AssigneeID: &user.ID},
-					fmt.Sprintf("Assigned %s to %s", issue.Identifier, user.DisplayName),
-				)
+				a.saveIssueField(issueFieldAssigneeSave(*issue, user.ID, formatUserDisplayName(*user)))
 			},
 		},
 		{
@@ -746,11 +743,7 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				emptyAssignee := ""
-				a.runIssueUpdate(
-					linearapi.UpdateIssueInput{ID: issue.ID, AssigneeID: &emptyAssignee},
-					fmt.Sprintf("Unassigned %s", issue.Identifier),
-				)
+				a.saveIssueField(issueFieldAssigneeClear(*issue))
 			},
 		},
 		{
@@ -808,11 +801,12 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				a.ShowStatusPicker(a.issueContextLine(*issue), func(stateID string) {
-					a.runIssueUpdate(
-						linearapi.UpdateIssueInput{ID: issue.ID, StateID: &stateID},
-						fmt.Sprintf("Changed status for %s", issue.Identifier),
-					)
+				// The picker names this issue, so the write targets it even if
+				// a refresh moves the selection while the picker is open.
+				target := *issue
+				a.ShowStatusPicker(a.issueContextLine(target), func(stateID string) {
+					name := a.issueFieldValueName(issueFieldState, stateID)
+					a.saveIssueField(issueFieldStateSave(target, stateID, name))
 				})
 			},
 		},
@@ -829,8 +823,10 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				a.ShowCyclePicker(a.issueContextLine(*issue), func(cycleID string) {
-					a.runIssueUpdate(linearapi.UpdateIssueInput{ID: issue.ID, CycleID: &cycleID}, fmt.Sprintf("Set cycle for %s", issue.Identifier))
+				target := *issue
+				a.ShowCyclePicker(a.issueContextLine(target), func(cycleID string) {
+					name := a.issueFieldValueName(issueFieldCycle, cycleID)
+					a.saveIssueField(issueFieldCycleSave(target, cycleID, name))
 				})
 			},
 		},
@@ -850,11 +846,7 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No cycle assigned")
 					return
 				}
-				emptyCycleID := ""
-				a.runIssueUpdate(
-					linearapi.UpdateIssueInput{ID: issue.ID, CycleID: &emptyCycleID},
-					fmt.Sprintf("Cleared cycle for %s", issue.Identifier),
-				)
+				a.saveIssueField(issueFieldCycleClear(*issue))
 			},
 		},
 		{
@@ -870,8 +862,10 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				a.ShowUserPicker(a.issueContextLine(*issue), func(userID string) {
-					a.runIssueUpdate(linearapi.UpdateIssueInput{ID: issue.ID, AssigneeID: &userID}, fmt.Sprintf("Assigned %s", issue.Identifier))
+				target := *issue
+				a.ShowUserPicker(a.issueContextLine(target), func(userID string) {
+					name := a.issueFieldValueName(issueFieldAssignee, userID)
+					a.saveIssueField(issueFieldAssigneeSave(target, userID, name))
 				})
 			},
 		},
@@ -1060,11 +1054,13 @@ func DefaultCommands(app *App) []Command {
 					a.flashError("Cannot set parent on issue with sub-issues")
 					return
 				}
-				a.ShowParentIssuePicker(a.issueContextLine(*issue), func(parentID string) {
-					a.runIssueUpdate(
-						linearapi.UpdateIssueInput{ID: issue.ID, ParentID: &parentID},
-						fmt.Sprintf("Set parent for %s", issue.Identifier),
-					)
+				target := *issue
+				a.ShowParentIssuePicker(a.issueContextLine(target), func(parentID string) {
+					name := ""
+					if ref := a.issueRefForID(parentID); ref != nil {
+						name = ref.Identifier
+					}
+					a.saveIssueField(issueFieldParentSave(target, parentID, name))
 				})
 			},
 		},
@@ -1088,13 +1084,7 @@ func DefaultCommands(app *App) []Command {
 					"Remove Parent",
 					fmt.Sprintf("Remove parent from %s?", issue.Identifier),
 					"Remove",
-					func() {
-						emptyParent := ""
-						a.runIssueUpdate(
-							linearapi.UpdateIssueInput{ID: issue.ID, ParentID: &emptyParent},
-							fmt.Sprintf("Removed parent from %s", issue.Identifier),
-						)
-					},
+					func() { a.saveIssueField(issueFieldParentClear(*issue)) },
 				)
 			},
 		},
