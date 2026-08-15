@@ -75,17 +75,19 @@ type App struct {
 	issuesColumn          *tview.Flex     // Vertical flex holding the active issues tab
 	detailsView           *tview.Flex     // The details pane: border, title, and the page
 	detailsPageView       *tview.TextView // The page's text, scrolled as one
-	// detailsHeaderLines is the metadata block untruncated and detailsBodyLines
-	// the description already rendered, so a refit re-joins them without
-	// rebuilding the header. detailsFittedWidth is the width they were last laid
-	// out at. The raw markdown is kept alongside because a width change has to
-	// re-run the renderer: glamour sizes tables to the width it is given.
-	detailsHeaderLines         []string
-	detailsBodyLines           []string
+	// detailsHeaderRows is the metadata untruncated and detailsBodyLines the
+	// description rendered, so a refit re-joins them without rebuilding either.
+	detailsHeaderRows []detailsRow
+	detailsBodyLines  []string
+	// Kept raw as well as rendered: glamour sizes tables to the width it was
+	// handed, so a width change has to re-run it.
 	detailsDescriptionMarkdown string
 	detailsFittedWidth         int
 	detailsCommentsSource      []linearapi.Comment
 	detailsActivitySource      []linearapi.IssueActivity
+	// detailsFieldSpans is where each editable field landed in the last render,
+	// the way commentSpans is for the cards.
+	detailsFieldSpans []fieldSpan
 	// focusedCommentID is the card the ring is on and commentSpans is where
 	// every card landed in the last render. The ring is held by id rather than
 	// by index so a refetch that reorders the stack keeps it on the same card.

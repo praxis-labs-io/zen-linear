@@ -176,6 +176,16 @@ func TestDetailsHeaderRefitsOnResize(t *testing.T) {
 	}
 }
 
+// headerTexts is the metadata header as the rows it was built from, for a test
+// that asserts what a row says rather than where it landed.
+func headerTexts(app *App) []string {
+	texts := make([]string, 0, len(app.detailsHeaderRows))
+	for _, row := range app.detailsHeaderRows {
+		texts = append(texts, row.text)
+	}
+	return texts
+}
+
 func findLine(t *testing.T, lines []string, substring string) string {
 	t.Helper()
 	for _, line := range lines {
@@ -275,10 +285,11 @@ func TestStateAndPriorityReadInWords(t *testing.T) {
 		{"State", fmt.Sprintf("State:[-]      %s%s In Progress[-]", colorTag(stateColor), stateIcon)},
 		{"Priority", fmt.Sprintf("Priority:[-]   %s%s Urgent[-]", colorTag(priorityColor), priorityIcon)},
 	} {
-		if !slices.ContainsFunc(app.detailsHeaderLines, func(line string) bool {
+		texts := headerTexts(app)
+		if !slices.ContainsFunc(texts, func(line string) bool {
 			return strings.Contains(line, want.line)
 		}) {
-			t.Errorf("no %s line reads %q, header:\n%s", want.field, want.line, strings.Join(app.detailsHeaderLines, "\n"))
+			t.Errorf("no %s line reads %q, header:\n%s", want.field, want.line, strings.Join(texts, "\n"))
 		}
 	}
 
@@ -287,6 +298,68 @@ func TestStateAndPriorityReadInWords(t *testing.T) {
 	drawn := findLine(t, drawDetails(t, app, 90), "Priority:")
 	if !strings.Contains(drawn, priorityIcon+" Urgent") {
 		t.Errorf("the drawn priority line = %q, want the glyph and the word", drawn)
+	}
+}
+
+// TestGriddedRowsLineUpAtTheGutter measures the drawn header. Every label on
+// the grid is padded to the same column, so the values read as a column.
+func TestGriddedRowsLineUpAtTheGutter(t *testing.T) {
+	app := newDetailsTestApp(t)
+	lines := drawDetails(t, app, 90)
+
+	for _, label := range []string{
+		"State:", "Assignee:", "Priority:", "Labels:", "Project:", "Milestone:",
+		"Cycle:", "Due date:", "Estimate:", "Branch:", "Sub-issues:",
+	} {
+		line := findLine(t, lines, label)
+		// Off the pane's own left padding, so column 0 is the start of the label.
+		row := []rune(strings.TrimLeft(line, " "))
+		if len(row) <= detailsLabelGutter {
+			t.Errorf("%s row = %q, want a value at column %d", label, line, detailsLabelGutter)
+			continue
+		}
+		if row[detailsLabelGutter-1] != ' ' || row[detailsLabelGutter] == ' ' {
+			t.Errorf("%s row = %q, want its value to start at column %d", label, string(row), detailsLabelGutter)
+		}
+	}
+}
+
+// TestTheHeaderReportsWhereItsFieldsLanded covers the map the field cursor
+// moves by: one span per editable field, in read order, on the row it is drawn.
+func TestTheHeaderReportsWhereItsFieldsLanded(t *testing.T) {
+	app := newDetailsTestApp(t)
+	lines, spans := app.detailsHeaderBlock(app.detailsMeasureWidth())
+
+	want := []struct {
+		field       issueField
+		text        string
+		valueColumn int
+	}{
+		{issueFieldTitle, "M3: comment infrastructure", 0},
+		{issueFieldState, "State:", detailsLabelGutter},
+		{issueFieldAssignee, "Assignee:", detailsLabelGutter},
+		{issueFieldPriority, "Priority:", detailsLabelGutter},
+		{issueFieldLabels, "Labels:", detailsLabelGutter},
+		{issueFieldProject, "Project:", detailsLabelGutter},
+		{issueFieldMilestone, "Milestone:", detailsLabelGutter},
+		{issueFieldCycle, "Cycle:", detailsLabelGutter},
+		{issueFieldDueDate, "Due date:", detailsLabelGutter},
+		{issueFieldEstimate, "Estimate:", detailsLabelGutter},
+	}
+	if len(spans) != len(want) {
+		t.Fatalf("%d field spans, want %d: %v", len(spans), len(want), spans)
+	}
+	for i, span := range spans {
+		if span.field != want[i].field {
+			t.Errorf("span %d is %q, want %q", i, span.field, want[i].field)
+			continue
+		}
+		if !strings.Contains(lines[span.row], want[i].text) {
+			t.Errorf("%s is on row %d, which reads %q", span.field, span.row, lines[span.row])
+		}
+		if span.valueColumn != want[i].valueColumn {
+			t.Errorf("%s value column = %d, want %d", span.field, span.valueColumn, want[i].valueColumn)
+		}
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 type issueField string
 
 const (
+	issueFieldTitle     issueField = "title"
 	issueFieldState     issueField = "state"
 	issueFieldAssignee  issueField = "assignee"
 	issueFieldPriority  issueField = "priority"
@@ -27,6 +28,7 @@ const (
 
 // issueFieldNames is what the status bar calls each field.
 var issueFieldNames = map[issueField]string{
+	issueFieldTitle:     "title",
 	issueFieldState:     "status",
 	issueFieldAssignee:  "assignee",
 	issueFieldPriority:  "priority",
