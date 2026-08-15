@@ -46,24 +46,21 @@ func parseEstimateInput(value string) (float64, error) {
 	return estimate, nil
 }
 
-// runIssueUpdate applies an update to the issue named in input.ID, falling
-// back to the current selection. Callers that open a modal first should set
-// the ID when they open it: a background refresh can move the selection while
-// the modal is up, and the write must land on the issue the modal named.
+// runIssueUpdate applies an update to the issue named in input.ID.
 func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage string) {
 	a.runIssueUpdateWithResult(input, successMessage, nil)
 }
 
-// runIssueUpdateWithResult is runIssueUpdate plus the outcome, for a caller
-// holding UI open until the write lands.
+// runIssueUpdateWithResult is runIssueUpdate plus the outcome. An empty ID is
+// refused, never resolved against a selection the caller may have outlived.
 func (a *App) runIssueUpdateWithResult(input linearapi.UpdateIssueInput, successMessage string, onDone func(error)) {
 	if input.ID == "" {
-		issue := a.GetSelectedIssue()
-		if issue == nil {
-			a.flashStatus("No issue selected")
-			return
+		logger.Error("tui.planning: issue update with no id, dropped")
+		a.flashError("No issue to update")
+		if onDone != nil {
+			onDone(fmt.Errorf("issue update with no id"))
 		}
-		input.ID = issue.ID
+		return
 	}
 	updateIssue := a.updateIssueFunc
 	if updateIssue == nil {

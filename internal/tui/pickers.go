@@ -180,7 +180,13 @@ func (a *App) issueFieldValueName(field issueField, id string) string {
 			}
 		}
 	case issueFieldProject:
-		return projectNameByID(a.teamProjects, id)
+		// Not projectNameByID: that answers a filter summary and returns the id
+		// itself on a miss, which would put a uuid in the corner.
+		for _, project := range a.teamProjects {
+			if project.ID == id {
+				return project.Name
+			}
+		}
 	}
 	return ""
 }

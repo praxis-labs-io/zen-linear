@@ -94,9 +94,11 @@ Panes that are waiting say so: `loading_pane.go` owns one ticker for the spinner
 
 ### Issue field writes
 
-`issue_field_save.go` builds every `UpdateIssueInput` outside the create form. A caller names a field and gets an `issueFieldSave` back; `saveIssueField` sends it. The constructors take `linearapi.Issue` **by value, never the `*App`**, because `GetSelectedIssue` returns a pointer into a slice pagination re-sorts in place: capture the issue where the user chose it, or a write that leaves the id to the send path lands on whatever the selection has since become. Six writes did exactly that until ZNL-115.
+`issue_field_save.go` builds the `UpdateIssueInput` for every single-field edit. A caller names a field and gets an `issueFieldSave` back; `saveIssueField` sends it. Two write paths are not on it yet and both are due to be deleted: `ShowEditDescriptionModal` and the issue form's edit mode.
 
-`issueFieldOptions` in `pickers.go` is the matching loader, so a field's options cannot differ between the overlay picker and the details pane. A new field needs both: a constructor here and a case there.
+The constructors take `linearapi.Issue` **by value, never the `*App`**, and the id is captured where the user chose the issue. A picker or a text modal outlives the background refresh that moves the selection, so a write that leaves the id to the send path lands on whatever is selected by then, which is a different issue. Six writes did exactly that until ZNL-115, and `runIssueUpdateWithResult` now refuses an empty id rather than resolving one.
+
+`issueFieldOptions` in `pickers.go` is the matching loader for the fields the shared single-select picker serves: state, assignee, priority, project, cycle. A new field of that kind needs both a constructor and a case. Text fields and the multi-select have constructors only.
 
 Messages follow one rule, in `fieldSetMessage`, `fieldClearMessage` and `fieldUpdateMessage`: `Set <field>: <value>`, `Cleared <field>`, and `Updated <field>` where the new value is not one name to print. Team keeps a phrasing of its own, because the move renumbers the issue and the identifier the user picked it by is the only one that still means anything. `TestFieldSaveMessagesNameTheFieldAndItsValue` reads them off the rendered status corner.
 

@@ -43,10 +43,9 @@ var issueFieldNames = map[issueField]string{
 // issueFieldSave is one field's write. Build one with a constructor below, so
 // the id and the message come from the same place.
 type issueFieldSave struct {
-	// Captured where the user chose the issue: GetSelectedIssue points into a
-	// slice pagination re-sorts, so reading it at write time can miss.
+	// Captured where the user chose the issue. A picker outlives a refresh
+	// that moves the selection; reading it at send time writes to that.
 	issueID string
-	field   issueField
 	message string
 	apply   func(*linearapi.UpdateIssueInput)
 }
@@ -84,7 +83,6 @@ func fieldUpdateMessage(field issueField) string {
 func issueFieldStateSave(issue linearapi.Issue, stateID, stateName string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldState,
 		message: fieldSetMessage(issueFieldState, stateName),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.StateID = &stateID },
 	}
@@ -93,7 +91,6 @@ func issueFieldStateSave(issue linearapi.Issue, stateID, stateName string) issue
 func issueFieldAssigneeSave(issue linearapi.Issue, userID, userName string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldAssignee,
 		message: fieldSetMessage(issueFieldAssignee, userName),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.AssigneeID = &userID },
 	}
@@ -102,7 +99,6 @@ func issueFieldAssigneeSave(issue linearapi.Issue, userID, userName string) issu
 func issueFieldAssigneeClear(issue linearapi.Issue) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldAssignee,
 		message: fieldClearMessage(issueFieldAssignee),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.AssigneeID = clearedID() },
 	}
@@ -111,7 +107,6 @@ func issueFieldAssigneeClear(issue linearapi.Issue) issueFieldSave {
 func issueFieldPrioritySave(issue linearapi.Issue, priority int) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldPriority,
 		message: fieldSetMessage(issueFieldPriority, priorityLabel(priority)),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.Priority = &priority },
 	}
@@ -120,7 +115,6 @@ func issueFieldPrioritySave(issue linearapi.Issue, priority int) issueFieldSave 
 func issueFieldLabelsSave(issue linearapi.Issue, labelIDs []string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldLabels,
 		message: fieldUpdateMessage(issueFieldLabels),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.LabelIDs = &labelIDs },
 	}
@@ -131,7 +125,6 @@ func issueFieldLabelsSave(issue linearapi.Issue, labelIDs []string) issueFieldSa
 func issueFieldProjectSave(issue linearapi.Issue, projectID, projectName string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldProject,
 		message: fieldSetMessage(issueFieldProject, projectName),
 		apply: func(input *linearapi.UpdateIssueInput) {
 			input.ProjectID = &projectID
@@ -143,7 +136,6 @@ func issueFieldProjectSave(issue linearapi.Issue, projectID, projectName string)
 func issueFieldProjectClear(issue linearapi.Issue) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldProject,
 		message: fieldClearMessage(issueFieldProject),
 		apply: func(input *linearapi.UpdateIssueInput) {
 			input.ProjectID = clearedID()
@@ -155,7 +147,6 @@ func issueFieldProjectClear(issue linearapi.Issue) issueFieldSave {
 func issueFieldMilestoneSave(issue linearapi.Issue, milestoneID, milestoneName string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldMilestone,
 		message: fieldSetMessage(issueFieldMilestone, milestoneName),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.ProjectMilestoneID = &milestoneID },
 	}
@@ -164,7 +155,6 @@ func issueFieldMilestoneSave(issue linearapi.Issue, milestoneID, milestoneName s
 func issueFieldMilestoneClear(issue linearapi.Issue) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldMilestone,
 		message: fieldClearMessage(issueFieldMilestone),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.ProjectMilestoneID = clearedID() },
 	}
@@ -173,7 +163,6 @@ func issueFieldMilestoneClear(issue linearapi.Issue) issueFieldSave {
 func issueFieldCycleSave(issue linearapi.Issue, cycleID, cycleName string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldCycle,
 		message: fieldSetMessage(issueFieldCycle, cycleName),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.CycleID = &cycleID },
 	}
@@ -182,7 +171,6 @@ func issueFieldCycleSave(issue linearapi.Issue, cycleID, cycleName string) issue
 func issueFieldCycleClear(issue linearapi.Issue) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldCycle,
 		message: fieldClearMessage(issueFieldCycle),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.CycleID = clearedID() },
 	}
@@ -197,7 +185,6 @@ func issueFieldDueDateSave(issue linearapi.Issue, text string) (issueFieldSave, 
 	}
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldDueDate,
 		message: fieldSetMessage(issueFieldDueDate, date),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.DueDate = &date },
 	}, nil
@@ -206,7 +193,6 @@ func issueFieldDueDateSave(issue linearapi.Issue, text string) (issueFieldSave, 
 func issueFieldDueDateClear(issue linearapi.Issue) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldDueDate,
 		message: fieldClearMessage(issueFieldDueDate),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.DueDate = clearedID() },
 	}
@@ -219,7 +205,6 @@ func issueFieldEstimateSave(issue linearapi.Issue, text string) (issueFieldSave,
 	}
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldEstimate,
 		message: fieldSetMessage(issueFieldEstimate, formatEstimate(&estimate)),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.Estimate = &estimate },
 	}, nil
@@ -230,7 +215,6 @@ func issueFieldEstimateSave(issue linearapi.Issue, text string) (issueFieldSave,
 func issueFieldEstimateClear(issue linearapi.Issue) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldEstimate,
 		message: fieldClearMessage(issueFieldEstimate),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.ClearEstimate = true },
 	}
@@ -245,7 +229,6 @@ func issueFieldTeamSave(issue linearapi.Issue, teamID, teamName string) issueFie
 	}
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldTeam,
 		message: message,
 		apply:   func(input *linearapi.UpdateIssueInput) { input.TeamID = &teamID },
 	}
@@ -254,7 +237,6 @@ func issueFieldTeamSave(issue linearapi.Issue, teamID, teamName string) issueFie
 func issueFieldParentSave(issue linearapi.Issue, parentID, parentName string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldParent,
 		message: fieldSetMessage(issueFieldParent, parentName),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.ParentID = &parentID },
 	}
@@ -263,7 +245,6 @@ func issueFieldParentSave(issue linearapi.Issue, parentID, parentName string) is
 func issueFieldParentClear(issue linearapi.Issue) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
-		field:   issueFieldParent,
 		message: fieldClearMessage(issueFieldParent),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.ParentID = clearedID() },
 	}
