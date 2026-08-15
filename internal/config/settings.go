@@ -227,14 +227,28 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 	}, nil
 }
 
-// ConfigFilePath returns the default settings file path.
+// ConfigFilePath returns the settings file path: an existing
+// $XDG_CONFIG_HOME/zen-linear/config.json, else Dir()/config.json.
 func ConfigFilePath() (string, error) {
+	const name = "config.json"
+
+	xdg, err := xdgDir()
+	if err != nil {
+		return "", err
+	}
+	preferred := filepath.Join(xdg, name)
+	if _, err := os.Stat(preferred); err == nil {
+		return preferred, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("stat settings file %s: %w", preferred, err)
+	}
+
 	dir, err := Dir()
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Join(dir, "config.json"), nil
+	return filepath.Join(dir, name), nil
 }
 
 // EnsureSettingsFile ensures the settings file exists and returns its settings.
