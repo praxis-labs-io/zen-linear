@@ -277,7 +277,9 @@ func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
 // detailsGridRow is one row of the metadata grid: the label padded out to the
 // gutter, then a value that carries its own color.
 func (a *App) detailsGridRow(field issueField, label, value string) detailsRow {
-	pad := strings.Repeat(" ", detailsLabelGutter-len(label)-1)
+	// A label too long for the gutter takes one space rather than a negative
+	// repeat, which would panic inside a draw. The gutter test catches it.
+	pad := strings.Repeat(" ", max(1, detailsLabelGutter-len(label)-1))
 	return detailsRow{
 		text:        a.themeTags.SecondaryText + label + ":[-]" + pad + value,
 		field:       field,
