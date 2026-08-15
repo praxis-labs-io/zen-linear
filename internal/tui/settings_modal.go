@@ -405,13 +405,7 @@ func (sm *SettingsModal) saveSettings() {
 		return
 	}
 
-	settingsPath, err := config.ConfigFilePath()
-	if err != nil {
-		logger.ErrorWithErr(err, "tui.settings: failed to get config file path")
-		sm.app.updateStatusBarWithError(err)
-		return
-	}
-
+	settingsPath := sm.app.settingsPath
 	if err := config.SaveSettings(settingsPath, settings); err != nil {
 		logger.ErrorWithErr(err, "tui.settings: failed to save settings path=%s", settingsPath)
 		sm.app.updateStatusBarWithError(err)

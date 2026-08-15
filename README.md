@@ -68,8 +68,9 @@ described below.
 ## Configuration
 
 Settings live in `~/.zen-linear/config.json`, created on first start. A
-config left over at `~/.linear-tui` is moved there automatically on startup.
-The options beyond the original linear-tui set:
+`config.json` under `$XDG_CONFIG_HOME/zen-linear` (by default
+`~/.config/zen-linear`) is read instead when it exists. The options beyond the
+original linear-tui set:
 
     {
       "theme": "rose_pine_moon",

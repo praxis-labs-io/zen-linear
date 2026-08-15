@@ -1,55 +1,56 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestMigrateLegacyDir(t *testing.T) {
+// A dotfiles setup links its configs into ~/.config, so the settings file is
+// read from either home. Everything the app writes stays under Dir().
+func TestConfigFilePath(t *testing.T) {
 	tests := []struct {
-		name           string
-		setup          func(t *testing.T, home string)
-		wantMigrated   bool
-		wantLegacyGone bool
+		name     string
+		xdgHome  bool
+		writeXDG bool
+		writeDir bool
+		want     func(home, xdgBase string) string
 	}{
 		{
-			name: "moves legacy dir when target is absent",
-			setup: func(t *testing.T, home string) {
-				t.Helper()
-				legacy := filepath.Join(home, legacyDirName)
-				if err := os.MkdirAll(legacy, 0o755); err != nil {
-					t.Fatalf("creating legacy dir: %v", err)
-				}
-				if err := os.WriteFile(filepath.Join(legacy, "config.json"), []byte(`{"theme":"linear"}`), 0o600); err != nil {
-					t.Fatalf("writing legacy config: %v", err)
-				}
+			name:     "prefers an existing file under the default XDG dir",
+			writeXDG: true,
+			want: func(home, _ string) string {
+				return filepath.Join(home, ".config", xdgDirName, "config.json")
 			},
-			wantMigrated:   true,
-			wantLegacyGone: true,
 		},
 		{
-			name: "leaves both alone when target already exists",
-			setup: func(t *testing.T, home string) {
-				t.Helper()
-				for _, dir := range []string{legacyDirName, dirName} {
-					if err := os.MkdirAll(filepath.Join(home, dir), 0o755); err != nil {
-						t.Fatalf("creating %s: %v", dir, err)
-					}
-				}
-				if err := os.WriteFile(filepath.Join(home, dirName, "config.json"), []byte(`{"theme":"linear"}`), 0o600); err != nil {
-					t.Fatalf("writing current config: %v", err)
-				}
+			name:     "prefers the XDG file when both exist",
+			writeXDG: true,
+			writeDir: true,
+			want: func(home, _ string) string {
+				return filepath.Join(home, ".config", xdgDirName, "config.json")
 			},
-			wantMigrated:   true,
-			wantLegacyGone: false,
 		},
 		{
-			name:           "no-op when nothing to migrate",
-			setup:          func(t *testing.T, _ string) { t.Helper() },
-			wantMigrated:   false,
-			wantLegacyGone: true,
+			name:     "honors XDG_CONFIG_HOME over ~/.config",
+			xdgHome:  true,
+			writeXDG: true,
+			want: func(_, xdgBase string) string {
+				return filepath.Join(xdgBase, xdgDirName, "config.json")
+			},
+		},
+		{
+			name:     "falls back to the app dir when no XDG file exists",
+			writeDir: true,
+			want: func(home, _ string) string {
+				return filepath.Join(home, dirName, "config.json")
+			},
+		},
+		{
+			name: "falls back to the app dir when neither exists, which is where a first run creates one",
+			want: func(home, _ string) string {
+				return filepath.Join(home, dirName, "config.json")
+			},
 		},
 	}
 
@@ -57,152 +58,81 @@ func TestMigrateLegacyDir(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
-			tt.setup(t, home)
 
-			if err := MigrateLegacyDir(); err != nil {
-				t.Fatalf("MigrateLegacyDir() error = %v", err)
+			xdgBase := filepath.Join(home, ".config")
+			if tt.xdgHome {
+				xdgBase = t.TempDir()
+				t.Setenv(xdgConfigHomeEnv, xdgBase)
+			} else {
+				t.Setenv(xdgConfigHomeEnv, "")
 			}
 
-			_, err := os.Stat(filepath.Join(home, dirName))
-			if gotMigrated := err == nil; gotMigrated != tt.wantMigrated {
-				t.Errorf("target dir exists = %v, want %v", gotMigrated, tt.wantMigrated)
+			if tt.writeXDG {
+				writeConfigJSON(t, filepath.Join(xdgBase, xdgDirName))
+			}
+			if tt.writeDir {
+				writeConfigJSON(t, filepath.Join(home, dirName))
 			}
 
-			_, err = os.Stat(filepath.Join(home, legacyDirName))
-			if gotGone := os.IsNotExist(err); gotGone != tt.wantLegacyGone {
-				t.Errorf("legacy dir gone = %v, want %v", gotGone, tt.wantLegacyGone)
+			got, err := ConfigFilePath()
+			if err != nil {
+				t.Fatalf("ConfigFilePath() error = %v", err)
 			}
-		})
-	}
-}
-
-// A renamed directory must keep symlinked config files resolving to their
-// original targets, which is how the dotfiles-managed config survives.
-func TestMigrateLegacyDirPreservesSymlink(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	target := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(target, []byte(`{"theme":"rose_pine_moon"}`), 0o600); err != nil {
-		t.Fatalf("writing symlink target: %v", err)
-	}
-
-	legacy := filepath.Join(home, legacyDirName)
-	if err := os.MkdirAll(legacy, 0o755); err != nil {
-		t.Fatalf("creating legacy dir: %v", err)
-	}
-	if err := os.Symlink(target, filepath.Join(legacy, "config.json")); err != nil {
-		t.Fatalf("creating symlink: %v", err)
-	}
-
-	if err := MigrateLegacyDir(); err != nil {
-		t.Fatalf("MigrateLegacyDir() error = %v", err)
-	}
-
-	migrated := filepath.Join(home, dirName, "config.json")
-	resolved, err := os.Readlink(migrated)
-	if err != nil {
-		t.Fatalf("migrated config is not a symlink: %v", err)
-	}
-	if resolved != target {
-		t.Errorf("symlink target = %q, want %q", resolved, target)
-	}
-
-	data, err := os.ReadFile(migrated)
-	if err != nil {
-		t.Fatalf("reading through migrated symlink: %v", err)
-	}
-	if string(data) != `{"theme":"rose_pine_moon"}` {
-		t.Errorf("content through symlink = %q, want the original config", data)
-	}
-}
-
-// TestRewriteLegacyPath covers the gap the directory rename left: it moved the
-// files but not the absolute paths written inside the config, so a stale
-// log_file kept recreating the old directory and logging into it where nobody
-// looks.
-func TestRewriteLegacyPath(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	legacy := filepath.Join(home, legacyDirName)
-	current := filepath.Join(home, dirName)
-
-	tests := []struct {
-		name string
-		path string
-		want string
-	}{
-		{
-			name: "rewrites a file under the legacy dir",
-			path: filepath.Join(legacy, "app.log"),
-			want: filepath.Join(current, "app.log"),
-		},
-		{
-			name: "rewrites a nested file",
-			path: filepath.Join(legacy, "logs", "app.log"),
-			want: filepath.Join(current, "logs", "app.log"),
-		},
-		{
-			name: "rewrites the legacy dir itself",
-			path: legacy,
-			want: current,
-		},
-		{
-			name: "leaves a path already under the current dir",
-			path: filepath.Join(current, "app.log"),
-			want: filepath.Join(current, "app.log"),
-		},
-		{
-			name: "leaves an unrelated path",
-			path: filepath.Join(home, "elsewhere", "app.log"),
-			want: filepath.Join(home, "elsewhere", "app.log"),
-		},
-		{
-			name: "leaves a sibling whose name merely starts the same",
-			path: filepath.Join(home, legacyDirName+"-backup", "app.log"),
-			want: filepath.Join(home, legacyDirName+"-backup", "app.log"),
-		},
-		{
-			name: "leaves an empty path, which disables logging",
-			path: "",
-			want: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := rewriteLegacyPath(tt.path); got != tt.want {
-				t.Errorf("rewriteLegacyPath(%q) = %q, want %q", tt.path, got, tt.want)
+			if want := tt.want(home, xdgBase); got != want {
+				t.Errorf("ConfigFilePath() = %q, want %q", got, want)
 			}
 		})
 	}
 }
 
-// TestLoadSettings_CorrectsALegacyLogPath drives the fix through the real load
-// path, since that is where a stale path actually reaches the logger.
-func TestLoadSettings_CorrectsALegacyLogPath(t *testing.T) {
+// The settings a real launch reads have to come from the XDG copy, not just
+// the path.
+func TestLoadSettingsReadsTheXDGConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv(xdgConfigHomeEnv, "")
 
-	dir := filepath.Join(home, dirName)
+	dir := filepath.Join(home, ".config", xdgDirName)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("creating config dir: %v", err)
+		t.Fatalf("creating XDG config dir: %v", err)
 	}
-	stale := filepath.Join(home, legacyDirName, "app.log")
-	path := filepath.Join(dir, "config.json")
-	body := fmt.Sprintf(`{"log_file":%q}`, stale)
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatalf("writing config: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"theme":"rose_pine_moon"}`), 0o600); err != nil {
+		t.Fatalf("writing XDG config: %v", err)
 	}
 
+	path, err := ConfigFilePath()
+	if err != nil {
+		t.Fatalf("ConfigFilePath() error = %v", err)
+	}
 	settings, err := LoadSettings(path)
 	if err != nil {
 		t.Fatalf("LoadSettings() error = %v", err)
 	}
+	if settings.Theme != "rose_pine_moon" {
+		t.Errorf("Theme = %q, want the value from the XDG config", settings.Theme)
+	}
+}
 
-	want := filepath.Join(dir, "app.log")
-	if settings.LogFile != want {
-		t.Fatalf("LogFile = %q, want %q", settings.LogFile, want)
+// The log stays under Dir() even when the settings come from XDG, because a
+// per-launch write into a dotfiles repo dirties it on every run.
+func TestDefaultLogFileStaysUnderTheAppDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(xdgConfigHomeEnv, "")
+	writeConfigJSON(t, filepath.Join(home, ".config", xdgDirName))
+
+	want := filepath.Join(home, dirName, "app.log")
+	if got := getDefaultLogFile(); got != want {
+		t.Errorf("getDefaultLogFile() = %q, want %q", got, want)
+	}
+}
+
+func writeConfigJSON(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("creating %s: %v", dir, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("writing config in %s: %v", dir, err)
 	}
 }

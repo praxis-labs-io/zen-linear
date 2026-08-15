@@ -1,10 +1,53 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/zen-linear/zen-linear/internal/config"
 )
+
+// A save has to land on the file the app launched from. Re-resolving the path
+// followed an XDG copy that appeared mid-session and wrote to a stranger.
+func TestSavingSettingsWritesBackToTheLaunchFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	launch := filepath.Join(home, ".zen-linear", "config.json")
+	app := newUXTestApp(t)
+	// The save validates before it writes, so the form needs values that pass.
+	app.config.LinearAPIKey = "k-acme"
+	app.config.APIEndpoint = "https://api.linear.app/graphql"
+	app.config.Timeout = 30 * time.Second
+	app.config.SearchDebounce = 300 * time.Millisecond
+	app.UseSettingsFile(launch)
+
+	intruder := filepath.Join(home, ".config", "zen-linear", "config.json")
+	if err := os.MkdirAll(filepath.Dir(intruder), 0o755); err != nil {
+		t.Fatalf("creating the XDG dir: %v", err)
+	}
+	const untouched = `{"theme":"linear"}`
+	if err := os.WriteFile(intruder, []byte(untouched), 0o600); err != nil {
+		t.Fatalf("writing the XDG config: %v", err)
+	}
+
+	app.settingsModal.Show()
+	app.settingsModal.saveSettings()
+
+	if _, err := os.Stat(launch); err != nil {
+		t.Fatalf("nothing written to the launch file: %v", err)
+	}
+	data, err := os.ReadFile(intruder)
+	if err != nil {
+		t.Fatalf("reading the XDG config: %v", err)
+	}
+	if string(data) != untouched {
+		t.Errorf("the XDG copy was overwritten: %s", data)
+	}
+}
 
 // TestSettingsFormRoundTripPreservesConfig guards the settings save path:
 // settingsFromForm rebuilds the config file from form controls, so any field
