@@ -290,10 +290,7 @@ func LoadSettings(path string) (Settings, error) {
 		settings.SearchDebounce = *file.SearchDebounce
 	}
 	if file.LogFile != nil {
-		// Corrected here rather than at the Config boundary so the settings
-		// modal shows the live path and an in-app save writes it back, instead
-		// of persisting the stale one the user was shown.
-		settings.LogFile = rewriteLegacyPath(*file.LogFile)
+		settings.LogFile = *file.LogFile
 	}
 	if file.LogLevel != nil {
 		settings.LogLevel = *file.LogLevel

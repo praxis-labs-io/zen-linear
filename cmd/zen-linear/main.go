@@ -26,11 +26,6 @@ func run(args []string) int {
 		return 0
 	}
 
-	if err := config.MigrateLegacyDir(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error migrating config directory: %v\n", err)
-		return 1
-	}
-
 	if len(args) > 0 && args[0] == "auth" {
 		return runAuth(args[1:])
 	}
