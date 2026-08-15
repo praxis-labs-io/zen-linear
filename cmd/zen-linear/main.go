@@ -197,6 +197,7 @@ func runTUI() int {
 	}
 
 	app := tui.NewApp(clientCfg, cfg, promptTemplates)
+	app.UseSettingsFile(settingsPath)
 	app.UseSession(sessionPath, sessionFile)
 	app.UseNavCache(navCachePath, navCacheFile)
 

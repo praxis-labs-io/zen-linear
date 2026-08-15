@@ -31,6 +31,10 @@ type App struct {
 	// belongs to; empty for explicit keys and OAuth sessions.
 	activeWorkspaceName string
 
+	// settingsPath is the config file this App launched from. Resolved once, so
+	// an in-app save writes back to the file it was loaded from.
+	settingsPath string
+
 	// sessionPath is the file the quit flush writes; empty disables the write.
 	sessionPath string
 	// pendingSession is the place to reopen, applied once by loadInitialData.
@@ -293,6 +297,9 @@ const (
 	FocusDetails
 	FocusPalette
 )
+
+// UseSettingsFile installs the config file the settings modal saves back to.
+func (a *App) UseSettingsFile(path string) { a.settingsPath = path }
 
 // NewApp creates a new application instance.
 func NewApp(clientCfg linearapi.ClientConfig, cfg config.Config, templates []config.AgentPromptTemplate) *App {
