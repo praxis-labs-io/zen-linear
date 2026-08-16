@@ -9,6 +9,10 @@ import (
 	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
+// fieldEditorMinWidth is what a box is never drawn narrower than, however far
+// into a small pane its value column falls.
+const fieldEditorMinWidth = 8
+
 // fieldHasEditor is the fields Enter opens a text box on, the ones typed rather
 // than picked.
 func fieldHasEditor(field issueField) bool {
@@ -38,13 +42,40 @@ func (a *App) openFieldEditor() {
 	a.detailsEdit.issue = *issue
 	a.detailsEdit.err = ""
 	a.detailsFieldInput.SetText(fieldEditorText(field, *issue))
+	a.detailsFieldInput.SetFieldStyle(a.fieldEditorStyle(field))
 	a.detailsFocus = detailsFocusField
 	// Rendered before the focus moves: the slot has to be on the page for the
 	// keyboard to land in it.
 	a.renderDetailsPage()
 	a.updateFocus()
+	// Queued from off the loop: the scroll wants a width only the next draw
+	// gives, and QueueUpdate blocks on a loop that is us. See CLAUDE.md.
+	go a.QueueUpdateDraw(a.showCaret)
 	a.scrollEditorIntoView()
 	a.updateStatusBar()
+}
+
+// fieldEditorSlot is the box's place on the page just rendered.
+func (a *App) fieldEditorSlot() (pageSlot, bool) {
+	if a.detailsPage == nil {
+		return pageSlot{}, false
+	}
+	for _, slot := range a.detailsPage.slots {
+		if slot.primitive == a.detailsFieldInput {
+			return slot, true
+		}
+	}
+	return pageSlot{}, false
+}
+
+// showCaret scrolls the end of the value onto the row, where SetText leaves the
+// caret sitting off the right of a long one. See CLAUDE.md for why it is a key.
+func (a *App) showCaret() {
+	handler := a.detailsFieldInput.InputHandler()
+	if handler == nil || a.detailsEdit.editing == "" {
+		return
+	}
+	handler(tcell.NewEventKey(tcell.KeyEnd, 0, tcell.ModNone), func(tview.Primitive) {})
 }
 
 // closeFieldEditor takes the box off the page and leaves edit mode on.
@@ -169,51 +200,30 @@ func (a *App) scrollEditorIntoView() {
 	a.scrollRowsIntoView(span.start, max(span.start, span.end))
 }
 
-// fieldEditorLines is the open box as page rows and the widget's place among
-// them. Framed like a comment card, hanging off the value column.
-func (a *App) fieldEditorLines(column int) ([]string, pageSlot) {
+// fieldEditorRect is where the box draws on the field's own row: the value's
+// column, and what is left of the measure.
+func (a *App) fieldEditorRect(column int) (int, int) {
 	// Pulled back off a pane narrower than the metadata gutter. The value column
 	// is a column of the untruncated row, and past the drawn line nothing shows.
-	column = max(0, min(column, a.detailsFittedWidth-commentCardMinWidth))
-	width := max(0, a.detailsFittedWidth-column)
-	indent := strings.Repeat(" ", column)
-	border := a.themeTags.BorderFocus
-	if width < commentCardMinWidth {
-		// Too narrow to frame, the way a comment drops its border rather than
-		// spending four cells of a pane this size on one.
-		lines := []string{indent}
-		if row, ok := a.fieldEditorError(width); ok {
-			lines = append(lines, indent+row)
-		}
-		return lines, pageSlot{primitive: a.detailsFieldInput, row: 0, height: 1, column: column, width: width}
-	}
-	inner := width - commentCardChrome
-	lines := []string{
-		indent + cardEdge("╭", "╮", width, border),
-		indent + cardRow("", inner, border),
-	}
-	if row, ok := a.fieldEditorError(inner); ok {
-		lines = append(lines, indent+cardRow(row, inner, border))
-	}
-	lines = append(lines, indent+cardEdge("╰", "╯", width, border))
-
-	// The chrome is a border cell and a pad cell, so the typing starts two in.
-	const cardInset = commentCardChrome / 2
-	return lines, pageSlot{
-		primitive: a.detailsFieldInput,
-		row:       1,
-		height:    1,
-		column:    column + cardInset,
-		width:     max(inner, 0),
-	}
+	column = max(0, min(column, max(0, a.detailsFittedWidth-fieldEditorMinWidth)))
+	return column, max(0, a.detailsFittedWidth-column)
 }
 
-// fieldEditorError is the refusal drawn under the box, and whether there is one.
-func (a *App) fieldEditorError(width int) (string, bool) {
+// fieldEditorStyle draws the value the way the row reads it, unfilled, so
+// typing into an issue looks like the issue and not like a form.
+func (a *App) fieldEditorStyle(field issueField) tcell.Style {
+	style := tcell.StyleDefault.Foreground(a.theme.Foreground).Background(a.theme.Background)
+	return style.Bold(field == issueFieldTitle)
+}
+
+// fieldEditorError is the refusal drawn under the field, and whether there is
+// one. Indented to the box it belongs to.
+func (a *App) fieldEditorError(column int) (string, bool) {
 	if a.detailsEdit.err == "" {
 		return "", false
 	}
-	return truncateTagged(a.themeTags.Error+tview.Escape(a.detailsEdit.err)+"[-]", max(1, width)), true
+	text := a.themeTags.Error + tview.Escape(a.detailsEdit.err) + "[-]"
+	return truncateTagged(strings.Repeat(" ", column)+text, a.detailsFittedWidth), true
 }
 
 // handleFieldEditorKey answers for the whole app while a box is on the page,

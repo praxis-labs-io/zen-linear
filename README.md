@@ -160,9 +160,9 @@ own, Esc closes the list. Esc again leaves the mode.
 
 State, assignee, priority, project, milestone and cycle open a list. Labels
 opens the same list with a box on every row: space toggles one, Enter applies
-the set, Esc drops it. Title, due date and estimate open a box to type in
-instead: Enter saves, Esc discards, and emptying the box clears the due date or
-the estimate. A value the app can tell is wrong keeps the box open with the
+the set, Esc drops it. Title, due date and estimate are typed in the row
+itself, where the value already is: Enter saves, Esc discards, and emptying the
+field clears the due date or the estimate. A value the app can tell is wrong keeps the field open with the
 reason under it; one Linear rejects on its own reports on the status bar, the
 way every other field write does.
 

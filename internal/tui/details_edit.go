@@ -183,13 +183,18 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 		return ""
 	}
 	if row.field != "" && row.field == a.detailsEdit.cursor {
-		tag := a.themeTags.Accent
-		if a.detailsEdit.open != "" || a.detailsEdit.editing != "" {
-			// Dimmed under an open chooser or box: the keyboard is in there,
-			// and this only says which row it belongs to.
+		tag, glyph := a.themeTags.Accent, "❯"
+		switch {
+		case a.detailsEdit.open != "":
+			// Dimmed under an open chooser: the cursor line inside it is where
+			// the keyboard is.
 			tag = a.themeTags.SecondaryText
+		case a.detailsEdit.editing != "":
+			// The row is being written in rather than pointed at, and the
+			// caret in it is the only other thing saying so.
+			glyph = "▌"
 		}
-		return tag + "❯[-] "
+		return tag + glyph + "[-] "
 	}
 	return strings.Repeat(" ", detailsCursorGutter)
 }

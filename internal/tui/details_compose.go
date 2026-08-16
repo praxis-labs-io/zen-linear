@@ -392,9 +392,7 @@ func (a *App) applyComposeTheme() {
 		area.SetBackgroundColor(a.theme.Background)
 	}
 	if a.detailsFieldInput != nil {
-		a.detailsFieldInput.
-			SetFieldTextColor(a.theme.Foreground).
-			SetFieldBackgroundColor(a.theme.Background)
+		a.detailsFieldInput.SetFieldStyle(a.fieldEditorStyle(a.detailsEdit.editing))
 		a.detailsFieldInput.SetBackgroundColor(a.theme.Background)
 	}
 	a.applyComposePlaceholder()
@@ -530,9 +528,9 @@ func (a *App) enterDetailsFocus(target detailsFocus) {
 	if !a.composeBoxOnScreen() {
 		return
 	}
-	// Two rings on one page: something else took the keyboard, so the cursor
-	// gives way. Cards counts only under a box, since entering arrives on it.
-	if target != detailsFocusCards || a.detailsEdit.editing != "" {
+	// A box and the field cursor are two rings on one page. The box was clicked
+	// into, so the cursor is the one that gives way. Cards is handleMouse's.
+	if target != detailsFocusCards {
 		a.leaveDetailsEdit()
 	}
 	a.detailsFocus = target
