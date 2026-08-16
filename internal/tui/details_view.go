@@ -256,8 +256,8 @@ type fieldSpan struct {
 }
 
 // detailsHeaderBlock is the metadata and the description as page lines, the row
-// each editable field landed on, and the lit chooser option's row, or -1.
-func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, int) {
+// each editable field landed on, and where an open chooser landed.
+func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, chooserSpan) {
 	// The top padding is written as text, the way trailingPad is, so it scrolls
 	// with the page. In this slice, or every span below it lands a row out.
 	pad := a.density.DetailsPadding.Top
@@ -269,7 +269,7 @@ func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, int) {
 	if a.detailsEdit.on {
 		indent = detailsCursorGutter
 	}
-	chooserRow := -1
+	chooser := noChooserSpan
 	for _, row := range a.detailsHeaderRows {
 		if row.field != "" {
 			spans = append(spans, fieldSpan{field: row.field, row: len(lines), valueColumn: row.valueColumn + indent})
@@ -283,15 +283,15 @@ func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, int) {
 		// The chooser hangs off the row it belongs to, and every span below it
 		// picks up the shift from len(lines) on the next turn of this loop.
 		options, lit := a.fieldChooserLines(row.valueColumn + indent)
-		if lit >= 0 {
-			chooserRow = len(lines) + lit
+		if len(options) > 0 {
+			chooser = chooserSpan{lit: len(lines) + lit, end: len(lines) + len(options) - 1}
 		}
 		lines = append(lines, options...)
 	}
 	if len(lines) > 0 {
 		lines = append(lines, a.detailsSeam(width)...)
 	}
-	return append(lines, a.detailsBodyLines...), spans, chooserRow
+	return append(lines, a.detailsBodyLines...), spans, chooser
 }
 
 // detailsGridRow is one row of the metadata grid: the label padded out to the

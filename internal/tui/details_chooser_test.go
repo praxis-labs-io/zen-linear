@@ -626,3 +626,23 @@ func TestTheAssigneeSaveNamesTheDisplayName(t *testing.T) {
 		t.Fatalf("status bar = %q, want the display name, not an empty one", text)
 	}
 }
+
+func TestTheChooserKeepsItsFootOnScreen(t *testing.T) {
+	app, _, _ := chooserFixture(t, issueFieldState)
+	app.workflowStates = manyStates(16)
+	// Short enough that reaching the last option has to scroll the page.
+	drawPrimitiveAt(t, app.detailsView, 90, 10)
+	pressFieldKey(app, tcell.KeyEnter)
+	drawPrimitiveAt(t, app.detailsView, 90, 10)
+
+	for range 20 {
+		pressField(app, 'j')
+	}
+	drawPrimitiveAt(t, app.detailsView, 90, 10)
+
+	top, _ := app.detailsPageView.GetScrollOffset()
+	height := viewHeight(app.detailsPageView)
+	if end := app.detailsChooserSpan.end; end >= top+height {
+		t.Fatalf("the chooser ends at row %d and the page shows %d..%d, want its foot on screen", end, top, top+height-1)
+	}
+}

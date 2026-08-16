@@ -270,13 +270,26 @@ func (a *App) moveChooserChoice(step int) {
 	a.scrollChooserIntoView()
 }
 
-// scrollChooserIntoView brings the highlighted option onto the page. The row,
-// not the block: a block taller than the pane anchors to its top.
+// chooserSpan is where an open chooser landed: the lit option's page row, and
+// the last row of its frame.
+type chooserSpan struct {
+	lit int
+	end int
+}
+
+// noChooserSpan is what a render with no chooser open records.
+var noChooserSpan = chooserSpan{lit: -1, end: -1}
+
+// scrollChooserIntoView brings the lit option and the frame under it onto the
+// page. The option alone would park on the last row, cutting off the foot.
 func (a *App) scrollChooserIntoView() {
-	if a.detailsEdit.open == "" || a.detailsChooserRow < 0 {
+	span := a.detailsChooserSpan
+	if a.detailsEdit.open == "" || span.lit < 0 {
 		return
 	}
-	a.scrollRowsIntoView(a.detailsChooserRow, a.detailsChooserRow)
+	// Anchored on the lit row when the tail does not fit, so a chooser taller
+	// than the pane still shows the option the keys are on.
+	a.scrollRowsIntoView(span.lit, max(span.lit, span.end))
 }
 
 // chooserVisibleRows is how many options fit: the cap, or fewer on a pane too
