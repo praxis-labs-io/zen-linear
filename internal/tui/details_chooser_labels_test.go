@@ -192,6 +192,71 @@ func TestALabelTheListDoesNotCarrySurvivesTheApply(t *testing.T) {
 	}
 }
 
+// refreshIssueLabels is the background refresh landing under an open chooser.
+func refreshIssueLabels(app *App, labels []linearapi.IssueLabel) {
+	app.issuesMu.Lock()
+	refreshed := *app.selectedIssue
+	refreshed.Labels = labels
+	app.selectedIssue = &refreshed
+	app.issuesMu.Unlock()
+}
+
+func TestALabelAddedWhileTheChooserIsOpenSurvivesTheApply(t *testing.T) {
+	app, writes, _ := chooserFixture(t, issueFieldLabels)
+	openChooser(t, app)
+
+	// The list never offered it, so no row of the chooser says anything about
+	// it and the reader cannot have decided to drop it.
+	refreshIssueLabels(app, []linearapi.IssueLabel{{ID: "label-1", Name: "Bug"}, {ID: "label-9", Name: "Hidden"}})
+
+	pressField(app, 'j')
+	pressField(app, ' ')
+	pressFieldKey(app, tcell.KeyEnter)
+
+	input := awaitWrite(t, writes)
+	if input.LabelIDs == nil || !reflect.DeepEqual(*input.LabelIDs, []string{"label-1", "label-2", "label-9"}) {
+		t.Fatalf("wrote labels %v, want the one added under the chooser kept", input.LabelIDs)
+	}
+}
+
+func TestApplyingWithNoToggleSendsNothingAfterARefresh(t *testing.T) {
+	app, writes, _ := chooserFixture(t, issueFieldLabels)
+	openChooser(t, app)
+
+	// The reader touched nothing, so Enter is a close. Comparing against the
+	// refreshed issue instead would write the new label straight back off.
+	refreshIssueLabels(app, []linearapi.IssueLabel{{ID: "label-1", Name: "Bug"}, {ID: "label-2", Name: "Chore"}})
+	pressFieldKey(app, tcell.KeyEnter)
+
+	// Then a set that did change. Reading the first write is the assertion.
+	openChooser(t, app)
+	pressField(app, ' ')
+	pressFieldKey(app, tcell.KeyEnter)
+
+	if input := awaitWrite(t, writes); input.LabelIDs == nil || !reflect.DeepEqual(*input.LabelIDs, []string{"label-2"}) {
+		t.Fatalf("first write set labels %v, want only the set the reader changed", input.LabelIDs)
+	}
+}
+
+func TestALabelTakenOffWhileTheChooserIsOpenIsNotPutBack(t *testing.T) {
+	app, writes, _ := chooserFixture(t, issueFieldLabels)
+	app.selectedIssue.Labels = append(app.selectedIssue.Labels, linearapi.IssueLabel{ID: "label-9", Name: "Hidden"})
+	app.updateDetailsView()
+	drawDetails(t, app, 90)
+	openChooser(t, app)
+
+	refreshIssueLabels(app, []linearapi.IssueLabel{{ID: "label-1", Name: "Bug"}})
+
+	pressField(app, 'j')
+	pressField(app, ' ')
+	pressFieldKey(app, tcell.KeyEnter)
+
+	input := awaitWrite(t, writes)
+	if input.LabelIDs == nil || !reflect.DeepEqual(*input.LabelIDs, []string{"label-1", "label-2"}) {
+		t.Fatalf("wrote labels %v, want the one taken off left off", input.LabelIDs)
+	}
+}
+
 func TestSpaceDoesNothingOnASingleSelectChooser(t *testing.T) {
 	app, _, _ := chooserFixture(t, issueFieldState)
 	openChooser(t, app)

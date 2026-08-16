@@ -136,25 +136,23 @@ func (a *App) commitFieldChooser() {
 	if edit.open == "" || edit.loading || edit.choice < 0 || edit.choice >= len(edit.options) {
 		return
 	}
-	field, item, opened := edit.open, edit.options[edit.choice], edit.issue
-	// Read before the close, which zeroes the set along with the rest.
+	// Read before the close, which zeroes the toggles along with the rest.
 	picked := pickedIDs(edit.picked)
 	issue := a.chooserIssue()
 	a.closeFieldChooser()
-	if chooserUnchanged(field, issue, item, picked) {
+	if chooserUnchanged(edit, issue, picked) {
 		return
 	}
-	if moved := chooserScopeMoved(field, opened, issue); moved != "" {
+	if moved := chooserScopeMoved(edit.open, edit.issue, issue); moved != "" {
 		a.flashError("The " + moved + " changed, pick again")
 		return
 	}
-	if save, ok := chooserSave(field, issue, item, picked); ok {
+	if save, ok := chooserSave(edit, issue, picked); ok {
 		a.saveIssueField(save)
 	}
 }
 
-// pickedIDs is the multi-select's toggles as a sorted list. The set is what is
-// written, never the rows: a label the list lacks is still on the issue.
+// pickedIDs is the multi-select's toggles as a sorted list.
 func pickedIDs(picked map[string]bool) []string {
 	ids := make([]string, 0, len(picked))
 	for id := range picked {
@@ -164,13 +162,37 @@ func pickedIDs(picked map[string]bool) []string {
 	return ids
 }
 
-// chooserUnchanged reports a pick that would write the value the issue already
-// holds, which sends nothing rather than a no-op update.
-func chooserUnchanged(field issueField, issue linearapi.Issue, item PickerItem, picked []string) bool {
-	if field == issueFieldLabels {
-		return slices.Equal(picked, issueLabelIDs(issue))
+// labelWrite is the set an apply sends: the reader's toggles for the labels
+// the list offered, and the issue's own for any it did not.
+func labelWrite(picked []string, options []PickerItem, issue linearapi.Issue) []string {
+	offered := make(map[string]bool, len(options))
+	for _, option := range options {
+		offered[option.ID] = true
 	}
-	return item.ID == currentFieldOptionID(field, issue)
+	ids := make([]string, 0, len(picked))
+	for _, id := range picked {
+		if offered[id] {
+			ids = append(ids, id)
+		}
+	}
+	// Rebased rather than carried from the snapshot: a label the reader never
+	// saw a row for is not one they decided to drop.
+	for _, label := range issue.Labels {
+		if !offered[label.ID] {
+			ids = append(ids, label.ID)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// chooserUnchanged reports a pick that writes nothing new: the value the issue
+// holds now, or for a set, one the reader never touched.
+func chooserUnchanged(edit detailsEditState, now linearapi.Issue, picked []string) bool {
+	if edit.open == issueFieldLabels {
+		return slices.Equal(picked, issueLabelIDs(edit.issue))
+	}
+	return edit.options[edit.choice].ID == currentFieldOptionID(edit.open, now)
 }
 
 // chooserScopeMoved names the scope the options no longer belong to, empty
@@ -207,10 +229,11 @@ func (a *App) chooserIssue() linearapi.Issue {
 
 // chooserSave builds one field's write from the option picked. An empty id is
 // the clear row.
-func chooserSave(field issueField, issue linearapi.Issue, item PickerItem, picked []string) (issueFieldSave, bool) {
-	switch field {
+func chooserSave(edit detailsEditState, issue linearapi.Issue, picked []string) (issueFieldSave, bool) {
+	item := edit.options[edit.choice]
+	switch edit.open {
 	case issueFieldLabels:
-		return issueFieldLabelsSave(issue, picked), true
+		return issueFieldLabelsSave(issue, labelWrite(picked, edit.options, issue)), true
 	case issueFieldState:
 		return issueFieldStateSave(issue, item.ID, item.name()), true
 	case issueFieldPriority:
@@ -476,7 +499,7 @@ func (a *App) handleChooserKey(event *tcell.EventKey) *tcell.EventKey {
 			a.moveChooserChoice(1)
 		case 'k':
 			a.moveChooserChoice(-1)
-		case ' ', 't':
+		case ' ':
 			a.toggleChooserPick()
 		}
 	}
