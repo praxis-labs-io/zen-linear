@@ -28,6 +28,11 @@ func pressField(app *App, r rune) *tcell.EventKey {
 	return app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 }
 
+// pressFieldKey is pressField for a key that is not a rune.
+func pressFieldKey(app *App, key tcell.Key) *tcell.EventKey {
+	return app.handleGlobalKey(tcell.NewEventKey(key, 0, tcell.ModNone))
+}
+
 // TestTheFieldCursorMarksTheRowItIsOn covers the marker and the gutter it sits
 // in: the whole header shifts, and the spans say by how much.
 func TestTheFieldCursorMarksTheRowItIsOn(t *testing.T) {

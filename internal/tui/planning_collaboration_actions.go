@@ -184,15 +184,13 @@ func (a *App) showSetPriorityPicker() {
 	// The picker names this issue, so the write targets it even if a refresh
 	// moves the selection while the picker is open.
 	target := *issue
-	a.issueFieldOptions(issueFieldPriority, func(items []PickerItem) {
-		a.pickerModal.ShowWithContext("Set Priority", a.issueContextLine(target), items, func(item PickerItem) {
-			priority, err := strconv.Atoi(item.ID)
-			if err != nil {
-				a.updateStatusBarWithError(err)
-				return
-			}
-			a.saveIssueField(issueFieldPrioritySave(target, priority))
-		})
+	a.ShowFieldPicker(issueFieldPriority, a.issueOptionScope(target), a.issueContextLine(target), func(item PickerItem) {
+		priority, err := strconv.Atoi(item.ID)
+		if err != nil {
+			a.updateStatusBarWithError(err)
+			return
+		}
+		a.saveIssueField(issueFieldPrioritySave(target, priority))
 	})
 }
 
@@ -205,13 +203,12 @@ func (a *App) showSetProjectPicker() {
 	// The picker names this issue, so the write targets it even if a refresh
 	// moves the selection while the picker is open.
 	target := *issue
-	a.ShowProjectPicker(a.issueContextLine(target), func(projectID string) {
-		if projectID == target.ProjectID {
+	a.ShowFieldPicker(issueFieldProject, a.issueOptionScope(target), a.issueContextLine(target), func(item PickerItem) {
+		if item.ID == target.ProjectID {
 			a.flashStatus("Already in that project")
 			return
 		}
-		name := a.issueFieldValueName(issueFieldProject, projectID)
-		a.saveIssueField(issueFieldProjectSave(target, projectID, name))
+		a.saveIssueField(issueFieldProjectSave(target, item.ID, item.name()))
 	})
 }
 
@@ -224,16 +221,16 @@ func (a *App) showChangeTeamPicker() {
 	// The picker names this issue, so the write targets it even if a refresh
 	// moves the selection while the picker is open.
 	target := *issue
-	a.ShowTeamPicker(a.issueContextLine(target), func(teamID string) {
-		if teamID == target.TeamID {
+	a.ShowTeamPicker(a.issueContextLine(target), func(item PickerItem) {
+		if item.ID == target.TeamID {
 			a.flashStatus("Already in that team")
 			return
 		}
 		name := ""
-		if team := findTeamByID(a.navTeams, teamID); team != nil {
+		if team := findTeamByID(a.navTeams, item.ID); team != nil {
 			name = team.Name
 		}
-		a.saveIssueField(issueFieldTeamSave(target, teamID, name))
+		a.saveIssueField(issueFieldTeamSave(target, item.ID, name))
 	})
 }
 
@@ -263,57 +260,27 @@ func clearMilestoneOnProjectChange(input *linearapi.UpdateIssueInput, issue line
 
 // The issue is captured before the fetch, not read again in the callback: the
 // id would otherwise be read a round trip and a navigated picker later.
-func (a *App) showProjectMilestonePicker(title string, onSelect func(linearapi.Issue, linearapi.ProjectMilestone)) {
+func (a *App) showProjectMilestonePicker(onSelect func(linearapi.Issue, PickerItem)) {
 	issue := a.GetSelectedIssue()
 	if issue == nil {
 		a.flashStatus("No issue selected")
 		return
 	}
 	target := *issue
-	if strings.TrimSpace(target.ProjectID) == "" {
-		a.updateStatusBarWithError(fmt.Errorf("issue must have a project"))
-		return
-	}
-	contextLine := a.issueContextLine(target)
-	go func() {
-		milestones, err := a.fetchMilestonesFunc(context.Background(), target.ProjectID)
-		a.QueueUpdateDraw(func() {
-			if err != nil {
-				a.updateStatusBarWithError(err)
-				return
-			}
-			if len(milestones) == 0 {
-				a.flashStatus("No project milestones available")
-				return
-			}
-			items := make([]PickerItem, 0, len(milestones))
-			byID := make(map[string]linearapi.ProjectMilestone, len(milestones))
-			for _, milestone := range milestones {
-				label := milestone.Name
-				if milestone.TargetDate != nil && *milestone.TargetDate != "" {
-					label += " (" + *milestone.TargetDate + ")"
-				}
-				items = append(items, PickerItem{ID: milestone.ID, Label: label})
-				byID[milestone.ID] = milestone
-			}
-			a.pickerModal.ShowWithContext(title, contextLine, items, func(item PickerItem) {
-				if onSelect != nil {
-					onSelect(target, byID[item.ID])
-				}
-			})
-		})
-	}()
+	a.ShowFieldPicker(issueFieldMilestone, a.issueOptionScope(target), a.issueContextLine(target), func(item PickerItem) {
+		onSelect(target, item)
+	})
 }
 
 func (a *App) listProjectMilestonesForSelectedIssue() {
-	a.showProjectMilestonePicker("Project Milestones", func(_ linearapi.Issue, milestone linearapi.ProjectMilestone) {
-		a.flashStatus(fmt.Sprintf("Milestone: %s", milestone.Name))
+	a.showProjectMilestonePicker(func(_ linearapi.Issue, milestone PickerItem) {
+		a.flashStatus(fmt.Sprintf("Milestone: %s", milestone.name()))
 	})
 }
 
 func (a *App) showSetMilestonePicker() {
-	a.showProjectMilestonePicker("Set Milestone", func(issue linearapi.Issue, milestone linearapi.ProjectMilestone) {
-		a.saveIssueField(issueFieldMilestoneSave(issue, milestone.ID, milestone.Name))
+	a.showProjectMilestonePicker(func(issue linearapi.Issue, milestone PickerItem) {
+		a.saveIssueField(issueFieldMilestoneSave(issue, milestone.ID, milestone.name()))
 	})
 }
 
@@ -370,9 +337,9 @@ func (a *App) showFilterIssuesPicker() {
 }
 
 func (a *App) showAssigneeFilter() {
-	a.ShowUserPicker("", func(userID string) {
-		a.richFilters.AssigneeID = userID
-		a.richFilters.AssigneeName = userDisplayNameByID(a.teamUsers, userID)
+	a.ShowFieldPicker(issueFieldAssignee, a.navOptionScope(), "", func(item PickerItem) {
+		a.richFilters.AssigneeID = item.ID
+		a.richFilters.AssigneeName = item.name()
 		a.applyFiltersAndRefresh("Applied assignee filter")
 	})
 }
@@ -406,31 +373,25 @@ func (a *App) showLabelFilter() {
 }
 
 func (a *App) showStatusFilter() {
-	a.ShowStatusPicker("", func(stateID string) {
-		a.richFilters.StateID = stateID
-		a.richFilters.StateName = workflowStateNameByID(a.workflowStates, stateID)
+	a.ShowFieldPicker(issueFieldState, a.navOptionScope(), "", func(item PickerItem) {
+		a.richFilters.StateID = item.ID
+		a.richFilters.StateName = item.name()
 		a.applyFiltersAndRefresh("Applied status filter")
 	})
 }
 
 func (a *App) showProjectFilter() {
-	// ShowProjectPicker only logs on a missing team; the filter's failure has
-	// to be visible.
-	if a.GetSelectedTeamID() == "" {
-		a.updateStatusBarWithError(fmt.Errorf("team context is required"))
-		return
-	}
-	a.ShowProjectPicker("", func(projectID string) {
-		a.richFilters.ProjectID = projectID
-		a.richFilters.ProjectName = projectNameByID(a.teamProjects, projectID)
+	a.ShowFieldPicker(issueFieldProject, a.navOptionScope(), "", func(item PickerItem) {
+		a.richFilters.ProjectID = item.ID
+		a.richFilters.ProjectName = item.name()
 		a.applyFiltersAndRefresh("Applied project filter")
 	})
 }
 
 func (a *App) showCycleFilter() {
-	a.ShowCyclePicker("", func(cycleID string) {
-		a.richFilters.CycleID = cycleID
-		a.richFilters.CycleName = cycleNameByID(a.teamCycles, cycleID)
+	a.ShowFieldPicker(issueFieldCycle, a.navOptionScope(), "", func(item PickerItem) {
+		a.richFilters.CycleID = item.ID
+		a.richFilters.CycleName = item.name()
 		a.applyFiltersAndRefresh("Applied cycle filter")
 	})
 }
@@ -458,42 +419,6 @@ func (a *App) showEstimateFilter() {
 		a.richFilters.Estimate = linearapi.NumberFilter{Eq: &estimate}
 		a.applyFiltersAndRefresh("Applied estimate filter")
 	})
-}
-
-func userDisplayNameByID(users []linearapi.User, id string) string {
-	for _, user := range users {
-		if user.ID == id {
-			return formatUserDisplayName(user)
-		}
-	}
-	return id
-}
-
-func workflowStateNameByID(states []linearapi.WorkflowState, id string) string {
-	for _, state := range states {
-		if state.ID == id {
-			return state.Name
-		}
-	}
-	return id
-}
-
-func projectNameByID(projects []linearapi.Project, id string) string {
-	for _, project := range projects {
-		if project.ID == id {
-			return project.Name
-		}
-	}
-	return id
-}
-
-func cycleNameByID(cycles []linearapi.Cycle, id string) string {
-	for _, cycle := range cycles {
-		if cycle.ID == id {
-			return cycle.DisplayName()
-		}
-	}
-	return id
 }
 
 func namesForIDs(ids []string, names map[string]string) []string {

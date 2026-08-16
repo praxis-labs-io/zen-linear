@@ -240,6 +240,9 @@ type ThemeTags struct {
 	Warning       string
 	Success       string
 	Error         string
+	// Selection is the cursor line, carrying a background as well as a color.
+	// It is what selectionStyle paints for the tree and the issue tables.
+	Selection string
 }
 
 // ThemeRegistry maps theme identifiers to theme palettes.
@@ -273,12 +276,18 @@ func NewThemeTags(theme Theme) ThemeTags {
 		Warning:      colorTag(theme.StatusInProgress),
 		Success:      colorTag(theme.SuccessColor()),
 		Error:        colorTag(theme.StatusCanceled),
+		Selection:    fmt.Sprintf("[%s:%s]", colorName(theme.SelectionText), colorName(theme.SelectionBg)),
 	}
 }
 
 func colorTag(color tcell.Color) string {
+	return "[" + colorName(color) + "]"
+}
+
+// colorName is a color as tview spells it inside a tag.
+func colorName(color tcell.Color) string {
 	if !color.Valid() {
-		return "[default]"
+		return "default"
 	}
 	css := color.CSS()
 	if css == "" {
@@ -289,7 +298,7 @@ func colorTag(color tcell.Color) string {
 	if css == "" {
 		css = "default"
 	}
-	return "[" + css + "]"
+	return css
 }
 
 // Icons for various UI elements.

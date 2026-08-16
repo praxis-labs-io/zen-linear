@@ -255,9 +255,9 @@ type fieldSpan struct {
 	valueColumn int
 }
 
-// detailsHeaderBlock is the metadata, the rule under it, and the description as
-// page lines, plus the row each editable field landed on.
-func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
+// detailsHeaderBlock is the metadata and the description as page lines, the row
+// each editable field landed on, and the lit chooser option's row, or -1.
+func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, int) {
 	// The top padding is written as text, the way trailingPad is, so it scrolls
 	// with the page. In this slice, or every span below it lands a row out.
 	pad := a.density.DetailsPadding.Top
@@ -269,6 +269,7 @@ func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
 	if a.detailsEdit.on {
 		indent = detailsCursorGutter
 	}
+	chooserRow := -1
 	for _, row := range a.detailsHeaderRows {
 		if row.field != "" {
 			spans = append(spans, fieldSpan{field: row.field, row: len(lines), valueColumn: row.valueColumn + indent})
@@ -276,11 +277,21 @@ func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
 		// Cut at what the last draw measured, 0 before the first: a render that
 		// beats the layout must not shorten the header to a box never on screen.
 		lines = append(lines, truncateTagged(a.fieldCursorMarker(row)+row.text, a.detailsFittedWidth))
+		if row.field == "" || row.field != a.detailsEdit.open {
+			continue
+		}
+		// The chooser hangs off the row it belongs to, and every span below it
+		// picks up the shift from len(lines) on the next turn of this loop.
+		options, lit := a.fieldChooserLines(row.valueColumn + indent)
+		if lit >= 0 {
+			chooserRow = len(lines) + lit
+		}
+		lines = append(lines, options...)
 	}
 	if len(lines) > 0 {
 		lines = append(lines, a.detailsSeam(width)...)
 	}
-	return append(lines, a.detailsBodyLines...), spans
+	return append(lines, a.detailsBodyLines...), spans, chooserRow
 }
 
 // detailsGridRow is one row of the metadata grid: the label padded out to the

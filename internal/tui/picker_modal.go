@@ -15,6 +15,18 @@ const (
 type PickerItem struct {
 	ID    string
 	Label string
+	// Name is the value without the row's decoration: "Cycle 12", not
+	// "Cycle 12 (active)". Empty when the two are the same.
+	Name string
+}
+
+// name is what a save message calls this option: the undecorated value, or the
+// row as drawn when there is nothing to strip.
+func (i PickerItem) name() string {
+	if i.Name != "" {
+		return i.Name
+	}
+	return i.Label
 }
 
 // PickerModal manages a picker overlay for selecting from a list of items.

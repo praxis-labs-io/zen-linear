@@ -153,6 +153,16 @@ Every box grows with what is written in it. In any of them, Ctrl+C copies the
 selection to the system clipboard and Ctrl+X cuts it. Ctrl+L selects
 everything. Paste is the terminal's own.
 
+`e` puts the details pane in edit mode. A cursor walks the metadata rows with
+j/k, and Enter opens the field's options in a list under it. The list opens on
+the value the issue already holds; j/k move it, Enter saves that field on its
+own, Esc closes the list. Esc again leaves the mode.
+
+State, assignee, priority, project, milestone and cycle open a list. The issue
+keys below still work from inside the mode and open their own pickers; `q`, `/`
+and the pane numbers don't, so nothing quits from under a field. With a list
+open, only its own keys answer.
+
 Commands act on the pane they belong to. A key that acts on the selected issue
 answers from the issues and details panes, favorites from the navigation tree,
 and the palette lists only what applies where you opened it.

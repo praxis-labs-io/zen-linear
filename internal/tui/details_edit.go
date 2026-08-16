@@ -4,19 +4,31 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // detailsCursorGutter is the two cells edit mode reserves at the head of every
 // header row for the cursor's marker.
 const detailsCursorGutter = 2
 
-// detailsEditState is the pane's edit mode: whether it is on, and the field the
-// cursor points at.
+// detailsEditState is the pane's edit mode: whether it is on, the field the
+// cursor points at, and the chooser open under it.
 type detailsEditState struct {
 	on bool
 	// An id, never a row index: the header is rebuilt under the cursor by every
 	// background refresh.
 	cursor issueField
+	// open is the field whose options are on the page, "" when none. issue is
+	// what they were loaded for, captured so a refresh cannot move the write.
+	open    issueField
+	issue   linearapi.Issue
+	options []PickerItem
+	choice  int
+	offset  int
+	loading bool
+	// gen stamps the open a load belongs to. The counter itself is on App: this
+	// struct is zeroed on every exit and would restart at nought.
+	gen uint64
 }
 
 // enterDetailsEdit puts the pane in edit mode with the cursor on the first
@@ -126,6 +138,11 @@ func (a *App) stepFieldCursor(step int) {
 // resolveFieldCursor puts the cursor back on the page a rebuild just drew,
 // looked up by id. A page with nothing to edit drops the mode.
 func (a *App) resolveFieldCursor() {
+	// A chooser whose field the rebuild no longer draws holds the keys with
+	// nothing on the page to show for it.
+	if a.detailsEdit.on && a.detailsEdit.open != "" && a.fieldSpanIndex(a.detailsEdit.open) < 0 {
+		a.closeFieldChooser()
+	}
 	if !a.detailsEdit.on || a.fieldSpanIndex(a.detailsEdit.cursor) >= 0 {
 		return
 	}
@@ -154,7 +171,13 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 		return ""
 	}
 	if row.field != "" && row.field == a.detailsEdit.cursor {
-		return a.themeTags.Accent + "❯[-] "
+		tag := a.themeTags.Accent
+		if a.detailsEdit.open != "" {
+			// Dimmed under an open chooser: the cursor line inside it is where
+			// the keyboard is, and this only says which row it belongs to.
+			tag = a.themeTags.SecondaryText
+		}
+		return tag + "❯[-] "
 	}
 	return strings.Repeat(" ", detailsCursorGutter)
 }
@@ -162,7 +185,12 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 // handleDetailsEditKey answers for the whole app while edit mode is on. It is
 // default-deny, so q cannot quit and a pane number cannot leave.
 func (a *App) handleDetailsEditKey(event *tcell.EventKey) *tcell.EventKey {
+	if a.detailsEdit.open != "" {
+		return a.handleChooserKey(event)
+	}
 	switch event.Key() {
+	case tcell.KeyEnter:
+		a.openFieldChooser()
 	case tcell.KeyCtrlC:
 		// The one key the mode does not own. Handed back, tview stops the app
 		// on it itself.

@@ -92,6 +92,10 @@ type App struct {
 	// was last built for, which is what says the issue changed under it.
 	detailsEdit    detailsEditState
 	detailsIssueID string
+	// detailsChooserRow is where the lit option landed in the last render, -1
+	// with no chooser open. chooserGeneration stamps each opening.
+	detailsChooserRow int
+	chooserGeneration atomic.Uint64
 	// focusedCommentID is the card the ring is on and commentSpans is where
 	// every card landed in the last render. The ring is held by id rather than
 	// by index so a refetch that reorders the stack keeps it on the same card.
