@@ -287,15 +287,15 @@ func (a *App) updateStatusBar() {
 			}
 			hints = append(hints, hint{"Esc", "done"})
 			note = "Editing fields"
-		case a.commentsFocus != commentsFocusCards && a.detailsHaveFocus():
+		case a.detailsFocus != detailsFocusCards && a.detailsHaveFocus():
 			// Every key in the box types, the palette's included, so the line
 			// names none of them.
 			hints = nil
 			note = "Writing a comment"
-			switch a.commentsFocus {
-			case commentsFocusReply, commentsFocusReplyPost:
+			switch a.detailsFocus {
+			case detailsFocusReply, detailsFocusReplyPost:
 				note = "Writing a reply"
-			case commentsFocusEdit, commentsFocusEditPost:
+			case detailsFocusEdit, detailsFocusEditPost:
 				note = "Editing a comment"
 			}
 		case a.cardsHaveFocus() && a.focusedCommentID != "":

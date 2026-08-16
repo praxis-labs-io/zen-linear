@@ -294,9 +294,9 @@ type App struct {
 	// UI update mutex (for test safety when queueUpdateDraw executes immediately)
 	uiUpdateMu sync.Mutex
 
-	// commentsFocus is what inside the details page holds the keyboard: a card,
+	// detailsFocus is what inside the details page holds the keyboard: a card,
 	// one of the writing boxes, or its button.
-	commentsFocus commentsFocus
+	detailsFocus detailsFocus
 }
 
 // FocusTarget indicates which pane has focus.

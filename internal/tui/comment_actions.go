@@ -23,7 +23,7 @@ type commentSpan struct {
 	// id is the comment's own id, or one of the box names.
 	id string
 	// focus is what the ring hands the keyboard to on this stop.
-	focus commentsFocus
+	focus detailsFocus
 	start int
 	end   int
 }
@@ -39,7 +39,7 @@ func (a *App) detailsHaveFocus() bool {
 // cardsHaveFocus reports whether the ring is on a comment card rather than in
 // one of the boxes, which is what the per-comment keys answer from.
 func (a *App) cardsHaveFocus() bool {
-	return a.detailsHaveFocus() && a.commentsFocus == commentsFocusCards
+	return a.detailsHaveFocus() && a.detailsFocus == detailsFocusCards
 }
 
 // focusedComment returns the comment the ring is on, and whether there is one
@@ -49,7 +49,7 @@ func (a *App) cardsHaveFocus() bool {
 // key that acted on it would answer about something off screen. That is the
 // same rule the ring re-anchors by.
 func (a *App) focusedComment() (linearapi.Comment, bool) {
-	if a.commentsFocus != commentsFocusCards {
+	if a.detailsFocus != detailsFocusCards {
 		return linearapi.Comment{}, false
 	}
 	index := a.commentStopIndex()
@@ -73,7 +73,7 @@ func (a *App) commentByID(id string) (linearapi.Comment, bool) {
 // -1 when what it names is no longer on it.
 func (a *App) commentStopIndex() int {
 	for i, span := range a.commentSpans {
-		if span.focus == a.commentsFocus && (span.focus != commentsFocusCards || span.id == a.focusedCommentID) {
+		if span.focus == a.detailsFocus && (span.focus != detailsFocusCards || span.id == a.focusedCommentID) {
 			return i
 		}
 	}
@@ -110,7 +110,7 @@ func (a *App) stepCommentRing(step int) bool {
 	// is where the reader is whatever the scroll says, and stepping off it to
 	// a card they happen to be looking at would take the keys away from what
 	// they were writing.
-	if index < 0 || (a.commentsFocus == commentsFocusCards && !a.commentSpanVisible(a.commentSpans[index])) {
+	if index < 0 || (a.detailsFocus == detailsFocusCards && !a.commentSpanVisible(a.commentSpans[index])) {
 		a.focusCommentAt(a.anchorComment(step))
 		return true
 	}
@@ -140,8 +140,8 @@ func (a *App) focusCommentAt(index int) {
 		return
 	}
 	span := a.commentSpans[index]
-	if a.focusedCommentID != span.id || a.commentsFocus != span.focus {
-		a.focusedCommentID, a.commentsFocus = span.id, span.focus
+	if a.focusedCommentID != span.id || a.detailsFocus != span.focus {
+		a.focusedCommentID, a.detailsFocus = span.id, span.focus
 		// Re-rendered rather than repainted: the border lives in the text, so
 		// the ring only moves when the page is written again. The spans are
 		// rebuilt by the same call, so the scroll below reads the new ones.
@@ -158,7 +158,7 @@ func (a *App) focusCommentAt(index int) {
 // focusComment puts the ring on a comment by id, for the paths that know the
 // comment rather than its place: a posted reply, a restored selection.
 func (a *App) focusComment(id string) {
-	a.commentsFocus = commentsFocusCards
+	a.detailsFocus = detailsFocusCards
 	a.focusCommentAt(a.commentSpanIndex(id))
 }
 
@@ -187,14 +187,14 @@ func (a *App) anchorComment(step int) int {
 // keyboard, and which stop was lit.
 type commentPaint struct {
 	active bool
-	focus  commentsFocus
+	focus  detailsFocus
 	id     string
 }
 
 // commentRing is the ring as it stands now, to be compared against what the
 // page is currently showing.
 func (a *App) commentRing() commentPaint {
-	return commentPaint{active: a.detailsHaveFocus(), focus: a.commentsFocus, id: a.focusedCommentID}
+	return commentPaint{active: a.detailsHaveFocus(), focus: a.detailsFocus, id: a.focusedCommentID}
 }
 
 // refreshCommentRing repaints the page when the ring has moved or has gained or
@@ -502,7 +502,7 @@ func (a *App) removeComment(issueID, commentID string) {
 	a.issuesMu.Unlock()
 
 	// Read before the render, which is what takes the card off the page.
-	held := a.commentsFocus == commentsFocusCards && a.focusedCommentID == commentID
+	held := a.detailsFocus == detailsFocusCards && a.focusedCommentID == commentID
 	a.cancelDetailFetch()
 	a.detailsCommentsSource = comments
 	a.renderDetailsPage()

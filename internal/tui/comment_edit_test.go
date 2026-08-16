@@ -62,8 +62,8 @@ func TestEditOpensABoxWhereTheCardWas(t *testing.T) {
 	if got := app.editingCommentID(); got != mineID {
 		t.Fatalf("editing %q, want %s", got, mineID)
 	}
-	if app.commentsFocus != commentsFocusEdit {
-		t.Errorf("focus = %v, want the edit box", app.commentsFocus)
+	if app.detailsFocus != detailsFocusEdit {
+		t.Errorf("focus = %v, want the edit box", app.detailsFocus)
 	}
 	if got := app.detailsEditArea.GetText(); got != mineBody {
 		t.Errorf("the box holds %q, want the comment's body", got)
@@ -397,8 +397,8 @@ func TestASlowSaveLeavesALaterEditAlone(t *testing.T) {
 	}
 	// The keyboard is physically in the box, so the state that says where it is
 	// has to agree. Tab, the growth refit and the hints all read this.
-	if app.commentsFocus != commentsFocusEdit {
-		t.Errorf("focus reads %v, want the box the keys are going to", app.commentsFocus)
+	if app.detailsFocus != detailsFocusEdit {
+		t.Errorf("focus reads %v, want the box the keys are going to", app.detailsFocus)
 	}
 	if got := app.focusedCommentID; got != mineReplyID {
 		t.Errorf("the ring moved to %q, want it left on the box being written in", got)
@@ -459,8 +459,8 @@ func TestDeletingACommentClosesTheBoxOpenOnIt(t *testing.T) {
 	if got := app.editingCommentID(); got != "" {
 		t.Errorf("the box on %q is still open after its comment left the page", got)
 	}
-	if app.commentsFocus != commentsFocusCards {
-		t.Errorf("focus reads %v, want the cards: the box it names is not drawn", app.commentsFocus)
+	if app.detailsFocus != detailsFocusCards {
+		t.Errorf("focus reads %v, want the cards: the box it names is not drawn", app.detailsFocus)
 	}
 }
 
@@ -481,8 +481,8 @@ func TestARefreshWithoutTheEditedCommentClosesTheBox(t *testing.T) {
 	if got := app.editingCommentID(); got != "" {
 		t.Errorf("the box on %q is still open after the refresh dropped its comment", got)
 	}
-	if app.commentsFocus != commentsFocusCards {
-		t.Errorf("focus reads %v, want the cards", app.commentsFocus)
+	if app.detailsFocus != detailsFocusCards {
+		t.Errorf("focus reads %v, want the cards", app.detailsFocus)
 	}
 	if app.commentSpanIndex(mineID) >= 0 {
 		t.Error("the deleted comment is still on the page")

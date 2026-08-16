@@ -43,7 +43,7 @@ func (a *App) renderDetailsPage() {
 	if a.detailsHeaderRows == nil {
 		// No issue: nothing to write on, nothing to write in. The ring is put
 		// back where it starts, or it names a card that is no longer drawn.
-		a.commentsFocus, a.focusedCommentID = commentsFocusCards, ""
+		a.detailsFocus, a.focusedCommentID = detailsFocusCards, ""
 		// The field cursor goes with it: there is no header left to point into.
 		a.detailsEdit = detailsEditState{}
 		// The pane's top padding is text now, so the message carries its own.
@@ -100,7 +100,7 @@ func (a *App) renderDetailsPage() {
 		// what opens it. A reply or edit box was asked for, so the ring arms it.
 		ring := block.focus
 		if block.id == blockIDCompose {
-			ring = commentsFocusCards
+			ring = detailsFocusCards
 		}
 		span := commentSpan{id: block.id, focus: ring, start: start, end: len(lines) - 1}
 		a.commentSpans = append(a.commentSpans, span)
@@ -122,19 +122,19 @@ func (a *App) blockCard(block commentBlock, width int) ([]string, []pageSlot) {
 	if block.event != nil {
 		return []string{a.activityLine(*block.event, width)}, nil
 	}
-	if block.focus == commentsFocusCards {
+	if block.focus == detailsFocusCards {
 		return a.commentCard(block.comment, width), nil
 	}
 	area, post := a.detailsComposeArea, a.detailsComposePost
 	heading := "write a comment"
 	switch block.focus {
-	case commentsFocusReply:
+	case detailsFocusReply:
 		area, post = a.detailsReplyArea, a.detailsReplyPost
 		heading = "write a reply"
-	case commentsFocusEdit:
+	case detailsFocusEdit:
 		area, post = a.detailsEditArea, a.detailsEditPost
 		heading = "edit this comment"
-	case commentsFocusText:
+	case detailsFocusText:
 		// Shut, the card invites a comment it will not take a letter of, so it
 		// says the key that opens it instead.
 		area.SetPlaceholder(a.composePrompt())
@@ -146,7 +146,7 @@ func (a *App) blockCard(block commentBlock, width int) ([]string, []pageSlot) {
 // written sits among what has been said rather than beside it. The interior
 // rows are left blank for the text area drawn over them, as many as what is in
 // the box needs.
-func (a *App) writingCard(width int, heading, border string, focus commentsFocus, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
+func (a *App) writingCard(width int, heading, border string, focus detailsFocus, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
 	if width < commentCardMinWidth {
 		return a.writingPlain(width, heading, focus, area, post)
 	}
@@ -180,7 +180,7 @@ func (a *App) writingCard(width int, heading, border string, focus commentsFocus
 // comment does. The box keeps its rows and its button; only the border goes,
 // because two border cells and two pad cells out of a pane this size leave
 // nothing to write in.
-func (a *App) writingPlain(width int, heading string, focus commentsFocus, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
+func (a *App) writingPlain(width int, heading string, focus detailsFocus, area *tview.TextArea, post *tview.Button) ([]string, []pageSlot) {
 	rows := writingBoxRows(area, width)
 	lines := []string{truncateTagged(a.writingByline(heading), width)}
 	for i := 0; i < rows; i++ {
@@ -242,25 +242,25 @@ func buttonWidth(post *tview.Button) int {
 // writingHints names what a box answers to, for as long as the keys are going
 // to it. A box nobody is writing in says nothing: the keys named there would be
 // the reader's, and they are not.
-func (a *App) writingHints(focus commentsFocus, width int) string {
+func (a *App) writingHints(focus detailsFocus, width int) string {
 	if !a.detailsHaveFocus() {
 		return ""
 	}
 	button, _ := postFocusFor(focus)
-	if a.commentsFocus != focus && a.commentsFocus != button {
+	if a.detailsFocus != focus && a.detailsFocus != button {
 		return a.closedComposeHint(focus, width)
 	}
 	done, verb := "esc done", "post"
 	switch focus {
-	case commentsFocusReply:
+	case detailsFocusReply:
 		done = "esc close"
-	case commentsFocusEdit:
+	case detailsFocusEdit:
 		// Not "close": nothing is kept, and the key that drops a rewrite should
 		// say so before it is pressed.
 		done, verb = "esc discard", "save"
 	}
 	send := "ctrl+enter " + verb
-	if a.commentsFocus == button {
+	if a.detailsFocus == button {
 		send = "enter " + verb
 	}
 	return a.themeTags.SecondaryText + cardHintLine(width, send, "tab "+verb+" button", done) + "[-]"
@@ -269,8 +269,8 @@ func (a *App) writingHints(focus commentsFocus, width int) string {
 // closedComposeHint names the key that opens the compose card, for the stop the
 // ring makes on it while it is shut. The other two boxes exist only while they
 // are open, so this is the one card the ring reaches with nothing to type into.
-func (a *App) closedComposeHint(focus commentsFocus, width int) string {
-	if focus != commentsFocusText || a.commentsFocus != commentsFocusCards || a.focusedCommentID != blockIDCompose {
+func (a *App) closedComposeHint(focus detailsFocus, width int) string {
+	if focus != detailsFocusText || a.detailsFocus != detailsFocusCards || a.focusedCommentID != blockIDCompose {
 		return ""
 	}
 	key, ok := a.commandShortcutLabel("add_comment")
@@ -283,7 +283,7 @@ func (a *App) closedComposeHint(focus commentsFocus, width int) string {
 // composePrompt is what the empty compose box says: what to write once it is
 // open, and the key that opens it for as long as it is not.
 func (a *App) composePrompt() string {
-	if a.commentsFocus == commentsFocusText || a.commentsFocus == commentsFocusPost {
+	if a.detailsFocus == detailsFocusText || a.detailsFocus == detailsFocusPost {
 		return composePlaceholder
 	}
 	key, ok := a.commandShortcutLabel("add_comment")

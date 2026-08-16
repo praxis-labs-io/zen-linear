@@ -61,7 +61,7 @@ func (a *App) enterDetailsEdit() {
 	a.focusedPane = FocusDetails
 	// The cards let go of the keyboard: two rings on one page would both answer
 	// j and k.
-	a.commentsFocus, a.focusedCommentID = commentsFocusCards, ""
+	a.detailsFocus, a.focusedCommentID = detailsFocusCards, ""
 	a.detailsEdit = detailsEditState{on: true, cursor: cursor}
 	a.rebuildContentLayout()
 	a.updateFocus()

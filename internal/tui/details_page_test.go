@@ -51,22 +51,22 @@ func TestThePaletteSurvivesAKeystrokeFromTheDetailsPane(t *testing.T) {
 	if got := app.focusedPane; got != FocusPalette {
 		t.Errorf("focus delegated to the details page took the pane to %v, want the palette to keep it", got)
 	}
-	if got := app.commentsFocus; got != commentsFocusCards {
+	if got := app.detailsFocus; got != detailsFocusCards {
 		t.Errorf("the delegation moved the box focus to %v, want it untouched", got)
 	}
 }
 
 // TestTabInAnotherPaneLeavesTheWritingBoxesAlone covers the other half of Tab
-// narrowing to a box and its button: commentsFocus outlives the pane being
+// narrowing to a box and its button: detailsFocus outlives the pane being
 // left, so an unscoped Tab elsewhere stepped a box nobody was looking at.
 func TestTabInAnotherPaneLeavesTheWritingBoxesAlone(t *testing.T) {
 	app := newThreadedTestApp(t)
-	app.commentsFocus = commentsFocusText
+	app.detailsFocus = detailsFocusText
 	app.focusedPane = FocusIssues
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 
-	if got := app.commentsFocus; got != commentsFocusText {
+	if got := app.detailsFocus; got != detailsFocusText {
 		t.Errorf("Tab in the issues pane moved the box focus to %v, want it untouched", got)
 	}
 	if got := app.focusedPane; got != FocusIssues {
@@ -224,7 +224,7 @@ func TestTheEmptyPaneSaysSoAndDropsTheRing(t *testing.T) {
 	if got := app.focusedCommentID; got != "" {
 		t.Errorf("the ring is still on %q with no issue selected", got)
 	}
-	if got := app.commentsFocus; got != commentsFocusCards {
+	if got := app.detailsFocus; got != detailsFocusCards {
 		t.Errorf("the sub-focus is %v with no issue selected, want the cards", got)
 	}
 	if got := app.detailsPageView.GetText(true); strings.Contains(got, "write a comment") {

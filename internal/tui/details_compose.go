@@ -59,7 +59,7 @@ func (a *App) openReplyBox(parentID string) {
 	// The ring is a pair, the stop and what it names. Moving one and not the
 	// other left the card the reader came from lit while the keyboard was in
 	// the box, and the box itself unlit.
-	a.commentsFocus, a.focusedCommentID = commentsFocusReply, blockIDReply
+	a.detailsFocus, a.focusedCommentID = detailsFocusReply, blockIDReply
 	a.updateFocus()
 	if index := a.commentSpanIndex(blockIDReply); index >= 0 {
 		a.scrollCommentIntoView(a.commentSpans[index])
@@ -88,7 +88,7 @@ func (a *App) openEditBox(commentID, body string) {
 	// Rendered before the focus moves, for the reason openReplyBox gives: the
 	// box has no stop in the ring until the page has been written with it in.
 	a.renderDetailsPage()
-	a.commentsFocus, a.focusedCommentID = commentsFocusEdit, commentID
+	a.detailsFocus, a.focusedCommentID = detailsFocusEdit, commentID
 	a.updateFocus()
 	if index := a.commentSpanIndex(commentID); index >= 0 {
 		a.scrollCommentIntoView(a.commentSpans[index])
@@ -104,7 +104,7 @@ func (a *App) closeEditBox() {
 	}
 	delete(a.composeEditing, a.composeDraftIssueID)
 	a.detailsEditArea.SetText("", false)
-	a.commentsFocus = commentsFocusCards
+	a.detailsFocus = detailsFocusCards
 	a.focusedCommentID = commentID
 	a.renderDetailsPage()
 	a.updateFocus()
@@ -140,7 +140,7 @@ func (a *App) closeReplyBox() {
 	a.holdReplyDraft()
 	delete(a.composeReplyTo, a.composeDraftIssueID)
 	a.detailsReplyArea.SetText("", false)
-	a.commentsFocus = commentsFocusCards
+	a.detailsFocus = detailsFocusCards
 	a.focusedCommentID = parent
 	a.renderDetailsPage()
 	a.updateFocus()
@@ -229,35 +229,35 @@ const (
 	saveLabel = "  Save  "
 )
 
-// commentsFocus names what on the details page holds the keyboard. The braces
+// detailsFocus names what on the details page holds the keyboard. The braces
 // step the cards and the boxes; Tab moves between a box and its button.
-type commentsFocus int
+type detailsFocus int
 
 const (
-	commentsFocusCards commentsFocus = iota
-	commentsFocusReply
-	commentsFocusReplyPost
-	commentsFocusText
-	commentsFocusPost
-	commentsFocusEdit
-	commentsFocusEditPost
+	detailsFocusCards detailsFocus = iota
+	detailsFocusReply
+	detailsFocusReplyPost
+	detailsFocusText
+	detailsFocusPost
+	detailsFocusEdit
+	detailsFocusEditPost
 )
 
 // isWriting reports whether a focus is one of the writing boxes.
-func (f commentsFocus) isWriting() bool {
-	return f == commentsFocusReply || f == commentsFocusText || f == commentsFocusEdit
+func (f detailsFocus) isWriting() bool {
+	return f == detailsFocusReply || f == detailsFocusText || f == detailsFocusEdit
 }
 
 // postFocusFor is the button that sends what a box holds, and whether the focus
 // named a box at all.
-func postFocusFor(f commentsFocus) (commentsFocus, bool) {
+func postFocusFor(f detailsFocus) (detailsFocus, bool) {
 	switch f {
-	case commentsFocusText:
-		return commentsFocusPost, true
-	case commentsFocusReply:
-		return commentsFocusReplyPost, true
-	case commentsFocusEdit:
-		return commentsFocusEditPost, true
+	case detailsFocusText:
+		return detailsFocusPost, true
+	case detailsFocusReply:
+		return detailsFocusReplyPost, true
+	case detailsFocusEdit:
+		return detailsFocusEditPost, true
 	}
 	return 0, false
 }
@@ -266,10 +266,10 @@ func postFocusFor(f commentsFocus) (commentsFocus, bool) {
 // around it owns the border, the title and the density padding; the page is
 // borderless.
 func (a *App) buildDetailsPage() {
-	a.detailsComposeArea, a.detailsComposePost = a.newWritingBox(commentsFocusText, commentsFocusPost, postLabel)
-	a.detailsReplyArea, a.detailsReplyPost = a.newWritingBox(commentsFocusReply, commentsFocusReplyPost, postLabel)
-	a.detailsEditArea, a.detailsEditPost = a.newWritingBox(commentsFocusEdit, commentsFocusEditPost, saveLabel)
-	a.detailsPageView.SetFocusFunc(func() { a.enterCommentsFocus(commentsFocusCards) })
+	a.detailsComposeArea, a.detailsComposePost = a.newWritingBox(detailsFocusText, detailsFocusPost, postLabel)
+	a.detailsReplyArea, a.detailsReplyPost = a.newWritingBox(detailsFocusReply, detailsFocusReplyPost, postLabel)
+	a.detailsEditArea, a.detailsEditPost = a.newWritingBox(detailsFocusEdit, detailsFocusEditPost, saveLabel)
+	a.detailsPageView.SetFocusFunc(func() { a.enterDetailsFocus(detailsFocusCards) })
 	a.applyComposeTheme()
 
 	a.detailsPage = newDetailsPage(a.detailsPageView, a.refitDetailsPage)
@@ -279,7 +279,7 @@ func (a *App) buildDetailsPage() {
 // newWritingBox builds one box: the writing area and the button that sends it.
 // Both are drawn inside a card on the page rather than mounted in a layout, so
 // neither carries a frame of its own.
-func (a *App) newWritingBox(text, post commentsFocus, label string) (*tview.TextArea, *tview.Button) {
+func (a *App) newWritingBox(text, post detailsFocus, label string) (*tview.TextArea, *tview.Button) {
 	area := tview.NewTextArea()
 	button := tview.NewButton(label)
 	button.SetSelectedFunc(func() { a.postFrom(text) })
@@ -287,8 +287,8 @@ func (a *App) newWritingBox(text, post commentsFocus, label string) (*tview.Text
 	// A box takes the keyboard by mouse as well as by key, and a click never
 	// goes through updateFocus. Recording it here is what keeps a typed letter
 	// out of the command shortcuts.
-	area.SetFocusFunc(func() { a.enterCommentsFocus(text) })
-	button.SetFocusFunc(func() { a.enterCommentsFocus(post) })
+	area.SetFocusFunc(func() { a.enterDetailsFocus(text) })
+	button.SetFocusFunc(func() { a.enterDetailsFocus(post) })
 	// The button greys out with nothing to send, so the control does not appear
 	// and disappear as you type, and the box grows to hold what is typed into
 	// it.
@@ -313,8 +313,8 @@ func (a *App) newWritingBox(text, post commentsFocus, label string) (*tview.Text
 // every letter, and every programmatic fill happens while the focus is
 // somewhere else — including the one inside updateDetailsView, which would
 // otherwise render a page the caller is halfway through rebuilding.
-func (a *App) refitWritingBox(focus commentsFocus, area *tview.TextArea) {
-	if a.detailsPage == nil || area == nil || !a.detailsHaveFocus() || a.commentsFocus != focus {
+func (a *App) refitWritingBox(focus detailsFocus, area *tview.TextArea) {
+	if a.detailsPage == nil || area == nil || !a.detailsHaveFocus() || a.detailsFocus != focus {
 		return
 	}
 	for _, slot := range a.detailsPage.slots {
@@ -334,11 +334,11 @@ func (a *App) refitWritingBox(focus commentsFocus, area *tview.TextArea) {
 
 // writingBoxBlockID names the block a box is drawn in, which is what the page
 // scrolls by. An edit box stands where a card did and keeps the comment's id.
-func (a *App) writingBoxBlockID(focus commentsFocus) string {
+func (a *App) writingBoxBlockID(focus detailsFocus) string {
 	switch focus {
-	case commentsFocusReply, commentsFocusReplyPost:
+	case detailsFocusReply, detailsFocusReplyPost:
 		return blockIDReply
-	case commentsFocusEdit, commentsFocusEditPost:
+	case detailsFocusEdit, detailsFocusEditPost:
 		return a.editingCommentID()
 	}
 	return blockIDCompose
@@ -346,7 +346,7 @@ func (a *App) writingBoxBlockID(focus commentsFocus) string {
 
 // scrollToWritingBox brings a box's card back onto the page, and does nothing
 // when it is already there.
-func (a *App) scrollToWritingBox(focus commentsFocus) {
+func (a *App) scrollToWritingBox(focus detailsFocus) {
 	if index := a.commentSpanIndex(a.writingBoxBlockID(focus)); index >= 0 {
 		a.scrollCommentIntoView(a.commentSpans[index])
 	}
@@ -354,13 +354,13 @@ func (a *App) scrollToWritingBox(focus commentsFocus) {
 
 // writingBox returns the widgets behind a focus, and whether that focus is a
 // box at all.
-func (a *App) writingBox(focus commentsFocus) (*tview.TextArea, *tview.Button, bool) {
+func (a *App) writingBox(focus detailsFocus) (*tview.TextArea, *tview.Button, bool) {
 	switch focus {
-	case commentsFocusText, commentsFocusPost:
+	case detailsFocusText, detailsFocusPost:
 		return a.detailsComposeArea, a.detailsComposePost, true
-	case commentsFocusReply, commentsFocusReplyPost:
+	case detailsFocusReply, detailsFocusReplyPost:
 		return a.detailsReplyArea, a.detailsReplyPost, true
-	case commentsFocusEdit, commentsFocusEditPost:
+	case detailsFocusEdit, detailsFocusEditPost:
 		return a.detailsEditArea, a.detailsEditPost, true
 	}
 	return nil, nil, false
@@ -370,7 +370,7 @@ func (a *App) writingBox(focus commentsFocus) (*tview.TextArea, *tview.Button, b
 // the tview globals at construction but exposes setters for all of them, so a
 // box is restyled rather than rebuilt: a rebuild would drop a draft.
 func (a *App) applyComposeTheme() {
-	for _, focus := range []commentsFocus{commentsFocusText, commentsFocusReply, commentsFocusEdit} {
+	for _, focus := range []detailsFocus{detailsFocusText, detailsFocusReply, detailsFocusEdit} {
 		area, _, _ := a.writingBox(focus)
 		if area == nil {
 			continue
@@ -397,7 +397,7 @@ func (a *App) applyComposeTheme() {
 // surface in every state, because it is a button in every state: an empty
 // buffer greys the label without taking the surface away.
 func (a *App) applyPostButtonTheme() {
-	for _, focus := range []commentsFocus{commentsFocusText, commentsFocusReply, commentsFocusEdit} {
+	for _, focus := range []detailsFocus{detailsFocusText, detailsFocusReply, detailsFocusEdit} {
 		area, button, _ := a.writingBox(focus)
 		if area == nil || button == nil {
 			continue
@@ -437,22 +437,22 @@ func (a *App) composeBoxOnScreen() bool {
 //
 // Call it from the key path only. Application.GetFocus takes the app's lock,
 // which Application.draw holds for the whole frame, so anything reachable from
-// a draw func reads a.commentsFocus instead.
+// a draw func reads a.detailsFocus instead.
 func (a *App) composeBoxActive() bool {
 	if a.detailsComposeArea == nil || !a.composeBoxOnScreen() {
 		return false
 	}
-	return a.activeWritingBox() != commentsFocusCards
+	return a.activeWritingBox() != detailsFocusCards
 }
 
 // activeWritingBox names the box the keyboard is actually in, or the cards when
 // it is in neither. Key path only, for the reason above.
-func (a *App) activeWritingBox() commentsFocus {
+func (a *App) activeWritingBox() detailsFocus {
 	focus := a.app.GetFocus()
-	for _, target := range []commentsFocus{
-		commentsFocusText, commentsFocusPost,
-		commentsFocusReply, commentsFocusReplyPost,
-		commentsFocusEdit, commentsFocusEditPost,
+	for _, target := range []detailsFocus{
+		detailsFocusText, detailsFocusPost,
+		detailsFocusReply, detailsFocusReplyPost,
+		detailsFocusEdit, detailsFocusEditPost,
 	} {
 		area, button, _ := a.writingBox(target)
 		if target.isWriting() && focus == area {
@@ -462,7 +462,7 @@ func (a *App) activeWritingBox() commentsFocus {
 			return target
 		}
 	}
-	return commentsFocusCards
+	return detailsFocusCards
 }
 
 // releaseStrandedCompose takes the keyboard back off a box that is no longer on
@@ -472,10 +472,10 @@ func (a *App) releaseStrandedCompose() {
 	if a.detailsComposeArea == nil || a.composeBoxOnScreen() {
 		return
 	}
-	if a.activeWritingBox() == commentsFocusCards {
+	if a.activeWritingBox() == detailsFocusCards {
 		return
 	}
-	a.commentsFocus = commentsFocusCards
+	a.detailsFocus = detailsFocusCards
 	a.updateFocus()
 }
 
@@ -483,7 +483,7 @@ func (a *App) releaseStrandedCompose() {
 // page, and does nothing when it is already there.
 func (a *App) showWritingBox() {
 	focus := a.activeWritingBox()
-	if focus == commentsFocusCards {
+	if focus == detailsFocusCards {
 		return
 	}
 	a.scrollToWritingBox(focus)
@@ -493,13 +493,13 @@ func (a *App) showWritingBox() {
 // which is where Enter posts.
 func (a *App) postButtonActive() bool {
 	switch a.activeWritingBox() {
-	case commentsFocusPost, commentsFocusReplyPost:
+	case detailsFocusPost, detailsFocusReplyPost:
 		return true
 	}
 	return false
 }
 
-// enterCommentsFocus records which stop on the page took the keyboard, for the
+// enterDetailsFocus records which stop on the page took the keyboard, for the
 // paths that take it without calling updateFocus: a mouse click, and tview
 // handing focus down to a child. It repaints the cues but must never move focus
 // itself, or focusing would recurse.
@@ -508,7 +508,7 @@ func (a *App) postButtonActive() bool {
 // it before the click is delivered, so claiming the pane here as well let
 // anything that focuses these widgets claim it too. Same rule, same reason, as
 // claimNavFocus.
-func (a *App) enterCommentsFocus(target commentsFocus) {
+func (a *App) enterDetailsFocus(target detailsFocus) {
 	// An overlay owns the keys however focus is delegated underneath it.
 	if a.focusedPane == FocusPalette || a.activeModal() != nil {
 		return
@@ -521,24 +521,24 @@ func (a *App) enterCommentsFocus(target commentsFocus) {
 	}
 	// A box and the field cursor are two rings on one page. The box was clicked
 	// into, so the cursor is the one that gives way.
-	if target != commentsFocusCards {
+	if target != detailsFocusCards {
 		a.leaveDetailsEdit()
 	}
-	a.commentsFocus = target
+	a.detailsFocus = target
 	// The border follows focusedPane rather than being lit outright, or a
 	// delegation walk would light this pane while another one holds the keys.
 	a.applyPaneBorders()
 	a.updateStatusBar()
 }
 
-// stepCommentsFocus walks the page's focus ring: every comment card in turn,
+// stepDetailsFocus walks the page's focus ring: every comment card in turn,
 // the reply box where one is open on the thread, and the compose card that ends
 // the page, each box followed by its button. The ring does not wrap and does
 // not leave the pane, so off either end the focus stays where it is.
 //
 // The ring is the page: the stops are recorded by the render, in the order the
 // cards were written, so what the braces do follows what the reader can see.
-func (a *App) stepCommentsFocus(backward bool) {
+func (a *App) stepDetailsFocus(backward bool) {
 	if a.focusedPane != FocusDetails {
 		return
 	}
@@ -556,25 +556,25 @@ func (a *App) stepCommentsFocus(backward bool) {
 // that sends it, which is the whole of what Tab does in this pane. A two-stop
 // walk reads the same in both directions, so there is no direction to pass.
 func (a *App) stepWritingBoxFocus() {
-	// Scoped to the pane that owns the boxes. commentsFocus outlives the pane
+	// Scoped to the pane that owns the boxes. detailsFocus outlives the pane
 	// being left — nothing resets it on the way out — so an unscoped Tab in the
 	// issues list would step a box nobody is looking at.
 	if !a.detailsHaveFocus() {
 		return
 	}
-	switch a.commentsFocus {
-	case commentsFocusText:
-		a.commentsFocus = commentsFocusPost
-	case commentsFocusPost:
-		a.commentsFocus = commentsFocusText
-	case commentsFocusReply:
-		a.commentsFocus = commentsFocusReplyPost
-	case commentsFocusReplyPost:
-		a.commentsFocus = commentsFocusReply
-	case commentsFocusEdit:
-		a.commentsFocus = commentsFocusEditPost
-	case commentsFocusEditPost:
-		a.commentsFocus = commentsFocusEdit
+	switch a.detailsFocus {
+	case detailsFocusText:
+		a.detailsFocus = detailsFocusPost
+	case detailsFocusPost:
+		a.detailsFocus = detailsFocusText
+	case detailsFocusReply:
+		a.detailsFocus = detailsFocusReplyPost
+	case detailsFocusReplyPost:
+		a.detailsFocus = detailsFocusReply
+	case detailsFocusEdit:
+		a.detailsFocus = detailsFocusEditPost
+	case detailsFocusEditPost:
+		a.detailsFocus = detailsFocusEdit
 	default:
 		return
 	}
@@ -595,13 +595,13 @@ func (a *App) openComposeBox() bool {
 	a.syncComposeDraft(issue.ID)
 	a.detailsHidden = false
 	a.focusedPane = FocusDetails
-	a.commentsFocus = commentsFocusText
+	a.detailsFocus = detailsFocusText
 	a.focusedCommentID = blockIDCompose
 	a.rebuildContentLayout()
 	a.updateFocus()
 	// Never leave the keyboard in a box the layout did not put on screen.
 	if !a.composeBoxOnScreen() {
-		a.commentsFocus = commentsFocusCards
+		a.detailsFocus = detailsFocusCards
 		a.updateFocus()
 		return false
 	}
@@ -617,7 +617,7 @@ func (a *App) openComposeBox() bool {
 // word. The box stays where it is: it is part of the tab, not something
 // summoned.
 func (a *App) leaveComposeBox() {
-	a.commentsFocus = commentsFocusCards
+	a.detailsFocus = detailsFocusCards
 	a.updateFocus()
 }
 
@@ -648,10 +648,10 @@ func (a *App) handleComposeKey(event *tcell.EventKey) *tcell.EventKey {
 		// in is a card of empty rows in the middle of the conversation. The
 		// words are kept against the comment, so reopening finds them.
 		switch box := a.activeWritingBox(); box {
-		case commentsFocusReply, commentsFocusReplyPost:
+		case detailsFocusReply, detailsFocusReplyPost:
 			a.closeReplyBox()
 			return nil
-		case commentsFocusEdit, commentsFocusEditPost:
+		case detailsFocusEdit, detailsFocusEditPost:
 			// The edit is dropped rather than held. A box that always opens on
 			// the comment as it stands cannot show a half-edit from last week
 			// in place of what the comment actually says.
@@ -677,7 +677,7 @@ func (a *App) handleComposeKey(event *tcell.EventKey) *tcell.EventKey {
 
 // postComment sends what is in the compose box, for the paths that name no box
 // of their own.
-func (a *App) postComment() { a.postFrom(commentsFocusText) }
+func (a *App) postComment() { a.postFrom(detailsFocusText) }
 
 // postFrom sends what is in one of the boxes and empties it. The words are held
 // here until the API answers, so a failed post can put them back.
@@ -686,16 +686,16 @@ func (a *App) postComment() { a.postFrom(commentsFocusText) }
 // at top level. Which box the keys were in is the whole of that difference,
 // which is why the caller names it rather than the aim being read off a field
 // that both boxes would share.
-func (a *App) postFrom(from commentsFocus) {
-	if from == commentsFocusPost {
-		from = commentsFocusText
+func (a *App) postFrom(from detailsFocus) {
+	if from == detailsFocusPost {
+		from = detailsFocusText
 	}
-	if from == commentsFocusReplyPost {
-		from = commentsFocusReply
+	if from == detailsFocusReplyPost {
+		from = detailsFocusReply
 	}
 	// The edit box writes over a comment rather than adding one, so the chord
 	// and the button reach a different call from the same two controls.
-	if from == commentsFocusEdit || from == commentsFocusEditPost {
+	if from == detailsFocusEdit || from == detailsFocusEditPost {
 		a.saveCommentEdit()
 		return
 	}
@@ -717,12 +717,12 @@ func (a *App) postFrom(from commentsFocus) {
 		return
 	}
 	parentID := ""
-	if from == commentsFocusReply {
+	if from == detailsFocusReply {
 		parentID = a.replyParentID()
 	}
 
 	area.SetText("", false)
-	if from == commentsFocusReply {
+	if from == detailsFocusReply {
 		a.closeReplyBox()
 	} else {
 		// The keyboard goes with the comment. The box is empty and no longer
@@ -868,7 +868,7 @@ func (a *App) replaceComment(issueID string, comment linearapi.Comment) {
 	// The reader may have moved while this was out: onto another card, or into
 	// a box. The ring follows the rewritten card only when it was already on
 	// it, which is where closeEditBox left it a moment ago.
-	if a.commentsFocus == commentsFocusCards && a.focusedCommentID == comment.ID {
+	if a.detailsFocus == detailsFocusCards && a.focusedCommentID == comment.ID {
 		a.focusComment(comment.ID)
 	}
 }
@@ -917,7 +917,7 @@ func (a *App) restoreComposeDraft(issueID, body, parentID string) {
 	// The keyboard comes back only where the box is on screen. A reader who
 	// moved to another pane stays in it.
 	if a.detailsHaveFocus() && a.composeBoxOnScreen() {
-		a.commentsFocus = commentsFocusText
+		a.detailsFocus = detailsFocusText
 		a.updateFocus()
 	}
 }
@@ -976,10 +976,10 @@ func (a *App) syncComposeDraft(issueID string) {
 	// is the lockup with no way out that releaseStrandedCompose cannot see —
 	// the panel is mounted, so it reads as on screen.
 	strandedReply := a.replyParentID() == "" &&
-		(a.commentsFocus == commentsFocusReply || a.commentsFocus == commentsFocusReplyPost)
-	strandedEdit := a.commentsFocus == commentsFocusEdit || a.commentsFocus == commentsFocusEditPost
+		(a.detailsFocus == detailsFocusReply || a.detailsFocus == detailsFocusReplyPost)
+	strandedEdit := a.detailsFocus == detailsFocusEdit || a.detailsFocus == detailsFocusEditPost
 	if strandedReply || strandedEdit {
-		a.commentsFocus = commentsFocusCards
+		a.detailsFocus = detailsFocusCards
 		a.focusedCommentID = ""
 		if a.focusedPane == FocusDetails {
 			a.updateFocus()

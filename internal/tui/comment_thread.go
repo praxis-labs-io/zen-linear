@@ -22,7 +22,7 @@ type commentBlock struct {
 	depth   int
 	// focus is what the ring calls this block: a card, the reply box, or the
 	// compose box.
-	focus commentsFocus
+	focus detailsFocus
 	// id names the block to the ring and to the border colors: a comment's own
 	// id, and a stable name for each box.
 	id string
@@ -49,20 +49,20 @@ func (a *App) commentBlocks() []commentBlock {
 
 	blocks := make([]commentBlock, 0, len(rows)+2)
 	for i, row := range rows {
-		focus := commentsFocusCards
+		focus := detailsFocusCards
 		if row.Comment.ID == editing {
-			focus = commentsFocusEdit
+			focus = detailsFocusEdit
 		}
 		blocks = append(blocks, commentBlock{comment: row.Comment, depth: row.Depth, focus: focus, id: row.Comment.ID})
 		// The box goes after the last comment of its thread, which is the row
 		// before the next root, and it takes the thread's own indent.
 		if reply != "" && threadRootID(a.detailsCommentsSource, row.Comment.ID) == reply &&
 			(i == len(rows)-1 || rows[i+1].Depth == 0) {
-			blocks = append(blocks, commentBlock{depth: 1, focus: commentsFocusReply, id: blockIDReply})
+			blocks = append(blocks, commentBlock{depth: 1, focus: detailsFocusReply, id: blockIDReply})
 		}
 	}
 	blocks = mergeActivityBlocks(blocks, a.detailsActivitySource)
-	return append(blocks, commentBlock{focus: commentsFocusText, id: blockIDCompose})
+	return append(blocks, commentBlock{focus: detailsFocusText, id: blockIDCompose})
 }
 
 // mergeActivityBlocks folds the activity into the comment blocks by time. Both
@@ -102,7 +102,7 @@ func mergeActivityBlocks(blocks []commentBlock, events []linearapi.IssueActivity
 // produce several events, so an id here would be a name that is neither unique
 // nor used.
 func activityBlock(event linearapi.IssueActivity) commentBlock {
-	return commentBlock{event: &event, focus: commentsFocusCards}
+	return commentBlock{event: &event, focus: detailsFocusCards}
 }
 
 // buildCommentRows orders comments into threads: every root in the order it

@@ -114,7 +114,7 @@ func (a *App) claimPaneFocus(pane FocusTarget) bool {
 	if pane == FocusDetails {
 		// Enter on the cards, the same way l and the pane numbers do. A click
 		// that landed in a writing box moves on from here when it is delivered.
-		a.commentsFocus = commentsFocusCards
+		a.detailsFocus = detailsFocusCards
 	}
 	before := a.mountedPanes()
 	a.updateFocus()
