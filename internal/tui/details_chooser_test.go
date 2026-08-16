@@ -23,8 +23,13 @@ func seedChooserOptions(app *App) {
 	issue.Assignee = "Ada Lovelace"
 	issue.ProjectID = "project-1"
 	issue.ProjectName = "Alpha"
+	issue.Labels = []linearapi.IssueLabel{{ID: "label-1", Name: "Bug"}}
 
 	app.metadataTeamID = chooserTeamID
+	app.teamLabels = []linearapi.IssueLabel{
+		{ID: "label-1", Name: "Bug"},
+		{ID: "label-2", Name: "Chore"},
+	}
 	app.workflowStates = []linearapi.WorkflowState{
 		{ID: "state-1", Name: "In Progress"},
 		{ID: "state-2", Name: "In Review"},
@@ -601,7 +606,7 @@ func TestTheHintNamesEnterOnlyWhereItOpensSomething(t *testing.T) {
 		t.Fatalf("status bar = %q, want Enter named on a field with a list", text)
 	}
 
-	cursorTo(t, app, issueFieldLabels)
+	cursorTo(t, app, issueFieldDueDate)
 	if text := statusText(app); strings.Contains(text, "⏎ open") {
 		t.Fatalf("status bar = %q, want Enter unnamed on a field it does nothing on", text)
 	}

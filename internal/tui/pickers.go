@@ -172,6 +172,22 @@ func (a *App) issueFieldOptions(field issueField, scope optionScope, onLoaded fu
 				onLoaded(items)
 			},
 		})
+	case issueFieldLabels:
+		showCachedPicker(a, pickerLoad[linearapi.IssueLabel]{
+			name:   "labels for picker",
+			teamID: scope.teamID,
+			cached: a.teamLabels,
+			store:  func(loaded []linearapi.IssueLabel) { a.teamLabels = loaded },
+			load:   a.fetchIssueLabelsFunc,
+			fail:   onFail,
+			render: func(labels []linearapi.IssueLabel) {
+				items := make([]PickerItem, 0, len(labels))
+				for _, label := range labels {
+					items = append(items, PickerItem{ID: label.ID, Label: label.Name})
+				}
+				onLoaded(items)
+			},
+		})
 	case issueFieldMilestone:
 		a.projectMilestoneOptions(scope.projectID, onLoaded, onFail)
 	case issueFieldPriority:
