@@ -268,6 +268,11 @@ func (a *App) updateStatusBar() {
 		// Read off the field, not live focus: a focus callback can reach here
 		// from inside a draw.
 		switch {
+		case a.detailsEdit.open == issueFieldLabels:
+			// A set rather than a value: the toggles are local until Enter, so
+			// the line says apply where the others say set.
+			hints = []hint{{"j/k", "option"}, {"space", "toggle"}, {"⏎", "apply"}, {"Esc", "cancel"}}
+			note = "Choosing " + issueFieldNames[issueFieldLabels]
 		case a.detailsEdit.open != "":
 			hints = []hint{{"j/k", "option"}, {"⏎", "set"}, {"Esc", "cancel"}}
 			note = "Choosing " + issueFieldNames[a.detailsEdit.open]

@@ -18,15 +18,23 @@ type MultiSelectItem struct {
 	Label string
 }
 
-// multiSelectRow is one toggle row: a filled block in the color a finished
-// action is said in, or a hollow one sitting back in the muted text. Square
-// brackets are out as the box, tview reads them as a color tag.
-func (a *App) multiSelectRow(label string, on bool) string {
-	mark := a.themeTags.SecondaryText + "◻[-]"
+// multiSelectGlyph is the box a toggle row leads with. Square brackets are out
+// as the box, tview reads them as a color tag.
+func multiSelectGlyph(on bool) string {
 	if on {
-		mark = a.themeTags.Success + "◼[-]"
+		return "◼"
 	}
-	return mark + " " + label
+	return "◻"
+}
+
+// multiSelectRow is one toggle row: a filled block in the color a finished
+// action is said in, or a hollow one sitting back in the muted text.
+func (a *App) multiSelectRow(label string, on bool) string {
+	tag := a.themeTags.SecondaryText
+	if on {
+		tag = a.themeTags.Success
+	}
+	return tag + multiSelectGlyph(on) + "[-] " + label
 }
 
 // MultiSelectModal manages a reusable multi-select picker. Editing an issue's

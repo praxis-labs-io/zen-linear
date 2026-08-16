@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/zen-linear/zen-linear/internal/config"
 	"github.com/zen-linear/zen-linear/internal/linearapi"
@@ -155,45 +156,28 @@ func (a *App) ShowEditLabelsModal() {
 	// moves the selection while the labels are still loading.
 	target := *issue
 
-	teamID := target.TeamID
-	if teamID == "" {
-		teamID = a.GetSelectedTeamID()
-	}
-	if teamID == "" {
-		logger.Warning("tui.app: cannot edit labels, no team context issue=%s", target.Identifier)
-		a.updateStatusBarWithError(fmt.Errorf("cannot edit labels: no team context"))
-		return
-	}
-
-	currentLabelIDs := make([]string, len(target.Labels))
-	for i, lbl := range target.Labels {
-		currentLabelIDs[i] = lbl.ID
-	}
-
-	go func() {
-		logger.Debug("tui.app: loading labels for edit modal issue=%s team_id=%s", target.Identifier, teamID)
-		ctx := context.Background()
-		availableLabels, err := a.cache.GetIssueLabels(ctx, teamID)
-		if err != nil {
-			logger.ErrorWithErr(err, "tui.app: failed to load labels issue=%s team_id=%s", target.Identifier, teamID)
-			a.QueueUpdateDraw(func() {
-				a.updateStatusBarWithError(err)
-			})
-			return
+	a.issueFieldOptions(issueFieldLabels, a.issueOptionScope(target), func(loaded []PickerItem) {
+		items := make([]MultiSelectItem, 0, len(loaded))
+		for _, item := range loaded {
+			items = append(items, MultiSelectItem{ID: item.ID, Label: item.Label})
 		}
-		logger.Debug("tui.app: loaded labels issue=%s count=%d", target.Identifier, len(availableLabels))
-
-		items := make([]MultiSelectItem, len(availableLabels))
-		for i, label := range availableLabels {
-			items[i] = MultiSelectItem{ID: label.ID, Label: label.Name}
-		}
-
-		a.QueueUpdateDraw(func() {
-			a.multiSelectModal.ShowWithContext("Edit Labels", a.issueContextLine(target), items, currentLabelIDs, func(labelIDs []string) {
-				a.saveIssueField(issueFieldLabelsSave(target, labelIDs))
-			})
+		a.multiSelectModal.ShowWithContext("Edit Labels", a.issueContextLine(target), items, issueLabelIDs(target), func(labelIDs []string) {
+			a.saveIssueField(issueFieldLabelsSave(target, labelIDs))
 		})
-	}()
+	}, func(err error) {
+		logger.ErrorWithErr(err, "tui.app: failed to load labels issue=%s", target.Identifier)
+		a.updateStatusBarWithError(err)
+	})
+}
+
+// issueLabelIDs is what an issue carries now, sorted so two sets compare.
+func issueLabelIDs(issue linearapi.Issue) []string {
+	ids := make([]string, len(issue.Labels))
+	for i, label := range issue.Labels {
+		ids[i] = label.ID
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 // ShowSettingsModal shows the settings modal.

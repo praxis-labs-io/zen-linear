@@ -26,6 +26,9 @@ type detailsEditState struct {
 	choice  int
 	offset  int
 	loading bool
+	// picked is the ids toggled on, for the one field whose chooser is a
+	// multi-select. Nil for the others.
+	picked map[string]bool
 	// gen stamps the open a load belongs to. The counter itself is on App: this
 	// struct is zeroed on every exit and would restart at nought.
 	gen uint64

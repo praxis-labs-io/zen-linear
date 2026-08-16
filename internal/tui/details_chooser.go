@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -33,7 +34,7 @@ var chooserClearLabels = map[issueField]string{
 func fieldHasChooser(field issueField) bool {
 	switch field {
 	case issueFieldState, issueFieldAssignee, issueFieldPriority,
-		issueFieldProject, issueFieldMilestone, issueFieldCycle:
+		issueFieldProject, issueFieldMilestone, issueFieldCycle, issueFieldLabels:
 		return true
 	}
 	return false
@@ -89,6 +90,12 @@ func (a *App) fillFieldChooser(gen uint64, field issueField, items []PickerItem)
 	}
 	a.detailsEdit.loading = false
 	a.detailsEdit.options = items
+	if field == issueFieldLabels {
+		a.detailsEdit.picked = make(map[string]bool, len(a.detailsEdit.issue.Labels))
+		for _, label := range a.detailsEdit.issue.Labels {
+			a.detailsEdit.picked[label.ID] = true
+		}
+	}
 	a.detailsEdit.choice = chooserIndexOf(items, current)
 	a.detailsEdit.offset = max(0, a.detailsEdit.choice-a.chooserVisibleRows()+1)
 	a.renderDetailsPage()
@@ -115,6 +122,7 @@ func (a *App) closeFieldChooser() {
 	a.detailsEdit.options = nil
 	a.detailsEdit.choice, a.detailsEdit.offset = 0, 0
 	a.detailsEdit.loading = false
+	a.detailsEdit.picked = nil
 	a.renderDetailsPage()
 	// The rows it held are gone and everything below has moved up, which can put
 	// the field it belongs to off the top.
@@ -128,19 +136,63 @@ func (a *App) commitFieldChooser() {
 	if edit.open == "" || edit.loading || edit.choice < 0 || edit.choice >= len(edit.options) {
 		return
 	}
-	field, item, opened := edit.open, edit.options[edit.choice], edit.issue
+	// Read before the close, which zeroes the toggles along with the rest.
+	picked := pickedIDs(edit.picked)
 	issue := a.chooserIssue()
 	a.closeFieldChooser()
-	if item.ID == currentFieldOptionID(field, issue) {
+	if chooserUnchanged(edit, issue, picked) {
 		return
 	}
-	if moved := chooserScopeMoved(field, opened, issue); moved != "" {
+	if moved := chooserScopeMoved(edit.open, edit.issue, issue); moved != "" {
 		a.flashError("The " + moved + " changed, pick again")
 		return
 	}
-	if save, ok := chooserSave(field, issue, item); ok {
+	if save, ok := chooserSave(edit, issue, picked); ok {
 		a.saveIssueField(save)
 	}
+}
+
+// pickedIDs is the multi-select's toggles as a sorted list.
+func pickedIDs(picked map[string]bool) []string {
+	ids := make([]string, 0, len(picked))
+	for id := range picked {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// labelWrite is the set an apply sends: the reader's toggles for the labels
+// the list offered, and the issue's own for any it did not.
+func labelWrite(picked []string, options []PickerItem, issue linearapi.Issue) []string {
+	offered := make(map[string]bool, len(options))
+	for _, option := range options {
+		offered[option.ID] = true
+	}
+	ids := make([]string, 0, len(picked))
+	for _, id := range picked {
+		if offered[id] {
+			ids = append(ids, id)
+		}
+	}
+	// Rebased rather than carried from the snapshot: a label the reader never
+	// saw a row for is not one they decided to drop.
+	for _, label := range issue.Labels {
+		if !offered[label.ID] {
+			ids = append(ids, label.ID)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// chooserUnchanged reports a pick that writes nothing new: the value the issue
+// holds now, or for a set, one the reader never touched.
+func chooserUnchanged(edit detailsEditState, now linearapi.Issue, picked []string) bool {
+	if edit.open == issueFieldLabels {
+		return slices.Equal(picked, issueLabelIDs(edit.issue))
+	}
+	return edit.options[edit.choice].ID == currentFieldOptionID(edit.open, now)
 }
 
 // chooserScopeMoved names the scope the options no longer belong to, empty
@@ -177,8 +229,11 @@ func (a *App) chooserIssue() linearapi.Issue {
 
 // chooserSave builds one field's write from the option picked. An empty id is
 // the clear row.
-func chooserSave(field issueField, issue linearapi.Issue, item PickerItem) (issueFieldSave, bool) {
-	switch field {
+func chooserSave(edit detailsEditState, issue linearapi.Issue, picked []string) (issueFieldSave, bool) {
+	item := edit.options[edit.choice]
+	switch edit.open {
+	case issueFieldLabels:
+		return issueFieldLabelsSave(issue, labelWrite(picked, edit.options, issue)), true
 	case issueFieldState:
 		return issueFieldStateSave(issue, item.ID, item.name()), true
 	case issueFieldPriority:
@@ -265,6 +320,23 @@ func (a *App) moveChooserChoice(step int) {
 		a.detailsEdit.offset = next
 	} else if next >= a.detailsEdit.offset+visible {
 		a.detailsEdit.offset = next - visible + 1
+	}
+	a.renderDetailsPage()
+	a.scrollChooserIntoView()
+}
+
+// toggleChooserPick flips the option under the cursor and writes nothing:
+// labelIds is one field, so a save per toggle races itself.
+func (a *App) toggleChooserPick() {
+	edit := &a.detailsEdit
+	if edit.open != issueFieldLabels || edit.choice < 0 || edit.choice >= len(edit.options) {
+		return
+	}
+	id := edit.options[edit.choice].ID
+	if edit.picked[id] {
+		delete(edit.picked, id)
+	} else {
+		edit.picked[id] = true
 	}
 	a.renderDetailsPage()
 	a.scrollChooserIntoView()
@@ -378,15 +450,24 @@ func (a *App) chooserRows(inner int) ([]string, int) {
 		return []string{fit(a.themeTags.SecondaryText + "No options[-]")}, -1
 	}
 	first, last := a.chooserWindow()
+	multi := a.detailsEdit.open == issueFieldLabels
 	rows := make([]string, 0, last-first+1)
 	highlight := -1
 	for i := first; i < last; i++ {
-		label := a.detailsEdit.options[i].Label
+		option := a.detailsEdit.options[i]
+		label := option.Label
 		if i == a.detailsEdit.choice {
-			// Left bare: the cursor line carries the color for this one.
+			// Left bare: the cursor line carries the color for this one, and a
+			// mark's own [-] would reset the text after it to the default.
 			highlight = len(rows)
+			if multi {
+				label = multiSelectGlyph(a.detailsEdit.picked[option.ID]) + " " + label
+			}
 		} else {
 			label = a.themeTags.Foreground + label + "[-]"
+			if multi {
+				label = a.multiSelectRow(label, a.detailsEdit.picked[option.ID])
+			}
 		}
 		rows = append(rows, fit(label))
 	}
@@ -418,6 +499,8 @@ func (a *App) handleChooserKey(event *tcell.EventKey) *tcell.EventKey {
 			a.moveChooserChoice(1)
 		case 'k':
 			a.moveChooserChoice(-1)
+		case ' ':
+			a.toggleChooserPick()
 		}
 	}
 	return nil

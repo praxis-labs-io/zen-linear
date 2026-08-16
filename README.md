@@ -158,10 +158,11 @@ j/k, and Enter opens the field's options in a list under it. The list opens on
 the value the issue already holds; j/k move it, Enter saves that field on its
 own, Esc closes the list. Esc again leaves the mode.
 
-State, assignee, priority, project, milestone and cycle open a list. The issue
-keys below still work from inside the mode and open their own pickers; `q`, `/`
-and the pane numbers don't, so nothing quits from under a field. With a list
-open, only its own keys answer.
+State, assignee, priority, project, milestone and cycle open a list. Labels
+opens the same list with a box on every row: space toggles one, Enter applies
+the set, Esc drops it. The issue keys below still work from inside the mode and
+open their own pickers; `q`, `/` and the pane numbers don't, so nothing quits
+from under a field. With a list open, only its own keys answer.
 
 Commands act on the pane they belong to. A key that acts on the selected issue
 answers from the issues and details panes, favorites from the navigation tree,
