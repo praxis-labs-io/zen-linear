@@ -120,23 +120,27 @@ func (a *App) issueFieldOptions(field issueField, scope optionScope, onLoaded fu
 			render: func(users []linearapi.User) {
 				items := make([]PickerItem, 0, len(users))
 				for _, user := range users {
-					label := user.Name
+					name := formatUserDisplayName(user)
+					label := name
 					if user.IsMe {
 						label += " (me)"
 					}
-					items = append(items, PickerItem{ID: user.ID, Label: label, Name: user.Name})
+					items = append(items, PickerItem{ID: user.ID, Label: label, Name: name})
 				}
 				onLoaded(items)
 			},
 		})
 	case issueFieldCycle:
+		// Snapshotted here rather than read in the worker: applySettings
+		// reassigns linearDeps whole, so the closure would race it.
+		fetchCycles := a.fetchCyclesFunc
 		showCachedPicker(a, pickerLoad[linearapi.Cycle]{
 			name:   "cycles for picker",
 			teamID: scope.teamID,
 			cached: a.teamCycles,
 			store:  func(loaded []linearapi.Cycle) { a.teamCycles = loaded },
 			load: func(ctx context.Context, teamID string) ([]linearapi.Cycle, error) {
-				loaded, err := a.fetchCyclesFunc(ctx, teamID)
+				loaded, err := fetchCycles(ctx, teamID)
 				if err != nil {
 					return nil, err
 				}
@@ -257,6 +261,12 @@ var fieldPickerTitles = map[issueField]string{
 func (a *App) ShowFieldPicker(field issueField, scope optionScope, contextLine string, onSelect func(item PickerItem)) {
 	logger.Debug("tui.app: showing %s picker", field)
 	a.issueFieldOptions(field, scope, func(items []PickerItem) {
+		// An empty overlay is a panel to dismiss for no reason. The team and
+		// parent pickers already say so instead of opening.
+		if len(items) == 0 {
+			a.flashStatus("No " + issueFieldNames[field] + " available")
+			return
+		}
 		a.presentPicker(fieldPickerTitles[field], contextLine, items, onSelect)
 	}, func(err error) {
 		a.updateStatusBarWithError(err)

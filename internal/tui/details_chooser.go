@@ -134,15 +134,32 @@ func (a *App) commitFieldChooser() {
 	if item.ID == currentFieldOptionID(field, issue) {
 		return
 	}
-	// The options were loaded for the project the chooser opened on, so a
-	// project change since then would file the milestone under the wrong one.
-	if field == issueFieldMilestone && issue.ProjectID != opened.ProjectID {
-		a.flashError("The project changed, pick a milestone again")
+	if moved := chooserScopeMoved(field, opened, issue); moved != "" {
+		a.flashError("The " + moved + " changed, pick again")
 		return
 	}
 	if save, ok := chooserSave(field, issue, item); ok {
 		a.saveIssueField(save)
 	}
+}
+
+// chooserScopeMoved names the scope the options no longer belong to, empty
+// while they still do. A refresh that moved the issue makes every id refusable.
+func chooserScopeMoved(field issueField, opened, now linearapi.Issue) string {
+	switch field {
+	case issueFieldPriority:
+		// A local list, scoped to nothing.
+		return ""
+	case issueFieldMilestone:
+		if now.ProjectID != opened.ProjectID {
+			return "project"
+		}
+	default:
+		if now.TeamID != opened.TeamID {
+			return "team"
+		}
+	}
+	return ""
 }
 
 // chooserIssue is the issue the chooser opened on, refreshed from the selection
@@ -218,8 +235,8 @@ func currentFieldOptionID(field issueField, issue linearapi.Issue) string {
 	return ""
 }
 
-// chooserIndexOf finds an option, and answers 0 for one the list does not
-// carry: a priority Linear added since is in no list, and -1 is a panic.
+// chooserIndexOf finds the option a field already holds, and -1 for a value the
+// list does not carry, which lights no row rather than lying about the first.
 func chooserIndexOf(items []PickerItem, id string) int {
 	if id == "" {
 		return 0
@@ -229,7 +246,7 @@ func chooserIndexOf(items []PickerItem, id string) int {
 			return i
 		}
 	}
-	return 0
+	return -1
 }
 
 // moveChooserChoice steps the highlight one option down (+1) or up (-1),
@@ -266,7 +283,9 @@ func (a *App) scrollChooserIntoView() {
 // short to reach the bottom of one.
 func (a *App) chooserVisibleRows() int {
 	rows := detailsChooserMaxRows
-	if height := viewHeight(a.detailsPageView); height > 0 {
+	// The height the last draw handed the refit, not the view's own rect, which
+	// during a draw is still the frame before this one.
+	if height := a.detailsFittedHeight; height > 0 {
 		rows = min(rows, max(1, height-detailsChooserChrome))
 	}
 	return rows
@@ -287,6 +306,9 @@ func (a *App) fieldChooserLines(column int) ([]string, int) {
 	if a.detailsEdit.open == "" {
 		return nil, -1
 	}
+	// Pulled back off a pane narrower than the metadata gutter. The value column
+	// is a column of the untruncated row, and past the drawn line nothing shows.
+	column = max(0, min(column, a.detailsFittedWidth-commentCardMinWidth))
 	width := max(0, a.detailsFittedWidth-column)
 	indent := strings.Repeat(" ", column)
 	if width < commentCardMinWidth {
@@ -355,7 +377,9 @@ func (a *App) chooserRows(inner int) ([]string, int) {
 		}
 		rows = append(rows, fit(label))
 	}
-	if rest := len(a.detailsEdit.options) - (last - first); rest > 0 {
+	// What is below, not what is hidden: the row sits at the foot of the list,
+	// so counting the ones scrolled off the top would point the wrong way.
+	if rest := len(a.detailsEdit.options) - last; rest > 0 {
 		rows = append(rows, fit(fmt.Sprintf("%s… +%d more[-]", a.themeTags.SecondaryText, rest)))
 	}
 	return rows, highlight

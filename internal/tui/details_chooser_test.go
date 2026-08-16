@@ -464,3 +464,165 @@ func TestTheCommitNamesTheValueWithoutItsDecoration(t *testing.T) {
 		t.Fatalf("status bar = %q, want the cycle named without the row's decoration", text)
 	}
 }
+
+func TestTheCountRowNamesWhatIsBelowIt(t *testing.T) {
+	app, _, _ := chooserFixture(t, issueFieldState)
+	app.workflowStates = manyStates(16)
+	openChooser(t, app)
+
+	// Stepped to the last option, nothing is below the window, so a count at
+	// the foot of the list would be pointing at the rows above it.
+	for range 20 {
+		pressField(app, 'j')
+	}
+	if body := strings.Join(drawDetails(t, app, 90), "\n"); strings.Contains(body, "more") {
+		t.Fatalf("the foot of the list still counts something:\n%s", body)
+	}
+}
+
+func TestAValueTheListDoesNotCarryLightsNothing(t *testing.T) {
+	app, writes, _ := chooserFixture(t, issueFieldState)
+	// A state Linear has since retired, or a priority it has since added.
+	app.issuesMu.Lock()
+	app.selectedIssue.StateID = "state-gone"
+	app.issuesMu.Unlock()
+	app.updateDetailsView()
+	cursorTo(t, app, issueFieldState)
+	openChooser(t, app)
+
+	if app.detailsEdit.choice != -1 {
+		t.Fatalf("choice = %d, want nothing lit for a value the list has not got", app.detailsEdit.choice)
+	}
+	pressFieldKey(app, tcell.KeyEnter)
+	select {
+	case input := <-writes:
+		t.Fatalf("Enter wrote %+v, want nothing while no option is lit", input)
+	default:
+	}
+	// j lands on the first option rather than refusing the key.
+	pressField(app, 'j')
+	if lit := litOption(t, app); lit != "In Progress" {
+		t.Fatalf("lit option = %q, want the first one", lit)
+	}
+}
+
+func TestAnIssueThatMovedTeamDoesNotCommitTheOldTeamsOption(t *testing.T) {
+	app, writes, _ := chooserFixture(t, issueFieldState)
+	openChooser(t, app)
+	pressField(app, 'j')
+	// The background refresh that lands while the list is open.
+	app.issuesMu.Lock()
+	app.selectedIssue.TeamID = "team-elsewhere"
+	app.issuesMu.Unlock()
+
+	pressFieldKey(app, tcell.KeyEnter)
+
+	select {
+	case input := <-writes:
+		t.Fatalf("wrote %+v, want nothing for an option from the team it left", input)
+	default:
+	}
+	if text := statusText(app); !strings.Contains(text, "team changed") {
+		t.Fatalf("status bar = %q, want the move named", text)
+	}
+}
+
+func TestANarrowPaneKeepsTheChooserOnScreen(t *testing.T) {
+	app, _, _ := chooserFixture(t, issueFieldState)
+	pressFieldKey(app, tcell.KeyEnter)
+
+	// Narrower than the metadata gutter the chooser hangs off. Drawn twice: the
+	// refit runs inside a draw, so it lands a frame behind the resize.
+	drawTextView(t, app.detailsView, 22)
+	lines := drawTextView(t, app.detailsView, 22)
+
+	below := lines[indexOfLine(lines, findLine(t, lines, "State:"))+1]
+	if !strings.Contains(below, "╭") {
+		t.Fatalf("the row under the field is %q, want the chooser drawn on it", below)
+	}
+	if runeColumn(below, "╮") < 0 {
+		t.Fatalf("the chooser runs off the drawn line: %q", below)
+	}
+}
+
+func TestAShorterPaneRecapsAnOpenChooser(t *testing.T) {
+	app, _, _ := chooserFixture(t, issueFieldState)
+	app.workflowStates = manyStates(16)
+	pressFieldKey(app, tcell.KeyEnter)
+	drawPrimitiveAt(t, app.detailsView, 90, 40)
+	tall := app.chooserVisibleRows()
+
+	// A height-only resize, which the width guard alone would not refit.
+	drawPrimitiveAt(t, app.detailsView, 90, 12)
+
+	if short := app.chooserVisibleRows(); short >= tall {
+		t.Fatalf("a %d-row pane still draws %d options, want fewer than the %d a tall one did", 12, short, tall)
+	}
+}
+
+func TestAnEmptyOptionListSaysSoRatherThanOpening(t *testing.T) {
+	app := newUXTestApp(t)
+	pending := make(chan func(), 8)
+	app.queueUpdateDraw = func(f func()) { pending <- f }
+	issue := linearapi.Issue{ID: "issue-1", Identifier: "ZNO-5", TeamID: chooserTeamID}
+	app.issuesMu.Lock()
+	app.selectedIssue = &issue
+	app.issuesMu.Unlock()
+	app.metadataTeamID = chooserTeamID
+	app.workflowStates = nil
+	app.fetchWorkflowStatesFunc = func(context.Context, string) ([]linearapi.WorkflowState, error) {
+		return nil, nil
+	}
+
+	app.ShowFieldPicker(issueFieldState, app.issueOptionScope(issue), "", func(PickerItem) {})
+	runQueuedUpdate(t, pending)
+
+	if app.pages.HasPage("picker") {
+		t.Fatal("an overlay opened with nothing in it to pick")
+	}
+	if text := statusText(app); !strings.Contains(text, "No status available") {
+		t.Fatalf("status bar = %q, want the empty list named", text)
+	}
+}
+
+func manyStates(n int) []linearapi.WorkflowState {
+	states := make([]linearapi.WorkflowState, 0, n)
+	states = append(states, linearapi.WorkflowState{ID: "state-1", Name: "In Progress"})
+	for i := len(states); i < n; i++ {
+		states = append(states, linearapi.WorkflowState{ID: fmt.Sprintf("state-%d", i+1), Name: fmt.Sprintf("Stage %02d", i+1)})
+	}
+	return states
+}
+
+func TestTheHintNamesEnterOnlyWhereItOpensSomething(t *testing.T) {
+	app, _, _ := chooserFixture(t, issueFieldState)
+
+	if text := statusText(app); !strings.Contains(text, "⏎ open") {
+		t.Fatalf("status bar = %q, want Enter named on a field with a list", text)
+	}
+
+	cursorTo(t, app, issueFieldLabels)
+	if text := statusText(app); strings.Contains(text, "⏎ open") {
+		t.Fatalf("status bar = %q, want Enter unnamed on a field it does nothing on", text)
+	}
+}
+
+func TestTheAssigneeSaveNamesTheDisplayName(t *testing.T) {
+	app, writes, pending := chooserFixture(t, issueFieldAssignee)
+	app.teamUsers = []linearapi.User{
+		{ID: "user-1", Name: "Ada Lovelace"},
+		{ID: "user-3", DisplayName: "grace"},
+	}
+	openChooser(t, app)
+
+	// One down from the current assignee, onto the user whose only name is a
+	// display name.
+	pressField(app, 'j')
+	pressFieldKey(app, tcell.KeyEnter)
+	awaitWrite(t, writes)
+	runQueuedUpdate(t, pending)
+
+	if text := statusText(app); !strings.Contains(text, "Set assignee: grace") {
+		t.Fatalf("status bar = %q, want the display name, not an empty one", text)
+	}
+}

@@ -353,13 +353,18 @@ func (a *App) renderDetailsBody(width int) {
 // The description is re-rendered too, not just re-truncated: glamour sizes
 // tables to the width it was given, so a stale one draws them at the old
 // measure.
-func (a *App) refitDetailsPage(width int) {
-	if width == a.detailsFittedWidth {
+func (a *App) refitDetailsPage(width, height int) {
+	if width == a.detailsFittedWidth && height == a.detailsFittedHeight {
 		return
 	}
-	a.detailsFittedWidth = width
 	row, column := a.detailsPageView.GetScrollOffset()
-	a.renderDetailsBody(width)
+	// Only the width reaches glamour. A shorter pane re-lays the page, which is
+	// what re-caps an open chooser against it.
+	if width != a.detailsFittedWidth {
+		a.detailsFittedWidth = width
+		a.renderDetailsBody(width)
+	}
+	a.detailsFittedHeight = height
 	a.renderDetailsPage()
 	a.detailsPageView.ScrollTo(row, column)
 }

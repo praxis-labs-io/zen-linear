@@ -39,10 +39,10 @@ type detailsPage struct {
 	// refit re-renders the page at a new measure. The draw is the only place
 	// the live width is known; refit itself skips a width it already laid out
 	// at, so this can be called on every frame.
-	refit func(width int)
+	refit func(width, height int)
 }
 
-func newDetailsPage(view *tview.TextView, refit func(int)) *detailsPage {
+func newDetailsPage(view *tview.TextView, refit func(int, int)) *detailsPage {
 	page := &detailsPage{Box: tview.NewBox(), view: view, refit: refit}
 	page.SetBackgroundColor(view.GetBackgroundColor())
 	return page
@@ -60,7 +60,7 @@ func (p *detailsPage) Draw(screen tcell.Screen) {
 	}
 
 	measure, gutter := readingMeasure(width)
-	p.refit(measure)
+	p.refit(measure, height)
 
 	p.view.SetRect(x+gutter, y, measure, height)
 	p.view.Draw(screen)

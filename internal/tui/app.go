@@ -83,6 +83,7 @@ type App struct {
 	// handed, so a width change has to re-run it.
 	detailsDescriptionMarkdown string
 	detailsFittedWidth         int
+	detailsFittedHeight        int
 	detailsCommentsSource      []linearapi.Comment
 	detailsActivitySource      []linearapi.IssueActivity
 	// detailsFieldSpans is where each editable field landed in the last render,
