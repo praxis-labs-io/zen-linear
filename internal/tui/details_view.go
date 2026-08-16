@@ -363,10 +363,11 @@ func (a *App) updateDetailsView() {
 	// issue keeps the reader's place; only a different one may move it.
 	issueChanged := issueID != a.detailsIssueID
 	a.detailsIssueID = issueID
-	if issueChanged {
-		// The cursor belongs to the issue it was aimed at. Carried onto another
-		// one it would point at a field of a different issue.
-		a.leaveDetailsEdit()
+	// The cursor belongs to the issue it was aimed at. Zeroed here rather than
+	// through leaveDetailsEdit, whose render would draw a page about to go.
+	leftEdit := issueChanged && a.detailsEdit.on
+	if leftEdit {
+		a.detailsEdit = detailsEditState{}
 	}
 	// A half-written comment belongs to the issue it was written for, not to
 	// the box, which stays put while the selection moves.
@@ -563,6 +564,10 @@ func (a *App) updateDetailsView() {
 	// refresh comes through here, and a reset on those throws away the scroll.
 	if issueChanged {
 		a.detailsPageView.ScrollToBeginning()
+	}
+	if leftEdit {
+		// The hints named a mode that ended with the issue.
+		a.updateStatusBar()
 	}
 	// The ring keeps its card across the async fetch that fills the comments
 	// in, and drops it on an issue whose comments it is not on: ids do not

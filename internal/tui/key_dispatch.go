@@ -128,25 +128,17 @@ func (a *App) paneScope() CommandScope {
 	return ScopeGlobal
 }
 
-// runCommandShortcut fires the palette command bound to the rune, if any.
+// runCommandShortcut fires the command bound to the rune, if any. One out of
+// scope never fires: an issue's keys do not answer from the navigation tree.
 func (a *App) runCommandShortcut(r rune) bool {
-	cmd, ok := a.commandForShortcut(r)
-	if ok {
-		cmd.Run(a)
-	}
-	return ok
-}
-
-// commandForShortcut finds the command a rune fires. One out of scope for the
-// focused pane is not one: an issue's keys do not answer from the tree.
-func (a *App) commandForShortcut(r rune) (Command, bool) {
 	scope := a.paneScope()
 	for _, cmd := range a.paletteCtrl.commands {
 		if cmd.ShortcutRune != 0 && cmd.ShortcutRune == r && cmd.appliesIn(scope) {
-			return cmd, true
+			cmd.Run(a)
+			return true
 		}
 	}
-	return Command{}, false
+	return false
 }
 
 // handleNavigationKey handles keyboard input when navigation pane is focused.

@@ -10,11 +10,10 @@ import (
 // header row for the cursor's marker.
 const detailsCursorGutter = 2
 
-// detailsEditState is the pane's edit mode: whether it is on, the issue it was
-// entered on, and the field the cursor points at.
+// detailsEditState is the pane's edit mode: whether it is on, and the field the
+// cursor points at.
 type detailsEditState struct {
-	on      bool
-	issueID string
+	on bool
 	// An id, never a row index: the header is rebuilt under the cursor by every
 	// background refresh.
 	cursor issueField
@@ -28,17 +27,32 @@ func (a *App) enterDetailsEdit() {
 		a.flashStatus("No issue selected")
 		return
 	}
+	if a.detailsEdit.on {
+		// Already in it, and re-entering would throw the cursor back to the
+		// first field.
+		return
+	}
+	// The selection moves at once but the render rides the detail debounce, so
+	// inside that window the page is still the issue before this one.
+	if a.detailsIssueID != issue.ID {
+		a.updateDetailsView()
+	}
+	cursor := a.firstEditableField()
+	if cursor == "" {
+		a.flashStatus("Nothing to edit on this issue")
+		return
+	}
 	a.detailsHidden = false
 	a.focusedPane = FocusDetails
 	// The cards let go of the keyboard: two rings on one page would both answer
 	// j and k.
 	a.commentsFocus, a.focusedCommentID = commentsFocusCards, ""
-	a.detailsEdit = detailsEditState{on: true, issueID: issue.ID, cursor: a.firstEditableField()}
+	a.detailsEdit = detailsEditState{on: true, cursor: cursor}
 	a.rebuildContentLayout()
 	a.updateFocus()
 	// Never leave the mode on over a pane that is not showing it, the way the
 	// compose box backs out of a layout that did not put it on screen.
-	if !a.detailsHaveFocus() || a.detailsEdit.cursor == "" {
+	if !a.detailsHaveFocus() {
 		a.detailsEdit = detailsEditState{}
 		a.updateFocus()
 		return
@@ -166,19 +180,10 @@ func (a *App) handleDetailsEditKey(event *tcell.EventKey) *tcell.EventKey {
 		case 'k':
 			a.stepFieldCursor(-1)
 		default:
-			a.runCommandFromFieldEdit(r)
+			// The pickers keep their shortcuts. A modal takes the keys ahead of
+			// this handler, so the mode waits under one rather than ending.
+			a.runCommandShortcut(r)
 		}
 	}
 	return nil
-}
-
-// runCommandFromFieldEdit fires the command bound to a rune, standing the mode
-// down first: the overlay it opens owns the keys, and nothing else would.
-func (a *App) runCommandFromFieldEdit(r rune) {
-	cmd, ok := a.commandForShortcut(r)
-	if !ok {
-		return
-	}
-	a.leaveDetailsEdit()
-	cmd.Run(a)
 }

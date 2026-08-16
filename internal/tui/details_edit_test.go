@@ -215,11 +215,13 @@ func TestLeavingThePaneLeavesEditMode(t *testing.T) {
 	}
 }
 
-// TestACommandStandsEditModeDown covers the overlay pickers, which keep their
-// shortcuts. The mode is not a page, so nothing else would take it off screen.
-func TestACommandStandsEditModeDown(t *testing.T) {
+// TestACommandRunsWithoutEndingTheMode covers the shortcuts that keep working
+// from inside it. A modal takes the keys ahead of the mode, so it waits.
+func TestACommandRunsWithoutEndingTheMode(t *testing.T) {
 	app := newFieldEditApp(t)
 	app.selectedIssue.URL = "https://linear.app/praxis-labs/issue/ZNO-5"
+	pressField(app, 'j')
+	want := app.detailsEdit.cursor
 	copied := ""
 	app.copyToClipboardFunc = func(text string) error {
 		copied = text
@@ -230,7 +232,47 @@ func TestACommandStandsEditModeDown(t *testing.T) {
 	if copied != app.selectedIssue.URL {
 		t.Errorf("copied %q, want the issue URL", copied)
 	}
-	if app.detailsEdit.on {
-		t.Error("edit mode stayed on under the command")
+	if !app.detailsEdit.on {
+		t.Fatal("the command ended edit mode")
+	}
+	if app.detailsEdit.cursor != want {
+		t.Errorf("cursor moved to %q, want %q", app.detailsEdit.cursor, want)
+	}
+}
+
+// TestEnteringTwiceKeepsTheCursor covers e pressed by habit from inside the
+// mode: re-entering would throw the cursor back to the first field.
+func TestEnteringTwiceKeepsTheCursor(t *testing.T) {
+	app := newFieldEditApp(t)
+	pressField(app, 'j')
+	pressField(app, 'j')
+	want := app.detailsEdit.cursor
+
+	pressField(app, 'e')
+	if !app.detailsEdit.on {
+		t.Fatal("e left edit mode")
+	}
+	if app.detailsEdit.cursor != want {
+		t.Errorf("cursor reset to %q, want %q", app.detailsEdit.cursor, want)
+	}
+}
+
+// TestEnteringInsideTheDebounceWindowHoldsTheMode covers e pressed while the
+// pane still shows the issue before this one, which the debounce would drop.
+func TestEnteringInsideTheDebounceWindowHoldsTheMode(t *testing.T) {
+	app := newDetailsTestApp(t)
+	// The selection moves at once and the render is deferred, so this is the
+	// state a key landing inside the debounce window finds.
+	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "ZNO-6", Title: "Another", State: "Todo"}
+
+	app.enterDetailsEdit()
+	if !app.detailsEdit.on {
+		t.Fatal("e did not enter edit mode")
+	}
+
+	// The debounce firing.
+	app.updateDetailsView()
+	if !app.detailsEdit.on {
+		t.Error("the deferred render dropped the mode it was entered in")
 	}
 }
