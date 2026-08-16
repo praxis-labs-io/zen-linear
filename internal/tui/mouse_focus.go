@@ -107,6 +107,9 @@ func (a *App) claimPaneFocus(pane FocusTarget) bool {
 	if a.focusedPane == pane {
 		return false
 	}
+	// A click into another pane is leaving this one, and the field cursor goes
+	// with it.
+	a.leaveDetailsEdit()
 	a.focusedPane = pane
 	if pane == FocusDetails {
 		// Enter on the cards, the same way l and the pane numbers do. A click

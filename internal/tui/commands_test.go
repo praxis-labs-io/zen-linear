@@ -218,9 +218,9 @@ func TestEditIssueOwnsEAndShortcutsAreUniquePerScope(t *testing.T) {
 	}
 }
 
-// TestEditIssueCommandOpensThePrefilledForm drives the shortcut the way the
-// key dispatcher does.
-func TestEditIssueCommandOpensThePrefilledForm(t *testing.T) {
+// TestEditIssueCommandEntersFieldEditMode drives the shortcut the way the key
+// dispatcher does, from the pane a reader presses it in.
+func TestEditIssueCommandEntersFieldEditMode(t *testing.T) {
 	app := newUXTestApp(t)
 	app.selectedIssue = &linearapi.Issue{
 		ID:         "issue-1",
@@ -228,6 +228,7 @@ func TestEditIssueCommandOpensThePrefilledForm(t *testing.T) {
 		Title:      "Needs an edit",
 		TeamID:     "team-1",
 	}
+	app.updateDetailsView()
 
 	// The shortcut only answers from an issue pane, which is where the key
 	// dispatcher runs it.
@@ -237,14 +238,14 @@ func TestEditIssueCommandOpensThePrefilledForm(t *testing.T) {
 		t.Fatal("e did not run a command")
 	}
 
-	if !app.pages.HasPage("issue_form") {
-		t.Fatal("issue form did not open")
+	if !app.detailsEdit.on {
+		t.Fatal("e left the pane out of edit mode")
 	}
-	if got := app.issueFormModal.titleField.GetText(); got != "Needs an edit" {
-		t.Fatalf("title field = %q, want the selected issue's title", got)
+	if app.focusedPane != FocusDetails || app.detailsHidden {
+		t.Fatalf("edit mode landed on pane %d, hidden %v", app.focusedPane, app.detailsHidden)
 	}
-	if app.issueFormModal.fm.title != "Edit Issue" {
-		t.Fatalf("modal title = %q, want Edit Issue", app.issueFormModal.fm.title)
+	if got := app.detailsEdit.cursor; got != issueFieldTitle {
+		t.Fatalf("cursor = %q, want the title", got)
 	}
 }
 

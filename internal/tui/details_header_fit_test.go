@@ -244,6 +244,30 @@ func TestDetailsPaneContentSitsInsideItsBorder(t *testing.T) {
 	}
 }
 
+// TestTheTopPaddingScrollsWithThePage covers the gap above the issue: written
+// into the text like the bottom, so it goes once the reader scrolls past it.
+func TestTheTopPaddingScrollsWithThePage(t *testing.T) {
+	app := newDetailsTestApp(t)
+	if app.density.DetailsPadding.Top == 0 {
+		t.Fatal("this density has no top padding to scroll")
+	}
+
+	// Row 0 is the pane's own border, so row 1 is the first row of the page.
+	lines := drawDetails(t, app, 90)
+	if strings.TrimSpace(lines[1]) != "" {
+		t.Errorf("first page row = %q, want the padding", lines[1])
+	}
+	if !strings.Contains(lines[2], "ZNO-5") {
+		t.Fatalf("second page row = %q, want the identifier", lines[2])
+	}
+
+	app.detailsPageView.ScrollTo(1, 0)
+	scrolled := drawDetails(t, app, 90)
+	if !strings.Contains(scrolled[1], "ZNO-5") {
+		t.Errorf("one row down the top row = %q, want the padding gone", scrolled[1])
+	}
+}
+
 // TestDetailsFieldOrder pins the metadata grid: what the issue is and who has
 // it, then where it sits in the plan, then its dates.
 func TestDetailsFieldOrder(t *testing.T) {
