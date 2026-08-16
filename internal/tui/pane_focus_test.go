@@ -57,13 +57,13 @@ func TestTabDoesNotMoveBetweenPanes(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails
-	app.commentsFocus = commentsFocusCards
+	app.detailsFocus = detailsFocusCards
 
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 	if app.focusedPane != FocusDetails {
 		t.Fatalf("Tab from Details landed on %v, want to stay put", app.focusedPane)
 	}
-	if app.commentsFocus != commentsFocusCards {
+	if app.detailsFocus != detailsFocusCards {
 		t.Fatal("Tab moved off the cards, where there is no box to walk")
 	}
 

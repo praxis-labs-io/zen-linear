@@ -242,6 +242,9 @@ const detailsLabelGutter = 12
 type detailsRow struct {
 	text  string
 	field issueField
+	// label is the grid's own word for the field, empty off the grid. Kept so
+	// a row being edited can print it without its value.
+	label string
 	// Recorded here rather than measured at render, which would mean stripping
 	// the color tags first.
 	valueColumn int
@@ -255,9 +258,18 @@ type fieldSpan struct {
 	valueColumn int
 }
 
-// detailsHeaderBlock is the metadata and the description as page lines, the row
-// each editable field landed on, and where an open chooser landed.
-func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, chooserSpan) {
+// detailsHeader is one render of the metadata and the description. The lines
+// start the page, so a slot in it wants no rebasing the way a card's does.
+type detailsHeader struct {
+	lines   []string
+	fields  []fieldSpan
+	chooser chooserSpan
+	editor  editorSpan
+	slots   []pageSlot
+}
+
+// detailsHeaderBlock renders the metadata and the description at a width.
+func (a *App) detailsHeaderBlock(width int) detailsHeader {
 	// The top padding is written as text, the way trailingPad is, so it scrolls
 	// with the page. In this slice, or every span below it lands a row out.
 	pad := a.density.DetailsPadding.Top
@@ -270,41 +282,80 @@ func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, chooserSpan)
 		indent = detailsCursorGutter
 	}
 	chooser := noChooserSpan
+	editor := noEditorSpan
+	var slots []pageSlot
 	for _, row := range a.detailsHeaderRows {
 		if row.field != "" {
 			spans = append(spans, fieldSpan{field: row.field, row: len(lines), valueColumn: row.valueColumn + indent})
 		}
+		text, editing := row.text, row.field != "" && row.field == a.detailsEdit.editing
+		if editing {
+			// The value is the box now, so the row keeps its label and stops
+			// there rather than drawing text the box has to cover.
+			text = a.detailsLabelCell(row.label)
+		}
+		fieldRow := len(lines)
 		// Cut at what the last draw measured, 0 before the first: a render that
 		// beats the layout must not shorten the header to a box never on screen.
-		lines = append(lines, truncateTagged(a.fieldCursorMarker(row)+row.text, a.detailsFittedWidth))
-		if row.field == "" || row.field != a.detailsEdit.open {
+		lines = append(lines, truncateTagged(a.fieldCursorMarker(row)+text, a.detailsFittedWidth))
+		if row.field == "" {
 			continue
 		}
-		// The chooser hangs off the row it belongs to, and every span below it
-		// picks up the shift from len(lines) on the next turn of this loop.
-		options, lit := a.fieldChooserLines(row.valueColumn + indent)
-		if len(options) > 0 {
-			chooser = chooserSpan{lit: len(lines) + lit, end: len(lines) + len(options) - 1}
+		if editing {
+			boxColumn, boxWidth := a.fieldEditorRect(row.valueColumn + indent)
+			slots = append(slots, pageSlot{primitive: a.detailsFieldInput, row: fieldRow, height: 1, column: boxColumn, width: boxWidth})
+			editor = editorSpan{start: fieldRow, end: fieldRow}
+			// The reason goes on its own row under the field, the one line the
+			// box costs the page.
+			if line, ok := a.fieldEditorError(boxColumn); ok {
+				editor.end = len(lines)
+				lines = append(lines, line)
+			}
+			continue
 		}
-		lines = append(lines, options...)
+		// The chooser hangs off the row it belongs to, and every span below
+		// picks up the shift from len(lines) on the next turn of this loop.
+		if row.field == a.detailsEdit.open {
+			options, lit := a.fieldChooserLines(row.valueColumn + indent)
+			if len(options) > 0 {
+				chooser = chooserSpan{lit: len(lines) + lit, end: len(lines) + len(options) - 1}
+			}
+			lines = append(lines, options...)
+		}
 	}
 	if len(lines) > 0 {
 		lines = append(lines, a.detailsSeam(width)...)
 	}
-	return append(lines, a.detailsBodyLines...), spans, chooser
+	return detailsHeader{
+		lines:   append(lines, a.detailsBodyLines...),
+		fields:  spans,
+		chooser: chooser,
+		editor:  editor,
+		slots:   slots,
+	}
 }
 
 // detailsGridRow is one row of the metadata grid: the label padded out to the
 // gutter, then a value that carries its own color.
 func (a *App) detailsGridRow(field issueField, label, value string) detailsRow {
+	return detailsRow{
+		text:        a.detailsLabelCell(label) + value,
+		field:       field,
+		label:       label,
+		valueColumn: detailsLabelGutter,
+	}
+}
+
+// detailsLabelCell is the label padded out to the value column, which is what
+// the read row and the row being edited both put in front of the value.
+func (a *App) detailsLabelCell(label string) string {
+	if label == "" {
+		return ""
+	}
 	// A label too long for the gutter takes one space rather than a negative
 	// repeat, which would panic inside a draw. The gutter test catches it.
 	pad := strings.Repeat(" ", max(1, detailsLabelGutter-len(label)-1))
-	return detailsRow{
-		text:        a.themeTags.SecondaryText + label + ":[-]" + pad + value,
-		field:       field,
-		valueColumn: detailsLabelGutter,
-	}
+	return a.themeTags.SecondaryText + label + ":[-]" + pad
 }
 
 // detailsSeam is the rule the page changes section on, spaced by the density.
@@ -386,6 +437,7 @@ func (a *App) updateDetailsView() {
 	// through leaveDetailsEdit, whose render would draw a page about to go.
 	leftEdit := issueChanged && a.detailsEdit.on
 	if leftEdit {
+		a.releaseFieldEditor()
 		a.detailsEdit = detailsEditState{}
 	}
 	// A half-written comment belongs to the issue it was written for, not to

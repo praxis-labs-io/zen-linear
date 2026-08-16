@@ -42,6 +42,7 @@ func (a *App) handleMouse(event *tcell.EventMouse, action tview.MouseAction) (*t
 		return event, action
 	}
 	a.repairLayoutFocus()
+	a.releaseFieldEditorOnClick(event.Position())
 
 	pane, ok := a.paneAt(event.Position())
 	if !ok {
@@ -59,6 +60,20 @@ func (a *App) handleMouse(event *tcell.EventMouse, action tview.MouseAction) (*t
 		return nil, action
 	}
 	return event, action
+}
+
+// releaseFieldEditorOnClick lets go of an open box on a press outside it. Not
+// in a focus callback: it holds the view lock the render would wedge on.
+func (a *App) releaseFieldEditorOnClick(x, y int) {
+	if a.detailsEdit.editing == "" || a.detailsFieldInput == nil {
+		return
+	}
+	// Inside the box is placing the caret, not leaving.
+	if a.detailsFieldInput.InRect(x, y) {
+		return
+	}
+	a.leaveDetailsEdit()
+	a.updateFocus()
 }
 
 // paneAt names the pane covering a screen cell.
@@ -114,7 +129,7 @@ func (a *App) claimPaneFocus(pane FocusTarget) bool {
 	if pane == FocusDetails {
 		// Enter on the cards, the same way l and the pane numbers do. A click
 		// that landed in a writing box moves on from here when it is delivered.
-		a.commentsFocus = commentsFocusCards
+		a.detailsFocus = detailsFocusCards
 	}
 	before := a.mountedPanes()
 	a.updateFocus()

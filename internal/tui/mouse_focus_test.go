@@ -309,8 +309,8 @@ func TestClickingIntoAWritingBoxTakesTheBoxAndNotJustThePane(t *testing.T) {
 	if app.focusedPane != FocusDetails {
 		t.Fatalf("clicking the compose box left the pane on %v", app.focusedPane)
 	}
-	if !app.commentsFocus.isWriting() {
-		t.Errorf("comments focus = %v, want the writing box", app.commentsFocus)
+	if !app.detailsFocus.isWriting() {
+		t.Errorf("comments focus = %v, want the writing box", app.detailsFocus)
 	}
 	if focus := app.app.GetFocus(); focus != tview.Primitive(app.detailsComposeArea) {
 		t.Errorf("the keyboard is on %T, not the compose box", focus)
@@ -318,11 +318,11 @@ func TestClickingIntoAWritingBoxTakesTheBoxAndNotJustThePane(t *testing.T) {
 
 	// Clicking the pane you are already in must not take the keyboard back off
 	// the box: that is what the same-pane guard is for.
-	writing := app.commentsFocus
+	writing := app.detailsFocus
 	left, top, _, height := app.detailsView.GetRect()
 	clickAt(t, app, left, top+height/2)
-	if app.commentsFocus != writing {
-		t.Errorf("clicking the details border moved the box focus to %v", app.commentsFocus)
+	if app.detailsFocus != writing {
+		t.Errorf("clicking the details border moved the box focus to %v", app.detailsFocus)
 	}
 }
 

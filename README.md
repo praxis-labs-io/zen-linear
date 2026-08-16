@@ -160,9 +160,15 @@ own, Esc closes the list. Esc again leaves the mode.
 
 State, assignee, priority, project, milestone and cycle open a list. Labels
 opens the same list with a box on every row: space toggles one, Enter applies
-the set, Esc drops it. The issue keys below still work from inside the mode and
-open their own pickers; `q`, `/` and the pane numbers don't, so nothing quits
-from under a field. With a list open, only its own keys answer.
+the set, Esc drops it. Title, due date and estimate are typed in the row
+itself, where the value already is: Enter saves, Esc discards, and emptying the
+field clears the due date or the estimate. A value the app can tell is wrong keeps the field open with the
+reason under it; one Linear rejects on its own reports on the status bar, the
+way every other field write does.
+
+The issue keys below still work from inside the mode and open their own
+pickers; `q`, `/` and the pane numbers don't, so nothing quits from under a
+field. With a list open, only its own keys answer; in a box, every key types.
 
 Commands act on the pane they belong to. A key that acts on the selected issue
 answers from the issues and details panes, favorites from the navigation tree,

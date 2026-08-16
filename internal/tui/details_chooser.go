@@ -138,7 +138,7 @@ func (a *App) commitFieldChooser() {
 	}
 	// Read before the close, which zeroes the toggles along with the rest.
 	picked := pickedIDs(edit.picked)
-	issue := a.chooserIssue()
+	issue := a.editTargetIssue()
 	a.closeFieldChooser()
 	if chooserUnchanged(edit, issue, picked) {
 		return
@@ -214,9 +214,10 @@ func chooserScopeMoved(field issueField, opened, now linearapi.Issue) string {
 	return ""
 }
 
-// chooserIssue is the issue the chooser opened on, refreshed from the selection
-// while it is still that one: the id is the write target, the rest is state.
-func (a *App) chooserIssue() linearapi.Issue {
+// editTargetIssue is the issue the chooser or the editor opened on, refreshed
+// from the selection while it is still that one: the id is the write target,
+// the rest is state.
+func (a *App) editTargetIssue() linearapi.Issue {
 	opened := a.detailsEdit.issue
 	a.issuesMu.RLock()
 	selected := a.selectedIssue

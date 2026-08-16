@@ -280,10 +280,10 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 			a.stepPane(-1)
 			return nil
 		case a.actionKey("comment_prev", '{'):
-			a.stepCommentsFocus(true)
+			a.stepDetailsFocus(true)
 			return nil
 		case a.actionKey("comment_next", '}'):
-			a.stepCommentsFocus(false)
+			a.stepDetailsFocus(false)
 			return nil
 		case 'j', 'k', 'g', 'G':
 			// Scrolling keys stay with the text view.

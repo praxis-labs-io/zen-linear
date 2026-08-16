@@ -151,7 +151,7 @@ func TestZoomedHintsDropTheHideKey(t *testing.T) {
 func TestWritingDropsTheKeyHints(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusDetails
-	app.commentsFocus = commentsFocusText
+	app.detailsFocus = detailsFocusText
 
 	app.updateStatusBar()
 

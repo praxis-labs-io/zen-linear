@@ -36,7 +36,7 @@ func newThreadedTestApp(t *testing.T) *App {
 func focusCommentCards(app *App) {
 	app.detailsHidden = false
 	app.focusedPane = FocusDetails
-	app.commentsFocus = commentsFocusCards
+	app.detailsFocus = detailsFocusCards
 	// Mounted, not just flagged: a key is delivered from the root down the
 	// focus chain, so a pane that is not in the layout is a pane no key can
 	// reach, and a test on an unmounted one proves nothing about the app.
@@ -80,7 +80,7 @@ func TestBracesStepThroughTheThreadIntoTheBox(t *testing.T) {
 		if got := app.focusedCommentID; got != want {
 			t.Fatalf("} picked %q, want %q", got, want)
 		}
-		if a := app.commentsFocus; a != commentsFocusCards {
+		if a := app.detailsFocus; a != detailsFocusCards {
 			t.Fatalf("} left the stack at %q", want)
 		}
 	}
@@ -102,8 +102,8 @@ func TestBracesStepThroughTheThreadIntoTheBox(t *testing.T) {
 	// From here the braces are prose: the box owns every letter typed into it,
 	// and Tab is what reaches the button that sends them.
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
-	if app.commentsFocus != commentsFocusPost {
-		t.Errorf("Tab from the box went to %v, want the Post button", app.commentsFocus)
+	if app.detailsFocus != detailsFocusPost {
+		t.Errorf("Tab from the box went to %v, want the Post button", app.detailsFocus)
 	}
 }
 
@@ -485,7 +485,7 @@ func TestReplyOpensABoxInsideTheThread(t *testing.T) {
 	if got := app.replyParentID(); got != "root-1" {
 		t.Errorf("the box answers %q, want the thread's root", got)
 	}
-	if !app.composeBoxActive() || app.commentsFocus != commentsFocusReply {
+	if !app.composeBoxActive() || app.detailsFocus != detailsFocusReply {
 		t.Error("r left the keyboard off the reply box")
 	}
 	if got := composeCue(t, app.detailsReplyArea); got != replyPlaceholder {
@@ -737,8 +737,8 @@ func TestAReplyStaysWithItsOwnIssue(t *testing.T) {
 	if app.composeBoxActive() {
 		t.Error("the keyboard stayed in a reply box the new page does not draw")
 	}
-	if app.commentsFocus == commentsFocusReply || app.commentsFocus == commentsFocusReplyPost {
-		t.Errorf("the ring still points at a reply box: %v", app.commentsFocus)
+	if app.detailsFocus == detailsFocusReply || app.detailsFocus == detailsFocusReplyPost {
+		t.Errorf("the ring still points at a reply box: %v", app.detailsFocus)
 	}
 
 	first := detailsFixture()
@@ -894,7 +894,7 @@ func TestAnUnwrittenQuoteDoesNotFollowYou(t *testing.T) {
 // and remove, and that walk goes to whichever pane contentFlex has flagged,
 // which goes stale: updateFocus only rebuilds the layout below the wide
 // breakpoint, so stepping off the details pane on a wide terminal leaves the
-// flag on it. enterCommentsFocus used to read that walk as the user having
+// flag on it. enterDetailsFocus used to read that walk as the user having
 // landed here, so closing a picker opened from the issues pane handed the
 // keyboard to the details pane instead of giving it back.
 func TestClosingAnOverlayLeavesTheDetailsPaneWhereItWas(t *testing.T) {

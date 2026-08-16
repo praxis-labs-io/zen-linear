@@ -29,6 +29,10 @@ type detailsEditState struct {
 	// picked is the ids toggled on, for the one field whose chooser is a
 	// multi-select. Nil for the others.
 	picked map[string]bool
+	// editing is the field whose text box is on the page, "" when none, and
+	// never set together with open. err is what the last commit refused.
+	editing issueField
+	err     string
 	// gen stamps the open a load belongs to. The counter itself is on App: this
 	// struct is zeroed on every exit and would restart at nought.
 	gen uint64
@@ -61,7 +65,7 @@ func (a *App) enterDetailsEdit() {
 	a.focusedPane = FocusDetails
 	// The cards let go of the keyboard: two rings on one page would both answer
 	// j and k.
-	a.commentsFocus, a.focusedCommentID = commentsFocusCards, ""
+	a.detailsFocus, a.focusedCommentID = detailsFocusCards, ""
 	a.detailsEdit = detailsEditState{on: true, cursor: cursor}
 	a.rebuildContentLayout()
 	a.updateFocus()
@@ -85,6 +89,7 @@ func (a *App) leaveDetailsEdit() {
 	if !a.detailsEdit.on {
 		return
 	}
+	a.releaseFieldEditor()
 	a.detailsEdit = detailsEditState{}
 	a.renderDetailsPage()
 	a.updateStatusBar()
@@ -146,6 +151,10 @@ func (a *App) resolveFieldCursor() {
 	if a.detailsEdit.on && a.detailsEdit.open != "" && a.fieldSpanIndex(a.detailsEdit.open) < 0 {
 		a.closeFieldChooser()
 	}
+	// Worse for a box, which holds the keyboard as well as the keys.
+	if a.detailsEdit.on && a.detailsEdit.editing != "" && a.fieldSpanIndex(a.detailsEdit.editing) < 0 {
+		a.closeFieldEditor()
+	}
 	if !a.detailsEdit.on || a.fieldSpanIndex(a.detailsEdit.cursor) >= 0 {
 		return
 	}
@@ -174,13 +183,18 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 		return ""
 	}
 	if row.field != "" && row.field == a.detailsEdit.cursor {
-		tag := a.themeTags.Accent
-		if a.detailsEdit.open != "" {
+		tag, glyph := a.themeTags.Accent, "❯"
+		switch {
+		case a.detailsEdit.open != "":
 			// Dimmed under an open chooser: the cursor line inside it is where
-			// the keyboard is, and this only says which row it belongs to.
+			// the keyboard is.
 			tag = a.themeTags.SecondaryText
+		case a.detailsEdit.editing != "":
+			// The row is being written in rather than pointed at, and the
+			// caret in it is the only other thing saying so.
+			glyph = "▌"
 		}
-		return tag + "❯[-] "
+		return tag + glyph + "[-] "
 	}
 	return strings.Repeat(" ", detailsCursorGutter)
 }
@@ -188,12 +202,19 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 // handleDetailsEditKey answers for the whole app while edit mode is on. It is
 // default-deny, so q cannot quit and a pane number cannot leave.
 func (a *App) handleDetailsEditKey(event *tcell.EventKey) *tcell.EventKey {
+	if a.detailsEdit.editing != "" {
+		return a.handleFieldEditorKey(event)
+	}
 	if a.detailsEdit.open != "" {
 		return a.handleChooserKey(event)
 	}
 	switch event.Key() {
 	case tcell.KeyEnter:
-		a.openFieldChooser()
+		if fieldHasEditor(a.detailsEdit.cursor) {
+			a.openFieldEditor()
+		} else {
+			a.openFieldChooser()
+		}
 	case tcell.KeyCtrlC:
 		// The one key the mode does not own. Handed back, tview stops the app
 		// on it itself.

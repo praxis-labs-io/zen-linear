@@ -60,7 +60,7 @@ func (a *App) focusPane(pane FocusTarget) {
 	case FocusDetails:
 		a.detailsHidden = false
 		// Enter on the cards, the same way l enters the pane.
-		a.commentsFocus = commentsFocusCards
+		a.detailsFocus = detailsFocusCards
 	case FocusIssues:
 		// The issues list is not on screen while zoomed, so asking for it by
 		// number is also how the zoom is released.
@@ -95,7 +95,7 @@ func (a *App) stepPane(direction int) {
 		// Enter on the cards, never mid-sentence in a box, the same way the pane
 		// numbers do. The reset lives here rather than in updateFocus, which
 		// openComposeBox calls straight after putting the keyboard in the box.
-		a.commentsFocus = commentsFocusCards
+		a.detailsFocus = detailsFocusCards
 	}
 	a.updateFocus()
 }
@@ -170,10 +170,12 @@ func (a *App) updateFocus() {
 			a.app.SetFocus(table)
 		}
 	case FocusDetails:
-		// The page has two kinds of stop: a card reads, and a box writes with a
-		// button that sends.
-		if area, button, ok := a.writingBox(a.commentsFocus); ok {
-			if a.commentsFocus.isWriting() {
+		// The page has three kinds of stop: a card reads, a box writes with a
+		// button that sends, and a field is typed into.
+		if a.detailsFocus == detailsFocusField && a.detailsEdit.editing != "" {
+			a.app.SetFocus(a.detailsFieldInput)
+		} else if area, button, ok := a.writingBox(a.detailsFocus); ok {
+			if a.detailsFocus.isWriting() {
 				a.app.SetFocus(area)
 			} else {
 				a.app.SetFocus(button)
