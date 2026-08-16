@@ -111,7 +111,7 @@ func (a *App) applyThemeToComponents() {
 func (a *App) applyDensityToComponents() {
 	if a.detailsView != nil {
 		padding := a.density.DetailsPadding
-		a.detailsView.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
+		a.detailsView.SetBorderPadding(0, 0, padding.Left, padding.Right)
 	}
 	if a.statusRow != nil {
 		a.applyStatusBarPadding()

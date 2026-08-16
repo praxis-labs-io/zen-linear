@@ -200,7 +200,7 @@ The metadata header is `detailsHeaderRows []detailsRow` (`details_view.go`), not
 
 **A thread is placed as a whole, by its root.** Events drain only where a depth-0 block starts, so an event stamped between a root and its reply lands after the thread's last reply. Splitting a thread would break the rail's closing corner (`isLastReply` reads the next block's depth) and leave it trailing into a line that is not a card. Inside a writing box the braces are prose; Esc is the way back to the cards. Linear rejects a `parentId` that is not top level, so a reply always posts against `threadRootID`.
 
-Bottom padding is written as blank lines at the end of the text rather than held back from the content rect (`trailingPad`), so mid-scroll the content runs to the border and the gap is the end of the scroll.
+The pane's vertical padding is written as blank lines in the text rather than held back from the content rect: `trailingPad` at the end, and the top rows inside `detailsHeaderBlock`, where the spans are counted. Mid-scroll the content runs to both borders, and each gap is an end of the issue rather than a margin that never moves. The pane keeps its left and right padding on the box, which has nothing to do with the scroll.
 
 ### Workspaces and auth
 

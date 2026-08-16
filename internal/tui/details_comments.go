@@ -45,7 +45,8 @@ func (a *App) renderDetailsPage() {
 		a.commentsFocus, a.focusedCommentID = commentsFocusCards, ""
 		// The field cursor goes with it: there is no header left to point into.
 		a.detailsEdit = detailsEditState{}
-		a.detailsPageView.SetText(a.emptyDetailsMessage())
+		// The pane's top padding is text now, so the message carries its own.
+		a.detailsPageView.SetText(strings.Repeat("\n", a.density.DetailsPadding.Top) + a.emptyDetailsMessage())
 		a.detailsPage.setSlots(nil)
 		return
 	}

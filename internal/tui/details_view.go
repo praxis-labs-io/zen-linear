@@ -177,9 +177,9 @@ func (a *App) buildDetailsView() *tview.Flex {
 		SetBorderColor(a.theme.Border).
 		SetBackgroundColor(a.theme.Background)
 	padding := a.density.DetailsPadding
-	// No bottom padding: the page writes its own at the end of the text, so the
-	// gap is the end of the issue rather than a row the pane never uses.
-	a.detailsView.SetBorderPadding(padding.Top, 0, padding.Left, padding.Right)
+	// No vertical padding: the page writes both into the text, so each gap is an
+	// end of the issue rather than a row the pane holds back from the scroll.
+	a.detailsView.SetBorderPadding(0, 0, padding.Left, padding.Right)
 	// The page is the panel's focus item. With none flagged, Flex.Focus falls
 	// through to the panel's own Box, whose InputHandler is nil, and any focus
 	// tview delegates on its own leaves the pane dead to the keyboard.
@@ -258,7 +258,10 @@ type fieldSpan struct {
 // detailsHeaderBlock is the metadata, the rule under it, and the description as
 // page lines, plus the row each editable field landed on.
 func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
-	lines := make([]string, 0, len(a.detailsHeaderRows)+len(a.detailsBodyLines)+3)
+	// The top padding is written as text, the way trailingPad is, so it scrolls
+	// with the page. In this slice, or every span below it lands a row out.
+	pad := a.density.DetailsPadding.Top
+	lines := make([]string, pad, pad+len(a.detailsHeaderRows)+len(a.detailsBodyLines)+3)
 	var spans []fieldSpan
 	// Every row shifts by the cursor gutter together, so the grid reads the same
 	// in both modes rather than jumping a column as the cursor passes.
