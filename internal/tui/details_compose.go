@@ -241,6 +241,7 @@ const (
 	detailsFocusPost
 	detailsFocusEdit
 	detailsFocusEditPost
+	detailsFocusField
 )
 
 // isWriting reports whether a focus is one of the writing boxes.
@@ -269,6 +270,10 @@ func (a *App) buildDetailsPage() {
 	a.detailsComposeArea, a.detailsComposePost = a.newWritingBox(detailsFocusText, detailsFocusPost, postLabel)
 	a.detailsReplyArea, a.detailsReplyPost = a.newWritingBox(detailsFocusReply, detailsFocusReplyPost, postLabel)
 	a.detailsEditArea, a.detailsEditPost = a.newWritingBox(detailsFocusEdit, detailsFocusEditPost, saveLabel)
+	a.detailsFieldInput = newThemedInputField(a.theme.Background)
+	a.detailsFieldInput.SetFieldWidth(0)
+	// No SetChangedFunc: the box does not grow, and seeding it must not render.
+	a.detailsFieldInput.SetFocusFunc(func() { a.claimFieldEditorFocus() })
 	a.detailsPageView.SetFocusFunc(func() { a.enterDetailsFocus(detailsFocusCards) })
 	a.applyComposeTheme()
 
@@ -385,6 +390,12 @@ func (a *App) applyComposeTheme() {
 			Foreground(a.theme.InverseTextColor()).
 			Background(a.theme.Accent))
 		area.SetBackgroundColor(a.theme.Background)
+	}
+	if a.detailsFieldInput != nil {
+		a.detailsFieldInput.
+			SetFieldTextColor(a.theme.Foreground).
+			SetFieldBackgroundColor(a.theme.Background)
+		a.detailsFieldInput.SetBackgroundColor(a.theme.Background)
 	}
 	a.applyComposePlaceholder()
 	a.applyPostButtonTheme()

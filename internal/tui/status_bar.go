@@ -268,6 +268,11 @@ func (a *App) updateStatusBar() {
 		// Read off the field, not live focus: a focus callback can reach here
 		// from inside a draw.
 		switch {
+		case a.detailsEdit.editing != "":
+			// Every key in the box types, so the line names only the two it
+			// does not get.
+			hints = []hint{{"⏎", "save"}, {"Esc", "cancel"}}
+			note = "Editing " + issueFieldNames[a.detailsEdit.editing]
 		case a.detailsEdit.open == issueFieldLabels:
 			// A set rather than a value: the toggles are local until Enter, so
 			// the line says apply where the others say set.
@@ -280,10 +285,13 @@ func (a *App) updateStatusBar() {
 			// The mode swallows every other key, the palette's included, so the
 			// line names only what it answers to.
 			hints = []hint{{"j/k", "field"}}
-			// Enter is inert on a field with no list behind it, and a hint for a
-			// key that does nothing is worse than no hint.
-			if fieldHasChooser(a.detailsEdit.cursor) {
+			// Enter is inert on a field with neither a list nor a box behind it,
+			// and a hint for a key that does nothing is worse than no hint.
+			switch {
+			case fieldHasChooser(a.detailsEdit.cursor):
 				hints = append(hints, hint{"⏎", "open"})
+			case fieldHasEditor(a.detailsEdit.cursor):
+				hints = append(hints, hint{"⏎", "edit"})
 			}
 			hints = append(hints, hint{"Esc", "done"})
 			note = "Editing fields"

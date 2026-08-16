@@ -40,9 +40,11 @@ func (a *App) renderDetailsPage() {
 
 	a.detailsFieldSpans = nil
 	a.detailsChooserSpan = noChooserSpan
+	a.detailsEditorSpan = noEditorSpan
 	if a.detailsHeaderRows == nil {
 		// No issue: nothing to write on, nothing to write in. The ring is put
 		// back where it starts, or it names a card that is no longer drawn.
+		a.releaseFieldEditor()
 		a.detailsFocus, a.focusedCommentID = detailsFocusCards, ""
 		// The field cursor goes with it: there is no header left to point into.
 		a.detailsEdit = detailsEditState{}
@@ -55,9 +57,12 @@ func (a *App) renderDetailsPage() {
 	width := a.detailsMeasureWidth()
 	blocks := a.commentBlocks()
 	var slots []pageSlot
-	lines, fields, chooser := a.detailsHeaderBlock(width)
-	a.detailsFieldSpans = fields
-	a.detailsChooserSpan = chooser
+	header := a.detailsHeaderBlock(width)
+	lines := header.lines
+	a.detailsFieldSpans = header.fields
+	a.detailsChooserSpan = header.chooser
+	a.detailsEditorSpan = header.editor
+	slots = append(slots, header.slots...)
 	lines = append(lines, a.detailsSeam(width)...)
 	// The label heads the section the way Description: heads the one above it.
 	// It carries no count: the feed holds the issue's own creation, so there is

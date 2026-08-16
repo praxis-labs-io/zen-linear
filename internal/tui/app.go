@@ -97,6 +97,10 @@ type App struct {
 	// chooserGeneration stamps each opening.
 	detailsChooserSpan chooserSpan
 	chooserGeneration  atomic.Uint64
+	// detailsFieldInput is the box a typed field is edited in, one widget for
+	// all three. detailsEditorSpan is where it landed in the last render.
+	detailsFieldInput *tview.InputField
+	detailsEditorSpan editorSpan
 	// focusedCommentID is the card the ring is on and commentSpans is where
 	// every card landed in the last render. The ring is held by id rather than
 	// by index so a refetch that reorders the stack keeps it on the same card.

@@ -29,6 +29,10 @@ type detailsEditState struct {
 	// picked is the ids toggled on, for the one field whose chooser is a
 	// multi-select. Nil for the others.
 	picked map[string]bool
+	// editing is the field whose text box is on the page, "" when none, and
+	// never set together with open. err is what the last commit refused.
+	editing issueField
+	err     string
 	// gen stamps the open a load belongs to. The counter itself is on App: this
 	// struct is zeroed on every exit and would restart at nought.
 	gen uint64
@@ -85,6 +89,7 @@ func (a *App) leaveDetailsEdit() {
 	if !a.detailsEdit.on {
 		return
 	}
+	a.releaseFieldEditor()
 	a.detailsEdit = detailsEditState{}
 	a.renderDetailsPage()
 	a.updateStatusBar()
@@ -146,6 +151,10 @@ func (a *App) resolveFieldCursor() {
 	if a.detailsEdit.on && a.detailsEdit.open != "" && a.fieldSpanIndex(a.detailsEdit.open) < 0 {
 		a.closeFieldChooser()
 	}
+	// Worse for a box, which holds the keyboard as well as the keys.
+	if a.detailsEdit.on && a.detailsEdit.editing != "" && a.fieldSpanIndex(a.detailsEdit.editing) < 0 {
+		a.closeFieldEditor()
+	}
 	if !a.detailsEdit.on || a.fieldSpanIndex(a.detailsEdit.cursor) >= 0 {
 		return
 	}
@@ -188,12 +197,19 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 // handleDetailsEditKey answers for the whole app while edit mode is on. It is
 // default-deny, so q cannot quit and a pane number cannot leave.
 func (a *App) handleDetailsEditKey(event *tcell.EventKey) *tcell.EventKey {
+	if a.detailsEdit.editing != "" {
+		return a.handleFieldEditorKey(event)
+	}
 	if a.detailsEdit.open != "" {
 		return a.handleChooserKey(event)
 	}
 	switch event.Key() {
 	case tcell.KeyEnter:
-		a.openFieldChooser()
+		if fieldHasEditor(a.detailsEdit.cursor) {
+			a.openFieldEditor()
+		} else {
+			a.openFieldChooser()
+		}
 	case tcell.KeyCtrlC:
 		// The one key the mode does not own. Handed back, tview stops the app
 		// on it itself.

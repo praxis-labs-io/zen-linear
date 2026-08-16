@@ -82,6 +82,20 @@ func fieldUpdateMessage(field issueField) string {
 	return fmt.Sprintf("Updated %s", issueFieldNames[field])
 }
 
+// Refuses the empty title Linear refuses, so a caller can keep its editor open.
+// The message names no value: a title is too long for the toast corner.
+func issueFieldTitleSave(issue linearapi.Issue, text string) (issueFieldSave, error) {
+	title := strings.TrimSpace(text)
+	if title == "" {
+		return issueFieldSave{}, fmt.Errorf("title is required")
+	}
+	return issueFieldSave{
+		issueID: issue.ID,
+		message: fieldUpdateMessage(issueFieldTitle),
+		apply:   func(input *linearapi.UpdateIssueInput) { input.Title = &title },
+	}, nil
+}
+
 func issueFieldStateSave(issue linearapi.Issue, stateID, stateName string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,

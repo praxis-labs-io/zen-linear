@@ -130,7 +130,8 @@ func (a *App) watchLayoutWidth(width int) {
 	a.updateStatusBar()
 }
 
-// repairLayoutFocus puts the keyboard on the pane a breakpoint moved it off.
+// repairLayoutFocus puts the keyboard where a breakpoint or a closing editor
+// moved it off.
 // Every event path calls it before routing, the way releaseStrandedCompose
 // does, since the draw that moved the pane could not move focus itself. No
 // event can arrive in between, so nobody sees the gap.

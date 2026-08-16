@@ -599,19 +599,6 @@ func manyStates(n int) []linearapi.WorkflowState {
 	return states
 }
 
-func TestTheHintNamesEnterOnlyWhereItOpensSomething(t *testing.T) {
-	app, _, _ := chooserFixture(t, issueFieldState)
-
-	if text := statusText(app); !strings.Contains(text, "⏎ open") {
-		t.Fatalf("status bar = %q, want Enter named on a field with a list", text)
-	}
-
-	cursorTo(t, app, issueFieldDueDate)
-	if text := statusText(app); strings.Contains(text, "⏎ open") {
-		t.Fatalf("status bar = %q, want Enter unnamed on a field it does nothing on", text)
-	}
-}
-
 func TestTheAssigneeSaveNamesTheDisplayName(t *testing.T) {
 	app, writes, pending := chooserFixture(t, issueFieldAssignee)
 	app.teamUsers = []linearapi.User{

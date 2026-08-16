@@ -255,9 +255,18 @@ type fieldSpan struct {
 	valueColumn int
 }
 
-// detailsHeaderBlock is the metadata and the description as page lines, the row
-// each editable field landed on, and where an open chooser landed.
-func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, chooserSpan) {
+// detailsHeader is one render of the metadata and the description. The lines
+// start the page, so a slot in it wants no rebasing the way a card's does.
+type detailsHeader struct {
+	lines   []string
+	fields  []fieldSpan
+	chooser chooserSpan
+	editor  editorSpan
+	slots   []pageSlot
+}
+
+// detailsHeaderBlock renders the metadata and the description at a width.
+func (a *App) detailsHeaderBlock(width int) detailsHeader {
 	// The top padding is written as text, the way trailingPad is, so it scrolls
 	// with the page. In this slice, or every span below it lands a row out.
 	pad := a.density.DetailsPadding.Top
@@ -270,28 +279,46 @@ func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, chooserSpan)
 		indent = detailsCursorGutter
 	}
 	chooser := noChooserSpan
+	editor := noEditorSpan
+	var slots []pageSlot
 	for _, row := range a.detailsHeaderRows {
 		if row.field != "" {
 			spans = append(spans, fieldSpan{field: row.field, row: len(lines), valueColumn: row.valueColumn + indent})
 		}
+		fieldRow := len(lines)
 		// Cut at what the last draw measured, 0 before the first: a render that
 		// beats the layout must not shorten the header to a box never on screen.
 		lines = append(lines, truncateTagged(a.fieldCursorMarker(row)+row.text, a.detailsFittedWidth))
-		if row.field == "" || row.field != a.detailsEdit.open {
+		if row.field == "" {
 			continue
 		}
-		// The chooser hangs off the row it belongs to, and every span below it
-		// picks up the shift from len(lines) on the next turn of this loop.
-		options, lit := a.fieldChooserLines(row.valueColumn + indent)
-		if len(options) > 0 {
-			chooser = chooserSpan{lit: len(lines) + lit, end: len(lines) + len(options) - 1}
+		// Both hang off the row they belong to, and every span below picks up
+		// the shift from len(lines) on the next turn of this loop.
+		switch row.field {
+		case a.detailsEdit.open:
+			options, lit := a.fieldChooserLines(row.valueColumn + indent)
+			if len(options) > 0 {
+				chooser = chooserSpan{lit: len(lines) + lit, end: len(lines) + len(options) - 1}
+			}
+			lines = append(lines, options...)
+		case a.detailsEdit.editing:
+			box, slot := a.fieldEditorLines(row.valueColumn + indent)
+			slot.row += len(lines)
+			slots = append(slots, slot)
+			editor = editorSpan{start: fieldRow, end: len(lines) + len(box) - 1}
+			lines = append(lines, box...)
 		}
-		lines = append(lines, options...)
 	}
 	if len(lines) > 0 {
 		lines = append(lines, a.detailsSeam(width)...)
 	}
-	return append(lines, a.detailsBodyLines...), spans, chooser
+	return detailsHeader{
+		lines:   append(lines, a.detailsBodyLines...),
+		fields:  spans,
+		chooser: chooser,
+		editor:  editor,
+		slots:   slots,
+	}
 }
 
 // detailsGridRow is one row of the metadata grid: the label padded out to the
@@ -386,6 +413,7 @@ func (a *App) updateDetailsView() {
 	// through leaveDetailsEdit, whose render would draw a page about to go.
 	leftEdit := issueChanged && a.detailsEdit.on
 	if leftEdit {
+		a.releaseFieldEditor()
 		a.detailsEdit = detailsEditState{}
 	}
 	// A half-written comment belongs to the issue it was written for, not to
