@@ -83,6 +83,7 @@ type App struct {
 	// handed, so a width change has to re-run it.
 	detailsDescriptionMarkdown string
 	detailsFittedWidth         int
+	detailsFittedHeight        int
 	detailsCommentsSource      []linearapi.Comment
 	detailsActivitySource      []linearapi.IssueActivity
 	// detailsFieldSpans is where each editable field landed in the last render,
@@ -92,6 +93,10 @@ type App struct {
 	// was last built for, which is what says the issue changed under it.
 	detailsEdit    detailsEditState
 	detailsIssueID string
+	// detailsChooserSpan is where the open chooser landed in the last render.
+	// chooserGeneration stamps each opening.
+	detailsChooserSpan chooserSpan
+	chooserGeneration  atomic.Uint64
 	// focusedCommentID is the card the ring is on and commentSpans is where
 	// every card landed in the last render. The ring is held by id rather than
 	// by index so a refetch that reorders the stack keeps it on the same card.

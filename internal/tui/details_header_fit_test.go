@@ -352,7 +352,7 @@ func TestGriddedRowsLineUpAtTheGutter(t *testing.T) {
 // moves by: one span per editable field, in read order, on the row it is drawn.
 func TestTheHeaderReportsWhereItsFieldsLanded(t *testing.T) {
 	app := newDetailsTestApp(t)
-	lines, spans := app.detailsHeaderBlock(app.detailsMeasureWidth())
+	lines, spans, _ := app.detailsHeaderBlock(app.detailsMeasureWidth())
 
 	want := []struct {
 		field       issueField

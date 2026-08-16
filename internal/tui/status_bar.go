@@ -268,10 +268,19 @@ func (a *App) updateStatusBar() {
 		// Read off the field, not live focus: a focus callback can reach here
 		// from inside a draw.
 		switch {
+		case a.detailsEdit.open != "":
+			hints = []hint{{"j/k", "option"}, {"⏎", "set"}, {"Esc", "cancel"}}
+			note = "Choosing " + issueFieldNames[a.detailsEdit.open]
 		case a.detailsEdit.on:
 			// The mode swallows every other key, the palette's included, so the
 			// line names only what it answers to.
-			hints = []hint{{"j/k", "field"}, {"Esc", "done"}}
+			hints = []hint{{"j/k", "field"}}
+			// Enter is inert on a field with no list behind it, and a hint for a
+			// key that does nothing is worse than no hint.
+			if fieldHasChooser(a.detailsEdit.cursor) {
+				hints = append(hints, hint{"⏎", "open"})
+			}
+			hints = append(hints, hint{"Esc", "done"})
 			note = "Editing fields"
 		case a.commentsFocus != commentsFocusCards && a.detailsHaveFocus():
 			// Every key in the box types, the palette's included, so the line

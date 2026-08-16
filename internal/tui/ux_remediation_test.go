@@ -278,7 +278,7 @@ func TestShowParentIssuePickerExcludesSelectedIssueAndDescendants(t *testing.T) 
 	}
 	app.issuesMu.Unlock()
 
-	app.ShowParentIssuePicker("", func(parentID string) {})
+	app.ShowParentIssuePicker("", func(PickerItem) {})
 
 	if len(app.pickerModal.items) != 1 {
 		t.Fatalf("picker item count = %d, want 1", len(app.pickerModal.items))

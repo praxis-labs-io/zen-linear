@@ -74,7 +74,7 @@ func openModal(t *testing.T, app *App, page string) {
 }
 
 func sendKey(app *App, key tcell.Key) {
-	app.handleGlobalKey(tcell.NewEventKey(key, 0, tcell.ModNone))
+	pressFieldKey(app, key)
 }
 
 func escape(app *App) {

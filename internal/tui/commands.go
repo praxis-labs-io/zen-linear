@@ -804,9 +804,8 @@ func DefaultCommands(app *App) []Command {
 				// The picker names this issue, so the write targets it even if
 				// a refresh moves the selection while the picker is open.
 				target := *issue
-				a.ShowStatusPicker(a.issueContextLine(target), func(stateID string) {
-					name := a.issueFieldValueName(issueFieldState, stateID)
-					a.saveIssueField(issueFieldStateSave(target, stateID, name))
+				a.ShowFieldPicker(issueFieldState, a.issueOptionScope(target), a.issueContextLine(target), func(item PickerItem) {
+					a.saveIssueField(issueFieldStateSave(target, item.ID, item.name()))
 				})
 			},
 		},
@@ -824,9 +823,8 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				target := *issue
-				a.ShowCyclePicker(a.issueContextLine(target), func(cycleID string) {
-					name := a.issueFieldValueName(issueFieldCycle, cycleID)
-					a.saveIssueField(issueFieldCycleSave(target, cycleID, name))
+				a.ShowFieldPicker(issueFieldCycle, a.issueOptionScope(target), a.issueContextLine(target), func(item PickerItem) {
+					a.saveIssueField(issueFieldCycleSave(target, item.ID, item.name()))
 				})
 			},
 		},
@@ -863,9 +861,8 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				target := *issue
-				a.ShowUserPicker(a.issueContextLine(target), func(userID string) {
-					name := a.issueFieldValueName(issueFieldAssignee, userID)
-					a.saveIssueField(issueFieldAssigneeSave(target, userID, name))
+				a.ShowFieldPicker(issueFieldAssignee, a.issueOptionScope(target), a.issueContextLine(target), func(item PickerItem) {
+					a.saveIssueField(issueFieldAssigneeSave(target, item.ID, item.name()))
 				})
 			},
 		},
@@ -1050,12 +1047,12 @@ func DefaultCommands(app *App) []Command {
 					return
 				}
 				target := *issue
-				a.ShowParentIssuePicker(a.issueContextLine(target), func(parentID string) {
+				a.ShowParentIssuePicker(a.issueContextLine(target), func(item PickerItem) {
 					name := ""
-					if ref := a.issueRefForID(parentID); ref != nil {
+					if ref := a.issueRefForID(item.ID); ref != nil {
 						name = ref.Identifier
 					}
-					a.saveIssueField(issueFieldParentSave(target, parentID, name))
+					a.saveIssueField(issueFieldParentSave(target, item.ID, name))
 				})
 			},
 		},

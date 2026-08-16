@@ -255,9 +255,9 @@ type fieldSpan struct {
 	valueColumn int
 }
 
-// detailsHeaderBlock is the metadata, the rule under it, and the description as
-// page lines, plus the row each editable field landed on.
-func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
+// detailsHeaderBlock is the metadata and the description as page lines, the row
+// each editable field landed on, and where an open chooser landed.
+func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan, chooserSpan) {
 	// The top padding is written as text, the way trailingPad is, so it scrolls
 	// with the page. In this slice, or every span below it lands a row out.
 	pad := a.density.DetailsPadding.Top
@@ -269,6 +269,7 @@ func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
 	if a.detailsEdit.on {
 		indent = detailsCursorGutter
 	}
+	chooser := noChooserSpan
 	for _, row := range a.detailsHeaderRows {
 		if row.field != "" {
 			spans = append(spans, fieldSpan{field: row.field, row: len(lines), valueColumn: row.valueColumn + indent})
@@ -276,11 +277,21 @@ func (a *App) detailsHeaderBlock(width int) ([]string, []fieldSpan) {
 		// Cut at what the last draw measured, 0 before the first: a render that
 		// beats the layout must not shorten the header to a box never on screen.
 		lines = append(lines, truncateTagged(a.fieldCursorMarker(row)+row.text, a.detailsFittedWidth))
+		if row.field == "" || row.field != a.detailsEdit.open {
+			continue
+		}
+		// The chooser hangs off the row it belongs to, and every span below it
+		// picks up the shift from len(lines) on the next turn of this loop.
+		options, lit := a.fieldChooserLines(row.valueColumn + indent)
+		if len(options) > 0 {
+			chooser = chooserSpan{lit: len(lines) + lit, end: len(lines) + len(options) - 1}
+		}
+		lines = append(lines, options...)
 	}
 	if len(lines) > 0 {
 		lines = append(lines, a.detailsSeam(width)...)
 	}
-	return append(lines, a.detailsBodyLines...), spans
+	return append(lines, a.detailsBodyLines...), spans, chooser
 }
 
 // detailsGridRow is one row of the metadata grid: the label padded out to the
@@ -342,13 +353,18 @@ func (a *App) renderDetailsBody(width int) {
 // The description is re-rendered too, not just re-truncated: glamour sizes
 // tables to the width it was given, so a stale one draws them at the old
 // measure.
-func (a *App) refitDetailsPage(width int) {
-	if width == a.detailsFittedWidth {
+func (a *App) refitDetailsPage(width, height int) {
+	if width == a.detailsFittedWidth && height == a.detailsFittedHeight {
 		return
 	}
-	a.detailsFittedWidth = width
 	row, column := a.detailsPageView.GetScrollOffset()
-	a.renderDetailsBody(width)
+	// Only the width reaches glamour. A shorter pane re-lays the page, which is
+	// what re-caps an open chooser against it.
+	if width != a.detailsFittedWidth {
+		a.detailsFittedWidth = width
+		a.renderDetailsBody(width)
+	}
+	a.detailsFittedHeight = height
 	a.renderDetailsPage()
 	a.detailsPageView.ScrollTo(row, column)
 }
