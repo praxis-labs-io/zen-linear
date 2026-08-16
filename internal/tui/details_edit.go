@@ -184,9 +184,9 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 	}
 	if row.field != "" && row.field == a.detailsEdit.cursor {
 		tag := a.themeTags.Accent
-		if a.detailsEdit.open != "" {
-			// Dimmed under an open chooser: the cursor line inside it is where
-			// the keyboard is, and this only says which row it belongs to.
+		if a.detailsEdit.open != "" || a.detailsEdit.editing != "" {
+			// Dimmed under an open chooser or box: the keyboard is in there,
+			// and this only says which row it belongs to.
 			tag = a.themeTags.SecondaryText
 		}
 		return tag + "❯[-] "

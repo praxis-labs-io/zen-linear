@@ -219,6 +219,9 @@ func (a *App) fieldEditorError(width int) (string, bool) {
 // handleFieldEditorKey answers for the whole app while a box is on the page,
 // default-allow: the box is being typed in, so q is a letter.
 func (a *App) handleFieldEditorKey(event *tcell.EventKey) *tcell.EventKey {
+	// The wheel goes straight through the pane, and a box scrolled off the top
+	// is not drawn while it still takes every key. The compose path does this.
+	a.scrollEditorIntoView()
 	switch event.Key() {
 	case tcell.KeyEscape:
 		a.closeFieldEditor()

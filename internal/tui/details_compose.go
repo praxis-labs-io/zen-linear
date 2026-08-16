@@ -530,9 +530,9 @@ func (a *App) enterDetailsFocus(target detailsFocus) {
 	if !a.composeBoxOnScreen() {
 		return
 	}
-	// A box and the field cursor are two rings on one page. The box was clicked
-	// into, so the cursor is the one that gives way.
-	if target != detailsFocusCards {
+	// Two rings on one page: something else took the keyboard, so the cursor
+	// gives way. Cards counts only under a box, since entering arrives on it.
+	if target != detailsFocusCards || a.detailsEdit.editing != "" {
 		a.leaveDetailsEdit()
 	}
 	a.detailsFocus = target

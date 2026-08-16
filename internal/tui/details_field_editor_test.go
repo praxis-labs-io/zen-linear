@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -25,7 +26,9 @@ func editorFixture(t *testing.T, field issueField) (*App, <-chan linearapi.Updat
 	drawDetails(t, app, 90)
 	cursorTo(t, app, field)
 
-	writes := make(chan linearapi.UpdateIssueInput, 1)
+	// Room for a write that should not have happened, so an extra one lands
+	// where the test can see it instead of blocking its goroutine.
+	writes := make(chan linearapi.UpdateIssueInput, 4)
 	app.updateIssueFunc = func(_ context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
 		writes <- input
 		return linearapi.Issue{ID: input.ID}, nil
@@ -52,16 +55,24 @@ func typeInto(app *App, text string) {
 	app.detailsFieldInput.SetText(text)
 }
 
-// nextWriteIs sends an edit that must land and returns the first write on the
-// channel. A skipped write is proven by this one arriving, not by an empty read.
-func nextWriteIs(t *testing.T, app *App, writes <-chan linearapi.UpdateIssueInput, text string) linearapi.UpdateIssueInput {
+// onlyWriteIs sends an edit that must land and returns it, having proven the
+// attempt before it sent nothing: this one arrived first, and none followed.
+func onlyWriteIs(t *testing.T, app *App, writes <-chan linearapi.UpdateIssueInput, text string) linearapi.UpdateIssueInput {
 	t.Helper()
 	if app.detailsEdit.editing == "" {
 		openEditor(t, app)
 	}
 	typeInto(app, text)
 	pressFieldKey(app, tcell.KeyEnter)
-	return awaitWrite(t, writes)
+	input := awaitWrite(t, writes)
+	// The skipped write's goroutine was launched first, so if it existed at all
+	// it has had longer than this to reach a channel with room on it.
+	select {
+	case extra := <-writes:
+		t.Fatalf("a second write followed: %+v", extra)
+	case <-time.After(200 * time.Millisecond):
+	}
+	return input
 }
 
 // editorSlot is the box's place on the page, and whether the render gave it one.
@@ -163,7 +174,7 @@ func TestSavingAnUnchangedValueSendsNothing(t *testing.T) {
 	if app.detailsEdit.editing != "" {
 		t.Fatal("Enter left the box open")
 	}
-	if input := nextWriteIs(t, app, writes, "2026-09-01"); input.DueDate == nil || *input.DueDate != "2026-09-01" {
+	if input := onlyWriteIs(t, app, writes, "2026-09-01"); input.DueDate == nil || *input.DueDate != "2026-09-01" {
 		t.Fatalf("first write = %+v, want nothing sent for a value nobody changed", input)
 	}
 }
@@ -212,7 +223,7 @@ func TestAnEmptyTitleIsRefusedAndTheBoxKeepsTheText(t *testing.T) {
 	}
 	findLine(t, drawDetails(t, app, 90), "title is required")
 
-	if input := nextWriteIs(t, app, writes, "A real title"); input.Title == nil || *input.Title != "A real title" {
+	if input := onlyWriteIs(t, app, writes, "A real title"); input.Title == nil || *input.Title != "A real title" {
 		t.Fatalf("first write = %+v, want the empty title refused rather than sent", input)
 	}
 }
@@ -232,7 +243,7 @@ func TestAMalformedDateIsRefusedUnderTheBox(t *testing.T) {
 	}
 	findLine(t, drawDetails(t, app, 90), "date must be YYYY-MM-DD")
 
-	if input := nextWriteIs(t, app, writes, "2026-09-01"); input.DueDate == nil || *input.DueDate != "2026-09-01" {
+	if input := onlyWriteIs(t, app, writes, "2026-09-01"); input.DueDate == nil || *input.DueDate != "2026-09-01" {
 		t.Fatalf("first write = %+v, want the bad date stopped here rather than sent", input)
 	}
 }
@@ -252,7 +263,7 @@ func TestEscapeDropsTheEditAndLeavesTheRow(t *testing.T) {
 	}
 	findLine(t, drawDetails(t, app, 90), "M3: comment infrastructure")
 
-	if input := nextWriteIs(t, app, writes, "A later title"); input.Title == nil || *input.Title != "A later title" {
+	if input := onlyWriteIs(t, app, writes, "A later title"); input.Title == nil || *input.Title != "A later title" {
 		t.Fatalf("first write = %+v, want Escape to have written nothing", input)
 	}
 }
@@ -346,6 +357,60 @@ func TestTheIssueChangingDropsTheBoxAndTheKeyboard(t *testing.T) {
 	pressField(app, 'j')
 	if app.app.GetFocus() == app.detailsFieldInput {
 		t.Error("a key later the keyboard is still in the box")
+	}
+}
+
+// The page text is a focus target too, and it comes through the same callback
+// as the writing boxes on the one value that used not to close the mode.
+func TestClickingThePageBodyClosesTheEditor(t *testing.T) {
+	app, _, _ := editorFixture(t, issueFieldTitle)
+	openEditor(t, app)
+
+	app.enterDetailsFocus(detailsFocusCards)
+
+	if app.detailsEdit.editing != "" {
+		t.Fatal("the box outlived the click that took the keyboard off it")
+	}
+	if app.detailsEdit.on {
+		t.Error("edit mode survived a click onto the page")
+	}
+}
+
+// Entering the mode reaches enterDetailsFocus on the cards, so the guard above
+// cannot be unconditional.
+func TestEnteringEditModeSurvivesItsOwnFocusCallback(t *testing.T) {
+	app := newDetailsTestApp(t)
+	seedChooserOptions(app)
+	app.updateDetailsView()
+
+	app.enterDetailsEdit()
+
+	if !app.detailsEdit.on {
+		t.Fatal("entering edit mode closed it again on the way in")
+	}
+}
+
+func TestAKeyBringsABoxScrolledOffTheTopBack(t *testing.T) {
+	app, _, _ := editorFixture(t, issueFieldTitle)
+	openEditor(t, app)
+
+	// What the wheel does: the page scrolls under a box that keeps the keyboard.
+	app.detailsPageView.ScrollTo(app.detailsEditorSpan.end+20, 0)
+	pressField(app, 'x')
+
+	if top, _ := app.detailsPageView.GetScrollOffset(); top > app.detailsEditorSpan.start {
+		t.Fatalf("scrolled to row %d with the box at %d, want the key to bring it back", top, app.detailsEditorSpan.start)
+	}
+}
+
+func TestTheFieldCursorDimsUnderAnOpenBox(t *testing.T) {
+	app, _, _ := editorFixture(t, issueFieldTitle)
+	openEditor(t, app)
+
+	page := strings.Split(app.detailsPageView.GetText(false), "\n")
+	marker := findLine(t, page, "❯")
+	if !strings.HasPrefix(marker, app.themeTags.SecondaryText+"❯") {
+		t.Errorf("cursor row = %q, want it dimmed: the keyboard is in the box under it", marker)
 	}
 }
 

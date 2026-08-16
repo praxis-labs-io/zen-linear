@@ -162,8 +162,11 @@ State, assignee, priority, project, milestone and cycle open a list. Labels
 opens the same list with a box on every row: space toggles one, Enter applies
 the set, Esc drops it. Title, due date and estimate open a box to type in
 instead: Enter saves, Esc discards, and emptying the box clears the due date or
-the estimate. A value Linear won't take keeps the box open with the reason under
-it. The issue keys below still work from inside the mode and open their own
+the estimate. A value the app can tell is wrong keeps the box open with the
+reason under it; one Linear rejects on its own reports on the status bar, the
+way every other field write does.
+
+The issue keys below still work from inside the mode and open their own
 pickers; `q`, `/` and the pane numbers don't, so nothing quits from under a
 field. With a list open, only its own keys answer; in a box, every key types.
 
