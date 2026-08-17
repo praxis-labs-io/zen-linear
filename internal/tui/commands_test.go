@@ -88,51 +88,6 @@ func selectPickerItem(t *testing.T, app *App, label string) {
 	t.Fatalf("picker has no %q item: %#v", label, app.pickerModal.items)
 }
 
-// TestEditDescriptionCommandFocusesModalNotNav reproduces the palette flow:
-// running "Edit issue description" must leave keyboard focus in the modal,
-// not on the pane the palette restored.
-func TestEditDescriptionCommandFocusesModalNotNav(t *testing.T) {
-	app := newUXTestApp(t)
-	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LTUI-1", Title: "T", Description: "old"}
-	app.focusedPane = FocusNavigation
-	app.openPalette()
-
-	var cmd Command
-	for _, c := range app.paletteCtrl.commands {
-		if c.ID == "edit_description" {
-			cmd = c
-			break
-		}
-	}
-	if cmd.ID == "" {
-		t.Fatal("edit_description command not registered")
-	}
-	app.closePalette()
-	cmd.Run(app)
-
-	if !app.pages.HasPage("edit_description") {
-		t.Fatal("edit description modal did not open")
-	}
-	if focused := app.app.GetFocus(); focused == app.navigationTree {
-		t.Fatal("focus is on the navigation tree, want the edit description form")
-	}
-}
-
-// TestEditDescriptionModalShowResetsFocusToTextArea verifies reopening the
-// modal focuses the description field even after a prior submit left focus
-// on a button.
-func TestEditDescriptionModalShowResetsFocusToTextArea(t *testing.T) {
-	app := newUXTestApp(t)
-	modal := app.editDescriptionModal
-	app.app.SetFocus(modal.fm.order[len(modal.fm.order)-1])
-
-	modal.Show("issue-1", "text", "ZEN-1 · Test issue", func(issueID, description string) {})
-
-	if app.app.GetFocus() != modal.bodyField {
-		t.Fatal("Show did not focus the description field")
-	}
-}
-
 // TestDefaultShortcutsMatchTheShippedSet pins the keys the app opens with.
 // Every entry here moved at least once, and a rune drifting back onto a command
 // that gave it up is the kind of change nothing else fails on.

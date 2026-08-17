@@ -370,6 +370,8 @@ func TestTheHeaderReportsWhereItsFieldsLanded(t *testing.T) {
 		{issueFieldCycle, "Cycle:", detailsLabelGutter},
 		{issueFieldDueDate, "Due date:", detailsLabelGutter},
 		{issueFieldEstimate, "Estimate:", detailsLabelGutter},
+		// Below the rule and off the grid, so its value starts at the margin.
+		{issueFieldDescription, "Description:", 0},
 	}
 	if len(spans) != len(want) {
 		t.Fatalf("%d field spans, want %d: %v", len(spans), len(want), spans)

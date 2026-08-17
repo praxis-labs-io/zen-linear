@@ -25,7 +25,6 @@ var modalBindings = []modalBinding{
 	{"confirmation", func(a *App) modalController { return a.confirmationModal }},
 	{"picker", func(a *App) modalController { return a.pickerModal }},
 	{"issue_form", func(a *App) modalController { return a.issueFormModal }},
-	{"edit_description", func(a *App) modalController { return a.editDescriptionModal }},
 	{"text_input", func(a *App) modalController { return a.textInputModal }},
 	{"multi_select", func(a *App) modalController { return a.multiSelectModal }},
 	{"settings", func(a *App) modalController { return a.settingsModal }},

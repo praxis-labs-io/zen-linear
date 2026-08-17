@@ -11,6 +11,10 @@ import (
 // header row for the cursor's marker.
 const detailsCursorGutter = 2
 
+// detailsWriteMarker says a row is being written in rather than pointed at. It
+// heads the row a box is on, and runs the height of the description's.
+const detailsWriteMarker = "▌"
+
 // detailsEditState is the pane's edit mode: whether it is on, the field the
 // cursor points at, and the chooser open under it.
 type detailsEditState struct {
@@ -153,7 +157,7 @@ func (a *App) resolveFieldCursor() {
 	}
 	// Worse for a box, which holds the keyboard as well as the keys.
 	if a.detailsEdit.on && a.detailsEdit.editing != "" && a.fieldSpanIndex(a.detailsEdit.editing) < 0 {
-		a.closeFieldEditor()
+		a.closeOpenEditor()
 	}
 	if !a.detailsEdit.on || a.fieldSpanIndex(a.detailsEdit.cursor) >= 0 {
 		return
@@ -192,7 +196,7 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 		case a.detailsEdit.editing != "":
 			// The row is being written in rather than pointed at, and the
 			// caret in it is the only other thing saying so.
-			glyph = "▌"
+			glyph = detailsWriteMarker
 		}
 		return tag + glyph + "[-] "
 	}
@@ -202,6 +206,9 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 // handleDetailsEditKey answers for the whole app while edit mode is on. It is
 // default-deny, so q cannot quit and a pane number cannot leave.
 func (a *App) handleDetailsEditKey(event *tcell.EventKey) *tcell.EventKey {
+	if a.detailsEdit.editing == issueFieldDescription {
+		return a.handleDescriptionKey(event)
+	}
 	if a.detailsEdit.editing != "" {
 		return a.handleFieldEditorKey(event)
 	}

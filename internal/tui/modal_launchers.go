@@ -114,38 +114,6 @@ func (a *App) issueRefForID(issueID string) *linearapi.IssueRef {
 	return nil
 }
 
-// ShowEditDescriptionModal shows the edit description modal for the selected
-// issue. Submitting empty text clears the description.
-func (a *App) ShowEditDescriptionModal() {
-	issue := a.GetSelectedIssue()
-	if issue == nil {
-		return
-	}
-
-	a.editDescriptionModal.Show(issue.ID, issue.Description, a.issueContextLine(*issue), func(issueID, description string) {
-		go func() {
-			ctx := context.Background()
-			_, err := a.api.UpdateIssue(ctx, linearapi.UpdateIssueInput{
-				ID:          issueID,
-				Description: &description,
-			})
-			a.QueueUpdateDraw(func() {
-				if err != nil {
-					logger.ErrorWithErr(err, "tui.app: failed to update issue description issue=%s", issue.Identifier)
-					a.updateStatusBarWithError(err)
-					return
-				}
-				logger.Info("tui.app: updated issue description issue=%s", issue.Identifier)
-				a.flashSuccess(fmt.Sprintf("Updated description for %s", issue.Identifier))
-
-				// Refetch the full issue so the details pane shows the new
-				// description without losing comments.
-				a.loadIssueDetailsByID(issueID)
-			})
-		}()
-	})
-}
-
 // ShowEditLabelsModal shows the edit labels modal for the selected issue.
 func (a *App) ShowEditLabelsModal() {
 	issue := a.GetSelectedIssue()
