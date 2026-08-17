@@ -46,13 +46,8 @@ func parseEstimateInput(value string) (float64, error) {
 	return estimate, nil
 }
 
-// runIssueUpdate applies an update to the issue named in input.ID.
-func (a *App) runIssueUpdate(input linearapi.UpdateIssueInput, successMessage string) {
-	a.runIssueUpdateWithResult(input, successMessage, nil)
-}
-
-// runIssueUpdateWithResult is runIssueUpdate plus the outcome. An empty ID is
-// refused, never resolved against a selection the caller may have outlived.
+// runIssueUpdateWithResult updates the issue named in input.ID, reporting the
+// outcome. An empty ID is refused, never resolved against a stale selection.
 func (a *App) runIssueUpdateWithResult(input linearapi.UpdateIssueInput, successMessage string, onDone func(error)) {
 	if input.ID == "" {
 		logger.Error("tui.planning: issue update with no id, dropped")

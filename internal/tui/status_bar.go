@@ -268,6 +268,11 @@ func (a *App) updateStatusBar() {
 		// Read off the field, not live focus: a focus callback can reach here
 		// from inside a draw.
 		switch {
+		case a.detailsEdit.editing == issueFieldDescription:
+			// Enter is a newline in prose, so a chord sends it. Ctrl+Enter does
+			// too and is left off: plenty of terminals fold it into a bare Enter.
+			hints = []hint{{"⌃S", "save"}, {"Esc", "cancel"}}
+			note = "Editing " + issueFieldNames[issueFieldDescription]
 		case a.detailsEdit.editing != "":
 			// Every key in the box types, so the line names only the two it
 			// does not get.

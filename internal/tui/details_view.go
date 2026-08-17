@@ -326,8 +326,38 @@ func (a *App) detailsHeaderBlock(width int) detailsHeader {
 	if len(lines) > 0 {
 		lines = append(lines, a.detailsSeam(width)...)
 	}
+	spans = append(spans, fieldSpan{field: issueFieldDescription, row: len(lines), valueColumn: indent})
+	labelRow := len(lines)
+	lines = append(lines, a.descriptionLabelRow())
+	if a.detailsEdit.editing == issueFieldDescription {
+		// The body is the box now: indented under the label, with the write
+		// marker running its height so the block reads as one open thing.
+		column, inner := descriptionBoxRect(width)
+		rows := writingBoxRows(a.detailsDescArea, inner)
+		// The blank the read view puts under the label, kept so opening the box
+		// does not lift the body a row.
+		lines = append(lines, a.descriptionRail())
+		slots = append(slots, pageSlot{
+			primitive: a.detailsDescArea,
+			row:       len(lines),
+			height:    rows,
+			column:    column,
+			width:     inner,
+		})
+		editor = editorSpan{start: labelRow, end: len(lines) + rows - 1}
+		for range rows {
+			lines = append(lines, a.descriptionRail())
+		}
+	} else {
+		// The body takes the same gutter its label does, so the block moves
+		// sideways with the mode rather than disagreeing with its own label.
+		pad := strings.Repeat(" ", indent)
+		for _, line := range a.detailsBodyLines {
+			lines = append(lines, pad+line)
+		}
+	}
 	return detailsHeader{
-		lines:   append(lines, a.detailsBodyLines...),
+		lines:   lines,
 		fields:  spans,
 		chooser: chooser,
 		editor:  editor,
@@ -385,12 +415,16 @@ func (a *App) detailsSeam(width int) []string {
 // blocks or tables, so its output goes through the same wrap a comment body
 // does.
 func (a *App) renderDetailsBody(width int) {
+	// The cursor gutter is reserved in both modes. Rendering to the full measure
+	// and re-wrapping on every mode toggle is the alternative, and it is worse.
+	width = max(0, width-detailsCursorGutter)
 	if a.detailsDescriptionMarkdown == "" {
-		a.detailsBodyLines = []string{fmt.Sprintf("%sNo description available[-]", a.themeTags.SecondaryText)}
+		a.detailsBodyLines = []string{"", fmt.Sprintf("%sNo description available[-]", a.themeTags.SecondaryText)}
 		return
 	}
-	label := truncateTagged(fmt.Sprintf("%sDescription:[-]", a.themeTags.SecondaryText), width)
-	lines := []string{label, ""}
+	// The Description: label is not here. It carries the field cursor, which
+	// moves far more often than the width these lines are cached against.
+	lines := []string{""}
 	for _, line := range commentBodyLines(a.detailsDescriptionMarkdown, width) {
 		lines = append(lines, wrapTagged(line, width)...)
 	}

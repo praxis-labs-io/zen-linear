@@ -52,7 +52,7 @@ func (a *App) openFieldChooser() {
 		return
 	}
 	field := a.detailsEdit.cursor
-	gen := a.chooserGeneration.Add(1)
+	gen := a.editGeneration.Add(1)
 	// Written before the loader runs: a warm cache answers inside this call, and
 	// a flag set after it would strand the chooser on its loading row.
 	a.detailsEdit.open = field

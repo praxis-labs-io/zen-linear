@@ -12,34 +12,36 @@ import (
 type issueField string
 
 const (
-	issueFieldTitle     issueField = "title"
-	issueFieldState     issueField = "state"
-	issueFieldAssignee  issueField = "assignee"
-	issueFieldPriority  issueField = "priority"
-	issueFieldLabels    issueField = "labels"
-	issueFieldProject   issueField = "project"
-	issueFieldMilestone issueField = "milestone"
-	issueFieldCycle     issueField = "cycle"
-	issueFieldDueDate   issueField = "dueDate"
-	issueFieldEstimate  issueField = "estimate"
-	issueFieldTeam      issueField = "team"
-	issueFieldParent    issueField = "parent"
+	issueFieldTitle       issueField = "title"
+	issueFieldDescription issueField = "description"
+	issueFieldState       issueField = "state"
+	issueFieldAssignee    issueField = "assignee"
+	issueFieldPriority    issueField = "priority"
+	issueFieldLabels      issueField = "labels"
+	issueFieldProject     issueField = "project"
+	issueFieldMilestone   issueField = "milestone"
+	issueFieldCycle       issueField = "cycle"
+	issueFieldDueDate     issueField = "dueDate"
+	issueFieldEstimate    issueField = "estimate"
+	issueFieldTeam        issueField = "team"
+	issueFieldParent      issueField = "parent"
 )
 
 // issueFieldNames is what the status bar calls each field.
 var issueFieldNames = map[issueField]string{
-	issueFieldTitle:     "title",
-	issueFieldState:     "status",
-	issueFieldAssignee:  "assignee",
-	issueFieldPriority:  "priority",
-	issueFieldLabels:    "labels",
-	issueFieldProject:   "project",
-	issueFieldMilestone: "milestone",
-	issueFieldCycle:     "cycle",
-	issueFieldDueDate:   "due date",
-	issueFieldEstimate:  "estimate",
-	issueFieldTeam:      "team",
-	issueFieldParent:    "parent",
+	issueFieldTitle:       "title",
+	issueFieldDescription: "description",
+	issueFieldState:       "status",
+	issueFieldAssignee:    "assignee",
+	issueFieldPriority:    "priority",
+	issueFieldLabels:      "labels",
+	issueFieldProject:     "project",
+	issueFieldMilestone:   "milestone",
+	issueFieldCycle:       "cycle",
+	issueFieldDueDate:     "due date",
+	issueFieldEstimate:    "estimate",
+	issueFieldTeam:        "team",
+	issueFieldParent:      "parent",
 }
 
 // issueFieldSave is one field's write. Build one with a constructor below, so
@@ -54,13 +56,22 @@ type issueFieldSave struct {
 
 // saveIssueField sends one field and flashes what it did.
 func (a *App) saveIssueField(save issueFieldSave) {
+	a.saveIssueFieldWithResult(save, nil)
+}
+
+// saveIssueFieldWithResult is saveIssueField plus the outcome, for a caller
+// holding words it cannot put back once its box has gone.
+func (a *App) saveIssueFieldWithResult(save issueFieldSave, onDone func(error)) {
 	if save.issueID == "" {
 		a.flashStatus("No issue selected")
+		if onDone != nil {
+			onDone(fmt.Errorf("no issue selected"))
+		}
 		return
 	}
 	input := linearapi.UpdateIssueInput{ID: save.issueID}
 	save.apply(&input)
-	a.runIssueUpdate(input, save.message)
+	a.runIssueUpdateWithResult(input, save.message, onDone)
 }
 
 // The three shapes a save reports. One rule here is how "Changed status for
@@ -94,6 +105,16 @@ func issueFieldTitleSave(issue linearapi.Issue, text string) (issueFieldSave, er
 		message: fieldUpdateMessage(issueFieldTitle),
 		apply:   func(input *linearapi.UpdateIssueInput) { input.Title = &title },
 	}, nil
+}
+
+// Sent as written, since leading whitespace is an indented code block to
+// Linear. Empty is the clear: Linear reads the empty string as one.
+func issueFieldDescriptionSave(issue linearapi.Issue, body string) issueFieldSave {
+	return issueFieldSave{
+		issueID: issue.ID,
+		message: fieldUpdateMessage(issueFieldDescription),
+		apply:   func(input *linearapi.UpdateIssueInput) { input.Description = &body },
+	}
 }
 
 func issueFieldStateSave(issue linearapi.Issue, stateID, stateName string) issueFieldSave {

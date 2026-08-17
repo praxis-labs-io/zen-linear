@@ -172,7 +172,9 @@ func (a *App) updateFocus() {
 	case FocusDetails:
 		// The page has three kinds of stop: a card reads, a box writes with a
 		// button that sends, and a field is typed into.
-		if a.detailsFocus == detailsFocusField && a.detailsEdit.editing != "" {
+		if a.detailsFocus == detailsFocusDescription && a.detailsEdit.editing == issueFieldDescription {
+			a.app.SetFocus(a.detailsDescArea)
+		} else if a.detailsFocus == detailsFocusField && a.detailsEdit.editing != "" {
 			a.app.SetFocus(a.detailsFieldInput)
 		} else if area, button, ok := a.writingBox(a.detailsFocus); ok {
 			if a.detailsFocus.isWriting() {

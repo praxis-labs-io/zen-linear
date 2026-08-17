@@ -242,6 +242,7 @@ const (
 	detailsFocusEdit
 	detailsFocusEditPost
 	detailsFocusField
+	detailsFocusDescription
 )
 
 // isWriting reports whether a focus is one of the writing boxes.
@@ -274,6 +275,12 @@ func (a *App) buildDetailsPage() {
 	a.detailsFieldInput.SetFieldWidth(0)
 	// No SetChangedFunc: the box does not grow, and seeding it must not render.
 	a.detailsFieldInput.SetFocusFunc(func() { a.claimFieldEditorFocus() })
+	// Not newWritingBox: the description is the issue's own body, so it has no
+	// byline, no Post button, and no place in the comment ring.
+	a.detailsDescArea = tview.NewTextArea()
+	a.detailsDescArea.SetFocusFunc(func() { a.claimDescriptionFocus() })
+	a.detailsDescArea.SetChangedFunc(func() { a.refitDescriptionBox() })
+	a.detailsDescArea.SetClipboard(func(text string) { a.copyText(text) }, nil)
 	a.detailsPageView.SetFocusFunc(func() { a.enterDetailsFocus(detailsFocusCards) })
 	a.applyComposeTheme()
 
@@ -394,6 +401,15 @@ func (a *App) applyComposeTheme() {
 	if a.detailsFieldInput != nil {
 		a.detailsFieldInput.SetFieldStyle(a.fieldEditorStyle(a.detailsEdit.editing))
 		a.detailsFieldInput.SetBackgroundColor(a.theme.Background)
+	}
+	if a.detailsDescArea != nil {
+		a.detailsDescArea.SetTextStyle(tcell.StyleDefault.
+			Foreground(a.theme.Foreground).
+			Background(a.theme.Background))
+		a.detailsDescArea.SetSelectedStyle(tcell.StyleDefault.
+			Foreground(a.theme.InverseTextColor()).
+			Background(a.theme.Accent))
+		a.detailsDescArea.SetBackgroundColor(a.theme.Background)
 	}
 	a.applyComposePlaceholder()
 	a.applyPostButtonTheme()

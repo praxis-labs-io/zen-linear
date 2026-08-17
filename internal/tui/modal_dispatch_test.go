@@ -15,7 +15,6 @@ var modalDispatchGolden = []string{
 	"confirmation",
 	"picker",
 	"issue_form",
-	"edit_description",
 	"text_input",
 	"multi_select",
 	"settings",
@@ -51,8 +50,6 @@ func openModal(t *testing.T, app *App, page string) {
 		app.showSortByPicker()
 	case "issue_form":
 		app.issueFormModal.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-1"})
-	case "edit_description":
-		app.editDescriptionModal.Show("issue-1", "Body", "ZNL-1", func(issueID, description string) {})
 	case "text_input":
 		app.textInputModal.Show("Related Issue", "Issue ID: ", "", func(string) {})
 	case "multi_select":
@@ -155,7 +152,6 @@ var modalFocusTargets = []struct {
 }{
 	{"picker", func(a *App) tview.Primitive { return a.pickerModal.list }},
 	{"issue_form", func(a *App) tview.Primitive { return a.issueFormModal.fm.focusedPrimitive() }},
-	{"edit_description", func(a *App) tview.Primitive { return a.editDescriptionModal.fm.focusedPrimitive() }},
 	{"text_input", func(a *App) tview.Primitive { return a.textInputModal.input }},
 	{"multi_select", func(a *App) tview.Primitive { return a.multiSelectModal.list }},
 	{"settings", func(a *App) tview.Primitive { return a.settingsModal.fm.focusedPrimitive() }},

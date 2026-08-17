@@ -94,13 +94,17 @@ type App struct {
 	detailsEdit    detailsEditState
 	detailsIssueID string
 	// detailsChooserSpan is where the open chooser landed in the last render.
-	// chooserGeneration stamps each opening.
+	// editGeneration stamps each opening of a chooser or a box.
 	detailsChooserSpan chooserSpan
-	chooserGeneration  atomic.Uint64
+	editGeneration     atomic.Uint64
 	// detailsFieldInput is the box a typed field is edited in, one widget for
 	// all three. detailsEditorSpan is where it landed in the last render.
 	detailsFieldInput *tview.InputField
 	detailsEditorSpan editorSpan
+	// detailsDescArea is the box the description is rewritten in.
+	// savingDescriptions holds the generations whose write is in flight.
+	detailsDescArea    *tview.TextArea
+	savingDescriptions map[uint64]struct{}
 	// focusedCommentID is the card the ring is on and commentSpans is where
 	// every card landed in the last render. The ring is held by id rather than
 	// by index so a refetch that reorders the stack keeps it on the same card.
@@ -162,7 +166,6 @@ type App struct {
 	bindings             *resolvedKeybindings
 	pickerModal          *PickerModal
 	issueFormModal       *IssueFormModal
-	editDescriptionModal *EditDescriptionModal
 	textInputModal       *TextInputModal
 	multiSelectModal     *MultiSelectModal
 	settingsModal        *SettingsModal
@@ -755,7 +758,6 @@ func (a *App) buildLayout() {
 	// Build picker and create issue modals
 	a.pickerModal = NewPickerModal(a)
 	a.issueFormModal = NewIssueFormModal(a)
-	a.editDescriptionModal = NewEditDescriptionModal(a)
 	a.textInputModal = NewTextInputModal(a)
 	a.multiSelectModal = NewMultiSelectModal(a)
 	a.settingsModal = NewSettingsModal(a)

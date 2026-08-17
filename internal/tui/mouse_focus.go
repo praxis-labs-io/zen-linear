@@ -65,15 +65,35 @@ func (a *App) handleMouse(event *tcell.EventMouse, action tview.MouseAction) (*t
 // releaseFieldEditorOnClick lets go of an open box on a press outside it. Not
 // in a focus callback: it holds the view lock the render would wedge on.
 func (a *App) releaseFieldEditorOnClick(x, y int) {
-	if a.detailsEdit.editing == "" || a.detailsFieldInput == nil {
-		return
-	}
+	box := a.openEditorBox()
 	// Inside the box is placing the caret, not leaving.
-	if a.detailsFieldInput.InRect(x, y) {
+	if box == nil || box.InRect(x, y) {
 		return
 	}
 	a.leaveDetailsEdit()
 	a.updateFocus()
+}
+
+// editorBox is what both of the pane's open boxes are, for a caller that wants
+// only the rect. tview.Primitive does not carry InRect; Box does.
+type editorBox interface {
+	InRect(x, y int) bool
+}
+
+// openEditorBox is the box an open editor is typed into, nil when none is.
+func (a *App) openEditorBox() editorBox {
+	switch a.detailsEdit.editing {
+	case "":
+	case issueFieldDescription:
+		if a.detailsDescArea != nil {
+			return a.detailsDescArea
+		}
+	default:
+		if a.detailsFieldInput != nil {
+			return a.detailsFieldInput
+		}
+	}
+	return nil
 }
 
 // paneAt names the pane covering a screen cell.

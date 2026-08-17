@@ -14,10 +14,10 @@ import (
 const fieldEditorMinWidth = 8
 
 // fieldHasEditor is the fields Enter opens a text box on, the ones typed rather
-// than picked.
+// than picked. The description opens a many-row one; the rest a single row.
 func fieldHasEditor(field issueField) bool {
 	switch field {
-	case issueFieldTitle, issueFieldDueDate, issueFieldEstimate:
+	case issueFieldTitle, issueFieldDueDate, issueFieldEstimate, issueFieldDescription:
 		return true
 	}
 	return false
@@ -36,6 +36,11 @@ func (a *App) openFieldEditor() {
 	// The page is what the box is about, and inside the detail debounce the
 	// selection has already moved off it.
 	if issue == nil || issue.ID != a.detailsIssueID {
+		return
+	}
+	if field == issueFieldDescription {
+		a.detailsEdit.issue = *issue
+		a.openDescriptionBox(issue.Description)
 		return
 	}
 	a.detailsEdit.editing = field
@@ -99,7 +104,7 @@ func (a *App) closeFieldEditor() {
 // releaseFieldEditor takes the keyboard off a box that is going away, next
 // event rather than now: a focus callback reaches here, and moving from one recurses.
 func (a *App) releaseFieldEditor() {
-	if a.detailsFocus != detailsFocusField {
+	if a.detailsFocus != detailsFocusField && a.detailsFocus != detailsFocusDescription {
 		return
 	}
 	a.detailsFocus = detailsFocusCards
@@ -181,7 +186,7 @@ func fieldEditorSave(field issueField, issue linearapi.Issue, text string) (issu
 }
 
 // editorSpan is where an open box landed: the field's own row, and the last row
-// of the frame under it.
+// the box costs the page under it.
 type editorSpan struct {
 	start int
 	end   int

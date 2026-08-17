@@ -166,6 +166,15 @@ field clears the due date or the estimate. A value the app can tell is wrong kee
 reason under it; one Linear rejects on its own reports on the status bar, the
 way every other field write does.
 
+The description is typed in place too, and the cursor reaches it last. Enter
+turns the rendered body into a box holding its markdown, which grows as you
+write. A bar runs down the left of it for as long as it is open. Enter is a
+newline there, so Ctrl+S saves and Esc discards. Ctrl+Enter saves too, the way
+it does in a comment, but it is not the key named on the status line: plenty of
+terminals fold it into a plain Enter. The box
+stays open until Linear has taken the rewrite, so one that fails to send is
+still on the screen.
+
 The issue keys below still work from inside the mode and open their own
 pickers; `q`, `/` and the pane numbers don't, so nothing quits from under a
 field. With a list open, only its own keys answer; in a box, every key types.

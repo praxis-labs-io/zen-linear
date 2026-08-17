@@ -910,12 +910,7 @@ func DefaultCommands(app *App) []Command {
 			Title:    "Edit issue description",
 			Keywords: []string{"edit", "description", "body", "details"},
 			Run: func(a *App) {
-				issue := a.GetSelectedIssue()
-				if issue == nil {
-					a.flashStatus("No issue selected")
-					return
-				}
-				a.ShowEditDescriptionModal()
+				a.editIssueDescription()
 			},
 		},
 		{
