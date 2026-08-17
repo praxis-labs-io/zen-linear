@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -170,7 +171,7 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 	f.titleField.SetText("")
 	f.descField.SetText("", true)
 	f.state = pickerOption{}
-	f.assignee = pickerOption{}
+	f.assignee = f.currentUserOption()
 	f.project = pickerOption{id: options.ProjectID}
 	f.milestone = pickerOption{}
 	f.cycle = pickerOption{id: options.CycleID}
@@ -204,8 +205,30 @@ func (f *IssueFormModal) assignAssignee(option pickerOption)  { f.assignee = opt
 func (f *IssueFormModal) assignMilestone(option pickerOption) { f.milestone = option }
 func (f *IssueFormModal) assignCycle(option pickerOption)     { f.cycle = option }
 
-// statusSentinel is the "leave it to Linear" row a create offers.
+// statusSentinel is the row a create offers when nothing can name the state
+// Linear would pick: a team with no default, or a fetch that failed.
 const statusSentinel = "Team default"
+
+// defaultStateOption is the state a create opens on, which Linear would
+// otherwise apply without naming it. Empty where the team has none set.
+func defaultStateOption(states []linearapi.WorkflowState) pickerOption {
+	for _, state := range states {
+		if state.IsDefault {
+			return pickerOption{id: state.ID, label: state.Name}
+		}
+	}
+	return pickerOption{}
+}
+
+// currentUserOption is the assignee a create opens on, named the way the
+// member list names it so the seeded row reads like the loaded one.
+func (f *IssueFormModal) currentUserOption() pickerOption {
+	user := f.app.GetCurrentUser()
+	if user == nil {
+		return pickerOption{}
+	}
+	return pickerOption{id: user.ID, label: fmt.Sprintf("%s (me)", user.Name)}
+}
 
 // setPicker rebuilds a dropdown around the value the form holds. A value the
 // options cannot show keeps a row of its own, or a slow fetch clears it.
@@ -427,7 +450,16 @@ func (f *IssueFormModal) loadStatuses() {
 		for _, state := range states {
 			options = append(options, pickerOption{id: state.ID, label: state.Name})
 		}
-		f.setPicker(f.statusField, statusSentinel, options, f.state, f.assignState)
+		if f.state.id == "" {
+			f.state = defaultStateOption(states)
+		}
+		// The sentinel stood for a state nobody could name. Naming it leaves two
+		// rows meaning one thing, so it goes wherever the default resolved.
+		sentinel := statusSentinel
+		if f.state.id != "" {
+			sentinel = ""
+		}
+		f.setPicker(f.statusField, sentinel, options, f.state, f.assignState)
 	}, func() {
 		// Reporting the failure as an option would make it selectable, and its
 		// empty id would then be saved as the issue's status.
@@ -445,6 +477,11 @@ func (f *IssueFormModal) loadAssignees() {
 				label = fmt.Sprintf("%s (me)", user.Name)
 			}
 			options = append(options, pickerOption{id: user.ID, label: label})
+		}
+		// Linear refuses an assignee off the team, and a create in another team
+		// opened seeded with one nobody typed.
+		if !slices.ContainsFunc(options, func(option pickerOption) bool { return option.id == f.assignee.id }) {
+			f.assignee = pickerOption{}
 		}
 		f.setPicker(f.assigneeField, "Unassigned", options, f.assignee, f.assignAssignee)
 	}, func() {

@@ -338,6 +338,9 @@ type WorkflowState struct {
 	Type     string // backlog, unstarted, started, completed, canceled
 	Position float64
 	TeamID   string
+	// IsDefault marks the state Linear puts a new issue in when the create
+	// names none. A team may have none set, and then no state carries it.
+	IsDefault bool
 }
 
 // IssueLabel represents a label that can be applied to issues.
