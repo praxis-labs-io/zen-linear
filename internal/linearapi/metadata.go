@@ -278,6 +278,10 @@ func (c *Client) GetCurrentUser(ctx context.Context) (User, error) {
 func (c *Client) ListWorkflowStates(ctx context.Context, teamID string) ([]WorkflowState, error) {
 	var query struct {
 		Team struct {
+			// Nullable, so a team with none set answers with an empty id.
+			DefaultIssueState struct {
+				ID graphql.String
+			}
 			States struct {
 				Nodes []struct {
 					ID       graphql.String
@@ -299,14 +303,17 @@ func (c *Client) ListWorkflowStates(ctx context.Context, teamID string) ([]Workf
 		return nil, fmt.Errorf("list workflow states for team %s: %w", teamID, err)
 	}
 
+	defaultID := string(query.Team.DefaultIssueState.ID)
 	states := make([]WorkflowState, 0, len(query.Team.States.Nodes))
 	for _, node := range query.Team.States.Nodes {
+		id := string(node.ID)
 		states = append(states, WorkflowState{
-			ID:       string(node.ID),
-			Name:     string(node.Name),
-			Type:     string(node.Type),
-			Position: float64(node.Position),
-			TeamID:   teamID,
+			ID:        id,
+			Name:      string(node.Name),
+			Type:      string(node.Type),
+			Position:  float64(node.Position),
+			TeamID:    teamID,
+			IsDefault: id == defaultID,
 		})
 	}
 

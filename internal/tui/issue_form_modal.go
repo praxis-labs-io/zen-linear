@@ -204,8 +204,20 @@ func (f *IssueFormModal) assignAssignee(option pickerOption)  { f.assignee = opt
 func (f *IssueFormModal) assignMilestone(option pickerOption) { f.milestone = option }
 func (f *IssueFormModal) assignCycle(option pickerOption)     { f.cycle = option }
 
-// statusSentinel is the "leave it to Linear" row a create offers.
+// statusSentinel is the row a create offers when nothing can name the state
+// Linear would pick: a team with no default, or a fetch that failed.
 const statusSentinel = "Team default"
+
+// defaultStateOption is the state a create opens on, which Linear would
+// otherwise apply without naming it. Empty where the team has none set.
+func defaultStateOption(states []linearapi.WorkflowState) pickerOption {
+	for _, state := range states {
+		if state.IsDefault {
+			return pickerOption{id: state.ID, label: state.Name}
+		}
+	}
+	return pickerOption{}
+}
 
 // setPicker rebuilds a dropdown around the value the form holds. A value the
 // options cannot show keeps a row of its own, or a slow fetch clears it.
@@ -427,7 +439,16 @@ func (f *IssueFormModal) loadStatuses() {
 		for _, state := range states {
 			options = append(options, pickerOption{id: state.ID, label: state.Name})
 		}
-		f.setPicker(f.statusField, statusSentinel, options, f.state, f.assignState)
+		if f.state.id == "" {
+			f.state = defaultStateOption(states)
+		}
+		// The sentinel stood for a state nobody could name. Naming it leaves two
+		// rows meaning one thing, so it goes wherever the default resolved.
+		sentinel := statusSentinel
+		if f.state.id != "" {
+			sentinel = ""
+		}
+		f.setPicker(f.statusField, sentinel, options, f.state, f.assignState)
 	}, func() {
 		// Reporting the failure as an option would make it selectable, and its
 		// empty id would then be saved as the issue's status.
@@ -445,6 +466,11 @@ func (f *IssueFormModal) loadAssignees() {
 				label = fmt.Sprintf("%s (me)", user.Name)
 			}
 			options = append(options, pickerOption{id: user.ID, label: label})
+			// Read off the member list rather than App.currentUser, so a team
+			// that does not list the viewer cannot open assigned to them.
+			if user.IsMe && f.assignee.id == "" {
+				f.assignee = options[len(options)-1]
+			}
 		}
 		f.setPicker(f.assigneeField, "Unassigned", options, f.assignee, f.assignAssignee)
 	}, func() {

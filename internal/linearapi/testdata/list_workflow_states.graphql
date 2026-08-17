@@ -1,1 +1,1 @@
-query($teamId:String!){team(id: $teamId){states{nodes{id,name,type,position}}}}
+query($teamId:String!){team(id: $teamId){defaultIssueState{id},states{nodes{id,name,type,position}}}}
