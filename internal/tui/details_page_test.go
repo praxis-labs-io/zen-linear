@@ -18,7 +18,7 @@ func TestTheDetailsPaneIsOneScrollingPage(t *testing.T) {
 	at := 0
 	for _, want := range []string{
 		"ZNO-5",                       // the identifier
-		"State:",                      // a metadata field
+		"Status:",                     // a metadata field
 		"─────",                       // the rule closing the metadata
 		"Description:",                // the description's own label
 		"The debounce is the problem", // the first comment
@@ -107,7 +107,7 @@ func TestTheDescriptionScrollsWithTheComments(t *testing.T) {
 	app.detailsPageView.ScrollToEnd()
 	page := strings.Join(showComments(t, app, 80, 20), "\n")
 
-	if strings.Contains(page, "State:") {
+	if strings.Contains(page, "Status:") {
 		t.Errorf("the metadata is still on screen at the end of the page:\n%s", page)
 	}
 	if !strings.Contains(page, "write a comment") {

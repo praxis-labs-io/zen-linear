@@ -233,7 +233,7 @@ func TestDetailsPaneContentSitsInsideItsBorder(t *testing.T) {
 
 			// drawDetails already drops the border columns, so the remaining
 			// indent is the padding and nothing else.
-			state := findLine(t, lines, "State:")
+			state := findLine(t, lines, "Status:")
 			if indent := len(state) - len(strings.TrimLeft(state, " ")); indent != density.wantIndent {
 				t.Errorf("content indent = %d, want %d for %s padding", indent, density.wantIndent, density.name)
 			}
@@ -275,7 +275,7 @@ func TestDetailsFieldOrder(t *testing.T) {
 	lines := drawDetails(t, app, 90)
 
 	want := []string{
-		"State:", "Assignee:", "Priority:", "Labels:",
+		"Status:", "Assignee:", "Priority:", "Labels:",
 		"Project:", "Milestone:", "Cycle:",
 		"Due date:", "Estimate:", "Branch:",
 	}
@@ -306,7 +306,7 @@ func TestStateAndPriorityReadInWords(t *testing.T) {
 		field string
 		line  string
 	}{
-		{"State", fmt.Sprintf("State:[-]      %s%s In Progress[-]", colorTag(stateColor), stateIcon)},
+		{"Status", fmt.Sprintf("Status:[-]     %s%s In Progress[-]", colorTag(stateColor), stateIcon)},
 		{"Priority", fmt.Sprintf("Priority:[-]   %s%s Urgent[-]", colorTag(priorityColor), priorityIcon)},
 	} {
 		texts := headerTexts(app)
@@ -332,7 +332,7 @@ func TestGriddedRowsLineUpAtTheGutter(t *testing.T) {
 	lines := drawDetails(t, app, 90)
 
 	for _, label := range []string{
-		"State:", "Assignee:", "Priority:", "Labels:", "Project:", "Milestone:",
+		"Status:", "Assignee:", "Priority:", "Labels:", "Project:", "Milestone:",
 		"Cycle:", "Due date:", "Estimate:", "Branch:", "Sub-issues:",
 	} {
 		line := findLine(t, lines, label)
@@ -361,7 +361,7 @@ func TestTheHeaderReportsWhereItsFieldsLanded(t *testing.T) {
 		valueColumn int
 	}{
 		{issueFieldTitle, "M3: comment infrastructure", 0},
-		{issueFieldState, "State:", detailsLabelGutter},
+		{issueFieldState, "Status:", detailsLabelGutter},
 		{issueFieldAssignee, "Assignee:", detailsLabelGutter},
 		{issueFieldPriority, "Priority:", detailsLabelGutter},
 		{issueFieldLabels, "Labels:", detailsLabelGutter},

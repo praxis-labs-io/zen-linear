@@ -117,15 +117,15 @@ func TestEnterDrawsTheOptionsUnderTheField(t *testing.T) {
 
 	lines := openChooser(t, app)
 
-	state := indexOfLine(lines, findLine(t, lines, "State:"))
+	state := indexOfLine(lines, findLine(t, lines, "Status:"))
 	review := indexOfLine(lines, findLine(t, lines, "In Review"))
 	if review <= state {
-		t.Fatalf("In Review is at row %d and State: at %d, want the options under the field", review, state)
+		t.Fatalf("In Review is at row %d and Status: at %d, want the options under the field", review, state)
 	}
 	// A span's column is a column of the row, and the drawn line carries the
 	// pane's own padding in front of it.
 	span := app.detailsFieldSpans[app.fieldSpanIndex(issueFieldState)]
-	padding := runeColumn(lines[state], "State:") - detailsCursorGutter
+	padding := runeColumn(lines[state], "Status:") - detailsCursorGutter
 	if got, want := runeColumn(lines[state+1], "╭"), padding+span.valueColumn; got != want {
 		t.Fatalf("the frame hangs at column %d, want the value column %d", got, want)
 	}
@@ -559,7 +559,7 @@ func TestANarrowPaneKeepsTheChooserOnScreen(t *testing.T) {
 	drawTextView(t, app.detailsView, 22)
 	lines := drawTextView(t, app.detailsView, 22)
 
-	below := lines[indexOfLine(lines, findLine(t, lines, "State:"))+1]
+	below := lines[indexOfLine(lines, findLine(t, lines, "Status:"))+1]
 	if !strings.Contains(below, "╭") {
 		t.Fatalf("the row under the field is %q, want the chooser drawn on it", below)
 	}

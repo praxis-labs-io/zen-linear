@@ -515,7 +515,7 @@ func (a *App) updateDetailsView() {
 	// has it, then where it sits in the plan, then its dates.
 	stateIcon, stateColor := formatStateIcon(issue.State, a.theme)
 	stateTag := colorTag(stateColor)
-	headerRows = append(headerRows, a.detailsGridRow(issueFieldState, "State",
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldState, "Status",
 		fmt.Sprintf("%s%s %s[-]", stateTag, stateIcon, issue.State)))
 
 	assignee := "Unassigned"

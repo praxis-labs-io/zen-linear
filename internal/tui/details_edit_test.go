@@ -49,7 +49,7 @@ func TestTheFieldCursorMarksTheRowItIsOn(t *testing.T) {
 		t.Errorf("title row = %q, want the cursor to have left it", moved)
 	}
 
-	state := findLine(t, lines, "State:")
+	state := findLine(t, lines, "Status:")
 	if !strings.Contains(state, "❯") {
 		t.Errorf("state row = %q, want the cursor on it", state)
 	}
@@ -87,7 +87,7 @@ func TestReadModeDrawsNoCursorGutter(t *testing.T) {
 			t.Errorf("read mode drew a cursor: %q", line)
 		}
 	}
-	state := findLine(t, lines, "State:")
+	state := findLine(t, lines, "Status:")
 	row := []rune(strings.TrimLeft(state, " "))
 	if row[detailsLabelGutter-1] != ' ' || row[detailsLabelGutter] == ' ' {
 		t.Errorf("state row = %q, want its value back at column %d", string(row), detailsLabelGutter)
