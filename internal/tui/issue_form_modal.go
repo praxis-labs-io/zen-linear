@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -171,7 +170,7 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 	f.titleField.SetText("")
 	f.descField.SetText("", true)
 	f.state = pickerOption{}
-	f.assignee = f.currentUserOption()
+	f.assignee = pickerOption{}
 	f.project = pickerOption{id: options.ProjectID}
 	f.milestone = pickerOption{}
 	f.cycle = pickerOption{id: options.CycleID}
@@ -218,16 +217,6 @@ func defaultStateOption(states []linearapi.WorkflowState) pickerOption {
 		}
 	}
 	return pickerOption{}
-}
-
-// currentUserOption is the assignee a create opens on, named the way the
-// member list names it so the seeded row reads like the loaded one.
-func (f *IssueFormModal) currentUserOption() pickerOption {
-	user := f.app.GetCurrentUser()
-	if user == nil {
-		return pickerOption{}
-	}
-	return pickerOption{id: user.ID, label: fmt.Sprintf("%s (me)", user.Name)}
 }
 
 // setPicker rebuilds a dropdown around the value the form holds. A value the
@@ -477,11 +466,11 @@ func (f *IssueFormModal) loadAssignees() {
 				label = fmt.Sprintf("%s (me)", user.Name)
 			}
 			options = append(options, pickerOption{id: user.ID, label: label})
-		}
-		// Linear refuses an assignee off the team, and a create in another team
-		// opened seeded with one nobody typed.
-		if !slices.ContainsFunc(options, func(option pickerOption) bool { return option.id == f.assignee.id }) {
-			f.assignee = pickerOption{}
+			// Read off the member list rather than App.currentUser, so a team
+			// that does not list the viewer cannot open assigned to them.
+			if user.IsMe && f.assignee.id == "" {
+				f.assignee = options[len(options)-1]
+			}
 		}
 		f.setPicker(f.assigneeField, "Unassigned", options, f.assignee, f.assignAssignee)
 	}, func() {

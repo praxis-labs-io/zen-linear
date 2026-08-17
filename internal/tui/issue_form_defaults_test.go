@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -77,10 +78,10 @@ func TestTheSentinelStaysWhereTheTeamHasNoDefault(t *testing.T) {
 
 func TestTheCreateFormOpensAssignedToMe(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
-	app.currentUser = &linearapi.User{ID: "user-1", Name: "Test User", IsMe: true}
-	// The member list names the viewer as Linear does, so the row the seed is
-	// replaced by reads the same as the seed.
-	app.teamUsers = []linearapi.User{{ID: "user-1", Name: "Test User", IsMe: true}}
+	app.teamUsers = []linearapi.User{
+		{ID: "user-2", Name: "Someone Else"},
+		{ID: "user-1", Name: "Test User", IsMe: true},
+	}
 	created := captureCreates(app)
 	form := app.issueFormModal
 
@@ -98,7 +99,7 @@ func TestTheCreateFormOpensAssignedToMe(t *testing.T) {
 // a member of would fail on a default nobody typed.
 func TestACreateInATeamWithoutMeFallsBackToUnassigned(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
-	app.currentUser = &linearapi.User{ID: "user-9", Name: "Outsider", IsMe: true}
+	app.teamUsers = []linearapi.User{{ID: "user-2", Name: "Someone Else"}}
 	created := captureCreates(app)
 	form := app.issueFormModal
 
@@ -109,5 +110,52 @@ func TestACreateInATeamWithoutMeFallsBackToUnassigned(t *testing.T) {
 	}
 	if got := submitCreate(t, form, created).AssigneeID; got != "" {
 		t.Fatalf("create AssigneeID = %q, want none", got)
+	}
+}
+
+// coldMemberList leaves the member list as the form's only background load, so
+// one queued callback is the whole of the fetch answering.
+func coldMemberList(app *App) {
+	app.teamUsers = nil
+	app.currentUser = &linearapi.User{ID: "user-1", Name: "Test User", IsMe: true}
+}
+
+// Nothing confirmed the user is on the team, so opening on them would send an
+// assignee Linear refuses and fail a create that used to work unassigned.
+func TestAFailedMemberFetchOpensUnassigned(t *testing.T) {
+	app, pending := newIssueFormTestApp(t)
+	coldMemberList(app)
+	app.fetchUsersFunc = func(context.Context, string) ([]linearapi.User, error) {
+		return nil, errors.New("member list unavailable")
+	}
+	created := captureCreates(app)
+	form := app.issueFormModal
+
+	form.Show(IssueFormOptions{TeamID: "team-1"})
+	runNextUpdate(t, pending)
+
+	if _, label := form.assigneeField.GetCurrentOption(); label != "Unassigned" {
+		t.Fatalf("assignee opened on %q, want Unassigned where the member list never arrived", label)
+	}
+	if got := submitCreate(t, form, created).AssigneeID; got != "" {
+		t.Fatalf("create AssigneeID = %q, want none", got)
+	}
+}
+
+// The window between opening the form and the member list landing. A create
+// sent in it must not carry an assignee nothing has checked.
+func TestASubmitBeforeTheMemberListLandsSendsNoAssignee(t *testing.T) {
+	app, _ := newIssueFormTestApp(t)
+	coldMemberList(app)
+	app.fetchUsersFunc = func(context.Context, string) ([]linearapi.User, error) {
+		return []linearapi.User{{ID: "user-1", Name: "Test User", IsMe: true}}, nil
+	}
+	created := captureCreates(app)
+	form := app.issueFormModal
+
+	form.Show(IssueFormOptions{TeamID: "team-1"})
+
+	if got := submitCreate(t, form, created).AssigneeID; got != "" {
+		t.Fatalf("create AssigneeID = %q, want none before the member list confirms it", got)
 	}
 }
