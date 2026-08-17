@@ -532,6 +532,24 @@ func TestAnIssueThatMovedTeamDoesNotCommitTheOldTeamsOption(t *testing.T) {
 	}
 }
 
+// A chooser outlives the refresh that moves the selection, so the write has to
+// land on the issue the reader picked rather than on whatever is selected now.
+func TestACommitTargetsTheIssueTheChooserOpenedOn(t *testing.T) {
+	app, writes, _ := chooserFixture(t, issueFieldState)
+	openChooser(t, app)
+	pressField(app, 'j')
+	// The background refresh that lands while the list is open.
+	app.issuesMu.Lock()
+	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "ZNO-8", TeamID: chooserTeamID}
+	app.issuesMu.Unlock()
+
+	pressFieldKey(app, tcell.KeyEnter)
+
+	if input := awaitWrite(t, writes); input.ID != "issue-1" {
+		t.Fatalf("input.ID = %q, want the issue the chooser opened on", input.ID)
+	}
+}
+
 func TestANarrowPaneKeepsTheChooserOnScreen(t *testing.T) {
 	app, _, _ := chooserFixture(t, issueFieldState)
 	pressFieldKey(app, tcell.KeyEnter)

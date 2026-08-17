@@ -3,8 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -15,20 +13,9 @@ import (
 	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
-// IssueFormMode selects which of the two jobs the shared issue form is doing.
-type IssueFormMode int
-
-const (
-	IssueFormCreate IssueFormMode = iota
-	IssueFormEdit
-)
-
 // IssueFormOptions describes one opening of the issue form.
 type IssueFormOptions struct {
-	Mode   IssueFormMode
 	TeamID string
-	// Issue is the issue being edited, captured by the caller at open time.
-	Issue *linearapi.Issue
 	// Parent, ParentID, ProjectID and CycleID seed a create from whatever the
 	// navigation tree had selected.
 	Parent    *linearapi.IssueRef
@@ -37,9 +24,8 @@ type IssueFormOptions struct {
 	CycleID   string
 }
 
-// issueFormValues is what the fields hold, in the shape the save diff compares.
-// Estimate and due date stay as typed text so validation reports what the user
-// wrote rather than what a failed parse left behind.
+// issueFormValues is what the fields hold at submit. Estimate and due date stay
+// as typed text, so validation reports what the user wrote.
 type issueFormValues struct {
 	title       string
 	description string
@@ -61,8 +47,8 @@ type pickerOption struct {
 	label string
 }
 
-// IssueFormModal is the full issue form. New Issue opens it blank, Edit Issue
-// opens it prefilled and saves every changed field in one update.
+// IssueFormModal is the full issue form, blank, for creating one issue. An
+// existing issue is edited in the details pane.
 type IssueFormModal struct {
 	app *App
 	fm  *FormModal
@@ -81,11 +67,8 @@ type IssueFormModal struct {
 	dueDateField   *tview.InputField
 	labelsField    *FormMultiSelect
 
-	mode       IssueFormMode
-	teamID     string
-	issueID    string
-	identifier string
-	parentID   string
+	teamID   string
+	parentID string
 
 	state     pickerOption
 	assignee  pickerOption
@@ -94,7 +77,6 @@ type IssueFormModal struct {
 	cycle     pickerOption
 	priority  int
 
-	original issueFormValues
 	// saving is true from submit until the write answers. The form stays up
 	// for that, so a refusal keeps the typing and the caret where they were.
 	saving bool
@@ -149,31 +131,16 @@ func NewIssueFormModal(app *App) *IssueFormModal {
 	return f
 }
 
-// Show opens the form for one create or edit.
+// Show opens the form for one create.
 func (f *IssueFormModal) Show(options IssueFormOptions) {
 	f.openGen.Add(1)
-	f.mode = options.Mode
 	f.teamID = options.TeamID
 	f.parentID = options.ParentID
-	f.issueID = ""
-	f.identifier = ""
-
-	issue := options.Issue
-	if issue != nil {
-		// The write targets the issue named here: a background refresh can
-		// move the selection while the form is up.
-		f.issueID = issue.ID
-		f.identifier = issue.Identifier
-		if f.teamID == "" {
-			f.teamID = issue.TeamID
-		}
-	}
 
 	f.saving = false
 	f.reset(options)
-	f.original = f.values()
 
-	logger.Debug("tui.issue_form: showing form mode=%d team_id=%s issue_id=%s", f.mode, f.teamID, f.issueID)
+	logger.Debug("tui.issue_form: showing form team_id=%s parent_id=%s", f.teamID, f.parentID)
 	f.fm.Show("issue_form")
 
 	f.loadStatuses()
@@ -184,25 +151,16 @@ func (f *IssueFormModal) Show(options IssueFormOptions) {
 	f.loadMilestones(f.project.id)
 }
 
-// reset points every field and every tracked id at this opening's issue, or
-// clears them for a create.
+// reset empties every field and seeds the ids a create takes from whatever the
+// navigation tree had selected.
 func (f *IssueFormModal) reset(options IssueFormOptions) {
-	issue := options.Issue
-
-	switch {
-	case f.mode == IssueFormEdit:
-		f.fm.SetTitle("Edit Issue")
-		f.fm.SetButtonLabel(0, "Save")
-		f.fm.SetHint("Esc cancel · Tab next · Space toggle · ⏎ open dropdown · ⌃⏎ save")
-	case options.Parent != nil:
-		f.fm.SetTitle(f.createTitle("New Sub-Issue"))
-		f.fm.SetButtonLabel(0, "Create")
-		f.fm.SetHint("Esc cancel · Tab next · Space toggle · ⏎ open dropdown · ⌃⏎ create")
-	default:
-		f.fm.SetTitle(f.createTitle("New Issue"))
-		f.fm.SetButtonLabel(0, "Create")
-		f.fm.SetHint("Esc cancel · Tab next · Space toggle · ⏎ open dropdown · ⌃⏎ create")
+	title := "New Issue"
+	if options.Parent != nil {
+		title = "New Sub-Issue"
 	}
+	f.fm.SetTitle(f.createTitle(title))
+	f.fm.SetButtonLabel(0, "Create")
+	f.fm.SetHint("Esc cancel · Tab next · Space toggle · ⏎ open dropdown · ⌃⏎ create")
 
 	f.fm.SetRowHidden(f.parentRowIdx, options.Parent == nil)
 	if options.Parent != nil {
@@ -211,47 +169,22 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 		f.parentView.SetText("")
 	}
 
-	if issue != nil {
-		f.fm.SetContext(f.app.issueContextLine(*issue))
-		f.titleField.SetText(issue.Title)
-		f.descField.SetText(issue.Description, true)
-		f.state = pickerOption{id: issue.StateID, label: issue.State}
-		f.assignee = pickerOption{id: issue.AssigneeID, label: issue.Assignee}
-		f.project = pickerOption{id: issue.ProjectID, label: issue.ProjectName}
-		f.milestone = pickerOption{}
-		if issue.ProjectMilestone != nil {
-			f.milestone = pickerOption{id: issue.ProjectMilestone.ID, label: issue.ProjectMilestone.Name}
-		}
-		f.cycle = pickerOption{}
-		if issue.Cycle != nil {
-			f.cycle = pickerOption{id: issue.Cycle.ID, label: issue.Cycle.DisplayName()}
-		}
-		f.priority = issue.Priority
-		f.estimateField.SetText(estimateText(issue.Estimate))
-		due := ""
-		if issue.DueDate != nil {
-			due = *issue.DueDate
-		}
-		f.dueDateField.SetText(due)
-		f.labelsField.SetItems(nil, labelIDs(issue.Labels))
-	} else {
-		f.fm.SetContext("")
-		f.titleField.SetText("")
-		f.descField.SetText("", true)
-		f.state = pickerOption{}
-		f.assignee = pickerOption{}
-		f.project = pickerOption{id: options.ProjectID}
-		f.milestone = pickerOption{}
-		f.cycle = pickerOption{id: options.CycleID}
-		f.priority = 0
-		f.estimateField.SetText("")
-		f.dueDateField.SetText("")
-		f.labelsField.SetItems(nil, nil)
-	}
+	f.fm.SetContext("")
+	f.titleField.SetText("")
+	f.descField.SetText("", true)
+	f.state = pickerOption{}
+	f.assignee = pickerOption{}
+	f.project = pickerOption{id: options.ProjectID}
+	f.milestone = pickerOption{}
+	f.cycle = pickerOption{id: options.CycleID}
+	f.priority = 0
+	f.estimateField.SetText("")
+	f.dueDateField.SetText("")
+	f.labelsField.SetItems(nil, nil)
 
 	f.priorityField.SetCurrentOption(f.priority)
 	f.labelsField.SetPlaceholder("Loading...")
-	f.setPicker(f.statusField, f.statusSentinel(), nil, f.state, f.assignState)
+	f.setPicker(f.statusField, statusSentinel, nil, f.state, f.assignState)
 	f.setPicker(f.assigneeField, "Unassigned", nil, f.assignee, f.assignAssignee)
 	f.setPicker(f.projectField, "No project", nil, f.project, f.assignProject)
 	f.setPicker(f.milestoneField, "No milestone", nil, f.milestone, f.assignMilestone)
@@ -274,14 +207,8 @@ func (f *IssueFormModal) assignAssignee(option pickerOption)  { f.assignee = opt
 func (f *IssueFormModal) assignMilestone(option pickerOption) { f.milestone = option }
 func (f *IssueFormModal) assignCycle(option pickerOption)     { f.cycle = option }
 
-// statusSentinel is the "leave it to Linear" row. An existing issue always has
-// a status, so only a create offers one.
-func (f *IssueFormModal) statusSentinel() string {
-	if f.mode == IssueFormCreate {
-		return "Team default"
-	}
-	return ""
-}
+// statusSentinel is the "leave it to Linear" row a create offers.
+const statusSentinel = "Team default"
 
 // setPicker rebuilds a dropdown around the value the form currently holds.
 // SetCurrentOption fires the change callback, so assign runs for the selected
@@ -386,23 +313,7 @@ func (f *IssueFormModal) submit() {
 		}
 	}
 	f.fm.SetStatus("", false)
-
-	if f.mode == IssueFormEdit {
-		f.submitEdit(values, estimate)
-		return
-	}
 	f.submitCreate(values, estimate)
-}
-
-func (f *IssueFormModal) submitEdit(values issueFormValues, estimate *float64) {
-	input, changed := buildIssueUpdate(f.issueID, f.original, values, estimate)
-	if !changed {
-		f.Hide()
-		f.app.flashStatus("No changes")
-		return
-	}
-	f.begin("Saving...")
-	f.app.runIssueUpdateWithResult(input, fmt.Sprintf("Updated %s", f.identifier), f.completion())
 }
 
 // begin marks a write in flight: the form stays up, says so, and takes no
@@ -467,64 +378,6 @@ func (f *IssueFormModal) submitCreate(values issueFormValues, estimate *float64)
 	f.app.createIssueFromForm(input, f.completion())
 }
 
-// buildIssueUpdate turns the difference between the form as opened and the
-// form as submitted into one update. A nil field means no change, an empty
-// string clears. estimate is the submitted text already parsed, nil when the
-// field is empty.
-func buildIssueUpdate(issueID string, original, current issueFormValues, estimate *float64) (linearapi.UpdateIssueInput, bool) {
-	input := linearapi.UpdateIssueInput{ID: issueID}
-	changed := false
-
-	if current.title != original.title {
-		input.Title = &current.title
-		changed = true
-	}
-	if current.description != original.description {
-		input.Description = &current.description
-		changed = true
-	}
-	if current.stateID != original.stateID {
-		input.StateID = &current.stateID
-		changed = true
-	}
-	if current.assigneeID != original.assigneeID {
-		input.AssigneeID = &current.assigneeID
-		changed = true
-	}
-	if current.projectID != original.projectID {
-		input.ProjectID = &current.projectID
-		changed = true
-	}
-	if current.milestoneID != original.milestoneID {
-		input.ProjectMilestoneID = &current.milestoneID
-		changed = true
-	}
-	if current.cycleID != original.cycleID {
-		input.CycleID = &current.cycleID
-		changed = true
-	}
-	if current.priority != original.priority {
-		input.Priority = &current.priority
-		changed = true
-	}
-	if current.dueDate != original.dueDate {
-		input.DueDate = &current.dueDate
-		changed = true
-	}
-	if current.estimate != original.estimate {
-		input.ClearEstimate = estimate == nil
-		input.Estimate = estimate
-		changed = true
-	}
-	if !reflect.DeepEqual(current.labelIDs, original.labelIDs) {
-		labels := current.labelIDs
-		input.LabelIDs = &labels
-		changed = true
-	}
-
-	return input, changed
-}
-
 // warmFor returns the App's cached metadata only when it belongs to the team
 // this form is working on. The caches follow the navigation tree, and editing
 // an issue from another team must not offer that team's ids: Linear rejects a
@@ -582,11 +435,11 @@ func (f *IssueFormModal) loadStatuses() {
 		for _, state := range states {
 			options = append(options, pickerOption{id: state.ID, label: state.Name})
 		}
-		f.setPicker(f.statusField, f.statusSentinel(), options, f.state, f.assignState)
+		f.setPicker(f.statusField, statusSentinel, options, f.state, f.assignState)
 	}, func() {
 		// Reporting the failure as an option would make it selectable, and its
 		// empty id would then be saved as the issue's status.
-		f.setPicker(f.statusField, f.statusSentinel(), nil, f.state, f.assignState)
+		f.setPicker(f.statusField, statusSentinel, nil, f.state, f.assignState)
 		f.fm.SetStatus("Could not load statuses", true)
 	})
 }
@@ -705,17 +558,6 @@ func estimateText(estimate *float64) string {
 		return ""
 	}
 	return strconv.FormatFloat(*estimate, 'f', -1, 64)
-}
-
-// labelIDs returns an issue's label ids, sorted to match what the multi-select
-// hands back.
-func labelIDs(labels []linearapi.IssueLabel) []string {
-	ids := make([]string, 0, len(labels))
-	for _, label := range labels {
-		ids = append(ids, label.ID)
-	}
-	sort.Strings(ids)
-	return ids
 }
 
 // Hide closes the form, and retires this opening so a write or a fetch still
