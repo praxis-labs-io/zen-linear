@@ -94,7 +94,7 @@ Panes that are waiting say so: `loading_pane.go` owns one ticker for the spinner
 
 ### Issue field writes
 
-`issue_field_save.go` builds the `UpdateIssueInput` for every single-field edit. A caller names a field and gets an `issueFieldSave` back; `saveIssueField` sends it. `saveIssueFieldWithResult` is the same call with `runIssueUpdateWithResult`'s `onDone`, for the one caller holding words it cannot put back once its box has gone — the description. One write path is not on it yet and is due to be deleted: the issue form's edit mode.
+`issue_field_save.go` builds the `UpdateIssueInput` for every single-field edit. A caller names a field and gets an `issueFieldSave` back; `saveIssueField` sends it. `saveIssueFieldWithResult` is the same call with `runIssueUpdateWithResult`'s `onDone`, for the one caller holding words it cannot put back once its box has gone — the description. Every write to an existing issue is on it: the issue form creates and nothing else, so `IssueFormOptions` has no mode and no issue.
 
 The constructors take `linearapi.Issue` **by value, never the `*App`**, and the id is captured where the user chose the issue. A picker or a text modal outlives the background refresh that moves the selection, so a write that leaves the id to the send path lands on whatever is selected by then, which is a different issue. Six writes did exactly that until ZNL-115, and `runIssueUpdateWithResult` now refuses an empty id rather than resolving one.
 

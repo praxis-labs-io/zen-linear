@@ -33,34 +33,11 @@ func (a *App) showCreateIssueModalWithParent(parentID string, parentRef *lineara
 	}
 
 	a.issueFormModal.Show(IssueFormOptions{
-		Mode:      IssueFormCreate,
 		TeamID:    a.GetSelectedTeamID(),
 		Parent:    parentRef,
 		ParentID:  parentID,
 		ProjectID: projectID,
 		CycleID:   cycleID,
-	})
-}
-
-// ShowEditIssueModal shows the issue form prefilled from the selected issue.
-func (a *App) ShowEditIssueModal() {
-	issue := a.GetSelectedIssue()
-	if issue == nil {
-		a.flashStatus("No issue selected")
-		return
-	}
-	parentRef := issue.Parent
-	parentID := ""
-	if parentRef != nil {
-		parentID = parentRef.ID
-	}
-
-	a.issueFormModal.Show(IssueFormOptions{
-		Mode:     IssueFormEdit,
-		TeamID:   issue.TeamID,
-		Issue:    issue,
-		Parent:   parentRef,
-		ParentID: parentID,
 	})
 }
 

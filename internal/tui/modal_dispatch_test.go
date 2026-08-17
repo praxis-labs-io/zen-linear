@@ -49,7 +49,7 @@ func openModal(t *testing.T, app *App, page string) {
 	case "picker":
 		app.showSortByPicker()
 	case "issue_form":
-		app.issueFormModal.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-1"})
+		app.issueFormModal.Show(IssueFormOptions{TeamID: "team-1"})
 	case "text_input":
 		app.textInputModal.Show("Related Issue", "Issue ID: ", "", func(string) {})
 	case "multi_select":

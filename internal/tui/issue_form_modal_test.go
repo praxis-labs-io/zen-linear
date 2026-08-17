@@ -86,61 +86,6 @@ func runUpdatesUntil(t *testing.T, pending chan func(), cond func() bool) {
 	}
 }
 
-func editableIssue() linearapi.Issue {
-	estimate := 3.0
-	due := "2026-09-01"
-	return linearapi.Issue{
-		ID:          "issue-1",
-		Identifier:  "ZNL-7",
-		Title:       "Original title",
-		Description: "Original body",
-		State:       "Todo",
-		StateID:     "state-todo",
-		Assignee:    "Test User",
-		AssigneeID:  "user-1",
-		Priority:    3,
-		TeamID:      "team-1",
-		ProjectID:   "project-1",
-		ProjectName: "Alpha",
-		Cycle:       &linearapi.CycleRef{ID: "cycle-1", Name: "Test Cycle", Number: 1},
-		DueDate:     &due,
-		Estimate:    &estimate,
-		Labels:      []linearapi.IssueLabel{{ID: "label-bug", Name: "Bug"}},
-	}
-}
-
-// captureUpdates stubs the mutation seam. The input travels back over a
-// channel so the assertion is ordered against the goroutine that sent it.
-func captureUpdates(app *App) chan linearapi.UpdateIssueInput {
-	updates := make(chan linearapi.UpdateIssueInput, 4)
-	app.updateIssueFunc = func(_ context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
-		updates <- input
-		return linearapi.Issue{ID: input.ID, Identifier: "ZNL-7"}, nil
-	}
-	return updates
-}
-
-func recvUpdate(t *testing.T, updates chan linearapi.UpdateIssueInput) linearapi.UpdateIssueInput {
-	t.Helper()
-	select {
-	case input := <-updates:
-		return input
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for the issue update")
-		return linearapi.UpdateIssueInput{}
-	}
-}
-
-func showEditForm(t *testing.T, app *App, issue linearapi.Issue) *IssueFormModal {
-	t.Helper()
-	form := app.issueFormModal
-	form.Show(IssueFormOptions{Mode: IssueFormEdit, TeamID: issue.TeamID, Issue: &issue})
-	if !app.pages.HasPage("issue_form") {
-		t.Fatal("Show left no issue_form page behind")
-	}
-	return form
-}
-
 // toggleLabel focuses the multi-select, moves its highlight, and toggles the
 // row through the form's own key handling.
 func toggleLabel(app *App, form *IssueFormModal, index int) {
@@ -149,128 +94,32 @@ func toggleLabel(app *App, form *IssueFormModal, index int) {
 	form.HandleKey(tcell.NewEventKey(tcell.KeyRune, ' ', tcell.ModNone))
 }
 
-func TestIssueFormEditSubmitsOnlyChangedFields(t *testing.T) {
-	app, _ := newIssueFormTestApp(t)
-	updates := captureUpdates(app)
-	form := showEditForm(t, app, editableIssue())
-
-	form.titleField.SetText("New title")
-	form.priorityField.SetCurrentOption(1)
-	toggleLabel(app, form, 1)
-
-	form.submit()
-
-	input := recvUpdate(t, updates)
-	if input.ID != "issue-1" {
-		t.Fatalf("input.ID = %q, want issue-1", input.ID)
-	}
-	if input.Title == nil || *input.Title != "New title" {
-		t.Fatalf("input.Title = %v, want New title", input.Title)
-	}
-	if input.Priority == nil || *input.Priority != 1 {
-		t.Fatalf("input.Priority = %v, want 1", input.Priority)
-	}
-	if input.LabelIDs == nil || !reflect.DeepEqual(*input.LabelIDs, []string{"label-bug", "label-chore"}) {
-		t.Fatalf("input.LabelIDs = %v, want both labels", input.LabelIDs)
-	}
-	untouched := map[string]interface{}{
-		"Description":        input.Description,
-		"StateID":            input.StateID,
-		"AssigneeID":         input.AssigneeID,
-		"ProjectID":          input.ProjectID,
-		"ProjectMilestoneID": input.ProjectMilestoneID,
-		"CycleID":            input.CycleID,
-		"DueDate":            input.DueDate,
-		"Estimate":           input.Estimate,
-	}
-	for name, field := range untouched {
-		if !reflect.ValueOf(field).IsNil() {
-			t.Fatalf("input.%s = %v, want nil for an untouched field", name, field)
-		}
-	}
-	if input.ClearEstimate {
-		t.Fatal("input.ClearEstimate is true for an untouched estimate")
-	}
-}
-
-func TestIssueFormEditWithNoChangesSendsNoRequest(t *testing.T) {
-	app, _ := newIssueFormTestApp(t)
-	updates := captureUpdates(app)
-	form := showEditForm(t, app, editableIssue())
-
-	form.submit()
-
-	if len(updates) != 0 {
-		t.Fatalf("update calls = %d, want 0", len(updates))
-	}
-	if app.pages.HasPage("issue_form") {
-		t.Fatal("form is still open after an unchanged submit")
-	}
-}
-
-func TestIssueFormEditClearsEmptiedFields(t *testing.T) {
-	app, _ := newIssueFormTestApp(t)
-	updates := captureUpdates(app)
-	form := showEditForm(t, app, editableIssue())
-
-	form.estimateField.SetText("")
-	form.dueDateField.SetText("")
-	form.assigneeField.SetCurrentOption(0)
-	form.cycleField.SetCurrentOption(0)
-	toggleLabel(app, form, 0)
-
-	form.submit()
-
-	input := recvUpdate(t, updates)
-	if !input.ClearEstimate || input.Estimate != nil {
-		t.Fatalf("estimate cleared as ClearEstimate=%v Estimate=%v, want true and nil", input.ClearEstimate, input.Estimate)
-	}
-	if input.DueDate == nil || *input.DueDate != "" {
-		t.Fatalf("input.DueDate = %v, want an empty string", input.DueDate)
-	}
-	if input.AssigneeID == nil || *input.AssigneeID != "" {
-		t.Fatalf("input.AssigneeID = %v, want an empty string", input.AssigneeID)
-	}
-	if input.CycleID == nil || *input.CycleID != "" {
-		t.Fatalf("input.CycleID = %v, want an empty string", input.CycleID)
-	}
-	if input.LabelIDs == nil || len(*input.LabelIDs) != 0 {
-		t.Fatalf("input.LabelIDs = %v, want an empty slice", input.LabelIDs)
-	}
-}
-
-func TestIssueFormEditTargetsTheIssueCapturedAtOpen(t *testing.T) {
-	app, _ := newIssueFormTestApp(t)
-	updates := captureUpdates(app)
-	form := showEditForm(t, app, editableIssue())
-
-	// A background refresh moves the selection while the form is up.
-	app.issuesMu.Lock()
-	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "ZNL-8"}
-	app.issuesMu.Unlock()
-
-	form.titleField.SetText("Renamed")
-	form.submit()
-
-	if input := recvUpdate(t, updates); input.ID != "issue-1" {
-		t.Fatalf("input.ID = %q, want the issue the form opened on", input.ID)
-	}
-}
-
 func TestIssueFormProjectChangeClearsAndReloadsMilestone(t *testing.T) {
-	app, _ := newIssueFormTestApp(t)
+	app, pending := newIssueFormTestApp(t)
 	fetched := make(chan string, 4)
 	app.fetchMilestonesFunc = func(_ context.Context, projectID string) ([]linearapi.ProjectMilestone, error) {
 		fetched <- projectID
 		return []linearapi.ProjectMilestone{{ID: "milestone-" + projectID, Name: "Milestone " + projectID}}, nil
 	}
-	updates := captureUpdates(app)
+	created := make(chan linearapi.CreateIssueInput, 2)
+	app.createIssueFunc = func(_ context.Context, input linearapi.CreateIssueInput) (linearapi.Issue, error) {
+		created <- input
+		return linearapi.Issue{ID: "issue-9"}, nil
+	}
 
-	issue := editableIssue()
-	issue.ProjectMilestone = &linearapi.ProjectMilestoneRef{ID: "milestone-project-1", Name: "Milestone project-1"}
-	form := showEditForm(t, app, issue)
+	// Seeded from a project in the navigation tree, which is the only way a
+	// create opens with one already chosen.
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{TeamID: "team-1", ProjectID: "project-1"})
 	if got := <-fetched; got != "project-1" {
 		t.Fatalf("first milestone fetch = %q, want project-1", got)
+	}
+	// The options have to land before one can be picked, or the milestone this
+	// test is about clearing was never set.
+	runNextUpdate(t, pending)
+	form.milestoneField.SetCurrentOption(1)
+	if form.milestone.id != "milestone-project-1" {
+		t.Fatalf("milestone = %+v, want project-1's picked before the move", form.milestone)
 	}
 
 	form.projectField.SetCurrentOption(2) // "No project", "Alpha", "Beta"
@@ -282,14 +131,66 @@ func TestIssueFormProjectChangeClearsAndReloadsMilestone(t *testing.T) {
 		t.Fatalf("project = %q, want project-2", form.project.id)
 	}
 
+	form.titleField.SetText("Fresh issue")
 	form.submit()
 
-	input := recvUpdate(t, updates)
-	if input.ProjectID == nil || *input.ProjectID != "project-2" {
-		t.Fatalf("input.ProjectID = %v, want project-2", input.ProjectID)
+	select {
+	case input := <-created:
+		if input.ProjectID != "project-2" {
+			t.Fatalf("input.ProjectID = %q, want project-2", input.ProjectID)
+		}
+		// A milestone belongs to one project, so moving project orphans it.
+		if input.ProjectMilestoneID != "" {
+			t.Fatalf("input.ProjectMilestoneID = %q, want it cleared", input.ProjectMilestoneID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the create")
 	}
-	if input.ProjectMilestoneID == nil || *input.ProjectMilestoneID != "" {
-		t.Fatalf("input.ProjectMilestoneID = %v, want an empty string", input.ProjectMilestoneID)
+}
+
+// awaitFetch reads the team one option load asked for, failing rather than
+// blocking when the form answered from a cache instead of fetching.
+func awaitFetch(t *testing.T, what string, asked chan string) {
+	t.Helper()
+	select {
+	case got := <-asked:
+		if got != "team-2" {
+			t.Fatalf("%s fetched for %q, want the team being created in", what, got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("%s never fetched: the form offered the navigation team's cache", what)
+	}
+}
+
+// The warm caches follow the navigation tree and lag a team switch, so a form
+// opened for a team they do not belong to has to fetch rather than offer them.
+func TestIssueFormFetchesForTheTeamItCreatesIn(t *testing.T) {
+	app, pending := newIssueFormTestApp(t)
+	states := make(chan string, 4)
+	app.fetchWorkflowStatesFunc = func(_ context.Context, teamID string) ([]linearapi.WorkflowState, error) {
+		states <- teamID
+		return []linearapi.WorkflowState{{ID: "state-other", Name: "Other Todo"}}, nil
+	}
+	labels := make(chan string, 4)
+	app.fetchIssueLabelsFunc = func(_ context.Context, teamID string) ([]linearapi.IssueLabel, error) {
+		labels <- teamID
+		return []linearapi.IssueLabel{{ID: "label-other", Name: "Other"}}, nil
+	}
+
+	// The tree warmed team-1; the create is for the team it has moved to.
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{TeamID: "team-2"})
+
+	// Timed rather than a bare receive: a form that wrongly reads the warm cache
+	// never fetches at all, and this has to fail rather than block.
+	awaitFetch(t, "statuses", states)
+	awaitFetch(t, "labels", labels)
+	runUpdatesUntil(t, pending, func() bool { return len(form.statusField.options) > 1 })
+
+	for _, option := range form.statusField.options {
+		if option == "Todo" || option == "In Progress" {
+			t.Fatalf("status options = %v, want team-2's, not the cached team-1 ones", form.statusField.options)
+		}
 	}
 }
 
@@ -298,7 +199,8 @@ func TestIssueFormProjectChangeClearsAndReloadsMilestone(t *testing.T) {
 // project the form has moved on to.
 func TestIssueFormStaleMilestoneLoadIsIgnored(t *testing.T) {
 	app, pending := newIssueFormTestApp(t)
-	form := showEditForm(t, app, editableIssue())
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{TeamID: "team-1", ProjectID: "project-1"})
 
 	form.loadMilestones("project-2")
 	form.loadMilestones("project-3")
@@ -333,14 +235,21 @@ func TestIssueFormRejectsInvalidInput(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			app, _ := newIssueFormTestApp(t)
-			updates := captureUpdates(app)
-			form := showEditForm(t, app, editableIssue())
+			created := make(chan linearapi.CreateIssueInput, 2)
+			app.createIssueFunc = func(_ context.Context, input linearapi.CreateIssueInput) (linearapi.Issue, error) {
+				created <- input
+				return linearapi.Issue{ID: "issue-9"}, nil
+			}
+			form := app.issueFormModal
+			form.Show(IssueFormOptions{TeamID: "team-1"})
+			// A valid title, so the two field cases fail on their own field.
+			form.titleField.SetText("Fresh issue")
 
 			tc.mutate(form)
 			form.submit()
 
-			if len(updates) != 0 {
-				t.Fatalf("update calls = %d, want 0", len(updates))
+			if len(created) != 0 {
+				t.Fatalf("create calls = %d, want 0", len(created))
 			}
 			if !app.pages.HasPage("issue_form") {
 				t.Fatal("form closed on a rejected submit")
@@ -362,7 +271,6 @@ func TestIssueFormCreateSendsEveryFieldInOneInput(t *testing.T) {
 	form := app.issueFormModal
 
 	form.Show(IssueFormOptions{
-		Mode:     IssueFormCreate,
 		TeamID:   "team-1",
 		ParentID: "parent-1",
 		Parent:   &linearapi.IssueRef{ID: "parent-1", Identifier: "ZNL-1", Title: "Parent issue"},
@@ -413,11 +321,17 @@ func TestIssueFormCreateSendsEveryFieldInOneInput(t *testing.T) {
 
 func TestIssueFormCreateResetsFieldsAndShowsParent(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
-	form := showEditForm(t, app, editableIssue())
+	form := app.issueFormModal
+	// A form left half filled in, which is what the next opening must not show.
+	form.Show(IssueFormOptions{TeamID: "team-1"})
+	form.titleField.SetText("Abandoned")
+	form.descField.SetText("Abandoned body", true)
+	form.estimateField.SetText("8")
+	form.dueDateField.SetText("2026-09-01")
+	toggleLabel(app, form, 0)
 	form.Hide()
 
 	form.Show(IssueFormOptions{
-		Mode:   IssueFormCreate,
 		TeamID: "team-1",
 		Parent: &linearapi.IssueRef{ID: "parent-1", Identifier: "ZNL-1", Title: "Parent issue"},
 	})
@@ -426,7 +340,7 @@ func TestIssueFormCreateResetsFieldsAndShowsParent(t *testing.T) {
 		t.Fatal("Show did not focus the title field")
 	}
 	if form.titleField.GetText() != "" || form.descField.GetText() != "" {
-		t.Fatalf("fields carried over the edited issue: %q / %q", form.titleField.GetText(), form.descField.GetText())
+		t.Fatalf("fields carried over the abandoned form: %q / %q", form.titleField.GetText(), form.descField.GetText())
 	}
 	if form.estimateField.GetText() != "" || form.dueDateField.GetText() != "" {
 		t.Fatalf("estimate/due date carried over: %q / %q", form.estimateField.GetText(), form.dueDateField.GetText())
@@ -442,60 +356,42 @@ func TestIssueFormCreateResetsFieldsAndShowsParent(t *testing.T) {
 	}
 }
 
-func TestIssueFormEditPrefillsEveryField(t *testing.T) {
+// A cold cache must not clear a field: an empty project list would otherwise
+// throw away the project the navigation tree seeded the create from.
+func TestIssueFormKeepsAProjectTheOptionsCannotShow(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
-	form := showEditForm(t, app, editableIssue())
-
-	if form.titleField.GetText() != "Original title" {
-		t.Fatalf("title = %q", form.titleField.GetText())
-	}
-	if form.descField.GetText() != "Original body" {
-		t.Fatalf("description = %q", form.descField.GetText())
-	}
-	if form.estimateField.GetText() != "3" {
-		t.Fatalf("estimate = %q, want 3", form.estimateField.GetText())
-	}
-	if form.dueDateField.GetText() != "2026-09-01" {
-		t.Fatalf("due date = %q", form.dueDateField.GetText())
-	}
-	if form.state.id != "state-todo" || form.assignee.id != "user-1" || form.project.id != "project-1" || form.cycle.id != "cycle-1" {
-		t.Fatalf("pickers = %+v %+v %+v %+v", form.state, form.assignee, form.project, form.cycle)
-	}
-	if !reflect.DeepEqual(form.labelsField.SelectedIDs(), []string{"label-bug"}) {
-		t.Fatalf("labels = %v, want label-bug", form.labelsField.SelectedIDs())
-	}
-	if form.fm.title != "Edit Issue" {
-		t.Fatalf("modal title = %q, want Edit Issue", form.fm.title)
-	}
-}
-
-// TestIssueFormKeepsAStatusTheOptionsCannotShow guards the failure that would
-// clear a field on a cold cache: an empty status list must not turn the
-// issue's status into no status.
-func TestIssueFormKeepsAStatusTheOptionsCannotShow(t *testing.T) {
-	app, _ := newIssueFormTestApp(t)
-	app.workflowStates = nil
-	app.fetchWorkflowStatesFunc = func(context.Context, string) ([]linearapi.WorkflowState, error) {
+	app.teamProjects = nil
+	app.fetchProjectsFunc = func(context.Context, string) ([]linearapi.Project, error) {
 		return nil, nil
 	}
-	updates := captureUpdates(app)
-	form := showEditForm(t, app, editableIssue())
-
-	if form.state.id != "state-todo" {
-		t.Fatalf("state = %+v, want the issue's own state kept", form.state)
+	created := make(chan linearapi.CreateIssueInput, 2)
+	app.createIssueFunc = func(_ context.Context, input linearapi.CreateIssueInput) (linearapi.Issue, error) {
+		created <- input
+		return linearapi.Issue{ID: "issue-9"}, nil
 	}
-	form.titleField.SetText("Renamed")
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{TeamID: "team-1", ProjectID: "project-1"})
+
+	if form.project.id != "project-1" {
+		t.Fatalf("project = %+v, want the seeded project kept", form.project)
+	}
+	form.titleField.SetText("Fresh issue")
 	form.submit()
 
-	if input := recvUpdate(t, updates); input.StateID != nil {
-		t.Fatalf("input.StateID = %v, want nil", input.StateID)
+	select {
+	case input := <-created:
+		if input.ProjectID != "project-1" {
+			t.Fatalf("input.ProjectID = %q, want the seeded project", input.ProjectID)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the create")
 	}
 }
 
 func TestIssueFormEscapeClosesTheOpenMenuBeforeModal(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	form := app.issueFormModal
-	form.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-1"})
+	form.Show(IssueFormOptions{TeamID: "team-1"})
 	app.app.SetFocus(form.assigneeField.view)
 	form.HandleKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 	if !form.assigneeField.IsOpen() {
@@ -522,7 +418,7 @@ func TestIssueFormCreateFailureKeepsTheFormAndTheTyping(t *testing.T) {
 		return linearapi.Issue{}, errors.New("labelIds for incorrect team")
 	}
 	form := app.issueFormModal
-	form.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-1"})
+	form.Show(IssueFormOptions{TeamID: "team-1"})
 
 	form.titleField.SetText("Audit modals")
 	form.descField.SetText("A long body worth keeping", true)
@@ -563,123 +459,46 @@ func TestIssueFormCreateFailureKeepsTheFormAndTheTyping(t *testing.T) {
 	}
 }
 
-// TestIssueFormEditRetryAfterAFailureStillDiffsAgainstTheIssue: the retry has
-// to measure against the server's version, not against what was resubmitted.
-func TestIssueFormEditRetryAfterAFailureStillDiffsAgainstTheIssue(t *testing.T) {
-	app, pending := newIssueFormTestApp(t)
-	updates := make(chan linearapi.UpdateIssueInput, 4)
-	results := make(chan error, 4)
-	results <- errors.New("rejected")
-	results <- nil
-	app.updateIssueFunc = func(_ context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
-		updates <- input
-		if err := <-results; err != nil {
-			return linearapi.Issue{}, err
-		}
-		return linearapi.Issue{ID: input.ID, Identifier: "ZNL-7"}, nil
-	}
-	form := showEditForm(t, app, editableIssue())
-
-	form.titleField.SetText("Renamed")
-	form.submit()
-
-	if first := recvUpdate(t, updates); first.Title == nil || *first.Title != "Renamed" {
-		t.Fatalf("first attempt title = %v, want Renamed", first.Title)
-	}
-	runUpdatesUntil(t, pending, func() bool { return !form.saving })
-	if !app.pages.HasPage("issue_form") {
-		t.Fatal("the form closed on a refused update")
-	}
-	if got := form.fm.hintView.GetText(true); !strings.Contains(got, "rejected") {
-		t.Fatalf("modal status line = %q, want the refusal", got)
-	}
-	if got := form.titleField.GetText(); got != "Renamed" {
-		t.Fatalf("title = %q, want the edit kept", got)
-	}
-
-	form.submit()
-
-	retry := recvUpdate(t, updates)
-	if retry.Title == nil || *retry.Title != "Renamed" {
-		t.Fatalf("retry title = %v, want it still sent as a change", retry.Title)
-	}
-	if retry.Description != nil || retry.LabelIDs != nil {
-		t.Fatalf("retry sent untouched fields: description=%v labels=%v", retry.Description, retry.LabelIDs)
-	}
-	runUpdatesUntil(t, pending, func() bool { return !app.pages.HasPage("issue_form") })
-}
-
 // TestIssueFormIgnoresASecondSubmitWhileSaving keeps a slow write from being
 // fired twice.
 func TestIssueFormIgnoresASecondSubmitWhileSaving(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
-	updates := captureUpdates(app)
-	form := showEditForm(t, app, editableIssue())
+	created := make(chan linearapi.CreateIssueInput, 4)
+	app.createIssueFunc = func(_ context.Context, input linearapi.CreateIssueInput) (linearapi.Issue, error) {
+		created <- input
+		return linearapi.Issue{ID: "issue-9"}, nil
+	}
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{TeamID: "team-1"})
 
-	form.titleField.SetText("Renamed")
+	form.titleField.SetText("Fresh issue")
 	form.submit()
 	form.submit()
 
-	recvUpdate(t, updates)
 	select {
-	case extra := <-updates:
+	case <-created:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the create")
+	}
+	select {
+	case extra := <-created:
 		t.Fatalf("a second submit went out while saving: %+v", extra)
 	case <-time.After(200 * time.Millisecond):
 	}
 }
 
-// TestIssueFormEditFetchesForTheIssuesOwnTeam guards a cross-team edit: the
-// App's warm metadata belongs to whatever the navigation tree has selected,
-// and offering it for another team's issue writes ids Linear refuses.
-func TestIssueFormEditFetchesForTheIssuesOwnTeam(t *testing.T) {
-	app, pending := newIssueFormTestApp(t)
-	states := make(chan string, 4)
-	app.fetchWorkflowStatesFunc = func(_ context.Context, teamID string) ([]linearapi.WorkflowState, error) {
-		states <- teamID
-		return []linearapi.WorkflowState{{ID: "state-other", Name: "Other Todo"}}, nil
-	}
-	labels := make(chan string, 4)
-	app.fetchIssueLabelsFunc = func(_ context.Context, teamID string) ([]linearapi.IssueLabel, error) {
-		labels <- teamID
-		return []linearapi.IssueLabel{{ID: "label-other", Name: "Other"}}, nil
-	}
-
-	issue := editableIssue()
-	issue.TeamID = "team-2" // the nav tree warmed team-1
-	issue.StateID = "state-other"
-	issue.State = "Other Todo"
-	issue.Labels = nil
-	form := showEditForm(t, app, issue)
-
-	if got := <-states; got != "team-2" {
-		t.Fatalf("statuses fetched for %q, want the issue's own team", got)
-	}
-	if got := <-labels; got != "team-2" {
-		t.Fatalf("labels fetched for %q, want the issue's own team", got)
-	}
-	runUpdatesUntil(t, pending, func() bool { return len(form.statusField.options) > 0 })
-
-	for _, option := range form.statusField.options {
-		if option == "Todo" || option == "In Progress" {
-			t.Fatalf("status options = %v, want team-2's, not the cached team-1 ones", form.statusField.options)
-		}
-	}
-}
-
 // TestIssueFormStaleSaveDoesNotCloseAReopenedForm covers escaping out of a
-// slow save and reopening: the first write must not tear down the second form.
+// slow create and reopening: the first write must not tear down the second form.
 func TestIssueFormStaleSaveDoesNotCloseAReopenedForm(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
-	form := showEditForm(t, app, editableIssue())
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{TeamID: "team-1"})
 
-	// The result handler the first save would carry.
+	// The result handler the first create would carry.
 	stale := form.completion()
 
 	form.Hide()
-	second := editableIssue()
-	second.ID = "issue-2"
-	second.Identifier = "ZNL-8"
-	form.Show(IssueFormOptions{Mode: IssueFormEdit, TeamID: second.TeamID, Issue: &second})
+	form.Show(IssueFormOptions{TeamID: "team-1"})
 	form.titleField.SetText("Half typed")
 
 	stale(nil)
@@ -707,14 +526,13 @@ func TestIssueFormCreateTitleNamesTheTeam(t *testing.T) {
 	}
 	form := app.issueFormModal
 
-	form.Show(IssueFormOptions{Mode: IssueFormCreate, TeamID: "team-2"})
+	form.Show(IssueFormOptions{TeamID: "team-2"})
 	if form.fm.title != "New Issue · Design" {
 		t.Fatalf("modal title = %q, want it to name the Design team", form.fm.title)
 	}
 	form.Hide()
 
 	form.Show(IssueFormOptions{
-		Mode:   IssueFormCreate,
 		TeamID: "team-1",
 		Parent: &linearapi.IssueRef{ID: "parent-1", Identifier: "LIN-1", Title: "Parent issue"},
 	})
@@ -723,10 +541,10 @@ func TestIssueFormCreateTitleNamesTheTeam(t *testing.T) {
 	}
 	form.Hide()
 
-	// An edit is already identified by ZNL-81 in the context line, and the
-	// team is not the user's to change from here.
-	form.Show(IssueFormOptions{Mode: IssueFormEdit, TeamID: "team-1", Issue: &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", TeamID: "team-1"}})
-	if form.fm.title != "Edit Issue" {
-		t.Fatalf("edit title = %q, want Edit Issue", form.fm.title)
+	// A team the tree does not carry leaves the base title rather than a
+	// dangling separator.
+	form.Show(IssueFormOptions{TeamID: "team-unknown"})
+	if form.fm.title != "New Issue" {
+		t.Fatalf("title = %q, want the base with no team", form.fm.title)
 	}
 }
