@@ -148,6 +148,52 @@ func TestIssueFormProjectChangeClearsAndReloadsMilestone(t *testing.T) {
 	}
 }
 
+// awaitFetch reads the team one option load asked for, failing rather than
+// blocking when the form answered from a cache instead of fetching.
+func awaitFetch(t *testing.T, what string, asked chan string) {
+	t.Helper()
+	select {
+	case got := <-asked:
+		if got != "team-2" {
+			t.Fatalf("%s fetched for %q, want the team being created in", what, got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("%s never fetched: the form offered the navigation team's cache", what)
+	}
+}
+
+// The warm caches follow the navigation tree and lag a team switch, so a form
+// opened for a team they do not belong to has to fetch rather than offer them.
+func TestIssueFormFetchesForTheTeamItCreatesIn(t *testing.T) {
+	app, pending := newIssueFormTestApp(t)
+	states := make(chan string, 4)
+	app.fetchWorkflowStatesFunc = func(_ context.Context, teamID string) ([]linearapi.WorkflowState, error) {
+		states <- teamID
+		return []linearapi.WorkflowState{{ID: "state-other", Name: "Other Todo"}}, nil
+	}
+	labels := make(chan string, 4)
+	app.fetchIssueLabelsFunc = func(_ context.Context, teamID string) ([]linearapi.IssueLabel, error) {
+		labels <- teamID
+		return []linearapi.IssueLabel{{ID: "label-other", Name: "Other"}}, nil
+	}
+
+	// The tree warmed team-1; the create is for the team it has moved to.
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{TeamID: "team-2"})
+
+	// Timed rather than a bare receive: a form that wrongly reads the warm cache
+	// never fetches at all, and this has to fail rather than block.
+	awaitFetch(t, "statuses", states)
+	awaitFetch(t, "labels", labels)
+	runUpdatesUntil(t, pending, func() bool { return len(form.statusField.options) > 1 })
+
+	for _, option := range form.statusField.options {
+		if option == "Todo" || option == "In Progress" {
+			t.Fatalf("status options = %v, want team-2's, not the cached team-1 ones", form.statusField.options)
+		}
+	}
+}
+
 // TestIssueFormStaleMilestoneLoadIsIgnored covers the flip from one project to
 // another and back: the first fetch must not paint its milestones under the
 // project the form has moved on to.

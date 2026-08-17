@@ -221,17 +221,6 @@ func (fm *FormModal) SetRowHidden(rowIdx int, hidden bool) {
 	}
 }
 
-// SetButtonLabel relabels an action button, for modals whose verb changes
-// with the mode.
-func (fm *FormModal) SetButtonLabel(idx int, label string) {
-	if idx < 0 || idx >= len(fm.buttons) {
-		return
-	}
-	btn := fm.buttons[idx]
-	btn.SetLabel(label)
-	fm.buttonsRow.ResizeItem(btn, len(label)+4, 0)
-}
-
 // EndRow closes the row consecutive AddPicker and AddPackedInput calls are
 // filling, so the next one starts a new row. Every other Add* closes it as a
 // side effect; a form with more packed fields than fit one row needs this.

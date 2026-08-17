@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -163,6 +164,15 @@ func fieldEditorText(field issueField, issue linearapi.Issue) string {
 		return estimateText(issue.Estimate)
 	}
 	return ""
+}
+
+// estimateText is what the box opens holding. formatEstimate is the table's
+// and prints "-" for nothing, which would then be typed back in as the value.
+func estimateText(estimate *float64) string {
+	if estimate == nil {
+		return ""
+	}
+	return strconv.FormatFloat(*estimate, 'f', -1, 64)
 }
 
 // fieldEditorSave builds one field's write from the text typed. Empty clears

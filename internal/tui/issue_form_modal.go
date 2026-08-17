@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -89,7 +88,7 @@ type IssueFormModal struct {
 	milestoneGen int
 }
 
-// NewIssueFormModal builds the shared issue form.
+// NewIssueFormModal builds the issue form.
 func NewIssueFormModal(app *App) *IssueFormModal {
 	f := &IssueFormModal{app: app}
 
@@ -159,7 +158,6 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 		title = "New Sub-Issue"
 	}
 	f.fm.SetTitle(f.createTitle(title))
-	f.fm.SetButtonLabel(0, "Create")
 	f.fm.SetHint("Esc cancel · Tab next · Space toggle · ⏎ open dropdown · ⌃⏎ create")
 
 	f.fm.SetRowHidden(f.parentRowIdx, options.Parent == nil)
@@ -169,7 +167,6 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 		f.parentView.SetText("")
 	}
 
-	f.fm.SetContext("")
 	f.titleField.SetText("")
 	f.descField.SetText("", true)
 	f.state = pickerOption{}
@@ -210,11 +207,8 @@ func (f *IssueFormModal) assignCycle(option pickerOption)     { f.cycle = option
 // statusSentinel is the "leave it to Linear" row a create offers.
 const statusSentinel = "Team default"
 
-// setPicker rebuilds a dropdown around the value the form currently holds.
-// SetCurrentOption fires the change callback, so assign runs for the selected
-// row and the tracked value and the visible row cannot drift apart. A current
-// value the options can't show is kept as its own row: a slow or failed fetch
-// must not quietly clear a field the issue has.
+// setPicker rebuilds a dropdown around the value the form holds. A value the
+// options cannot show keeps a row of its own, or a slow fetch clears it.
 func (f *IssueFormModal) setPicker(dd *FormPicker, sentinel string, options []pickerOption, current pickerOption, assign func(pickerOption)) {
 	rows := make([]pickerOption, 0, len(options)+2)
 	if sentinel != "" {
@@ -269,7 +263,7 @@ func (f *IssueFormModal) assignProject(option pickerOption) {
 	f.loadMilestones(option.id)
 }
 
-// values reads the fields back into a comparable snapshot.
+// values reads the fields back into the shape submitCreate sends.
 func (f *IssueFormModal) values() issueFormValues {
 	return issueFormValues{
 		title:       strings.TrimSpace(f.titleField.GetText()),
@@ -286,8 +280,8 @@ func (f *IssueFormModal) values() issueFormValues {
 	}
 }
 
-// submit validates the form and routes to the create or the update path. A
-// rejected form stays open with the reason on the status bar.
+// submit validates the form and creates the issue. A rejected form stays open
+// with the reason on the status bar.
 func (f *IssueFormModal) submit() {
 	if f.saving {
 		return
@@ -378,10 +372,8 @@ func (f *IssueFormModal) submitCreate(values issueFormValues, estimate *float64)
 	f.app.createIssueFromForm(input, f.completion())
 }
 
-// warmFor returns the App's cached metadata only when it belongs to the team
-// this form is working on. The caches follow the navigation tree, and editing
-// an issue from another team must not offer that team's ids: Linear rejects a
-// foreign state or label, and accepts a foreign project.
+// warmFor returns the cached metadata only when it belongs to the team being
+// created in. The cache lags a team switch, and Linear rejects a foreign state.
 func warmFor[T any](f *IssueFormModal, cached []T) []T {
 	if f.app.metadataTeamID != f.teamID {
 		return nil
@@ -549,15 +541,6 @@ func (f *IssueFormModal) loadMilestones(projectID string) {
 			f.setPicker(f.milestoneField, "No milestone", options, f.milestone, f.assignMilestone)
 		})
 	}()
-}
-
-// estimateText renders an estimate for the form. formatEstimate is for the
-// table and prints "-" for nothing, which the form would then try to save.
-func estimateText(estimate *float64) string {
-	if estimate == nil {
-		return ""
-	}
-	return strconv.FormatFloat(*estimate, 'f', -1, 64)
 }
 
 // Hide closes the form, and retires this opening so a write or a fetch still
