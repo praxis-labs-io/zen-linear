@@ -320,6 +320,123 @@ func TestASecondSendWhileOneIsInFlightWritesNothing(t *testing.T) {
 	runQueuedUpdate(t, pending)
 }
 
+// A close and a reopen on the same issue are alike but for the stamp, so an
+// id-keyed callback closed the second box and wiped what had been typed in.
+func TestAnInFlightSaveLeavesAReopenedBoxAlone(t *testing.T) {
+	app, writes, pending := descriptionFixture(t)
+	openDescription(t, app)
+	app.detailsDescArea.SetText("First rewrite.", true)
+	sendDescription(app)
+	awaitWrite(t, writes)
+
+	pressFieldKey(app, tcell.KeyEscape)
+	openDescription(t, app)
+	app.detailsDescArea.SetText("Second rewrite.", true)
+	runQueuedUpdate(t, pending)
+
+	if app.detailsEdit.editing != issueFieldDescription {
+		t.Fatal("the first save closed the box that replaced it")
+	}
+	if got := app.detailsDescArea.GetText(); got != "Second rewrite." {
+		t.Errorf("box holds %q, want the words typed since the first save went out", got)
+	}
+}
+
+// The guard is against a hammered chord on one box, not against a reader who
+// closed, reopened and meant it.
+func TestReopeningAndSendingAgainWrites(t *testing.T) {
+	app, writes, pending := descriptionFixture(t)
+	openDescription(t, app)
+	app.detailsDescArea.SetText("First rewrite.", true)
+	sendDescription(app)
+	awaitWrite(t, writes)
+
+	pressFieldKey(app, tcell.KeyEscape)
+	openDescription(t, app)
+	app.detailsDescArea.SetText("Second rewrite.", true)
+	sendDescription(app)
+
+	input := awaitWrite(t, writes)
+	if input.Description == nil || *input.Description != "Second rewrite." {
+		t.Fatalf("second write carried %+v, want the second rewrite", input)
+	}
+	runQueuedUpdate(t, pending)
+	runQueuedUpdate(t, pending)
+}
+
+// Ctrl+Enter is a chord plenty of terminals fold into a bare Enter, and this
+// box has no button to fall back to.
+func TestCtrlSSavesAndCtrlEnterStillDoes(t *testing.T) {
+	for _, send := range []struct {
+		name  string
+		event *tcell.EventKey
+	}{
+		{"ctrl+s", tcell.NewEventKey(tcell.KeyCtrlS, 's', tcell.ModCtrl)},
+		{"ctrl+enter", tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModCtrl)},
+	} {
+		t.Run(send.name, func(t *testing.T) {
+			app, writes, _ := descriptionFixture(t)
+			openDescription(t, app)
+			app.detailsDescArea.SetText("Rewritten.", true)
+
+			app.handleGlobalKey(send.event)
+
+			input := awaitWrite(t, writes)
+			if input.Description == nil || *input.Description != "Rewritten." {
+				t.Fatalf("write carried %+v, want the new description", input)
+			}
+		})
+	}
+}
+
+// A box with no width holds the keyboard while drawing nothing, and nothing on
+// screen says where the typing went.
+func TestANarrowPaneStillLeavesDescriptionToTypeIn(t *testing.T) {
+	for _, width := range []int{1, 2, 4, 9, 10, 30, 90} {
+		column, inner := descriptionBoxRect(width)
+
+		if column+inner != width {
+			t.Errorf("width %d puts the box at %d+%d, which is not the pane", width, column, inner)
+		}
+		// The indent is given up before the typing is. Anything less means the
+		// bar took room the words needed.
+		if want := min(width, fieldEditorMinWidth); inner < want {
+			t.Errorf("width %d gives a box %d wide, want at least %d", width, inner, want)
+		}
+		if width >= fieldEditorMinWidth+detailsCursorGutter && column != detailsCursorGutter {
+			t.Errorf("width %d indents the box %d, want the full %d", width, column, detailsCursorGutter)
+		}
+	}
+}
+
+// The label takes the edit-mode gutter, so the body has to as well or the block
+// disagrees with its own label and jumps when the box opens.
+func TestTheBodyTakesTheSameGutterAsItsLabel(t *testing.T) {
+	app := newDetailsTestApp(t)
+
+	read := drawDetails(t, app, 90)
+	readBody := findLine(t, read, "rather than being cut off at the border")
+
+	app.enterDetailsEdit()
+	edit := drawDetails(t, app, 90)
+	editBody := findLine(t, edit, "rather than being cut off at the border")
+	editLabel := findLine(t, edit, "Description:")
+
+	if indent(editBody) != indent(editLabel) {
+		t.Errorf("body indented %d, label %d: the block disagrees with its label",
+			indent(editBody), indent(editLabel))
+	}
+	if indent(editBody)-indent(readBody) != detailsCursorGutter {
+		t.Errorf("the body moved %d columns entering edit mode, want %d",
+			indent(editBody)-indent(readBody), detailsCursorGutter)
+	}
+}
+
+// indent is how far a drawn line's text starts from the pane's own left edge.
+func indent(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " "))
+}
+
 func TestEscapePutsTheRenderedBodyBack(t *testing.T) {
 	app, writes, _ := descriptionFixture(t)
 	openDescription(t, app)
@@ -379,8 +496,13 @@ func TestTheStatusLineNamesTheChord(t *testing.T) {
 	app.updateStatusBar()
 
 	hints := app.statusBar.GetText(true)
-	if !strings.Contains(hints, "⌃⏎") || !strings.Contains(hints, "save") {
+	if !strings.Contains(hints, "⌃S") || !strings.Contains(hints, "save") {
 		t.Errorf("status line = %q, want the chord that sends it", hints)
+	}
+	// Ctrl+Enter saves too and is deliberately not named: terminals that fold
+	// it into a bare Enter would leave the line advertising a dead key.
+	if strings.Contains(hints, "⌃⏎") {
+		t.Errorf("status line = %q, want Ctrl+Enter left off it", hints)
 	}
 	if !strings.Contains(hints, "Editing description") {
 		t.Errorf("status line = %q, want it to name the field", hints)

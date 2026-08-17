@@ -332,7 +332,7 @@ func (a *App) detailsHeaderBlock(width int) detailsHeader {
 	if a.detailsEdit.editing == issueFieldDescription {
 		// The body is the box now: indented under the label, with the write
 		// marker running its height so the block reads as one open thing.
-		inner := width - detailsCursorGutter
+		column, inner := descriptionBoxRect(width)
 		rows := writingBoxRows(a.detailsDescArea, inner)
 		// The blank the read view puts under the label, kept so opening the box
 		// does not lift the body a row.
@@ -341,7 +341,7 @@ func (a *App) detailsHeaderBlock(width int) detailsHeader {
 			primitive: a.detailsDescArea,
 			row:       len(lines),
 			height:    rows,
-			column:    detailsCursorGutter,
+			column:    column,
 			width:     inner,
 		})
 		editor = editorSpan{start: labelRow, end: len(lines) + rows - 1}
@@ -349,7 +349,12 @@ func (a *App) detailsHeaderBlock(width int) detailsHeader {
 			lines = append(lines, a.descriptionRail())
 		}
 	} else {
-		lines = append(lines, a.detailsBodyLines...)
+		// The body takes the same gutter its label does, so the block moves
+		// sideways with the mode rather than disagreeing with its own label.
+		pad := strings.Repeat(" ", indent)
+		for _, line := range a.detailsBodyLines {
+			lines = append(lines, pad+line)
+		}
 	}
 	return detailsHeader{
 		lines:   lines,
@@ -410,6 +415,9 @@ func (a *App) detailsSeam(width int) []string {
 // blocks or tables, so its output goes through the same wrap a comment body
 // does.
 func (a *App) renderDetailsBody(width int) {
+	// The cursor gutter is reserved in both modes. Rendering to the full measure
+	// and re-wrapping on every mode toggle is the alternative, and it is worse.
+	width = max(0, width-detailsCursorGutter)
 	if a.detailsDescriptionMarkdown == "" {
 		a.detailsBodyLines = []string{"", fmt.Sprintf("%sNo description available[-]", a.themeTags.SecondaryText)}
 		return

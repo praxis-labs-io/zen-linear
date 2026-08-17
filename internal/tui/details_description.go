@@ -13,6 +13,9 @@ func (a *App) openDescriptionBox(description string) {
 	}
 	a.detailsEdit.editing = issueFieldDescription
 	a.detailsEdit.err = ""
+	// Stamped so a write sent by an earlier box cannot answer for this one. A
+	// close and a reopen on the same issue are alike in every other way.
+	a.detailsEdit.gen = a.editGeneration.Add(1)
 	// Caret at the head, unlike every other box here: a description is read
 	// before it is rewritten, and a long one opened on its tail is not.
 	a.detailsDescArea.SetText(description, false)
@@ -81,17 +84,22 @@ func (a *App) commitDescription() {
 		return
 	}
 	issue := a.editTargetIssue()
-	if issue.ID != "" && issue.ID == a.savingDescription {
+	// Keyed by the box, not the issue: a hammered chord is the double send to
+	// refuse, while a deliberate reopen and resend is a second write to make.
+	gen := a.detailsEdit.gen
+	if _, out := a.savingDescriptions[gen]; out {
 		a.flashStatus("Already saving this description")
 		return
 	}
-	a.savingDescription = issue.ID
+	if a.savingDescriptions == nil {
+		a.savingDescriptions = make(map[uint64]struct{})
+	}
+	a.savingDescriptions[gen] = struct{}{}
 	a.saveIssueFieldWithResult(issueFieldDescriptionSave(issue, body), func(err error) {
-		a.savingDescription = ""
-		// The box may be about another issue by now, and closing it then would
-		// throw away words written against that one.
-		if err == nil && a.detailsEdit.editing == issueFieldDescription &&
-			a.detailsEdit.issue.ID == issue.ID {
+		delete(a.savingDescriptions, gen)
+		// Only the box this was sent from. A reopened one holds words written
+		// since, and closing it would wipe them.
+		if err == nil && a.detailsEdit.editing == issueFieldDescription && a.detailsEdit.gen == gen {
 			a.closeDescriptionBox()
 		}
 	})
@@ -115,6 +123,15 @@ func (a *App) refitDescriptionBox() {
 		}
 		return
 	}
+}
+
+// descriptionBoxRect is where the box draws: indented to clear the bar, and
+// pulled back to the margin on a pane too narrow to afford both.
+func descriptionBoxRect(width int) (column, inner int) {
+	// A box with no width still holds the keyboard, and nothing on screen says
+	// where the typing went. The bar loses to the text on a pane this small.
+	column = min(detailsCursorGutter, max(0, width-fieldEditorMinWidth))
+	return column, max(0, width-column)
 }
 
 // descriptionRail is the write marker on one row of the open box, so the bar
@@ -159,9 +176,14 @@ func (a *App) handleDescriptionKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyEscape:
 		a.closeDescriptionBox()
 		return nil
+	case tcell.KeyCtrlS:
+		// The save. Reachable everywhere, where Ctrl+Enter is a chord plenty of
+		// terminals fold into a bare Enter; tcell's raw mode frees Ctrl+S.
+		a.commitDescription()
+		return nil
 	case tcell.KeyEnter:
-		// Enter is a newline in prose, which is the only thing it can be, so
-		// the chord is the way to send without leaving the words.
+		// Enter is a newline in prose, so a chord is the only way to send. Kept
+		// unadvertised beside Ctrl+S, since the comment boxes are written this way.
 		if event.Modifiers()&tcell.ModCtrl != 0 || event.Modifiers()&tcell.ModMeta != 0 {
 			a.commitDescription()
 			return nil
