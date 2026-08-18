@@ -44,26 +44,21 @@ func queryTerminalColors() (background, foreground tcell.Color, ok bool) {
 	deadline := time.Now().Add(terminalQueryTimeout)
 	chunk := make([]byte, 256)
 	var reply strings.Builder
-	for {
-		if !waitForTTYData(fd, deadline) {
-			return tcell.ColorDefault, tcell.ColorDefault, false
-		}
+	// The reply is read to its end even once the colors are in. Whatever is
+	// left in the buffer is echoed and read as keys the moment raw mode goes.
+	for waitForTTYData(fd, deadline) {
 		read, err := unix.Read(fd, chunk)
 		if read > 0 {
 			reply.Write(chunk[:read])
 		}
 		if err != nil {
-			return tcell.ColorDefault, tcell.ColorDefault, false
+			break
 		}
-		if background, foreground, ok := parseTerminalColors(reply.String()); ok {
-			return background, foreground, true
-		}
-		// Reading to the end of the answer is what keeps a late report out of
-		// the keyboard tcell is about to read.
 		if hasDeviceAttributes(reply.String()) {
-			return tcell.ColorDefault, tcell.ColorDefault, false
+			break
 		}
 	}
+	return parseTerminalColors(reply.String())
 }
 
 // waitForTTYData reports whether the terminal answered before the deadline. The
