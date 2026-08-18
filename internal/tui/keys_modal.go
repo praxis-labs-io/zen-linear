@@ -13,17 +13,10 @@ const (
 	// keysKeyGutter pads the key out so the verbs line up as a column, the way
 	// the details grid pads its labels.
 	keysKeyGutter = 12
-	// keysModalLeastHeight is the border, the footer's rule and hint, and a row
-	// of content under them.
-	keysModalLeastHeight = 5
-	// keysColumnGap separates two columns of sections.
-	keysColumnGap = 4
-	// keysMaxColumns keeps the panel a panel. Wider than three columns it is
-	// the screen, and the eye has to travel further than the scroll it saved.
-	keysMaxColumns = 3
-	// keysColumnCap is the widest a column is measured as, so one long verb
-	// cannot cost the reader a whole column.
-	keysColumnCap = 40
+	// keysChromeRows is the panel's two borders, the footer's rule and its hint.
+	keysChromeRows = 4
+	// keysMinWidth keeps the panel wide enough to read at all.
+	keysMinWidth = 34
 )
 
 // keySection is one context's keys. rows is a function because every key is
@@ -34,8 +27,8 @@ type keySection struct {
 	rows    func(*App) []hint
 }
 
-// keySections is the reference, in reading order: what works everywhere, then
-// the panes left to right, then what a pane opens on top of itself.
+// keySections is one legend per context. Only the reader's own is shown, with
+// Anywhere under it, so a section is what the footer strip could not fit.
 var keySections = []keySection{
 	{keyContextGlobal, "Anywhere", func(a *App) []hint {
 		return []hint{
@@ -74,8 +67,9 @@ var keySections = []keySection{
 			{"j / k", "move"},
 			{"⏎", "preview"},
 			{"h / l", "previous / next pane"},
+			{"g / G", "first / last"},
 			{"space", "collapse a group"},
-			{keyPairLabel(a.actionKey("columns_left", '['), a.actionKey("columns_right", ']')), "columns"},
+			{keyPairLabel(a.actionKey("columns_left", 'H'), a.actionKey("columns_right", 'L')), "scroll the columns"},
 			{"Esc", "leave search results"},
 			a.commandHint("zoom_details", "zoom the details pane"),
 		}
@@ -123,7 +117,7 @@ var keySections = []keySection{
 		return []hint{
 			{"⏎", "save"},
 			{"Esc", "close, saving nothing"},
-			{"(empty)", "clears the field"},
+			{"(empty)", "clears a due date or estimate"},
 		}
 	}},
 	{keyContextDescription, "Description box", func(*App) []hint {
@@ -152,25 +146,24 @@ var keySections = []keySection{
 	}},
 }
 
-// keysReferenceKey is the rune for the two handlers that are default-deny and
-// so never reach the shortcut dispatch. 0 where a binding took it, as actionKey.
+// keysReferenceKey is the rune for the chooser, which is default-deny and so
+// never reaches the shortcut dispatch. 0 where a binding took it, as actionKey.
 func (a *App) keysReferenceKey() rune {
 	key, _ := a.commandShortcutRune("show_keys")
 	return key
 }
 
-// KeysModal is the keys reference: one scrolling page of sections, opened on
-// the one the reader is in.
+// KeysModal is the hint legend: the keys for where the reader is, in full,
+// where the status strip has room for about five of them.
 type KeysModal struct {
-	app    *App
-	modal  *tview.Flex
-	panel  *tview.Flex
-	view   *tview.TextView
-	hint   *tview.TextView
-	blocks [][]string
+	app   *App
+	modal *tview.Flex
+	panel *tview.Flex
+	view  *tview.TextView
+	hint  *tview.TextView
 }
 
-// NewKeysModal builds the reference.
+// NewKeysModal builds the legend.
 func NewKeysModal(app *App) *KeysModal {
 	km := &KeysModal{app: app}
 
@@ -180,34 +173,36 @@ func NewKeysModal(app *App) *KeysModal {
 		SetBackgroundColor(app.theme.ModalBackground())
 
 	km.hint = tview.NewTextView()
-	km.hint.SetText("j/k scroll   esc close").
+	km.hint.SetText("esc close").
 		SetTextAlign(tview.AlignCenter).
 		SetTextColor(app.theme.SecondaryText).
 		SetBackgroundColor(app.theme.ModalBackground())
 
-	// Rebuilt per Show, since the height comes from what it holds. The wrapper
-	// is not: pages hold this pointer.
+	// Rebuilt per Show, since its title names the context. The wrapper is not:
+	// pages hold this pointer.
 	km.modal = tview.NewFlex()
 	km.modal.SetBackgroundColor(app.theme.Background)
 
 	return km
 }
 
-// Show opens the reference on the context the keyboard is in.
+// Show opens the legend for the context the keyboard is in.
 func (km *KeysModal) Show() {
-	km.blocks = km.app.keyBlocks(km.app.keyContext())
+	section, ok := keySectionFor(km.app.keyContext())
+	if !ok {
+		return
+	}
+	lines := km.app.keyLines(section)
+	km.view.SetText(strings.Join(lines, "\n"))
 	km.view.ScrollToBeginning()
 
-	km.panel = km.app.modalPanel("Keys")
+	km.panel = km.app.modalPanel("Keys: " + section.title)
 	km.panel.AddItem(km.view, 0, 1, true)
 	km.panel.AddItem(km.app.modalRule(), 1, 0, false)
 	km.panel.AddItem(km.hint, 1, 0, false)
-	// The columns are re-laid here rather than above, since how many there are
-	// is the screen's to decide and centerModal asks again on every resize.
 	centerModal(km.modal, km.panel, func() (int, int) {
-		lines, width := km.app.keysPage(km.blocks)
-		km.view.SetText(strings.Join(lines, "\n"))
-		return width, km.app.fitModalHeight(len(lines)+keysModalLeastHeight, keysModalLeastHeight)
+		return km.app.modalWidth(keysPanelWidth(lines)),
+			km.app.fitModalHeight(len(lines)+keysChromeRows, keysChromeRows+1)
 	})
 
 	km.app.pages.AddPage("keys", km.modal, true, true)
@@ -215,111 +210,39 @@ func (km *KeysModal) Show() {
 	km.app.app.SetFocus(km.view)
 }
 
-// keyBlocks is one block of lines per section, the reader's own first and the
-// rest in the table's order under it.
-func (a *App) keyBlocks(current keyContext) [][]string {
-	ordered := make([]keySection, 0, len(keySections))
+// keySectionFor is the legend for one context.
+func keySectionFor(context keyContext) (keySection, bool) {
 	for _, section := range keySections {
-		if section.context == current {
-			ordered = append(ordered, section)
+		if section.context == context {
+			return section, true
 		}
 	}
-	for _, section := range keySections {
-		if section.context != current {
-			ordered = append(ordered, section)
-		}
-	}
-
-	blocks := make([][]string, 0, len(ordered))
-	for _, section := range ordered {
-		block := []string{a.keyHeading(section, section.context == current)}
-		blocks = append(blocks, append(block, a.keyRows(section.rows(a))...))
-	}
-	return blocks
+	return keySection{}, false
 }
 
-// keysPage lays the blocks into as many columns as the screen affords, and
-// reports the panel width those columns need.
-func (a *App) keysPage(blocks [][]string) (lines []string, width int) {
-	column := keysColumnWidth(blocks)
-	screenW, _ := a.modalScreen()
-	// The screen less its margin, the panel's two borders and its two gutters.
-	room := screenW - modalScreenWMargin - 2 - 2*modalGutter
-	count := max(1, min((room+keysColumnGap)/(column+keysColumnGap), keysMaxColumns))
-
-	columns := packKeyBlocks(blocks, count)
-	return joinKeyColumns(columns, column), a.modalWidth(count*column + (count-1)*keysColumnGap)
+// keyLines is the context's own keys, then the ones that work anywhere. The
+// pane numbers and quit are part of what a reader can do here.
+func (a *App) keyLines(section keySection) []string {
+	lines := a.keyRows(section.rows(a))
+	if section.context == keyContextGlobal {
+		return lines
+	}
+	global, ok := keySectionFor(keyContextGlobal)
+	if !ok {
+		return lines
+	}
+	lines = append(lines, "", a.themeTags.SecondaryText+global.title+"[-]")
+	return append(lines, a.keyRows(global.rows(a))...)
 }
 
-// keysColumnWidth is the widest row there is, capped so one long verb cannot
-// cost the reader a whole column.
-func keysColumnWidth(blocks [][]string) int {
+// keysPanelWidth is the panel the rows need: the widest of them, plus the
+// border and both gutters modalPanel takes out of it.
+func keysPanelWidth(lines []string) int {
 	widest := 0
-	for _, block := range blocks {
-		for _, line := range block {
-			widest = max(widest, tview.TaggedStringWidth(line))
-		}
+	for _, line := range lines {
+		widest = max(widest, tview.TaggedStringWidth(line))
 	}
-	return min(max(widest, 1), keysColumnCap)
-}
-
-// packKeyBlocks fills count columns to about an equal share, starting a new one
-// rather than breaking a section across the gap.
-func packKeyBlocks(blocks [][]string, count int) [][]string {
-	total := 0
-	for _, block := range blocks {
-		total += len(block) + 1
-	}
-	target := (total + count - 1) / count
-
-	columns := make([][]string, 0, count)
-	current := make([]string, 0, target)
-	for _, block := range blocks {
-		// The last column takes whatever is left, or a block that no longer
-		// fits would be dropped rather than scrolled to.
-		full := len(current) > 0 && len(current)+len(block) > target
-		if full && len(columns) < count-1 {
-			columns = append(columns, current)
-			current = make([]string, 0, target)
-		}
-		if len(current) > 0 {
-			current = append(current, "")
-		}
-		current = append(current, block...)
-	}
-	return append(columns, current)
-}
-
-// joinKeyColumns lays the columns side by side, each padded to width. Trailing
-// space is cut: the view draws it, and a selection would carry it.
-func joinKeyColumns(columns [][]string, width int) []string {
-	tallest := 0
-	for _, column := range columns {
-		tallest = max(tallest, len(column))
-	}
-
-	gap := strings.Repeat(" ", keysColumnGap)
-	lines := make([]string, 0, tallest)
-	for row := 0; row < tallest; row++ {
-		cells := make([]string, 0, len(columns))
-		for _, column := range columns {
-			cell := ""
-			if row < len(column) {
-				cell = truncateTagged(column[row], width)
-			}
-			cells = append(cells, cell+strings.Repeat(" ", max(0, width-tview.TaggedStringWidth(cell))))
-		}
-		lines = append(lines, strings.TrimRight(strings.Join(cells, gap), " "))
-	}
-	return lines
-}
-
-// keyHeading names a section, marking the one the reader is in.
-func (a *App) keyHeading(section keySection, current bool) string {
-	if !current {
-		return a.themeTags.SecondaryText + section.title + "[-]"
-	}
-	return fmt.Sprintf("%s%s[-]%s  ← you are here[-]", a.themeTags.Accent, section.title, a.themeTags.SecondaryText)
+	return max(widest+2+2*modalGutter, keysMinWidth)
 }
 
 // keyRows renders one section's pairs, dropping any left keyless because a
@@ -330,14 +253,14 @@ func (a *App) keyRows(rows []hint) []string {
 		if row.key == "" {
 			continue
 		}
-		key := tview.Escape(row.key)
 		pad := max(1, keysKeyGutter-runewidth.StringWidth(row.key))
-		lines = append(lines, fmt.Sprintf("  %s%s[-]%s%s", a.themeTags.Accent, key, strings.Repeat(" ", pad), row.verb))
+		lines = append(lines, fmt.Sprintf("  %s%s[-]%s%s",
+			a.themeTags.Accent, tview.Escape(row.key), strings.Repeat(" ", pad), row.verb))
 	}
 	return lines
 }
 
-// Hide closes the reference and hands the keys back to whatever it covered.
+// Hide closes the legend and hands the keys back to whatever it covered.
 func (km *KeysModal) Hide() {
 	km.app.pages.RemovePage("keys")
 	km.app.restoreModalFocus()
@@ -346,8 +269,8 @@ func (km *KeysModal) Hide() {
 // Focus returns keyboard focus to the page, for when an overlay closes.
 func (km *KeysModal) Focus() { km.app.app.SetFocus(km.view) }
 
-// HandleKey scrolls the page and closes it. Default-deny: the reference is not
-// a place to run anything from, and the key that opened it closes it again.
+// HandleKey closes the legend. Default-deny: it is a legend, not a place to
+// run anything from, and the key that opened it closes it again.
 func (km *KeysModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyCtrlC:
@@ -360,12 +283,8 @@ func (km *KeysModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 			km.scroll(1)
 		case 'k':
 			km.scroll(-1)
-		case 'g':
-			km.view.ScrollToBeginning()
-		case 'G':
-			km.view.ScrollToEnd()
 		default:
-			if key, ok := km.app.commandShortcutRune("show_keys"); ok && event.Rune() == key {
+			if key := km.app.keysReferenceKey(); key != 0 && event.Rune() == key {
 				km.Hide()
 			}
 		}
@@ -376,7 +295,8 @@ func (km *KeysModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return nil
 }
 
-// scroll steps the page, since the view answers arrows and not j/k.
+// scroll steps a legend too tall for the terminal, since the view answers the
+// arrows and not j/k.
 func (km *KeysModal) scroll(delta int) {
 	row, column := km.view.GetScrollOffset()
 	km.view.ScrollTo(max(0, row+delta), column)

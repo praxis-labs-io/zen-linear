@@ -12,18 +12,19 @@ import (
 // keyHandlers is the context each handler answers for. handleGlobalKey routes
 // to exactly one of them, and keyContext mirrors that routing.
 var keyHandlers = map[string]keyContext{
-	"handleGlobalKey":      keyContextGlobal,
-	"handleNavigationKey":  keyContextNavigation,
-	"handleNavSearchKey":   keyContextNavSearch,
-	"handleIssuesKey":      keyContextIssues,
-	"handleDetailsKey":     keyContextDetails,
-	"handleCommentKey":     keyContextComment,
-	"handleDetailsEditKey": keyContextEditMode,
-	"handleChooserKey":     keyContextChooser,
-	"handleFieldEditorKey": keyContextFieldEditor,
-	"handleDescriptionKey": keyContextDescription,
-	"handleComposeKey":     keyContextWriting,
-	"handlePaletteKey":     keyContextPalette,
+	"handleGlobalKey":       keyContextGlobal,
+	"handleNavigationKey":   keyContextNavigation,
+	"handleNavSearchKey":    keyContextNavSearch,
+	"handleIssuesKey":       keyContextIssues,
+	"handleIssuesTableRune": keyContextIssues,
+	"handleDetailsKey":      keyContextDetails,
+	"handleCommentKey":      keyContextComment,
+	"handleDetailsEditKey":  keyContextEditMode,
+	"handleChooserKey":      keyContextChooser,
+	"handleFieldEditorKey":  keyContextFieldEditor,
+	"handleDescriptionKey":  keyContextDescription,
+	"handleComposeKey":      keyContextWriting,
+	"handlePaletteKey":      keyContextPalette,
 }
 
 // keyTokens is how a tcell key name reads in the reference.
@@ -55,9 +56,9 @@ var keysNotListed = map[string]string{
 func TestEveryHandlerKeyIsListed(t *testing.T) {
 	app := newUXTestApp(t)
 
-	listed := make(map[keyContext]string, len(keySections))
+	listed := make(map[keyContext]map[string]bool, len(keySections))
 	for _, section := range keySections {
-		listed[section.context] = strings.Join(app.keyRows(section.rows(app)), "\n")
+		listed[section.context] = sectionKeys(app, section)
 	}
 	everywhere := listed[keyContextGlobal]
 
@@ -70,9 +71,9 @@ func TestEveryHandlerKeyIsListed(t *testing.T) {
 		}
 		for _, key := range handlerKeys(t, app, body) {
 			found++
-			// A reader reads their own section and the global one, so a key in
-			// either is a key they can find.
-			if strings.Contains(listed[context], key) || strings.Contains(everywhere, key) {
+			// The legend shows the reader's own section and the global one, so a
+			// key in either is a key they can find.
+			if listed[context][key] || everywhere[key] {
 				continue
 			}
 			t.Errorf("%s answers %q, which no section lists", name, key)
@@ -81,6 +82,27 @@ func TestEveryHandlerKeyIsListed(t *testing.T) {
 	if found == 0 {
 		t.Fatal("read no keys out of any handler, the walk has drifted from the code")
 	}
+}
+
+// sectionKeys is the keys a section names, one token per key. Matched exactly:
+// against the rendered line, a bare "o" hits the "o" in "collapse a group".
+func sectionKeys(app *App, section keySection) map[string]bool {
+	keys := make(map[string]bool)
+	for _, row := range section.rows(app) {
+		if row.key == "" {
+			continue
+		}
+		// A row can name a pair, as "j / k" or "{/}" does. Splitting leaves the
+		// search key nothing, / being the whole of it.
+		tokens := strings.FieldsFunc(row.key, func(r rune) bool { return r == '/' || r == ' ' })
+		if len(tokens) == 0 {
+			tokens = []string{row.key}
+		}
+		for _, token := range tokens {
+			keys[token] = true
+		}
+	}
+	return keys
 }
 
 // handlerBody finds one handler in the package sources.

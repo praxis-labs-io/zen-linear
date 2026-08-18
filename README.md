@@ -114,9 +114,9 @@ original linear-tui set:
 
 ## Keys
 
-`?` opens a reference to all of them, grouped by where they work and opened on
-wherever you pressed it. In a writing box `?` is a character, so the reference
-lists those keys for a reader who is not in one.
+`?` opens a legend for wherever you are: every key that works there, plus the
+ones that work anywhere. It is the status strip without the width limit. In a
+writing box `?` is a character, so use the palette's **Show keys** there.
 
     j/k         move            Enter       toggle details
     h/l         switch panes    Space       expand sub-issues
@@ -126,7 +126,7 @@ lists those keys for a reader who is not in one.
     :           palette         /           search
     r           refresh         w           switch workspace
     n           new issue       q           quit
-    ?           keys reference
+    ?           keys for here
 
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.

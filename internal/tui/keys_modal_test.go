@@ -34,31 +34,36 @@ func TestEveryKeySectionHasRows(t *testing.T) {
 	}
 }
 
-// The whole of "context aware": the reader's own section leads, and the rest
-// stay reachable under it.
-func TestTheReferenceLeadsWithTheContextItWasOpenedFrom(t *testing.T) {
+// keysTitle is the context the panel says it is for.
+func keysTitle(app *App) string {
+	return app.keysModal.panel.GetTitle()
+}
+
+// A legend, not a manual: the keys for here, and the ones that work anywhere.
+func TestTheLegendShowsThisContextAndTheGlobalKeys(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
 
-	page := openKeys(t, app)
+	page := strings.Join(openKeys(t, app), "\n")
 
-	if !strings.HasPrefix(page[0], "Issue list") {
-		t.Fatalf("first line = %q, want the issue list's own section", page[0])
+	if !strings.Contains(keysTitle(app), "Issue list") {
+		t.Fatalf("panel title = %q, want the issue list named", keysTitle(app))
 	}
-	if !strings.Contains(page[0], "you are here") {
-		t.Errorf("first line = %q, want it marked as the reader's context", page[0])
+	if !strings.Contains(page, "Anywhere") {
+		t.Error("the global keys are missing: the pane numbers and quit work here too")
 	}
 	for _, section := range keySections {
-		if !strings.Contains(strings.Join(page, "\n"), section.title) {
-			t.Errorf("section %q is missing: every context stays reachable", section.title)
+		switch section.context {
+		case keyContextIssues, keyContextGlobal:
+			continue
 		}
-	}
-	if marked := strings.Count(strings.Join(page, "\n"), "you are here"); marked != 1 {
-		t.Errorf("%d sections marked, want exactly one", marked)
+		if strings.Contains(page, section.title) {
+			t.Errorf("%q is on the page, and the reader is not in it", section.title)
+		}
 	}
 }
 
-func TestTheReferenceOpensOnEachContext(t *testing.T) {
+func TestTheLegendOpensOnEachContext(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		setup func(*App)
@@ -88,9 +93,9 @@ func TestTheReferenceOpensOnEachContext(t *testing.T) {
 			tc.setup(app)
 			drawComments(t, app, 90)
 
-			page := openKeys(t, app)
-			if !strings.HasPrefix(page[0], tc.want) {
-				t.Fatalf("first line = %q, want %q", page[0], tc.want)
+			openKeys(t, app)
+			if !strings.Contains(keysTitle(app), tc.want) {
+				t.Fatalf("panel title = %q, want %q", keysTitle(app), tc.want)
 			}
 		})
 	}
@@ -194,63 +199,5 @@ func TestTheReferenceClosesOnEscapeAndOnItsOwnKey(t *testing.T) {
 				t.Fatal("the reference stayed open")
 			}
 		})
-	}
-}
-
-// keysRows is the page the reference lays out for a screen of that width.
-func keysRows(t *testing.T, app *App, width int) []string {
-	t.Helper()
-	app.pages.SetRect(0, 0, width, 44)
-	lines, _ := app.keysPage(app.keyBlocks(keyContextIssues))
-	return lines
-}
-
-// Ninety rows in a narrow panel is a lot of scrolling beside a lot of empty
-// terminal, so the sections column up into whatever width there is.
-func TestTheReferenceColumnsUpOnAWiderScreen(t *testing.T) {
-	app := newUXTestApp(t)
-
-	narrow := len(keysRows(t, app, 80))
-	medium := len(keysRows(t, app, 120))
-	wide := len(keysRows(t, app, 170))
-
-	if wide >= medium || medium >= narrow {
-		t.Fatalf("rows were %d wide, %d medium, %d narrow, want each wider screen shorter", wide, medium, narrow)
-	}
-	if wide*keysMaxColumns < narrow-len(keySections) {
-		t.Errorf("the widest layout is %d rows against %d, want about a third of them", wide, narrow)
-	}
-}
-
-// A heading in one column with half its keys in the next is worse than the
-// scrolling it saved.
-func TestNoSectionIsSplitAcrossAColumn(t *testing.T) {
-	app := newUXTestApp(t)
-	blocks := app.keyBlocks(keyContextIssues)
-
-	// Past keysMaxColumns as well: a break that lands on a block boundary by
-	// luck at one count will not at six.
-	for count := 1; count <= 6; count++ {
-		columns := packKeyBlocks(blocks, count)
-		if len(columns) > count {
-			t.Fatalf("packed into %d columns, want at most %d", len(columns), count)
-		}
-		joined := make([]string, len(columns))
-		for i, column := range columns {
-			joined[i] = strings.Join(column, "\n")
-		}
-		for _, block := range blocks {
-			whole := strings.Join(block, "\n")
-			held := 0
-			for _, column := range joined {
-				if strings.Contains(column, whole) {
-					held++
-				}
-			}
-			if held != 1 {
-				t.Errorf("in %d columns, %q sits whole in %d of them, want exactly one",
-					count, block[0], held)
-			}
-		}
 	}
 }
