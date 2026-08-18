@@ -106,7 +106,7 @@ var LinearTheme = Theme{
 	Foreground:    tcell.NewRGBColor(235, 235, 245), // #EBEBF5
 	Border:        tcell.NewRGBColor(60, 60, 60),    // #3C3C3C
 	BorderFocus:   tcell.NewRGBColor(94, 106, 210),  // #5E6AD2 (Linear Purple-ish)
-	SelectionText: tcell.ColorWhite,
+	SelectionText: tcell.NewRGBColor(255, 255, 255), // #FFFFFF
 	SelectionBg:   tcell.NewRGBColor(40, 40, 50),    // Slight purple tint dark bg
 	HeaderBg:      tcell.NewRGBColor(30, 30, 30),    // #1E1E1E
 	HeaderText:    tcell.NewRGBColor(160, 160, 160), // #A0A0A0
@@ -253,12 +253,13 @@ var ThemeRegistry = map[string]Theme{
 	config.ThemeRosePineMoon: RosePineMoonTheme,
 }
 
-// ResolveTheme returns the theme for a given name, or the default theme.
+// ResolveTheme returns the theme for a name, or the terminal-derived one. That
+// one is built rather than registered: its shades come from a launch query.
 func ResolveTheme(name string) Theme {
 	if theme, ok := ThemeRegistry[name]; ok {
 		return theme
 	}
-	return LinearTheme
+	return TerminalTheme()
 }
 
 // NewThemeTags builds tag strings for dynamic color usage.
@@ -284,10 +285,21 @@ func colorTag(color tcell.Color) string {
 	return "[" + colorName(color) + "]"
 }
 
-// colorName is a color as tview spells it inside a tag.
+// paletteNames are the terminal's own slots as tview spells them. A table
+// rather than tcell.Name(), whose map walk answers with a random alias.
+var paletteNames = [16]string{
+	"black", "maroon", "green", "olive", "navy", "purple", "teal", "silver",
+	"gray", "red", "lime", "yellow", "blue", "fuchsia", "aqua", "white",
+}
+
+// colorName is a color as tview spells it inside a tag. A palette color is
+// named, not hexed: a hex would pin it to a palette the terminal has replaced.
 func colorName(color tcell.Color) string {
 	if !color.Valid() {
 		return "default"
+	}
+	if slot := int(color &^ tcell.ColorValid); !color.IsRGB() && slot < len(paletteNames) {
+		return paletteNames[slot]
 	}
 	css := color.CSS()
 	if css == "" {

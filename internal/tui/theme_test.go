@@ -28,10 +28,11 @@ func TestResolveThemeKnownNames(t *testing.T) {
 	}
 }
 
-// TestResolveThemeUnknownFallsBack verifies unknown names return the default theme.
+// An unknown name returns the adaptive theme, so a config naming a theme that
+// has gone away still follows the terminal.
 func TestResolveThemeUnknownFallsBack(t *testing.T) {
-	if got := ResolveTheme("rainbow"); got != LinearTheme {
-		t.Errorf("ResolveTheme(\"rainbow\") = %+v, want LinearTheme", got)
+	if got := ResolveTheme("rainbow"); got != TerminalTheme() {
+		t.Errorf("ResolveTheme(\"rainbow\") = %+v, want the terminal theme", got)
 	}
 }
 
