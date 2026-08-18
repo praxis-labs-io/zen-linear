@@ -213,6 +213,20 @@ func (a *App) commandShortcutLabel(id string) (label string, ok bool) {
 	return "", false
 }
 
+// commandShortcutRune is commandShortcutLabel's twin for a handler that has to
+// match the key rather than print it, where the rune is the config's to move.
+func (a *App) commandShortcutRune(id string) (rune, bool) {
+	if a.paletteCtrl == nil {
+		return 0, false
+	}
+	for _, cmd := range a.paletteCtrl.commands {
+		if cmd.ID == id {
+			return cmd.ShortcutRune, cmd.ShortcutRune != 0
+		}
+	}
+	return 0, false
+}
+
 // actionKey returns the key a UI action answers to: the one the config named,
 // or its fallback unless something else was bound to that rune. It returns 0
 // when the fallback is taken, which no key event carries, so the action's case

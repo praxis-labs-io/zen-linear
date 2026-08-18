@@ -31,6 +31,9 @@ var modalBindings = []modalBinding{
 	{"prompt_templates", func(a *App) modalController { return a.promptTemplatesModal }},
 	{"agent_prompt", func(a *App) modalController { return a.agentPromptModal }},
 	{"agent_output", func(a *App) modalController { return a.agentOutputModal }},
+	// Last: the reference opens nothing and is opened from no modal, so it can
+	// only ever be the one page up.
+	{"keys", func(a *App) modalController { return a.keysModal }},
 }
 
 // activeModal returns the modal that owns keys right now, or nil when none is

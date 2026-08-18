@@ -152,9 +152,10 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 // than a 100x30 screen before it drew anything, so the run was read through a
 // panel whose edges were off it.
 func (om *AgentOutputModal) layout() {
-	centerModal(om.modal, om.modalContent,
-		om.app.modalWidth(agentOutputMaxWidth),
-		om.app.fitModalHeight(agentOutputMaxHeight, agentOutputLeastHeight))
+	centerModal(om.modal, om.modalContent, func() (int, int) {
+		return om.app.modalWidth(agentOutputMaxWidth),
+			om.app.fitModalHeight(agentOutputMaxHeight, agentOutputLeastHeight)
+	})
 }
 
 // ApplyTheme updates modal colors to match the active theme.

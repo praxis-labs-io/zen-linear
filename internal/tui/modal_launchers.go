@@ -125,6 +125,15 @@ func issueLabelIDs(issue linearapi.Issue) []string {
 	return ids
 }
 
+// ShowKeysModal shows the keys reference, opened on the context the keyboard
+// is in. It reads that before the page is added, since adding one moves focus.
+func (a *App) ShowKeysModal() {
+	if a.keysModal == nil {
+		return
+	}
+	a.keysModal.Show()
+}
+
 // ShowSettingsModal shows the settings modal.
 func (a *App) ShowSettingsModal() {
 	if a.settingsModal == nil {

@@ -114,6 +114,10 @@ original linear-tui set:
 
 ## Keys
 
+`?` opens a legend for wherever you are: every key that works there, plus the
+ones that work anywhere. It is the status strip without the width limit. In a
+writing box `?` is a character, so use the palette's **Show keys** there.
+
     j/k         move            Enter       toggle details
     h/l         switch panes    Space       expand sub-issues
     1/2/3       focus a pane    { }         step comments
@@ -122,6 +126,7 @@ original linear-tui set:
     :           palette         /           search
     r           refresh         w           switch workspace
     n           new issue       q           quit
+    ?           keys for here
 
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.

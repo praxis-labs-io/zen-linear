@@ -173,6 +173,7 @@ type App struct {
 	agentPromptModal     *AgentPromptModal
 	agentOutputModal     *AgentOutputModal
 	confirmationModal    *ConfirmationModal
+	keysModal            *KeysModal
 	agentRunner          *agents.Runner
 	agentPromptTemplates []config.AgentPromptTemplate
 
@@ -765,6 +766,7 @@ func (a *App) buildLayout() {
 	a.agentPromptModal = NewAgentPromptModal(a)
 	a.agentOutputModal = NewAgentOutputModal(a)
 	a.confirmationModal = NewConfirmationModal(a)
+	a.keysModal = NewKeysModal(a)
 	a.agentRunner = agents.NewRunner()
 
 	// Reflow panes when the terminal width crosses a breakpoint.

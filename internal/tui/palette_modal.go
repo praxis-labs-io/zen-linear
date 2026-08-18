@@ -109,7 +109,7 @@ func (a *App) buildPaletteModal() *tview.Flex {
 		return action, nil
 	})
 
-	return a.layoutPaletteModal(paletteMinVisibleRows)
+	return a.layoutPaletteModal(0)
 }
 
 // runPaletteRowAt runs the command clicked at the given screen cell. A click
@@ -133,10 +133,9 @@ func (a *App) runPaletteRowAt(x, y int) {
 	command.Run(a)
 }
 
-// layoutPaletteModal rebuilds the panel around a list of the given height and
-// centers it. Every keystroke resizes the list, so this runs again on each one;
-// the input, its frame, and the list are reused, the wrappers are not.
-func (a *App) layoutPaletteModal(listRows int) *tview.Flex {
+// layoutPaletteModal rebuilds the panel around that many matches and centers
+// it. Run per keystroke: the input, frame and list are reused, wrappers are not.
+func (a *App) layoutPaletteModal(matches int) *tview.Flex {
 	panel := a.theme.ModalBackground()
 
 	hint := tview.NewTextView()
@@ -150,14 +149,18 @@ func (a *App) layoutPaletteModal(listRows int) *tview.Flex {
 	content := a.modalPanel("Commands")
 	content.
 		AddItem(a.paletteSearchFrame, paletteQueryBoxRows, 0, true).
-		AddItem(a.paletteList, listRows, 0, false).
+		AddItem(a.paletteList, 0, 1, false).
 		AddItem(spacer, a.density.ModalSpacerLines, 0, false).
 		AddItem(a.modalRule(), 1, 0, false).
 		AddItem(hint, 1, 0, false)
 
 	modal := tview.NewFlex()
 	modal.SetBackgroundColor(a.theme.Background)
-	centerModal(modal, content, a.modalWidth(paletteMaxWidth), listRows+a.paletteChromeLines()+2)
+	// The list is the flexible row and the rows are counted against the live
+	// screen, so a terminal that shrank takes rows off it rather than the frame.
+	centerModal(modal, content, func() (int, int) {
+		return a.modalWidth(paletteMaxWidth), a.paletteListRows(matches) + a.paletteChromeLines() + 2
+	})
 
 	return modal
 }
@@ -233,7 +236,7 @@ func (a *App) updatePaletteList() {
 		a.paletteList.SetCurrentItem(cursor)
 	}
 
-	a.paletteModal = a.layoutPaletteModal(a.paletteListRows(len(rows)))
+	a.paletteModal = a.layoutPaletteModal(len(rows))
 
 	// Replace the modal in pages
 	a.pages.RemovePage("palette")
