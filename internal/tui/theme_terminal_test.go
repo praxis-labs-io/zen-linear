@@ -29,6 +29,11 @@ func TestParseTerminalColorsReadsBothReports(t *testing.T) {
 			ok:         true,
 		},
 		{
+			name:  "a report still arriving",
+			reply: "\x1b]10;rgb:d0d0/d0d0/d0d0\x1b\\\x1b]11;rgb:1c1c/1c1c/1c",
+			ok:    false,
+		},
+		{
 			name:  "only the background answered",
 			reply: "\x1b]11;rgb:1c1c/1c1c/1c1c\x1b\\",
 			ok:    false,
@@ -138,14 +143,28 @@ func TestTerminalThemeFallsBackToThePalette(t *testing.T) {
 	}
 }
 
+// The device attributes answer closes the reply, so a terminal that ignores the
+// color queries is done with rather than waited out.
+func TestDeviceAttributesEndTheReply(t *testing.T) {
+	if !hasDeviceAttributes("\x1b[?62;1;6c") {
+		t.Error("a device attributes answer went unrecognized")
+	}
+	if hasDeviceAttributes("\x1b]11;rgb:1c1c/1c1c/1c1c\x1b\\") {
+		t.Error("a color report read as the end of the reply")
+	}
+}
+
 // A palette color has to reach tview and glamour as a slot, not as the hex of
 // a standard palette the terminal has replaced.
 func TestPaletteColorsSurviveTheConversions(t *testing.T) {
-	if got := colorName(ansiBlue); got != "navy" {
-		t.Errorf("colorName(ANSI 4) = %q, want the palette name", got)
+	for slot, color := range []tcell.Color{ansiBlack, ansiRed, ansiGreen, ansiYellow, ansiBlue, ansiMagenta, ansiWhite, ansiBrightBlack} {
+		name := colorName(color)
+		if got := tcell.GetColor(name); got != color {
+			t.Errorf("the tag %q for slot %d resolves back to %v", name, slot, got)
+		}
 	}
-	if got := tcell.GetColor(colorName(ansiBlue)); got != ansiBlue {
-		t.Errorf("tview would resolve the tag back to %v, want ANSI 4", got)
+	if got := colorName(ansiBrightBlack); got != "gray" {
+		t.Errorf("colorName(ANSI 8) = %q, want the same name on every run", got)
 	}
 
 	got := hexPtr(ansiBlue)

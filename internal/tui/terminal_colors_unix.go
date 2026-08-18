@@ -45,8 +45,7 @@ func queryTerminalColors() (background, foreground tcell.Color, ok bool) {
 	chunk := make([]byte, 256)
 	var reply strings.Builder
 	for {
-		remaining := time.Until(deadline)
-		if remaining <= 0 || !waitForTTYData(fd, remaining) {
+		if !waitForTTYData(fd, deadline) {
 			return tcell.ColorDefault, tcell.ColorDefault, false
 		}
 		read, err := unix.Read(fd, chunk)
@@ -59,15 +58,26 @@ func queryTerminalColors() (background, foreground tcell.Color, ok bool) {
 		if background, foreground, ok := parseTerminalColors(reply.String()); ok {
 			return background, foreground, true
 		}
+		// Reading to the end of the answer is what keeps a late report out of
+		// the keyboard tcell is about to read.
+		if hasDeviceAttributes(reply.String()) {
+			return tcell.ColorDefault, tcell.ColorDefault, false
+		}
 	}
 }
 
-// waitForTTYData reports whether the terminal answered before the timeout.
-func waitForTTYData(fd int, timeout time.Duration) bool {
-	timeval := unix.NsecToTimeval(int64(timeout))
-	var readable unix.FdSet
-	readable.Set(fd)
+// waitForTTYData reports whether the terminal answered before the deadline. The
+// set and the timeval are rebuilt per call: select leaves both undefined when
+// it returns an error, EINTR included.
+func waitForTTYData(fd int, deadline time.Time) bool {
 	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return false
+		}
+		timeval := unix.NsecToTimeval(int64(remaining))
+		var readable unix.FdSet
+		readable.Set(fd)
 		ready, err := unix.Select(fd+1, &readable, nil, nil, &timeval)
 		if err == unix.EINTR {
 			continue

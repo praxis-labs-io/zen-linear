@@ -13,12 +13,23 @@ import (
 // paid once at launch by terminals that ignore the query, so it is short.
 const terminalQueryTimeout = 200 * time.Millisecond
 
-// oscColorQuery asks for the foreground (OSC 10) and background (OSC 11).
-const oscColorQuery = "\x1b]10;?\x1b\\\x1b]11;?\x1b\\"
+// oscColorQuery asks for the foreground (OSC 10) and background (OSC 11), then
+// for device attributes, which a terminal answers last and always.
+const oscColorQuery = "\x1b]10;?\x1b\\\x1b]11;?\x1b\\\x1b[c"
 
 // oscColorReport matches a terminal's answer: an OSC code, then components of
-// one to four hex digits each, BEL- or ST-terminated.
-var oscColorReport = regexp.MustCompile(`\x1b\]([0-9]{1,2});rgba?:([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})`)
+// one to four hex digits each. The terminator is required, or a report still
+// arriving matches short and a component scales to the wrong value.
+var oscColorReport = regexp.MustCompile(`\x1b\]([0-9]{1,2});rgba?:([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})(?:\x07|\x1b\\)`)
+
+// deviceAttributesReport is the answer to the query that closes the reply. It
+// arrives after the color reports, so seeing it means none are coming.
+var deviceAttributesReport = regexp.MustCompile(`\x1b\[\?[0-9;]*c`)
+
+// hasDeviceAttributes reports whether the terminal has finished answering.
+func hasDeviceAttributes(reply string) bool {
+	return deviceAttributesReport.MatchString(reply)
+}
 
 // parseTerminalColors reads the foreground and background out of whatever the
 // terminal has sent so far. It reports false until both have arrived.
