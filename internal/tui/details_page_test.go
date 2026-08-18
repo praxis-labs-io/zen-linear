@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // TestTheDetailsPaneIsOneScrollingPage is what the pane is now: the issue, its

@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/zen-linear/zen-linear/internal/agents"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/agents"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // TestIssueShortcutIsDeadInTheNavigationPane drives the key the dispatcher

@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // IssueRow represents a single row in the issues table with hierarchy info.

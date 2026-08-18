@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/zen-linear/zen-linear/internal/auth"
-	"github.com/zen-linear/zen-linear/internal/auth/oauth"
-	"github.com/zen-linear/zen-linear/internal/cache"
-	"github.com/zen-linear/zen-linear/internal/config"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
-	"github.com/zen-linear/zen-linear/internal/logger"
-	"github.com/zen-linear/zen-linear/internal/session"
-	"github.com/zen-linear/zen-linear/internal/tui"
+	"github.com/praxis-labs-io/zen-linear/internal/auth"
+	"github.com/praxis-labs-io/zen-linear/internal/auth/oauth"
+	"github.com/praxis-labs-io/zen-linear/internal/cache"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/logger"
+	"github.com/praxis-labs-io/zen-linear/internal/session"
+	"github.com/praxis-labs-io/zen-linear/internal/tui"
 )
 
 func main() {

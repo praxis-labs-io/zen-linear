@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/praxis-labs-io/zen-linear/internal/config"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/config"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // paneTitles returns each pane's title with the color tags stripped.

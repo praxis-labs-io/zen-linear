@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 func navFixture() NavData {

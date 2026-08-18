@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // Renderers are cached per wrap width and rebuilt when the theme changes.

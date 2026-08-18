@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/zen-linear/zen-linear/internal/config"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 func newReviewGraphQLServer(t *testing.T, onQuery func(string)) *httptest.Server {

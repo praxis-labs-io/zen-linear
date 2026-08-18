@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // contextTestApp puts a project of a known team on screen, so the title has a

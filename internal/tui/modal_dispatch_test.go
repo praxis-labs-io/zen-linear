@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/config"
 )
 
 // modalDispatchGolden is the priority the global key handler gives modals,

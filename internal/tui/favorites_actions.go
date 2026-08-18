@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/logger"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
-	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // favoriteTargetForNode maps a navigation node onto the Linear entity a

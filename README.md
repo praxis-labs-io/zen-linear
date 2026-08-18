@@ -52,13 +52,9 @@ Appearance
 
 ## Install
 
-Homebrew:
+Requires Go 1.24 or later:
 
-    brew install zen-linear/tap/zen-linear
-
-From source, requires Go 1.24 or later:
-
-    git clone https://github.com/zen-linear/zen-linear.git
+    git clone https://github.com/praxis-labs-io/zen-linear.git
     cd zen-linear
     go build -o ~/.local/bin/zen-linear ./cmd/zen-linear
 

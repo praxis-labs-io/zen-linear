@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or Discussion
-    url: https://github.com/zen-linear/zen-linear/discussions
+    url: https://github.com/praxis-labs-io/zen-linear/discussions
     about: Ask questions or discuss ideas with the community
   - name: Security Vulnerability
-    url: https://github.com/zen-linear/zen-linear/security/advisories/new
+    url: https://github.com/praxis-labs-io/zen-linear/security/advisories/new
     about: Report a security vulnerability privately

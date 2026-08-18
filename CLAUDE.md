@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Drew's Go/tview terminal client for Linear, at zen-linear/zen-linear (`origin`). It began as a fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui) and separated on 2026-08-02: the module is `github.com/zen-linear/zen-linear`, there is no `upstream` remote, and nothing here is written with an upstream PR in mind. The MIT license retains Roey Azroel's copyright alongside Drew's, and the README credits the original. Both stay.
+Drew's Go/tview terminal client for Linear, at praxis-labs-io/zen-linear (`origin`). It began as a fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui) and separated on 2026-08-02: the module is `github.com/praxis-labs-io/zen-linear`, there is no `upstream` remote, and nothing here is written with an upstream PR in mind. The MIT license retains Roey Azroel's copyright alongside Drew's, and the README credits the original. Both stay.
 
 **`main` is the product branch.** Feature work flows ticket → branch → PR on `origin` (see Project Management); genuinely trivial tweaks (a typo, a one-liner) still commit straight to `main`. A pre-push hook rejects pushes to `main`, so agent work always goes through a branch. The installed binary is built from here to `~/.local/bin/zen-linear`; **rebuild after changes or Drew keeps running the old code**:
 
@@ -12,7 +12,7 @@ Drew's Go/tview terminal client for Linear, at zen-linear/zen-linear (`origin`).
 go build -o ~/.local/bin/zen-linear ./cmd/zen-linear
 ```
 
-The repo moved to the `zen-linear` org under the Praxis Labs enterprise on 2026-08-02, so the module path is `github.com/zen-linear/zen-linear` and the Homebrew tap lives at `zen-linear/homebrew-tap`. Releases install as `brew install zen-linear/tap/zen-linear`. **Keep the tap prefix**: Homebrew 6 refuses to load formulae from untrusted taps, and naming the tap on the command line is its consent signal, so a bare `brew install zen-linear` fails. The brew step needs a `HOMEBREW_TAP_TOKEN` secret with write access to the tap repo.
+The repo moved to the `praxis-labs-io` org on 2026-08-18, so the module path is `github.com/praxis-labs-io/zen-linear`. **There is no Homebrew tap and no published release**: nobody was using either, so both were torn down on the move rather than carried across, and the source build above is the only install. The emptied `zen-linear` org is held on purpose, because a tap there installs as `brew install zen-linear/tap/zen-linear` and one under `praxis-labs-io` would not read as the product. Recreating it for an alpha means `zen-linear/homebrew-tap`, a `brews:` block in `.goreleaser.yml`, and a `HOMEBREW_TAP_TOKEN` secret on this repo holding a PAT scoped to that other org. **Keep the tap prefix**: Homebrew 6 refuses formulae from untrusted taps, and naming the tap is its consent signal, so a bare `brew install zen-linear` fails.
 
 Anything published under Drew's name (PR bodies, issues, README) must be shown to him word-for-word before pushing. His voice: terse, considerate, stoic, no strong adverbs, no em-dashes.
 

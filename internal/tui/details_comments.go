@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 const (

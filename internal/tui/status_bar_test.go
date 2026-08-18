@@ -328,7 +328,7 @@ func waitForQueuedUpdate(t *testing.T, queued <-chan struct{}) {
 func TestALongFlashLeavesTheHintsRoom(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
-	app.flashStatus("Opened GitHub: https://github.com/zen-linear/zen-linear/pull/1234 and then some")
+	app.flashStatus("Opened GitHub: https://github.com/praxis-labs-io/zen-linear/pull/1234 and then some")
 
 	lines := drawPrimitive(t, app.statusRow, 80)
 

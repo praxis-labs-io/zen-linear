@@ -7,9 +7,9 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/logger"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
-	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // navFetchers is the pair the navigation tree is built from, taken off the App

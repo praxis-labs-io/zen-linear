@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // detailsCursorGutter is the two cells edit mode reserves at the head of every

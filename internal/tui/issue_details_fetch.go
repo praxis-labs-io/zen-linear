@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
-	"github.com/zen-linear/zen-linear/internal/logger"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
 // defaultDetailDebounce bounds how far the details pane lags the cursor.

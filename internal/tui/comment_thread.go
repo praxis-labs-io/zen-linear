@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/zen-linear/zen-linear/internal/linearapi"
+import "github.com/praxis-labs-io/zen-linear/internal/linearapi"
 
 // commentThreadIndent is the gutter a reply is inset by, in cells. The rail and
 // its elbow are drawn in it, and the card gives up the same width.

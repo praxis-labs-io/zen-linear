@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // Column order matches Linear's list view: priority, id, state, title,

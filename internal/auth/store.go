@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/zen-linear/zen-linear/internal/config"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
 // ErrCredentialsNotFound indicates there is no credentials file on disk.

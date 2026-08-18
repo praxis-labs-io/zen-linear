@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // IssueFilters contains structured filters applied in addition to navigation.

@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/zen-linear/zen-linear/internal/agents"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
-	"github.com/zen-linear/zen-linear/internal/logger"
+	"github.com/praxis-labs-io/zen-linear/internal/agents"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
 // FormatShortcut returns a human-readable string for a shortcut. The rune is

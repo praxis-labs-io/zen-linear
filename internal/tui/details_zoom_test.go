@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/config"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // zoomKey presses the zoom shortcut through the real global handler, so the

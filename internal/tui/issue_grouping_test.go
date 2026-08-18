@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // hydratedGroupingApp seeds a grouped two-issue list with a selection carrying

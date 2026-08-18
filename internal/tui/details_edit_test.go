@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // newFieldEditApp opens the details fixture in edit mode the way e does, drawn
