@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
 // TestPaneHintsNameWhatTheKeyboardDoesHere pins each pane's hints. The bar is
@@ -212,7 +213,12 @@ func TestTheToastColorsSaySuccessAndFailureApart(t *testing.T) {
 // Every theme needs a color to say success in, and the fallback has to give one
 // to a theme that predates the field rather than an unpaintable default.
 func TestEveryThemeHasASuccessColor(t *testing.T) {
+	// The terminal theme is built rather than registered, so it is named here.
+	themes := map[string]Theme{config.ThemeTerminal: TerminalTheme()}
 	for name, theme := range ThemeRegistry {
+		themes[name] = theme
+	}
+	for name, theme := range themes {
 		if got := theme.SuccessColor(); !got.Valid() {
 			t.Errorf("%s has no success color: %v", name, got)
 		}

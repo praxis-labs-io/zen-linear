@@ -253,12 +253,13 @@ var ThemeRegistry = map[string]Theme{
 	config.ThemeRosePineMoon: RosePineMoonTheme,
 }
 
-// ResolveTheme returns the theme for a given name, or the default theme.
+// ResolveTheme returns the theme for a name, or the terminal-derived one. That
+// one is built rather than registered: its shades come from a launch query.
 func ResolveTheme(name string) Theme {
 	if theme, ok := ThemeRegistry[name]; ok {
 		return theme
 	}
-	return LinearTheme
+	return TerminalTheme()
 }
 
 // NewThemeTags builds tag strings for dynamic color usage.
@@ -284,10 +285,16 @@ func colorTag(color tcell.Color) string {
 	return "[" + colorName(color) + "]"
 }
 
-// colorName is a color as tview spells it inside a tag.
+// colorName is a color as tview spells it inside a tag. A palette color is
+// named, not hexed: a hex would pin it to a palette the terminal has replaced.
 func colorName(color tcell.Color) string {
 	if !color.Valid() {
 		return "default"
+	}
+	if !color.IsRGB() {
+		if name := color.Name(); name != "" {
+			return name
+		}
 	}
 	css := color.CSS()
 	if css == "" {

@@ -196,6 +196,9 @@ func runTUI() int {
 		}
 	}
 
+	// Before NewApp resolves the theme, and before tcell owns the tty.
+	tui.DetectTerminalColors()
+
 	app := tui.NewApp(clientCfg, cfg, promptTemplates)
 	app.UseSettingsFile(settingsPath)
 	app.UseSession(sessionPath, sessionFile)

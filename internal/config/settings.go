@@ -431,10 +431,10 @@ func validateLogLevel(logLevel string, label string) error {
 // validateTheme validates the allowed theme values.
 func validateTheme(theme string, label string) error {
 	switch theme {
-	case ThemeLinear, ThemeHighContrast, ThemeColorBlind, ThemeRosePineMoon:
+	case ThemeTerminal, ThemeLinear, ThemeHighContrast, ThemeColorBlind, ThemeRosePineMoon:
 		return nil
 	default:
-		return fmt.Errorf("invalid %s value %q: must be linear, high_contrast, color_blind, or rose_pine_moon", label, theme)
+		return fmt.Errorf("invalid %s value %q: must be terminal, linear, high_contrast, color_blind, or rose_pine_moon", label, theme)
 	}
 }
 

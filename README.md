@@ -45,8 +45,9 @@ Interaction
 - Copy issue ID, URL, or branch name. Open the issue or its GitHub link
 
 Appearance
-- Rose Pine Moon theme with a transparent background, plus the original
-  linear, high contrast, and color blind themes
+- Default theme built from the terminal's own colors, plus Rose Pine Moon with
+  a transparent background and the original linear, high contrast, and color
+  blind themes
 - Optional rounded borders
 - Theme-derived selection, markdown, and modal styling
 
@@ -69,7 +70,7 @@ Settings live in `~/.zen-linear/config.json`, created on first start. A
 original linear-tui set:
 
     {
-      "theme": "rose_pine_moon",
+      "theme": "terminal",
       "rounded_borders": true,
       "group_by": "status",
       "subgroup_by": "",
@@ -87,6 +88,10 @@ original linear-tui set:
       }
     }
 
+- `theme` defaults to `terminal`, which takes its hues from the terminal's ANSI
+  palette and its shades from the background and foreground the terminal
+  reports at launch. Set `rose_pine_moon`, `linear`, `high_contrast`, or
+  `color_blind` to pin the colors instead
 - `columns` selects and orders the issue list from: priority, id, state,
   title, labels, assignee, updated, cycle, due, estimate, project, milestone
 - `group_by` and `subgroup_by` take status, priority, assignee, cycle,

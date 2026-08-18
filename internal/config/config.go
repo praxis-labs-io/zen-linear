@@ -29,11 +29,12 @@ const (
 	DefaultSearchDebounce = 200 * time.Millisecond
 	DefaultAPIEndpoint    = "https://api.linear.app/graphql"
 	DefaultLogLevel       = "warning" // debug, info, warning, error
+	ThemeTerminal         = "terminal"
 	ThemeLinear           = "linear"
 	ThemeHighContrast     = "high_contrast"
 	ThemeColorBlind       = "color_blind"
 	ThemeRosePineMoon     = "rose_pine_moon"
-	DefaultTheme          = ThemeLinear
+	DefaultTheme          = ThemeTerminal
 	DensityComfortable    = "comfortable"
 	DensityCompact        = "compact"
 	DefaultDensity        = DensityComfortable

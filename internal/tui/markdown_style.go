@@ -2,17 +2,22 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
 	"github.com/gdamore/tcell/v2"
 )
 
-// hexPtr converts a tcell color to a glamour hex string. ColorDefault maps to
-// nil so the terminal's own color shows through.
+// hexPtr is the string glamour styles by: an index for a palette color, so
+// markdown follows the terminal's palette, a hex for RGB, nil for default.
 func hexPtr(color tcell.Color) *string {
 	if !color.Valid() {
 		return nil
+	}
+	if !color.IsRGB() {
+		index := strconv.Itoa(int(color &^ tcell.ColorValid))
+		return &index
 	}
 	hex := fmt.Sprintf("#%06x", color.Hex())
 	return &hex
