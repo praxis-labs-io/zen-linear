@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/mattn/go-runewidth"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 func runeCellWidth(text string) int {

@@ -3,8 +3,8 @@ package tui
 import (
 	"context"
 
-	"github.com/zen-linear/zen-linear/internal/cache"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/cache"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // GetAPI returns the Linear API client (used by commands).

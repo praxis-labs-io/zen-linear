@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/zen-linear/zen-linear/internal/cache"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/cache"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // linearDeps bundles the Linear API client, its metadata cache, and every

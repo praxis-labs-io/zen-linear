@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // mockClient is a mock implementation for testing cache behavior.

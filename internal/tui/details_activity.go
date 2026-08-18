@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // Glyphs for the activity events that have no icon of their own. A state move

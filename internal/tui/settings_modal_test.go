@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zen-linear/zen-linear/internal/config"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
 // A save has to land on the file the app launched from. Re-resolving the path

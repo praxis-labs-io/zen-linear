@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // BuildIssueContext renders title, description, and comments into plain text.

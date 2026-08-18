@@ -1,4 +1,4 @@
-module github.com/zen-linear/zen-linear
+module github.com/praxis-labs-io/zen-linear
 
 go 1.24.0
 

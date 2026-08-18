@@ -63,27 +63,8 @@ changelog:
 
 release:
   github:
-    owner: zen-linear
+    owner: praxis-labs-io
     name: zen-linear
   draft: false
   prerelease: auto
   name_template: "{{.ProjectName}} v{{.Version}}"
-
-# Note: brews is deprecated in favor of homebrew_casks, but for CLI tools
-# formulas are still the appropriate distribution method. This will continue
-# to work and can be migrated to homebrew_casks in a future update if needed.
-brews:
-  - name: zen-linear
-    repository:
-      owner: zen-linear
-      name: homebrew-tap
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/zen-linear/zen-linear"
-    description: "Terminal user interface for Linear"
-    license: "MIT"
-    install: |
-      bin.install "zen-linear"
-    test: |
-      system "#{bin}/zen-linear", "--version"

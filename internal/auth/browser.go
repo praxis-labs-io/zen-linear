@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/zen-linear/zen-linear/internal/config"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
 // OpenURL opens url in the user's default browser.

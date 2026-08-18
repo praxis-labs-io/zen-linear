@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zen-linear/zen-linear/internal/agents"
+	"github.com/praxis-labs-io/zen-linear/internal/agents"
 )
 
 // TestAgentStreamBuffer_ThinkingStreams verifies thinking lines stream in chunks.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // Search results come from the server-side searchIssues query and live in their

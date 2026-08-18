@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/zen-linear/zen-linear/internal/logger"
+import "github.com/praxis-labs-io/zen-linear/internal/logger"
 
 // uiActionScopes are the keybinding ids naming a UI action rather than a
 // palette command, each with the panes it answers from. An action collides with

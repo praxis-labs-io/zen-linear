@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // commentedIssueFixture is an issue whose comments exercise the card: a body

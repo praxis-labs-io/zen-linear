@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/praxis-labs-io/zen-linear/internal/cache"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/cache"
-	"github.com/zen-linear/zen-linear/internal/config"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // newNavCacheTestApp builds an App whose navigation fetch is held open, so a

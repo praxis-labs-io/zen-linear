@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 const chooserTeamID = "team-1"

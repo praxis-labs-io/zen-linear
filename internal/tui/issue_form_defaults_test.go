@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
 // captureCreates routes the form's writes to a channel instead of the network.

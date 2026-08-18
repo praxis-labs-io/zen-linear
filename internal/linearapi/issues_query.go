@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/praxis-labs-io/zen-linear/internal/logger"
 	"github.com/shurcooL/graphql"
-	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // FetchIssuesPage fetches a single page of issues with optional filtering and sorting.

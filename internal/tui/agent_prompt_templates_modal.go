@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/config"
 )
 
 // AgentPromptTemplatesModal manages editing of agent prompt templates.

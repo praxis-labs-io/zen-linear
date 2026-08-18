@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/zen-linear/zen-linear/internal/linearapi"
-	"github.com/zen-linear/zen-linear/internal/logger"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
 // issueColumns returns the configured issue list columns, or the default

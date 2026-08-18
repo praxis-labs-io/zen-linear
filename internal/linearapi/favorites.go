@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/praxis-labs-io/zen-linear/internal/logger"
 	"github.com/shurcooL/graphql"
-	"github.com/zen-linear/zen-linear/internal/logger"
 )
 
 // favoriteNode is the favorite selection shared by the list query and the

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/zen-linear/zen-linear/internal/config"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
-	"github.com/zen-linear/zen-linear/internal/session"
+	"github.com/praxis-labs-io/zen-linear/internal/config"
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/session"
 )
 
 // newSessionRestoreTestApp extends the default-navigation harness with the

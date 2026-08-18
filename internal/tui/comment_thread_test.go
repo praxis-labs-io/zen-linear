@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
-	"github.com/zen-linear/zen-linear/internal/linearapi"
 )
 
 // threadedComments is a discussion with a reply, a reply to that reply, and a
