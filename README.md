@@ -114,6 +114,10 @@ original linear-tui set:
 
 ## Keys
 
+`?` opens a reference to all of them, grouped by where they work and opened on
+wherever you pressed it. In a writing box `?` is a character, so the reference
+lists those keys for a reader who is not in one.
+
     j/k         move            Enter       toggle details
     h/l         switch panes    Space       expand sub-issues
     1/2/3       focus a pane    { }         step comments
@@ -122,6 +126,7 @@ original linear-tui set:
     :           palette         /           search
     r           refresh         w           switch workspace
     n           new issue       q           quit
+    ?           keys reference
 
 Each pane's number is shown in its title. Typing one focuses that pane, and
 brings it back if it has been toggled off.

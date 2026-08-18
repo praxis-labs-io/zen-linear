@@ -140,6 +140,7 @@ func (a *App) rebuildModals() {
 		a.agentOutputModal.ApplyTheme(a.theme)
 	}
 	a.confirmationModal = NewConfirmationModal(a)
+	a.keysModal = NewKeysModal(a)
 }
 
 func (a *App) applyIssuesTableTheme(table *tview.Table) {

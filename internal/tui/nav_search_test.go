@@ -129,6 +129,7 @@ func TestClosingAnOverlayGoesBackToThePaneItOpenedFrom(t *testing.T) {
 		{"multi_select", func(a *App) {
 			a.multiSelectModal.Show("Filter Labels", []MultiSelectItem{{ID: "1", Label: "Bug"}}, nil, func([]string) {})
 		}, func(a *App) { a.multiSelectModal.Hide() }},
+		{"keys", (*App).ShowKeysModal, func(a *App) { a.keysModal.Hide() }},
 	}
 	for _, overlay := range overlays {
 		t.Run(overlay.name, func(t *testing.T) {

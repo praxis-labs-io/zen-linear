@@ -21,6 +21,7 @@ var modalDispatchGolden = []string{
 	"prompt_templates",
 	"agent_prompt",
 	"agent_output",
+	"keys",
 }
 
 // TestModalDispatchGoldenCoversTheRegistry keeps the two lists the same length
@@ -62,6 +63,8 @@ func openModal(t *testing.T, app *App, page string) {
 		app.agentPromptModal.Show("ZNL-1", func(prompt, workspace string) {})
 	case "agent_output":
 		app.agentOutputModal.Show("Agent", func() {})
+	case "keys":
+		app.ShowKeysModal()
 	default:
 		t.Fatalf("openModal: no opener for page %q", page)
 	}

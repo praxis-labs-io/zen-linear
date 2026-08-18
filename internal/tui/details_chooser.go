@@ -502,6 +502,8 @@ func (a *App) handleChooserKey(event *tcell.EventKey) *tcell.EventKey {
 			a.moveChooserChoice(-1)
 		case ' ':
 			a.toggleChooserPick()
+		case a.keysReferenceKey():
+			a.ShowKeysModal()
 		}
 	}
 	return nil

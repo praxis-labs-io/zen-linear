@@ -238,6 +238,8 @@ func (a *App) handleDetailsEditKey(event *tcell.EventKey) *tcell.EventKey {
 			a.stepFieldCursor(1)
 		case 'k':
 			a.stepFieldCursor(-1)
+		case a.keysReferenceKey():
+			a.ShowKeysModal()
 		default:
 			// The pickers keep their shortcuts. A modal takes the keys ahead of
 			// this handler, so the mode waits under one rather than ending.

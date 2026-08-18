@@ -308,6 +308,16 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 		{
+			ID:           "show_keys",
+			Group:        GroupApp,
+			Title:        "Show keys",
+			Keywords:     []string{"keys", "help", "shortcuts", "bindings", "reference", "?"},
+			ShortcutRune: '?',
+			Run: func(a *App) {
+				a.ShowKeysModal()
+			},
+		},
+		{
 			ID:              "search",
 			Group:           GroupList,
 			Title:           "Search issues",
