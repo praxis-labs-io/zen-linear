@@ -195,13 +195,7 @@ func (lm *listModal) open(title, contextLine string) {
 func (lm *listModal) layout(title string) {
 	app := lm.app
 
-	rows := lm.count
-	if rows == 0 {
-		rows = 1
-	}
-	if rows > lm.maxRows {
-		rows = lm.maxRows
-	}
+	rows := min(max(lm.count, 1), lm.maxRows)
 
 	hasContext := lm.contextLine != ""
 	// The border, the footer's rule and its hint line, and where there is one,
@@ -211,9 +205,8 @@ func (lm *listModal) layout(title string) {
 		fixed += 2
 	}
 
-	// A blank row under the list always, and one above it where no context line
-	// stands there. They are the first thing given up on a short screen, being
-	// the only part nobody reads.
+	// A blank row under the list always, one above where no context line stands.
+	// The first thing given up on a short screen, being the part nobody reads.
 	gap, slots := app.density.ModalSpacerLines, 1
 	if !hasContext {
 		slots = 2
@@ -222,7 +215,6 @@ func (lm *listModal) layout(title string) {
 	if want := rows + fixed + slots*gap; app.fitModalHeight(want, least) < want {
 		gap = 0
 	}
-	height := app.fitModalHeight(rows+fixed+slots*gap, least)
 
 	panel := app.modalPanel(title)
 	if hasContext {
@@ -236,7 +228,9 @@ func (lm *listModal) layout(title string) {
 	panel.AddItem(app.modalRule(), 1, 0, false)
 	panel.AddItem(lm.hintView, 1, 0, false)
 
-	centerModal(lm.modal, panel, app.modalWidth(lm.widest), height)
+	centerModal(lm.modal, panel, func() (int, int) {
+		return app.modalWidth(lm.widest), app.fitModalHeight(rows+fixed+slots*gap, least)
+	})
 }
 
 // Hide closes the overlay and hands the keys back to whatever it covered.
@@ -260,22 +254,33 @@ func (lm *listModal) move(delta int) {
 	lm.list.SetCurrentItem(index)
 }
 
-// centerModal fills the given wrapper with the panel centered at that size.
-// Two Flexes, not three: a third only looks centered because tview hands its
-// spacers a negative width when the panel is wider than the slot they share,
-// which puts the panel where it belongs and its rect somewhere else, and a rect
-// the pointer is not in takes no clicks. The wrapper is refilled rather than
-// replaced so a page already holding it keeps drawing.
-func centerModal(root *tview.Flex, panel tview.Primitive, width, height int) {
-	column := tview.NewFlex().
-		SetDirection(tview.FlexRow).
-		AddItem(nil, 0, 1, false).
-		AddItem(panel, height, 0, true).
-		AddItem(nil, 0, 1, false)
+// centerModal fills the wrapper with the panel centered and keeps it there:
+// fit is asked again on every resize. CLAUDE.md has the three rules in here.
+func centerModal(root *tview.Flex, panel tview.Primitive, fit func() (width, height int)) {
+	place := func() {
+		width, height := fit()
+		column := tview.NewFlex().
+			SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(panel, height, 0, true).
+			AddItem(nil, 0, 1, false)
 
-	root.Clear()
-	root.SetDirection(tview.FlexColumn).
-		AddItem(nil, 0, 1, false).
-		AddItem(column, width, 0, true).
-		AddItem(nil, 0, 1, false)
+		root.Clear()
+		root.SetDirection(tview.FlexColumn).
+			AddItem(nil, 0, 1, false).
+			AddItem(column, width, 0, true).
+			AddItem(nil, 0, 1, false)
+	}
+	place()
+
+	fittedW, fittedH := -1, -1
+	// The wrapper's rect is the screen, so its own draw is where a resize is
+	// seen. Refilling here is safe: tview runs a draw func before the items.
+	root.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		if width != fittedW || height != fittedH {
+			fittedW, fittedH = width, height
+			place()
+		}
+		return x, y, width, height
+	})
 }
