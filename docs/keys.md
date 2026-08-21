@@ -59,10 +59,11 @@ attachments, and the agent.
 
     F           favorite or unfavorite the item under the cursor
     J/K         move a favorite down or up
-    L           move a favorite into the folder above it
-    H           move a favorite back out of its folder
 
-All of it writes back to Linear, so the web app stays in step.
+`J` and `K` step a favorite through the tree as it is drawn. Stepping onto
+an open folder moves the favorite into it, stepping off the end of a folder
+moves it back out, and a closed folder is stepped over. All of it writes
+back to Linear, so the web app stays in step.
 
 `/` puts the cursor in the query box at the top of the pane. The search is
 workspace-wide: it takes neither the tree's scope, the rich filters, nor the

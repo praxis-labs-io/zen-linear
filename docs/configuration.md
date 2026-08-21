@@ -115,7 +115,6 @@ An id is either a palette command's id or one of these UI actions:
     comment_next        comment_prev
     columns_left        columns_right
     favorite_move_up    favorite_move_down
-    favorite_nest       favorite_unnest
     comment_reply       comment_quote       comment_copy_link
     comment_open        comment_edit        comment_delete
 

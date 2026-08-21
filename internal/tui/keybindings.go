@@ -21,8 +21,6 @@ var uiActionScopes = map[string]CommandScope{
 	"columns_right":      ScopeIssue,
 	"favorite_move_up":   ScopeNavigation,
 	"favorite_move_down": ScopeNavigation,
-	"favorite_nest":      ScopeNavigation,
-	"favorite_unnest":    ScopeNavigation,
 	"comment_reply":      ScopeComment,
 	"comment_quote":      ScopeComment,
 	"comment_copy_link":  ScopeComment,

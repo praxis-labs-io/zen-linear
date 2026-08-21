@@ -491,88 +491,124 @@ func indexOfChild(parent, target *tview.TreeNode) int {
 	return -1
 }
 
-func TestPlanFavoriteNestIntoFolderAbove(t *testing.T) {
+// allExpanded is the folder state a plan test uses when collapse is not what it
+// is pinning.
+func allExpanded(string) bool { return true }
+
+func TestPlanFavoriteEnterFolderLandsOnTheEndItArrivesAt(t *testing.T) {
+	// down: loose steps onto the folder below it and lands above child-a.
+	// up: loose steps onto the folder above it and lands below child-b.
 	favorites := []linearapi.Favorite{
-		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 10},
-		{ID: "child", Type: "project", ProjectID: "p1", ParentID: "folder", SortOrder: 20},
-		{ID: "loose", Type: "project", ProjectID: "p2", SortOrder: 30},
+		{ID: "above", Type: "folder", FolderName: "Above", SortOrder: 10},
+		{ID: "child-b", Type: "project", ProjectID: "p1", ParentID: "above", SortOrder: 11},
+		{ID: "loose", Type: "project", ProjectID: "p2", SortOrder: 20},
+		{ID: "below", Type: "folder", FolderName: "Below", SortOrder: 30},
+		{ID: "child-a", Type: "project", ProjectID: "p3", ParentID: "below", SortOrder: 31},
 	}
 
-	plan, ok := planFavoriteNest(favorites, "loose", "")
-	if !ok {
-		t.Fatal("planFavoriteNest(loose) ok = false, want true")
+	down, ok := planFavoriteEnterFolder(favorites, "loose", "", 1, allExpanded)
+	if !ok || down.ParentID != "below" {
+		t.Fatalf("stepping down = %+v, %v; want the folder below", down, ok)
 	}
-	if plan.ParentID != "folder" {
-		t.Errorf("plan.ParentID = %q, want folder", plan.ParentID)
+	if down.SortOrder >= 31 {
+		t.Errorf("down.SortOrder = %v, want less than the first child's 31", down.SortOrder)
 	}
-	// It lands below the folder's existing child.
-	if plan.SortOrder <= 20 {
-		t.Errorf("plan.SortOrder = %v, want greater than the last child's 20", plan.SortOrder)
+
+	up, ok := planFavoriteEnterFolder(favorites, "loose", "", -1, allExpanded)
+	if !ok || up.ParentID != "above" {
+		t.Fatalf("stepping up = %+v, %v; want the folder above", up, ok)
+	}
+	if up.SortOrder <= 11 {
+		t.Errorf("up.SortOrder = %v, want greater than the last child's 11", up.SortOrder)
 	}
 }
 
-func TestPlanFavoriteNestIntoEmptyFolder(t *testing.T) {
-	favorites := []linearapi.Favorite{
-		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 10},
-		{ID: "loose", Type: "project", ProjectID: "p1", SortOrder: 20},
-	}
-
-	plan, ok := planFavoriteNest(favorites, "loose", "")
-	if !ok || plan.ParentID != "folder" {
-		t.Fatalf("planFavoriteNest(empty folder) = %+v, %v; want parent folder", plan, ok)
-	}
-}
-
-func TestPlanFavoriteNestRejectsNonFolderAboveAndFolders(t *testing.T) {
-	favorites := []linearapi.Favorite{
-		{ID: "first", Type: "project", ProjectID: "p1", SortOrder: 10},
-		{ID: "second", Type: "project", ProjectID: "p2", SortOrder: 20},
-		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 30},
-		{ID: "folder-2", Type: "folder", FolderName: "Home", SortOrder: 40},
-	}
-
-	if _, ok := planFavoriteNest(favorites, "second", ""); ok {
-		t.Error("nested under a project, want false")
-	}
-	if _, ok := planFavoriteNest(favorites, "first", ""); ok {
-		t.Error("nested the first item with nothing above it, want false")
-	}
-	// Linear's sidebar has no nested folders.
-	if _, ok := planFavoriteNest(favorites, "folder-2", ""); ok {
-		t.Error("nested a folder inside a folder, want false")
-	}
-}
-
-func TestPlanFavoriteUnnestLandsBelowItsFolder(t *testing.T) {
-	favorites := []linearapi.Favorite{
-		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 10},
-		{ID: "child", Type: "project", ProjectID: "p1", ParentID: "folder", SortOrder: 15},
-		{ID: "after", Type: "project", ProjectID: "p2", SortOrder: 20},
-	}
-
-	plan, ok := planFavoriteUnnest(favorites, "child", "folder")
-	if !ok {
-		t.Fatal("planFavoriteUnnest(child) ok = false, want true")
-	}
-	if plan.ParentID != "" {
-		t.Errorf("plan.ParentID = %q, want the top level", plan.ParentID)
-	}
-	if plan.SortOrder <= 10 || plan.SortOrder >= 20 {
-		t.Errorf("plan.SortOrder = %v, want between the folder's 10 and the next item's 20", plan.SortOrder)
-	}
-}
-
-func TestPlanFavoriteUnnestAtTopLevelIsNoOp(t *testing.T) {
+func TestPlanFavoriteEnterFolderStepsOverACollapsedOne(t *testing.T) {
 	favorites := []linearapi.Favorite{
 		{ID: "loose", Type: "project", ProjectID: "p1", SortOrder: 10},
+		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 20},
+		{ID: "child", Type: "project", ProjectID: "p2", ParentID: "folder", SortOrder: 21},
 	}
+	collapsed := func(string) bool { return false }
 
-	if _, ok := planFavoriteUnnest(favorites, "loose", ""); ok {
-		t.Error("planFavoriteUnnest(top level) ok = true, want false")
+	if _, ok := planFavoriteEnterFolder(favorites, "loose", "", 1, collapsed); ok {
+		t.Error("entered a collapsed folder, want the plain reorder past it")
 	}
 }
 
-func TestNestFavoriteRoundTripsThroughTheTree(t *testing.T) {
+func TestPlanFavoriteEnterFolderRefusesAFolderAndTheEdges(t *testing.T) {
+	favorites := []linearapi.Favorite{
+		{ID: "first", Type: "project", ProjectID: "p1", SortOrder: 10},
+		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 20},
+		{ID: "folder-2", Type: "folder", FolderName: "Home", SortOrder: 30},
+	}
+
+	// Linear's sidebar has no nested folders.
+	if _, ok := planFavoriteEnterFolder(favorites, "folder-2", "", -1, allExpanded); ok {
+		t.Error("a folder entered another folder, want false")
+	}
+	if _, ok := planFavoriteEnterFolder(favorites, "first", "", -1, allExpanded); ok {
+		t.Error("entered something above the first row, want false")
+	}
+}
+
+func TestPlanFavoriteEnterEmptyFolder(t *testing.T) {
+	favorites := []linearapi.Favorite{
+		{ID: "loose", Type: "project", ProjectID: "p1", SortOrder: 10},
+		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 20},
+	}
+
+	plan, ok := planFavoriteEnterFolder(favorites, "loose", "", 1, allExpanded)
+	if !ok || plan.ParentID != "folder" {
+		t.Fatalf("planFavoriteEnterFolder(empty folder) = %+v, %v; want the folder", plan, ok)
+	}
+}
+
+func TestPlanFavoriteLeaveFolderStepsPastIt(t *testing.T) {
+	favorites := []linearapi.Favorite{
+		{ID: "before", Type: "project", ProjectID: "p1", SortOrder: 10},
+		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 20},
+		{ID: "only", Type: "project", ProjectID: "p2", ParentID: "folder", SortOrder: 21},
+		{ID: "after", Type: "project", ProjectID: "p3", SortOrder: 30},
+	}
+
+	down, ok := planFavoriteLeaveFolder(favorites, "only", "folder", 1)
+	if !ok || down.ParentID != "" {
+		t.Fatalf("stepping down out = %+v, %v; want the top level", down, ok)
+	}
+	if down.SortOrder <= 20 || down.SortOrder >= 30 {
+		t.Errorf("down.SortOrder = %v, want between the folder's 20 and after's 30", down.SortOrder)
+	}
+
+	up, ok := planFavoriteLeaveFolder(favorites, "only", "folder", -1)
+	if !ok || up.ParentID != "" {
+		t.Fatalf("stepping up out = %+v, %v; want the top level", up, ok)
+	}
+	if up.SortOrder <= 10 || up.SortOrder >= 20 {
+		t.Errorf("up.SortOrder = %v, want between before's 10 and the folder's 20", up.SortOrder)
+	}
+}
+
+func TestPlanFavoriteLeaveFolderOnlyAtTheEdges(t *testing.T) {
+	favorites := []linearapi.Favorite{
+		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 10},
+		{ID: "first", Type: "project", ProjectID: "p1", ParentID: "folder", SortOrder: 11},
+		{ID: "last", Type: "project", ProjectID: "p2", ParentID: "folder", SortOrder: 12},
+		{ID: "loose", Type: "project", ProjectID: "p3", SortOrder: 20},
+	}
+
+	if _, ok := planFavoriteLeaveFolder(favorites, "first", "folder", 1); ok {
+		t.Error("left the folder with a sibling below, want the plain reorder")
+	}
+	if _, ok := planFavoriteLeaveFolder(favorites, "last", "folder", -1); ok {
+		t.Error("left the folder with a sibling above, want the plain reorder")
+	}
+	if _, ok := planFavoriteLeaveFolder(favorites, "loose", "", 1); ok {
+		t.Error("left the top level, want false")
+	}
+}
+
+func TestMoveFavoriteWalksIntoAndOutOfAFolder(t *testing.T) {
 	app := newFavoritesTestApp(t)
 	settled := make(chan struct{}, 1)
 	app.favoritesChanged = func() { settled <- struct{}{} }
@@ -590,8 +626,8 @@ func TestNestFavoriteRoundTripsThroughTheTree(t *testing.T) {
 
 	// Second child of the group is the loose project; the folder is first.
 	app.navigationTree.SetCurrentNode(app.favoritesGroup.GetChildren()[1])
-	if !app.nestFavorite(app.currentNavigationNode(), false) {
-		t.Fatal("nestFavorite did not consume the key")
+	if !app.moveFavorite(app.currentNavigationNode(), -1) {
+		t.Fatal("stepping up into the folder did not land")
 	}
 	waitForFavorites(t, settled)
 
@@ -609,21 +645,68 @@ func TestNestFavoriteRoundTripsThroughTheTree(t *testing.T) {
 
 	// And back out again.
 	app.navigationTree.SetCurrentNode(folderNode.GetChildren()[0])
-	if !app.nestFavorite(app.currentNavigationNode(), true) {
-		t.Fatal("unnest did not consume the key")
+	if !app.moveFavorite(app.currentNavigationNode(), 1) {
+		t.Fatal("stepping down out of the folder did not land")
 	}
 	waitForFavorites(t, settled)
 
 	if gotParent != "" {
-		t.Fatalf("unnest wrote parent %q, want the top level", gotParent)
+		t.Fatalf("leaving wrote parent %q, want the top level", gotParent)
 	}
 	if len(app.favoritesGroup.GetChildren()) != 2 {
-		t.Fatalf("favorites group has %d top-level children after unnesting, want 2",
+		t.Fatalf("favorites group has %d top-level children after leaving, want 2",
 			len(app.favoritesGroup.GetChildren()))
 	}
 }
 
-func TestNestFavoriteIgnoresNonFavorites(t *testing.T) {
+func TestMoveFavoriteStepsOverACollapsedFolder(t *testing.T) {
+	app := newFavoritesTestApp(t)
+	settled := make(chan struct{}, 1)
+	app.favoritesChanged = func() { settled <- struct{}{} }
+	app.moveFavoriteFunc = func(context.Context, string, string, float64) error {
+		t.Error("moveFavoriteFunc called for a collapsed folder, want a plain reorder")
+		return nil
+	}
+	sorted := map[string]float64{}
+	app.updateFavoriteSortFunc = func(_ context.Context, favoriteID string, sortOrder float64) error {
+		sorted[favoriteID] = sortOrder
+		return nil
+	}
+
+	app.rebuildNavigationTree(nil, []linearapi.Favorite{
+		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 10},
+		{ID: "child", Type: "project", ProjectID: "p1", ProjectName: "Beta", ParentID: "folder", SortOrder: 11},
+		{ID: "loose", Type: "project", ProjectID: "p2", ProjectName: "Alpha", SortOrder: 20},
+	})
+	app.favoritesGroup.GetChildren()[0].SetExpanded(false)
+
+	app.navigationTree.SetCurrentNode(app.favoritesGroup.GetChildren()[1])
+	if !app.moveFavorite(app.currentNavigationNode(), -1) {
+		t.Fatal("stepping up past a collapsed folder did not land")
+	}
+	waitForFavorites(t, settled)
+
+	if sorted["loose"] != 10 || sorted["folder"] != 20 {
+		t.Fatalf("sort orders = %v, want loose and folder swapped", sorted)
+	}
+}
+
+func TestCollapsedFavoriteFolderSurvivesARefresh(t *testing.T) {
+	app := newFavoritesTestApp(t)
+	app.rebuildNavigationTree(nil, []linearapi.Favorite{
+		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 10},
+		{ID: "child", Type: "project", ProjectID: "p1", ProjectName: "Beta", ParentID: "folder", SortOrder: 11},
+	})
+
+	app.favoritesGroup.GetChildren()[0].SetExpanded(false)
+	app.refreshFavoritesSection("")
+
+	if app.favoritesGroup.GetChildren()[0].IsExpanded() {
+		t.Error("the folder reopened across a refresh, want it left collapsed")
+	}
+}
+
+func TestMoveFavoriteIgnoresNonFavorites(t *testing.T) {
 	app := newFavoritesTestApp(t)
 	app.moveFavoriteFunc = func(context.Context, string, string, float64) error {
 		t.Error("moveFavoriteFunc called for a non-favorite")
@@ -632,10 +715,10 @@ func TestNestFavoriteIgnoresNonFavorites(t *testing.T) {
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
 	app.navigationTree.SetCurrentNode(app.navigationTree.GetRoot().GetChildren()[1])
 
-	if app.nestFavorite(app.currentNavigationNode(), false) {
-		t.Error("nestFavorite consumed the key on a team node")
+	if app.moveFavorite(app.currentNavigationNode(), 1) {
+		t.Error("moveFavorite landed on a team node")
 	}
-	if app.nestFavorite(app.currentNavigationNode(), true) {
-		t.Error("unnest consumed the key on a team node")
+	if app.moveFavorite(app.currentNavigationNode(), -1) {
+		t.Error("moveFavorite landed on a team node")
 	}
 }
