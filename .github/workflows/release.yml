@@ -1,6 +1,5 @@
 # Release workflow for zen-linear
-# Triggered when a version tag (vX.Y.Z) is pushed
-# Uses GoReleaser to build and publish releases
+# Builds the binaries for a version tag and cuts the GitHub release from them.
 
 name: Release
 
@@ -9,33 +8,149 @@ on:
     tags:
       - "v*"
 
+env:
+  GO_VERSION: "1.24"
+
+# Nothing here writes. The release job asks for more itself.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
-    name: Release
+  # ci.yml runs on main and on pull requests, never on a tag, so without this
+  # a tag on an unmerged commit publishes from code nothing checked.
+  test:
+    name: Test
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+
+      # First, so a tag cut ahead of its notes fails in seconds rather than
+      # after the race suite and five cross-compiles.
+      - name: Check the notes
+        run: |
+          notes="docs/release-notes/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$notes" ]; then
+            echo "No $notes in this tag. Notes are committed to main before the tag is cut." >&2
+            echo "Recover with: gh release create $GITHUB_REF_NAME dist/* --notes-file <path> --verify-tag" >&2
+            exit 1
+          fi
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Run tests
-        run: go test -v ./...
+      - name: Test
+        run: make test
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: test
+    runs-on: ubuntu-latest
+
+    # Everything is pure Go, so one linux runner cross-compiles every target
+    # and there is no macOS runner in the bill. The set matches the one CI
+    # builds, windows/arm64 excluded there and so absent here.
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+
+          binary="zen-linear"
+          if [ "$GOOS" = "windows" ]; then
+            binary="zen-linear.exe"
+          fi
+
+          mkdir -p build dist
+          # -trimpath so the archive does not carry the runner's paths, and the
+          # three values stamped here are the only thing that sets them: a plain
+          # go build reports dev/none/unknown.
+          go build -trimpath \
+            -ldflags "-s -w -X main.Version=${version} -X main.Commit=${GITHUB_SHA} -X main.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o "build/${binary}" ./cmd/zen-linear
+
+          # zip for windows and tar for the rest, each being what that platform
+          # opens without reaching for anything.
+          archive="dist/zen-linear_${version}_${GOOS}_${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then
+            (cd build && zip -q "../${archive}.zip" "$binary")
+          else
+            tar -czf "${archive}.tar.gz" -C build "$binary"
+          fi
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: zen-linear_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    # The one job that writes, and only to the release.
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        # zen-linear_* rather than a list of extensions, so a new archive
+        # format cannot be left out of the checksums by omission.
+        run: cd dist && sha256sum zen-linear_* > checksums.txt
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # --verify-tag so a workflow triggered by anything but a real tag on
+        # this commit fails rather than inventing one. --notes-file rather than
+        # --generate-notes: a squash-per-PR history generates a list of every
+        # ticket ever merged, and this history still carries the fork's.
+        #
+        # No --title. Without --generate-notes gh titles the release from the
+        # tag, which is what we want, and an H1 in the notes would repeat it.
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --notes-file "docs/release-notes/${GITHUB_REF_NAME}.md" \
+            --verify-tag

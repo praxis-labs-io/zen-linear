@@ -1,4 +1,4 @@
-.PHONY: help test build lint fmt mod-tidy all clean coverage
+.PHONY: help test build install lint lint-fix fmt fmt-fix mod-tidy all clean coverage
 
 # Default target
 .DEFAULT_GOAL := help
@@ -7,6 +7,7 @@
 BINARY_NAME := zen-linear
 MAIN_PACKAGE := ./cmd/zen-linear
 COVERAGE_FILE := coverage.out
+INSTALL_DIR := $(HOME)/.local/bin
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -25,6 +26,12 @@ coverage: test ## Show test coverage report
 build: ## Build the binary
 	@echo "Building $(BINARY_NAME)..."
 	go build -v $(MAIN_PACKAGE)
+
+install: ## Build into ~/.local/bin so the installed binary matches this tree
+	@echo "Installing $(BINARY_NAME) to $(INSTALL_DIR)..."
+	@mkdir -p $(INSTALL_DIR)
+	go build -o $(INSTALL_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "Installed $(INSTALL_DIR)/$(BINARY_NAME)."
 
 fmt: ## Check code formatting with gofmt
 	@echo "Checking code formatting..."

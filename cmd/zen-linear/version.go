@@ -5,8 +5,9 @@ import (
 	"runtime"
 )
 
-// Version information set via ldflags at build time by GoReleaser.
-// Example: -ldflags "-X main.Version=1.0.0 -X main.Commit=abc123 -X main.Date=2026-01-14"
+// Build metadata stamped at link time by .github/workflows/release.yml. A
+// plain go build leaves the defaults, which is how a local binary is told
+// apart from a released one.
 var (
 	// Version is the semantic version of the application.
 	Version = "dev"
