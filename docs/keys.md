@@ -62,8 +62,10 @@ attachments, and the agent.
 
 `J` and `K` step a favorite through the tree as it is drawn. Stepping onto
 an open folder moves the favorite into it, stepping off the end of a folder
-moves it back out, and a closed folder is stepped over. All of it writes
-back to Linear, so the web app stays in step.
+moves it back out, and a closed folder is stepped over. A folder is moved
+whole, over its neighbour rather than into it, since Linear has no folder
+inside a folder. All of it writes back to Linear, so the web app stays in
+step.
 
 `/` puts the cursor in the query box at the top of the pane. The search is
 workspace-wide: it takes neither the tree's scope, the rich filters, nor the

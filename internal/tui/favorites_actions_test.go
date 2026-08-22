@@ -589,6 +589,32 @@ func TestPlanFavoriteLeaveFolderStepsPastIt(t *testing.T) {
 	}
 }
 
+func TestPlanFavoriteLeaveFolderClearsATiedNeighbor(t *testing.T) {
+	// A half-failed reorder leaves a pair sharing a sort order. A midpoint of
+	// two equal values is that value, which lands the favorite tied with both.
+	favorites := []linearapi.Favorite{
+		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 20},
+		{ID: "only", Type: "project", ProjectID: "p1", ParentID: "folder", SortOrder: 21},
+		{ID: "tied", Type: "project", ProjectID: "p2", SortOrder: 20},
+	}
+
+	down, ok := planFavoriteLeaveFolder(favorites, "only", "folder", 1)
+	if !ok {
+		t.Fatalf("stepping down out of a folder = %v, want a plan", ok)
+	}
+	if down.SortOrder <= 20 {
+		t.Errorf("down.SortOrder = %v, want past the tied pair at 20", down.SortOrder)
+	}
+
+	up, ok := planFavoriteLeaveFolder(favorites, "only", "folder", -1)
+	if !ok {
+		t.Fatalf("stepping up out of a folder = %v, want a plan", ok)
+	}
+	if up.SortOrder >= 20 {
+		t.Errorf("up.SortOrder = %v, want before the tied pair at 20", up.SortOrder)
+	}
+}
+
 func TestPlanFavoriteLeaveFolderOnlyAtTheEdges(t *testing.T) {
 	favorites := []linearapi.Favorite{
 		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 10},

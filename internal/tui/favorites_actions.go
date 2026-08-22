@@ -247,10 +247,13 @@ func planFavoriteLeaveFolder(favorites []linearapi.Favorite, favoriteID, parentI
 	outer := favoriteSiblings(favorites, grandparent)
 	folderIndex := indexOfFavorite(outer, folder.ID)
 
-	// Slot between the folder and whatever it is stepping towards.
+	// Slot between the folder and whatever it is stepping towards. A tied pair
+	// has no midpoint to take, so step off the folder instead of landing on it.
 	sortOrder := folder.SortOrder + float64(delta)
 	if neighbor := folderIndex + delta; folderIndex >= 0 && neighbor >= 0 && neighbor < len(outer) {
-		sortOrder = (folder.SortOrder + outer[neighbor].SortOrder) / 2
+		if gap := outer[neighbor].SortOrder - folder.SortOrder; gap != 0 {
+			sortOrder = folder.SortOrder + gap/2
+		}
 	}
 	return favoriteMove{FavoriteID: favoriteID, ParentID: grandparent, SortOrder: sortOrder}, true
 }

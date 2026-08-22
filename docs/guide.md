@@ -35,7 +35,9 @@ Projects, issues, cycles, teams, custom views, triage and folders all appear as
 you favorited them. `F` favorites or unfavorites whatever the cursor is on.
 `J` and `K` move a favorite through the tree as it is drawn: onto an open
 folder steps into it, off the end of a folder steps back out, and a closed
-folder is stepped over. Each of those writes to Linear.
+folder is stepped over. A folder itself moves whole, over its neighbour
+rather than into it, since Linear has no folder inside a folder. Each of
+those writes to Linear.
 
 ### Teams
 
