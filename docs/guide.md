@@ -9,18 +9,17 @@ model of your workspace to fall out of date.
 
 ## The three panes
 
-    ┌ 1 Navigation ─┬ 2 Issues ────────────┬ 3 Details ──────────┐
-    │ Favorites     │ ZNL-130  Add the pre │ ZNL-130             │
-    │   Cycle 12    │ ZNL-128  Delete the  │ Add the pre-push    │
-    │ Zen Linear    │ ZNL-129  Default the │ hook CLAUDE.md      │
-    │   Cycles      │                      │ already promises    │
-    │   Projects    │                      │                     │
-    └───────────────┴──────────────────────┴─────────────────────┘
+![The three panes side by side](images/main.png)
 
-Left to right: where you are, what is there, and the issue you are on. Each
-pane's number is in its title, and typing that number focuses it, including
-when it has been toggled off. `h` and `l` step between them, `<` and `>` hide
-the outer two, and `v` zooms the details pane over the issue list.
+Left to right: where you are, what is there, and the issue you are on.
+
+Each pane's title carries its number, and typing that number focuses the pane,
+including when it has been toggled off. Pane 1 is titled with the workspace you
+are in rather than the word Navigation, and pane 2 with the scope the list is
+showing and how many issues are in it.
+
+`h` and `l` step between the panes, `<` and `>` hide the outer two, and `v`
+zooms the details pane over the issue list.
 
 On a narrow terminal the layout collapses to fewer panes and the numbers still
 work.

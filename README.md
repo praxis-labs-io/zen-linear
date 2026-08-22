@@ -11,19 +11,10 @@ editable in place, saving as you go.
 It is an unofficial third-party client built on Linear's public API, and it is
 not affiliated with Linear.
 
-```
-┌ [1] Navigation ───┬ [2] Cycle 12 (6) ──────────────────────┬ [3] Details ────────┐
-│ ▾ Favorites       │ ▾ In Progress                      2   │ ZNL-130             │
-│    Cycle 12       │ ↑ ZNL-130 ⊙ Add the pre-push h…  DW    │ ⊙ In Progress       │
-│    My issues      │ = ZNL-124 ⊙ Add a keys legend    DW    │ High · Cycle 12     │
-│ ▾ Zen Linear      │ ▾ Todo                             4   │ Drew White          │
-│    Cycles         │ ▲ ZNL-131 ○ Purge the stale do…  DW    │                     │
-│    Projects       │ = ZNL-129 ○ Default the theme     -    │ The pre-push hook   │
-│    Members        │ ↓ ZNL-118 ○ Wrap long descript…   -    │ CLAUDE.md already   │
-│                   │                                        │ promises.           │
-└───────────────────┴────────────────────────────────────────┴─────────────────────┘
- :  palette    /  search    ?  keys                           ZNL-130 saved
-```
+![The three panes: the navigation tree, the issue list grouped by status, and the details page](docs/images/main.png)
+
+Left to right: where you are, what is there, and the issue you are on. Each
+pane's number is in its title, and typing that number focuses it.
 
 ## Install
 
@@ -71,6 +62,20 @@ opens the one you are on.
 
 After that: `h`/`l` move between panes, `/` searches the workspace, `c` writes
 a comment, `n` makes an issue.
+
+## A look around
+
+`:` opens the command palette. It lists only what applies to the pane you
+opened it from, so the same key gives you issue commands from the list and
+favorites commands from the tree.
+
+![The command palette open over the issue list, grouped into Issue and List commands](docs/images/palette.png)
+
+`v` zooms the details pane over the list. The issue is one scrolling page:
+metadata at the top, the description as rendered markdown, then the activity
+and the conversation. Every field in that header is editable in place.
+
+![The details page zoomed, showing the metadata header, the description and the activity feed](docs/images/details.png)
 
 ## Documentation
 
