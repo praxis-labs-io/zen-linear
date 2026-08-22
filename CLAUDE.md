@@ -4,15 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Drew's Go/tview terminal client for Linear, at praxis-labs-io/zen-linear (`origin`). It began as a fork of [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui) and separated on 2026-08-02: the module is `github.com/praxis-labs-io/zen-linear`, there is no `upstream` remote, and nothing here is written with an upstream PR in mind. The MIT license retains Roey Azroel's copyright alongside Drew's, and the README credits the original. Both stay.
+Drew's Go/tview terminal client for Linear, at praxis-labs-io/zen-linear (`origin`). It began as a fork of roeyazroel/linear-tui and separated on 2026-08-02: there is no `upstream` remote and nothing here is written with an upstream PR in mind. The MIT license retains Roey Azroel's copyright alongside Drew's and the README acknowledges the original. Both stay; that is settled and is not revisited.
 
 **`main` is the product branch.** Feature work flows ticket → branch → PR on `origin` (see Project Management); genuinely trivial tweaks (a typo, a one-liner) still commit straight to `main`. A pre-push hook rejects pushes to `main`, so agent work always goes through a branch. The installed binary is built from here to `~/.local/bin/zen-linear`; **rebuild after changes or Drew keeps running the old code**:
 
 ```sh
-go build -o ~/.local/bin/zen-linear ./cmd/zen-linear
+make install
 ```
 
-The repo moved to the `praxis-labs-io` org on 2026-08-18, so the module path is `github.com/praxis-labs-io/zen-linear`. **There is no Homebrew tap and no published release**: nobody was using either, so both were torn down on the move rather than carried across, and the source build above is the only install. The emptied `zen-linear` org is held on purpose, because a tap there installs as `brew install zen-linear/tap/zen-linear` and one under `praxis-labs-io` would not read as the product. Recreating it for an alpha means `zen-linear/homebrew-tap`, a `brews:` block in `.goreleaser.yml`, and a `HOMEBREW_TAP_TOKEN` secret on this repo holding a PAT scoped to that other org. **Keep the tap prefix**: Homebrew 6 refuses formulae from untrusted taps, and naming the tap is its consent signal, so a bare `brew install zen-linear` fails.
+The repo moved to the `praxis-labs-io` org on 2026-08-18, so the module path is `github.com/praxis-labs-io/zen-linear`.
+
+**User-facing behaviour lives in `docs/`**: [the guide](docs/guide.md) for the panes and what they do, [keys](docs/keys.md) for the keymap, [configuration](docs/configuration.md) for every setting, [install](docs/install.md) for the install and auth paths, [agents](docs/agents.md) for the agent runs, and [CONTRIBUTING](docs/CONTRIBUTING.md) for the checks, the conventions and the version policy. What follows here is what the code has to keep true, not what a reader sees. Change one and the other says the wrong thing.
+
+**There is no Homebrew tap.** Distribution is `install.sh` and the tagged release workflow, both mirroring zen-review's. The emptied `zen-linear` org is held on purpose: a tap there would install as `brew install zen-linear/tap/zen-linear`, and one under `praxis-labs-io` would not read as the product. Homebrew 6 refuses formulae from untrusted taps and naming the tap is its consent signal, so a bare `brew install zen-linear` cannot work from a tap at all. If a tap is ever wanted, it gets designed then rather than carried as dead detail here.
 
 Anything published under Drew's name (PR bodies, issues, README) must be shown to him word-for-word before pushing. His voice: terse, considerate, stoic, no strong adverbs, no em-dashes.
 
@@ -27,10 +31,11 @@ make all              # lint (gofmt + mod-tidy + golangci-lint) + test + build
 make test             # go test -v -race -coverprofile ./...
 make lint             # includes gofmt check and go.mod tidiness
 make fmt-fix          # gofmt -w .
+make install          # build to ~/.local/bin/zen-linear
 go test ./internal/tui/ -run TestName   # single test
 ```
 
-Run checks directly, never through a pipe that swallows exit codes (`make lint | tail` reports success on failure — this let broken commits through repeatedly).
+Run checks directly, never through a pipe that swallows exit codes (`make lint | tail` reports success on failure — this let broken commits through repeatedly). The reader-facing copy of this table is in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ### Lint version pin
 
@@ -52,7 +57,7 @@ Five long-running buckets. They never complete; every ticket belongs to exactly 
 - **Feature Backlog**: net-new capabilities. Ideas live here until promoted.
 - **Performance and Code-Quality**: improves the code, no user-visible change (perf, refactors, tests, hygiene).
 - **Website**: the public site, its copy, its SEO.
-- **Release & Distribution**: how the binary gets from `main` to a user and stays current (GoReleaser, Homebrew tap, versioning, CI release).
+- **Release & Distribution**: how the binary gets from `main` to a user and stays current (`install.sh`, the release workflow, versioning, release notes).
 
 A body of work big enough to need milestones gets its own finite epic project, named for what it delivers, completed and closed when it ships. An epic is a Linear Project, never a tracking issue. When an epic closes, follow-ups move to the matching bucket.
 
@@ -68,11 +73,21 @@ A body of work big enough to need milestones gets its own finite epic project, n
 
 ### Shipping
 
-Feature-complete work ships via the `ship-feature` skill (`.claude/skills/ship-feature/SKILL.md`): `make all` green, push, draft PR, Copilot + `/code-review`, triage with no tech debt, push then mark ready as separate actions. Manual invocation only.
+Feature-complete work ships via the global `ship-feature` skill: `make all` green, push, draft PR, `/code-review`, triage with no tech debt, push then mark ready as separate actions. Manual invocation only.
 
-### Specs and plans
+**There is no copy of it in this repo.**
 
-Scratch, never committed. `docs/` describes only what is true today. Durable context lives in Linear project descriptions and tickets.
+### Releasing
+
+Releases are cut with the repo's own `release` skill (`.claude/skills/release/SKILL.md`), manual invocation only. The workflow owns the mechanical half and the skill owns the judgement: what the version is, whether the docs a release makes public are still true, and how the notes read.
+
+Two things the workflow depends on. `docs/release-notes/vX.Y.Z.md` has to be on `main` **before** the tag is cut, because the release job reads it out of the tagged commit and a tag published ahead of its notes cannot be renumbered. And the version reaches the binary only through the workflow's ldflags: `make install` and a plain `go build` leave `main.Version` at `dev`, which is deliberate and is how a local binary is told apart from a released one.
+
+The version policy is in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md), and the change-to-doc map there is what the skill derives its doc check from.
+
+### Specs
+
+`docs/specs/` holds the design docs that shaped a milestone. `docs/` otherwise describes only what is true today. Durable context lives in Linear project descriptions and tickets. Specs are deleted as a part of branch cleanup.
 
 ## Architecture
 
@@ -110,6 +125,8 @@ Messages follow one rule, in `fieldSetMessage`, `fieldClearMessage` and `fieldUp
 
 ### Config plumbing (the most common trap)
 
+What each setting means to a reader is in [docs/configuration.md](docs/configuration.md); a new field needs a row there. What follows is what the code has to keep true.
+
 `internal/config` has a triple: `SettingsFile` (pointer fields, what's on disk) → `Settings` → `Config`. The settings modal saves via `settingsFromForm`, which rebuilds the file from form controls — **any config field without a form control (workspaces, default_workspace, group_by, subgroup_by, columns, keybindings) must be explicitly carried through there, or an in-app settings save silently strips it from the user's config**. Every new field needs: the triple, a validator in `settings.go`, and the carry-through.
 
 Config, credentials, prompts, the session, and the log live under `~/.zen-linear`, resolved through `config.Dir()`. **Only the settings file is dual-homed**: `ConfigFilePath` prefers a `config.json` already sitting under `$XDG_CONFIG_HOME/zen-linear` (default `~/.config/zen-linear`) and falls back to `Dir()`, which is also where a first run creates one. Nothing else follows it there, because that copy is usually a symlink into a dotfiles repo and the rest is written on every quit. The resolution happens once, at launch, and rides on `App.settingsPath` (`UseSettingsFile`): the settings modal saves back to the file it was loaded from, since re-resolving would follow an XDG copy that appeared or went away mid-session.
@@ -118,9 +135,11 @@ Config, credentials, prompts, the session, and the log live under `~/.zen-linear
 
 `internal/cache` owns `nav-cache.json` beside it: the teams and favorites the tree is built from, keyed by workspace, versioned and discarded rather than migrated. **A session with no configured workspace name gets no entry** (a bare `LINEAR_API_KEY` or OAuth): nothing on disk tells two Linear workspaces reached that way apart, one shared entry would paint the wrong teams, and fingerprinting the token to tell them apart puts a derivative of a live credential in a cache file. It is cached API data, not user state, which is why it sits outside `internal/session`. Both write through `config.WriteFileAtomic` (temp file plus rename, mode 0600).
 
-Drew's live config is a symlink chain: `~/.zen-linear/config.json` → dotfiles repo (`drucial-dots/configs/linear-tui/config.json`). The app writes settings in place, so in-app saves show up as diffs in the dotfiles repo — intentional.
+Drew's live config is a **hardlink**, not a symlink: `~/.config/zen-linear/config.json` and `drucial-dots/configs/zen-linear/config.json` are one inode. It works because `SaveSettings` is a plain `os.WriteFile` rather than `WriteFileAtomic` — a truncate-in-place keeps the inode, where a temp-file-plus-rename would break the link and leave the dotfiles copy frozen at the old contents. In-app saves showing up as diffs in the dotfiles repo is intentional; moving that write onto `WriteFileAtomic` would silently end it.
 
 ### Keybindings
+
+The ids a user can bind and the rules a binding is rejected by are in [docs/configuration.md](docs/configuration.md), and the keys themselves in [docs/keys.md](docs/keys.md). What follows is what the code has to keep true.
 
 `config.Keybindings` (id → key) is validated **once**, by `resolveKeybindings` in `internal/tui/keybindings.go`, into the `resolvedKeybindings` on `App.bindings`. A binding that names a movement rune (`h`, `l`, `j`, `k`, `g`, `G`), is not a single rune, or names neither a command nor a UI action is dropped there and logged. **Everything downstream reads the resolved set, never `config.Keybindings`.** Half-honoring a rejected binding is the bug this shape exists to prevent: it used to keep a command's default alive at one call site while taking a rune at another, so one dead key explained a second.
 
@@ -153,6 +172,8 @@ Adding a page moves focus. `Pages.AddPage` re-delegates focus to the top visible
 **Editing an issue's labels is the multi-select with a context line**, not a modal of its own. It was a second copy of the same toggle list until 2026-08-14. The `edit_labels` command id is unchanged; only the type went.
 
 ### Theme system
+
+The five themes and what they take from the terminal are in [docs/configuration.md](docs/configuration.md). What follows is what the code has to keep true.
 
 Themes are structs in `internal/tui/theme.go` registered in `ThemeRegistry`. Optional fields (`InverseText`, `StatusReview`, `StatusTriage`, `AssigneeText`, `Success`) have fallback methods so legacy themes need no changes.
 
@@ -216,7 +237,7 @@ The current option wears `themeTags.Selection`, the cursor line the tree and the
 
 **Four fields are typed rather than picked** (`fieldHasEditor`), all held by `detailsEdit.editing` beside the chooser's `open`. `openFieldEditor` owns the guards the four share and forks after them; the description's half is `details_description.go`.
 
-**Title, due date and estimate are typed in the row itself** (`details_editor.go`). The row's value *is* the box: a `tview.InputField` in a `pageSlot` at the field's own row and `valueColumn`, so the label stays, nothing below shifts, and the page costs no rows. It is the only widget the header block contributes, which is why `detailsHeaderBlock` returns slots at all; its lines starting the page is why they need no rebasing. **Unfilled, in the style the row reads in** (`fieldEditorStyle`, bold for the title): a filled field reads as a form, and the pane is meant to read as the issue. The caret is the cue, which is why the `❯` stays lit here and dims under a chooser. The row's own text stops at the label while a box is open, or a value longer than the box shows its tail past the end of the field.
+**Title, due date and estimate are typed in the row itself** (`details_editor.go`). The row's value _is_ the box: a `tview.InputField` in a `pageSlot` at the field's own row and `valueColumn`, so the label stays, nothing below shifts, and the page costs no rows. It is the only widget the header block contributes, which is why `detailsHeaderBlock` returns slots at all; its lines starting the page is why they need no rebasing. **Unfilled, in the style the row reads in** (`fieldEditorStyle`, bold for the title): a filled field reads as a form, and the pane is meant to read as the issue. The caret is the cue, which is why the `❯` stays lit here and dims under a chooser. The row's own text stops at the label while a box is open, or a value longer than the box shows its tail past the end of the field.
 
 Five rules. `handleFieldEditorKey` is **default-allow**, the inverse of the mode around it, so `q` is a letter; it keeps Enter, Escape, and Tab, which is swallowed because `InputField`'s done func would hand the keyboard to whatever tview walks to next, and it re-scrolls the box into view the way `handleComposeKey` does, since the wheel goes straight through the pane. The chooser never took focus and this does, so **opening renders before it focuses and closing renders before it moves focus off** — the slot has to exist first, and a caret on a zeroed rect is left on the terminal. A teardown a focus callback can reach (`leaveDetailsEdit`, `updateDetailsView`) calls `releaseFieldEditor`, which drops the target and sets `layoutFocusStale` rather than moving focus itself. The widget's own `SetFocusFunc` is `claimFieldEditorFocus`, not `enterDetailsFocus`.
 
@@ -239,6 +260,8 @@ An empty box is a clear for due date and estimate, checked before the parse, and
 The pane's vertical padding is written as blank lines in the text rather than held back from the content rect: `trailingPad` at the end, and the top rows inside `detailsHeaderBlock`, where the spans are counted. Mid-scroll the content runs to both borders, and each gap is an end of the issue rather than a margin that never moves. The pane keeps its left and right padding on the box, which has nothing to do with the scroll.
 
 ### Workspaces and auth
+
+The three auth paths and how a reader sets them up are in [docs/install.md](docs/install.md). What follows is what the code has to keep true.
 
 `workspaces` in config reference env vars (`api_key_env`) — keys are never stored in the file. A bare `LINEAR_API_KEY` env var overrides all auth unconditionally (`internal/auth/resolve.go`); never export one. Known upstream bug, unfixed: `applySettings` rebuilds the API client without `UseBearer`/`OnUnauthorized`, breaking OAuth sessions after an in-app settings save (doesn't affect API-key workspaces).
 
@@ -267,5 +290,7 @@ ZEN_UPDATE_GOLDENS=1 go test ./internal/linearapi -run TestQueryGoldens
 **`relationChanges.type` is an undocumented two-letter code**, decoded in `relationChangePhrases`: a relation letter (r related, x blocking, b blocked by, d duplicate, m duplicate of) prefixed with `a` when added and suffixed with `r` when removed. The five addition codes plus `xr` and `br` were read off a real workspace; the rest follow the pattern. **An unrecognized code drops the event** — if Linear extends the vocabulary the feed loses a line rather than printing a wrong one, and that is the intended failure.
 
 ### Agent providers
+
+What a run does, the two providers and the prompt templates are in [docs/agents.md](docs/agents.md). What follows is what the code has to keep true.
 
 Each provider in `internal/agents` builds argv for a CLI that isn't in this repo, so nothing but a real run proves a flag exists. `--sandbox` and `--workspace` shipped for months against `cursor-agent`, which has neither, and every run died on the first one. Provider tests pin the whole argv against a literal for that reason; check a new flag against the installed CLI before adding it, and note that `--help` exits 0 on an unknown flag, so it settles nothing. `AgentRunOptions.Sandbox` is a portable intent, not a flag: claude maps it to `--permission-mode`, cursor to `--force`. The workspace rides on `cmd.Dir` in `runner.go`, never a flag.

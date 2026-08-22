@@ -1,238 +1,115 @@
 # zen-linear
 
-A terminal interface for Linear, built with Go and tview.
+A terminal client for Linear, for people who work their issues from a keyboard
+and would rather not leave the terminal to do it.
 
-Not affiliated with Linear. Unofficial third-party client, built on Linear's
-public API.
+Your Linear sidebar is the navigation tree, favorites and all. The issue list
+groups, sorts and filters the way the web app does. The details pane is one
+scrolling page: the issue, its description, its comments. Every field on it is
+editable in place, saving as you go.
 
-zen-linear started as a fork of
-[linear-tui](https://github.com/roeyazroel/linear-tui) by
-[@roeyazroel](https://github.com/roeyazroel), who built the foundation it runs
-on: the Linear API client, OAuth, the pane layout, and the agent integration.
-It is now developed independently.
+It is an unofficial third-party client built on Linear's public API, and it is
+not affiliated with Linear.
 
-## Screenshots
+![The three panes: the navigation tree, the issue list grouped by status, and the details page](docs/images/main.png)
 
-![Main interface](docs/screenshots/main.png)
-
-![Grouped issues](docs/screenshots/grouped.png)
-
-![Command palette](docs/screenshots/palette.png)
-
-## Features
-
-Navigation
-- Favorites matching the Linear sidebar: projects, issues, cycles, teams,
-  custom views, triage, folders
-- Favorite, reorder, and move in and out of folders from the sidebar. All of
-  it writes back to Linear, so the web app stays in step
-- Teams with cycles, statuses, and projects
-- Workspace switching with per-workspace API keys and a default workspace
-
-Issues
-- Linear-style columns, configurable order and visibility
-- Grouping and subgrouping by status, priority, assignee, cycle, project, or
-  milestone, with collapsible headers
-- Workspace-wide search from a query box at the top of the navigation pane,
-  its results replacing the list until the query is cleared
-- Sort by updated, created, priority, or status
-- Details drawer with themed markdown, comments, attachments, and branch name
-
-Interaction
-- Context-aware command palette with fuzzy search and number shortcuts
-- Configurable keybindings
-- Pane toggles and a responsive layout on narrow terminals
-- Copy issue ID, URL, or branch name. Open the issue or its GitHub link
-
-Appearance
-- Default theme built from the terminal's own colors, plus Rose Pine Moon with
-  a transparent background and the original linear, high contrast, and color
-  blind themes
-- Optional rounded borders
-- Theme-derived selection, markdown, and modal styling
+Left to right: where you are, what is there, and the issue you are on. Each
+pane's number is in its title, and typing that number focuses it.
 
 ## Install
 
-Requires Go 1.24 or later:
+```sh
+curl -fsSL https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.sh | sh
+```
 
-    git clone https://github.com/praxis-labs-io/zen-linear.git
-    cd zen-linear
-    go build -o ~/.local/bin/zen-linear ./cmd/zen-linear
+Downloads the binary for macOS or Linux, on arm64 or amd64. Windows takes the
+`.zip` off the
+[releases page](https://github.com/praxis-labs-io/zen-linear/releases), the
+installer being a POSIX script. On anything else:
 
-Authenticate with `zen-linear auth login`, or set per-workspace API keys as
-described below.
+```sh
+go install github.com/praxis-labs-io/zen-linear/cmd/zen-linear@latest
+```
 
-## Configuration
+Or from a clone, which is what you want if you intend to change anything:
 
-Settings live in `~/.zen-linear/config.json`, created on first start. A
-`config.json` under `$XDG_CONFIG_HOME/zen-linear` (by default
-`~/.config/zen-linear`) is read instead when it exists. The options beyond the
-original linear-tui set:
+```sh
+git clone https://github.com/praxis-labs-io/zen-linear.git
+cd zen-linear
+make install
+```
 
-    {
-      "theme": "terminal",
-      "rounded_borders": true,
-      "group_by": "status",
-      "subgroup_by": "",
-      "sort_by": ["status", "priority"],
-      "columns": ["priority", "id", "state", "title", "labels", "assignee", "updated"],
-      "default_workspace": "Work",
-      "session_restore": true,
-      "workspaces": [
-        { "name": "Work", "api_key_env": "LINEAR_API_KEY_WORK" },
-        { "name": "Personal", "api_key_env": "LINEAR_API_KEY_PERSONAL" }
-      ],
-      "keybindings": {
-        "edit_description": "D",
-        "archive": "X"
-      }
-    }
+The installer and `make install` both put the binary in `~/.local/bin`, and
+`INSTALL_DIR` moves it. There is no Homebrew tap.
+[docs/install.md](docs/install.md) has the requirements, the PATH setup and how
+to upgrade.
 
-- `theme` defaults to `terminal`, which takes its hues from the terminal's ANSI
-  palette and its shades from the background and foreground the terminal
-  reports at launch. Set `rose_pine_moon`, `linear`, `high_contrast`, or
-  `color_blind` to pin the colors instead
-- `columns` selects and orders the issue list from: priority, id, state,
-  title, labels, assignee, updated, cycle, due, estimate, project, milestone
-- `group_by` and `subgroup_by` take status, priority, assignee, cycle,
-  project, or milestone
-- `sort_by` takes status, priority, updated, or created. Order matters: the
-  first field decides, the rest break ties. Omit it to sort by most recently
-  updated
-- `workspaces` reads keys from the named env vars. Keys are never stored in
-  the file
-- `session_restore` reopens the last workspace, list, filters, search, and
-  focused issue, saved to `~/.zen-linear/session.json` on quit. It is on by
-  default, which makes `default_workspace`, `default_team`, and
-  `default_project` first-run settings. Turn it off to open on those every
-  time
-- `keybindings` remaps palette commands by id, the global quit, open_palette,
-  and search actions, and the comment_next, comment_prev, columns_left,
-  columns_right, focus_navigation, focus_issues, focus_details,
-  favorite_move_up, favorite_move_down, favorite_nest, favorite_unnest,
-  comment_reply, comment_quote, comment_copy_link, comment_open, comment_edit,
-  and comment_delete actions
+## A first run
 
-## Keys
+```sh
+zen-linear auth login
+zen-linear
+```
 
-`?` opens a legend for wherever you are: every key that works there, plus the
-ones that work anywhere. It is the status strip without the width limit. In a
-writing box `?` is a character, so use the palette's **Show keys** there.
+`auth login` opens Linear in a browser. If you would rather use an API key, or
+run more than one workspace, [docs/install.md](docs/install.md) covers both.
 
-    j/k         move            Enter       toggle details
-    h/l         switch panes    Space       expand sub-issues
-    1/2/3       focus a pane    { }         step comments
-    <           hide/show nav   >           hide/show details
-    v           zoom details    H/L         scroll columns
-    :           palette         /           search
-    r           refresh         w           switch workspace
-    n           new issue       q           quit
-    ?           keys for here
+Three keys carry most of it. `?` lists every key that works where you are, and
+it is context-aware rather than one long sheet. `:` opens the command palette,
+which lists only what applies to the pane you opened it from. `e` puts the
+details pane in edit mode, where `j`/`k` walk the issue's fields and Enter
+opens the one you are on.
 
-Each pane's number is shown in its title. Typing one focuses that pane, and
-brings it back if it has been toggled off.
+After that: `h`/`l` move between panes, `/` searches the workspace, `c` writes
+a comment, `n` makes an issue.
 
-The details pane is one page: the issue, its description, the comments, then a
-box to write in at the end of them. `{` and `}` step through the cards; j/k
-keep scrolling. Nothing is picked out until a brace says so, and Esc lets go
-again. A picked card answers to keys of its own, which shadow the issue keys on
-the same runes for as long as it holds them:
+## A look around
 
-    r           reply           Q           quote and reply
-    y           copy link       o           open in Linear
-    e           edit            d           delete
+`:` opens the command palette. It lists only what applies to the pane you
+opened it from, so the same key gives you issue commands from the list and
+favorites commands from the tree.
 
-Edit and delete are offered on your own comments only. A picked card names the
-keys that act on the conversation along its bottom border; `y` and `o` leave for
-a clipboard or a browser, and answer without being advertised there.
+![The command palette open over the issue list, grouped into Issue and List commands](docs/images/palette.png)
 
-Replies nest under the comment they answer, and replying opens a box inside
-that thread rather than at the foot of the page, so the answer is written where
-it is going to appear. Esc closes it and keeps the words for next time.
+`v` zooms the details pane over the list. The issue is one scrolling page:
+metadata at the top, the description as rendered markdown, then the activity
+and the conversation. Every field in that header is editable in place.
 
-Editing turns the card into a box in the place it stood, holding what the
-comment says. Ctrl+Enter saves, and Esc drops the rewrite and puts the card
-back: a box always opens on the comment as it stands. Deleting asks first, and
-replies stay when the comment they answered goes.
+![The details page zoomed, showing the metadata header, the description and the activity feed](docs/images/details.png)
 
-Every box grows with what is written in it. In any of them, Ctrl+C copies the
-selection to the system clipboard and Ctrl+X cuts it. Ctrl+L selects
-everything. Paste is the terminal's own.
+Comments are threaded, and the issue's history is folded into the same stream
+by time, so a status move sits where it happened rather than in a separate tab.
+`{` and `}` step between the cards. A picked card names the keys that act on
+the conversation along its own bottom border, and edit and delete are offered
+on your own comments only. The box to write in is always at the end of the
+page.
 
-`e` puts the details pane in edit mode. A cursor walks the metadata rows with
-j/k, and Enter opens the field's options in a list under it. The list opens on
-the value the issue already holds; j/k move it, Enter saves that field on its
-own, Esc closes the list. Esc again leaves the mode.
+![A picked comment card showing its reply, edit, delete and quote keys, with nested replies, activity lines merged in by time, and the compose box at the foot of the page](docs/images/comments.png)
 
-State, assignee, priority, project, milestone and cycle open a list. Labels
-opens the same list with a box on every row: space toggles one, Enter applies
-the set, Esc drops it. Title, due date and estimate are typed in the row
-itself, where the value already is: Enter saves, Esc discards, and emptying the
-field clears the due date or the estimate. A value the app can tell is wrong keeps the field open with the
-reason under it; one Linear rejects on its own reports on the status bar, the
-way every other field write does.
+## Documentation
 
-The description is typed in place too, and the cursor reaches it last. Enter
-turns the rendered body into a box holding its markdown, which grows as you
-write. A bar runs down the left of it for as long as it is open. Enter is a
-newline there, so Ctrl+S saves and Esc discards. Ctrl+Enter saves too, the way
-it does in a comment, but it is not the key named on the status line: plenty of
-terminals fold it into a plain Enter. The box
-stays open until Linear has taken the rewrite, so one that fails to send is
-still on the screen.
+- [Guide](docs/guide.md) — the panes, favorites, grouping and sorting, the
+  details page, what is kept between runs
+- [Keys](docs/keys.md) — every key, by what you are doing
+- [Configuration](docs/configuration.md) — `config.json`, themes, columns,
+  workspaces, keybindings
+- [Install](docs/install.md) — requirements, authenticating, PATH, upgrading
+- [Agents](docs/agents.md) — handing an issue to a terminal coding agent
+- [Contributing](docs/CONTRIBUTING.md) — building, testing and the conventions
 
-The issue keys below still work from inside the mode and open their own
-pickers; `q`, `/` and the pane numbers don't, so nothing quits from under a
-field. With a list open, only its own keys answer; in a box, every key types.
+## Acknowledgments
 
-Commands act on the pane they belong to. A key that acts on the selected issue
-answers from the issues and details panes, favorites from the navigation tree,
-and the palette lists only what applies where you opened it.
+zen-linear began as a fork of
+[linear-tui](https://github.com/roeyazroel/linear-tui) by
+[@roeyazroel](https://github.com/roeyazroel), who built the foundation it still
+runs on: the Linear API client, OAuth, the pane layout and the agent
+integration. It has been developed independently since August 2026, and the MIT
+copyright is held jointly in [LICENSE](LICENSE).
 
-On the selected issue, from the issues and details panes:
-
-    e           edit            t           labels
-    s           status          T           move to a team
-    p           priority        P           project
-    C           cycle           c           write a comment
-    a           assign          m           assign to me
-    u           unassign        x           archive
-    N           new sub-issue   o           open in Linear
-    O           open on GitHub  i           copy the id
-    y           copy the URL    Y           copy the branch
-
-In the navigation pane:
-
-    F           favorite or unfavorite the item under the cursor
-    J/K         move a favorite down or up
-    L           move a favorite into the folder above it
-    H           move a favorite back out of its folder
-
-Everything else is in the palette: filters, grouping, sorting, expand and
-collapse all, parent issues, due dates, estimates, milestones, relations,
-attachments, and the agent.
-
-`}` past the last card lands on the compose box the way it lands on a comment:
-lit, and taking no letters. `c` opens it, and from there every key types. Tab
-moves between the box and the Post button:
-
-    Ctrl+Enter  post it         Enter       new line, or post from the button
-    Esc         stop writing, keeping what is in the box
-
-Esc leaves the ring on the box, so a brace steps off it. The box is always on
-the page, and the `add_comment` keybinding moves the key that opens it.
-
-Zoom widens the details pane over the issues list, keeping the navigation
-tree. Text caps at 90 columns so a wide terminal stays readable.
-
-A command bound under `keybindings` takes the key from whatever held it,
-including a default like `[`. A binding is ignored, and says so in the log,
-when it names a reserved movement key (`j`, `k`, `g`, `G` move the cursor,
-`h` and `l` the panes) or an id matching neither a command nor an action.
-
-## Credits
-
-Built on [roeyazroel/linear-tui](https://github.com/roeyazroel/linear-tui).
 Themed with [Rose Pine](https://rosepinetheme.com). Rendered by
 [tview](https://github.com/rivo/tview) and
 [glamour](https://github.com/charmbracelet/glamour).
+
+## License
+
+MIT, held jointly by Drew White and Roey Azroel. See [LICENSE](LICENSE).
