@@ -42,7 +42,7 @@ Every key is optional. What is missing takes its default.
 | --- | --- | --- |
 | `theme` | `terminal` | `terminal`, `rose_pine_moon`, `linear`, `high_contrast`, `color_blind` |
 | `density` | `comfortable` | `comfortable`, `compact` |
-| `rounded_borders` | `true` | a boolean |
+| `rounded_borders` | `false` | a boolean |
 
 `terminal` takes its hues from the terminal's ANSI palette and its shades from
 the background and foreground the terminal reports at launch, so it matches
@@ -57,7 +57,7 @@ the status bar, and closes the gap between the details page's sections.
 | Key | Default | Takes |
 | --- | --- | --- |
 | `columns` | priority, id, state, title, labels, assignee, updated | any of the below, in the order they are listed |
-| `group_by` | `status` | `status`, `priority`, `assignee`, `cycle`, `project`, `milestone`, or `""` |
+| `group_by` | `""` | `status`, `priority`, `assignee`, `cycle`, `project`, `milestone`, or `""` |
 | `subgroup_by` | `""` | the same set |
 | `sort_by` | `["updated"]` | `status`, `priority`, `updated`, `created` |
 
@@ -108,8 +108,7 @@ See [agents.md](agents.md).
 }
 ```
 
-An id is either a palette command (its id is shown in the palette) or one of
-these UI actions:
+An id is either a palette command's id or one of these UI actions:
 
     quit                open_palette        search
     focus_navigation    focus_issues        focus_details

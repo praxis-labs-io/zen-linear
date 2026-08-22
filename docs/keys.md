@@ -2,7 +2,8 @@
 
 `?` opens a legend for wherever you are: every key that works there, plus the
 ones that work anywhere. It is the status strip without the width limit. In a
-writing box `?` is a character, so use the palette's **Show keys** there.
+writing box every key types, `?` and `:` included, so Esc out of the box
+first.
 
 Every key on this page can be rebound. See [Rebinding](#rebinding) at the end,
 and the `keybindings` section of [configuration.md](configuration.md).
@@ -145,12 +146,13 @@ field. With a list open, only its own keys answer; in a box, every key types.
 lists only what applies where you opened it. Under an empty query the commands
 are grouped under headings; a query lists matches flat, ranked.
 
-Number shortcuts run the row they label without moving the cursor to it.
+The arrow keys move the cursor, Enter runs the row it is on, and Esc closes
+the palette. Every other key goes to the query.
 
 ## Rebinding
 
 A command bound under `keybindings` takes the key from whatever held it,
-including a default like `[`. A binding is ignored, and says so in the log,
+including a default like `{`. A binding is ignored, and says so in the log,
 when it names a reserved movement key (`j`, `k`, `g`, `G` move the cursor, `h`
 and `l` the panes) or an id matching neither a command nor an action.
 
