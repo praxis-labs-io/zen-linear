@@ -51,7 +51,6 @@ var keySections = []keySection{
 			{"g / G", "first / last"},
 			{"Tab", "search box"},
 			{keyPairLabel(a.actionKey("favorite_move_up", 'K'), a.actionKey("favorite_move_down", 'J')), "move a favorite"},
-			{keyPairLabel(a.actionKey("favorite_unnest", 'H'), a.actionKey("favorite_nest", 'L')), "unnest / nest a favorite"},
 			a.commandHint("toggle_navigation_pane", "hide the pane"),
 		}
 	}},

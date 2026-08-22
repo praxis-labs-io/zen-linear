@@ -394,9 +394,9 @@ func TestFavoriteMoveKeysDefaultToShiftJK(t *testing.T) {
 	}
 }
 
-// TestFavoriteMoveKeysFallThroughOnNonFavorites verifies the keys stay with the
-// tree when the cursor is not on a favorite, rather than raising an error.
-func TestFavoriteMoveKeysFallThroughOnNonFavorites(t *testing.T) {
+// TestFavoriteMoveKeysAreSwallowedOnNonFavorites verifies the keys never reach
+// tview, whose jump-to-child and jump-to-parent they would otherwise fire.
+func TestFavoriteMoveKeysAreSwallowedOnNonFavorites(t *testing.T) {
 	app := newUXTestApp(t)
 	app.updateFavoriteSortFunc = func(context.Context, string, float64) error {
 		t.Error("reorder must not reach the API for a non-favorite")
@@ -406,8 +406,8 @@ func TestFavoriteMoveKeysFallThroughOnNonFavorites(t *testing.T) {
 	app.navigationTree.SetCurrentNode(app.navigationTree.GetRoot().GetChildren()[1])
 
 	for _, r := range []rune{'J', 'K'} {
-		if app.handleNavigationKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone)) == nil {
-			t.Errorf("%q was consumed on a team node, want fall-through", r)
+		if app.handleNavigationKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone)) != nil {
+			t.Errorf("%q reached the tree on a team node, want it swallowed", r)
 		}
 	}
 }

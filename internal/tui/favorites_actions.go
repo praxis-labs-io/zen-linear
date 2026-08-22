@@ -194,36 +194,48 @@ type favoriteMove struct {
 	SortOrder  float64
 }
 
-// planFavoriteNest works out the move that tucks a favorite into the folder
-// directly above it, the way an outliner indents under the previous sibling. It
-// reports false when there is no folder above it, or when the favorite is
-// itself a folder: Linear's sidebar does not nest folders.
-func planFavoriteNest(favorites []linearapi.Favorite, favoriteID, parentID string) (favoriteMove, bool) {
+// planFavoriteEnterFolder steps a favorite into the expanded folder beside it,
+// as first child going down and last going up. Folders never enter one.
+func planFavoriteEnterFolder(favorites []linearapi.Favorite, favoriteID, parentID string, delta int, isExpanded func(folderID string) bool) (favoriteMove, bool) {
 	siblings := favoriteSiblings(favorites, parentID)
 	index := indexOfFavorite(siblings, favoriteID)
-	if index < 1 {
+	if index < 0 || siblings[index].Type == favoriteTypeFolder {
 		return favoriteMove{}, false
 	}
-	if siblings[index].Type == favoriteTypeFolder {
+	next := index + delta
+	if next < 0 || next >= len(siblings) {
 		return favoriteMove{}, false
 	}
-	folder := siblings[index-1]
-	if folder.Type != favoriteTypeFolder {
+	folder := siblings[next]
+	if folder.Type != favoriteTypeFolder || !isExpanded(folder.ID) {
 		return favoriteMove{}, false
 	}
 
-	// Land at the bottom of the folder, where an indent naturally puts it.
+	// Land on the end the step arrives at, next to the row it left.
+	children := favoriteSiblings(favorites, folder.ID)
 	sortOrder := folder.SortOrder + 1
-	if children := favoriteSiblings(favorites, folder.ID); len(children) > 0 {
+	switch {
+	case len(children) == 0:
+	case delta > 0:
+		sortOrder = children[0].SortOrder - 1
+	default:
 		sortOrder = children[len(children)-1].SortOrder + 1
 	}
 	return favoriteMove{FavoriteID: favoriteID, ParentID: folder.ID, SortOrder: sortOrder}, true
 }
 
-// planFavoriteUnnest works out the move that lifts a favorite out of its
-// folder, landing it just below that folder. It reports false at the top level.
-func planFavoriteUnnest(favorites []linearapi.Favorite, favoriteID, parentID string) (favoriteMove, bool) {
+// planFavoriteLeaveFolder steps a favorite off the edge of its folder, landing
+// just past that folder among the folder's own siblings.
+func planFavoriteLeaveFolder(favorites []linearapi.Favorite, favoriteID, parentID string, delta int) (favoriteMove, bool) {
 	if parentID == "" {
+		return favoriteMove{}, false
+	}
+	siblings := favoriteSiblings(favorites, parentID)
+	index := indexOfFavorite(siblings, favoriteID)
+	if index < 0 {
+		return favoriteMove{}, false
+	}
+	if next := index + delta; next >= 0 && next < len(siblings) {
 		return favoriteMove{}, false
 	}
 	folder, ok := favoriteByID(favorites, parentID)
@@ -235,30 +247,19 @@ func planFavoriteUnnest(favorites []linearapi.Favorite, favoriteID, parentID str
 	outer := favoriteSiblings(favorites, grandparent)
 	folderIndex := indexOfFavorite(outer, folder.ID)
 
-	// Slot between the folder and whatever follows it, so the favorite appears
-	// where it was dragged out to.
-	sortOrder := folder.SortOrder + 1
-	if folderIndex >= 0 && folderIndex+1 < len(outer) {
-		sortOrder = (folder.SortOrder + outer[folderIndex+1].SortOrder) / 2
+	// Slot between the folder and whatever it is stepping towards. A tied pair
+	// has no midpoint to take, so step off the folder instead of landing on it.
+	sortOrder := folder.SortOrder + float64(delta)
+	if neighbor := folderIndex + delta; folderIndex >= 0 && neighbor >= 0 && neighbor < len(outer) {
+		if gap := outer[neighbor].SortOrder - folder.SortOrder; gap != 0 {
+			sortOrder = folder.SortOrder + gap/2
+		}
 	}
 	return favoriteMove{FavoriteID: favoriteID, ParentID: grandparent, SortOrder: sortOrder}, true
 }
 
-// nestFavorite moves a favorite into the folder above it, or out of its folder
-// when out is true. It reports whether it consumed the key.
-func (a *App) nestFavorite(node *NavigationNode, out bool) bool {
-	if node == nil || node.FavoriteID == "" {
-		return false
-	}
-
-	plan, ok := planFavoriteNest(a.favorites, node.FavoriteID, node.FavoriteParentID)
-	if out {
-		plan, ok = planFavoriteUnnest(a.favorites, node.FavoriteID, node.FavoriteParentID)
-	}
-	if !ok {
-		return false
-	}
-
+// reparentFavorite writes a move and folds it into the rendered section.
+func (a *App) reparentFavorite(plan favoriteMove) {
 	a.runFavoriteAction(
 		func(ctx context.Context) error {
 			return a.moveFavoriteFunc(ctx, plan.FavoriteID, plan.ParentID, plan.SortOrder)
@@ -269,7 +270,12 @@ func (a *App) nestFavorite(node *NavigationNode, out bool) bool {
 		},
 		"move failed favorite_id=%s", plan.FavoriteID,
 	)
-	return true
+}
+
+// favoriteFolderExpanded reports whether a folder's rendered node is open.
+func (a *App) favoriteFolderExpanded(folderID string) bool {
+	node := findFavoriteTreeNode(a.favoritesGroup, folderID)
+	return node != nil && node.IsExpanded()
 }
 
 // applyFavoriteMove records a reparent locally.
@@ -305,13 +311,20 @@ func favoriteByID(favorites []linearapi.Favorite, favoriteID string) (linearapi.
 	return linearapi.Favorite{}, false
 }
 
-// moveFavorite swaps a favorite with its neighbor in Linear's sort order.
-// delta is -1 for up and 1 for down. It reports whether it consumed the key:
-// on anything but a favorite, and at either end of the list, the key belongs to
-// the tree rather than raising an error at someone who pressed it in passing.
+// moveFavorite steps a favorite one place in visual order, entering, leaving,
+// or reordering as the neighbor requires. delta is -1 for up and 1 for down.
 func (a *App) moveFavorite(node *NavigationNode, delta int) bool {
 	if node == nil || node.FavoriteID == "" {
 		return false
+	}
+
+	if plan, ok := planFavoriteEnterFolder(a.favorites, node.FavoriteID, node.FavoriteParentID, delta, a.favoriteFolderExpanded); ok {
+		a.reparentFavorite(plan)
+		return true
+	}
+	if plan, ok := planFavoriteLeaveFolder(a.favorites, node.FavoriteID, node.FavoriteParentID, delta); ok {
+		a.reparentFavorite(plan)
+		return true
 	}
 
 	plan, ok := planFavoriteReorder(a.favorites, node.FavoriteID, node.FavoriteParentID, delta)
@@ -472,6 +485,7 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 	if previous == nil && group == nil {
 		return
 	}
+	restoreFavoriteExpansion(previous, group)
 
 	children := root.GetChildren()
 	rebuilt := make([]*tview.TreeNode, 0, len(children)+1)
@@ -521,6 +535,23 @@ func (a *App) restoreNavigationCursor(root, group *tview.TreeNode, preferFavorit
 	}
 	if children := root.GetChildren(); len(children) > 0 {
 		a.navigationTree.SetCurrentNode(children[0])
+	}
+}
+
+// restoreFavoriteExpansion carries collapsed folders across a rebuild, which
+// buildFavoritesGroup would otherwise reopen. Only top-level folders collapse.
+func restoreFavoriteExpansion(previous, group *tview.TreeNode) {
+	if previous == nil || group == nil {
+		return
+	}
+	for _, child := range group.GetChildren() {
+		ref, ok := child.GetReference().(*NavigationNode)
+		if !ok || !ref.IsFolder {
+			continue
+		}
+		if was := findFavoriteTreeNode(previous, ref.FavoriteID); was != nil {
+			child.SetExpanded(was.IsExpanded())
+		}
 	}
 }
 

@@ -164,22 +164,14 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 				a.focusNavSearch()
 				return nil
 			}
+		// Swallowed either way, so tview's jump-to-child and jump-to-parent
+		// never surface on a node that is not a favorite.
 		case a.actionKey("favorite_move_up", 'K'):
-			if a.moveFavorite(a.currentNavigationNode(), -1) {
-				return nil
-			}
+			a.moveFavorite(a.currentNavigationNode(), -1)
+			return nil
 		case a.actionKey("favorite_move_down", 'J'):
-			if a.moveFavorite(a.currentNavigationNode(), 1) {
-				return nil
-			}
-		case a.actionKey("favorite_nest", 'L'):
-			if a.nestFavorite(a.currentNavigationNode(), false) {
-				return nil
-			}
-		case a.actionKey("favorite_unnest", 'H'):
-			if a.nestFavorite(a.currentNavigationNode(), true) {
-				return nil
-			}
+			a.moveFavorite(a.currentNavigationNode(), 1)
+			return nil
 		case 'j', 'g', 'G', 'h':
 			// Tree movement keys stay with the tree.
 		default:
