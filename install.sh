@@ -66,16 +66,37 @@ else
 fi
 
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT INT TERM
+staged="$INSTALL_DIR/.$BINARY.new"
+trap 'rm -rf "$work" "$staged"' EXIT INT TERM
 
-url="https://github.com/$REPO/releases/download/$tag/${BINARY}_${tag#v}_${os}_${arch}.tar.gz"
+archive="${BINARY}_${tag#v}_${os}_${arch}.tar.gz"
+download="https://github.com/$REPO/releases/download/$tag"
 echo "Downloading $tag for $os/$arch"
-curl -fsSL "$url" -o "$work/release.tar.gz" || die "Could not download $url"
-tar -xzf "$work/release.tar.gz" -C "$work"
+curl -fsSL "$download/$archive" -o "$work/$archive" || die "Could not download $download/$archive"
+
+# This runs through a pipe from the network, so the archive is checked against
+# the checksums the release publishes rather than trusted for having arrived.
+if command -v sha256sum >/dev/null 2>&1; then
+	sum="$(sha256sum "$work/$archive" | cut -d ' ' -f 1)"
+elif command -v shasum >/dev/null 2>&1; then
+	sum="$(shasum -a 256 "$work/$archive" | cut -d ' ' -f 1)"
+else
+	die "Neither sha256sum nor shasum is on PATH, and verifying the download needs one."
+fi
+curl -fsSL "$download/checksums.txt" -o "$work/checksums.txt" ||
+	die "Could not download the checksums for $tag."
+grep -q "^$sum  $archive\$" "$work/checksums.txt" ||
+	die "$archive does not match the checksum published for $tag. Nothing was installed."
+
+tar -xzf "$work/$archive" -C "$work"
 
 mkdir -p "$INSTALL_DIR"
-cp "$work/$BINARY" "$INSTALL_DIR/$BINARY"
-chmod 0755 "$INSTALL_DIR/$BINARY"
+# Staged beside the target and renamed over it. A copy straight onto the
+# binary fails on Linux while a copy of it is running, which is exactly what
+# an upgrade is.
+cp "$work/$BINARY" "$staged"
+chmod 0755 "$staged"
+mv -f "$staged" "$INSTALL_DIR/$BINARY"
 
 echo "Installed $INSTALL_DIR/$BINARY"
 

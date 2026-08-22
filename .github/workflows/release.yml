@@ -93,6 +93,9 @@ jobs:
           fi
 
           mkdir -p build dist
+          # The MIT notice travels with the binary, the way it did under
+          # goreleaser's files list.
+          cp LICENSE build/
           # -trimpath so the archive does not carry the runner's paths, and the
           # three values stamped here are the only thing that sets them: a plain
           # go build reports dev/none/unknown.
@@ -104,9 +107,9 @@ jobs:
           # opens without reaching for anything.
           archive="dist/zen-linear_${version}_${GOOS}_${GOARCH}"
           if [ "$GOOS" = "windows" ]; then
-            (cd build && zip -q "../${archive}.zip" "$binary")
+            (cd build && zip -q "../${archive}.zip" "$binary" LICENSE)
           else
-            tar -czf "${archive}.tar.gz" -C build "$binary"
+            tar -czf "${archive}.tar.gz" -C build "$binary" LICENSE
           fi
 
       - name: Upload
@@ -150,7 +153,15 @@ jobs:
         #
         # No --title. Without --generate-notes gh titles the release from the
         # tag, which is what we want, and an H1 in the notes would repeat it.
+        #
+        # A tag carrying a suffix (v0.2.0-rc.1) is published as a pre-release,
+        # or it becomes the latest release install.sh hands to everyone.
         run: |
+          case "$GITHUB_REF_NAME" in
+          *-*) prerelease="--prerelease" ;;
+          *) prerelease="" ;;
+          esac
+
           gh release create "$GITHUB_REF_NAME" dist/* \
             --notes-file "docs/release-notes/${GITHUB_REF_NAME}.md" \
-            --verify-tag
+            --verify-tag $prerelease
