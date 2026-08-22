@@ -77,6 +77,15 @@ and the conversation. Every field in that header is editable in place.
 
 ![The details page zoomed, showing the metadata header, the description and the activity feed](docs/images/details.png)
 
+Comments are threaded, and the issue's history is folded into the same stream
+by time, so a status move sits where it happened rather than in a separate tab.
+`{` and `}` step between the cards. A picked card names the keys that act on
+the conversation along its own bottom border, and edit and delete are offered
+on your own comments only. The box to write in is always at the end of the
+page.
+
+![A picked comment card showing its reply, edit, delete and quote keys, with nested replies, activity lines merged in by time, and the compose box at the foot of the page](docs/images/comments.png)
+
 ## Documentation
 
 - [Guide](docs/guide.md) — the panes, favorites, grouping and sorting, the
