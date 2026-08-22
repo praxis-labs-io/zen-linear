@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Linear OAuth endpoints and public-client defaults for linear-tui.
+// Linear OAuth endpoints and public-client defaults for zen-linear.
 const (
 	AuthorizeURL    = "https://linear.app/oauth/authorize"
 	TokenURL        = "https://api.linear.app/oauth/token"
