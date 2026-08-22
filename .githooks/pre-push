@@ -1,0 +1,16 @@
+#!/bin/bash
+# Reject direct pushes to main. Feature work goes ticket → branch → PR.
+# Install with: git config core.hooksPath .githooks
+set -euo pipefail
+
+protected="refs/heads/main"
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+	if [ "$remote_ref" = "$protected" ]; then
+		echo "pre-push: refusing to push to main." >&2
+		echo "Branch off and open a PR. To override: git push --no-verify" >&2
+		exit 1
+	fi
+done
+
+exit 0
