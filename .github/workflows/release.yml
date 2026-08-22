@@ -93,8 +93,8 @@ jobs:
           fi
 
           mkdir -p build dist
-          # The MIT notice travels with the binary, the way it did under
-          # goreleaser's files list.
+          # MIT asks that the notice travel with the software, and an
+          # archive holding a bare binary does not carry it.
           cp LICENSE build/
           # -trimpath so the archive does not carry the runner's paths, and the
           # three values stamped here are the only thing that sets them: a plain
