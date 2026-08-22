@@ -263,7 +263,7 @@ The pane's vertical padding is written as blank lines in the text rather than he
 
 The three auth paths and how a reader sets them up are in [docs/install.md](docs/install.md). What follows is what the code has to keep true.
 
-`workspaces` in config reference env vars (`api_key_env`) — keys are never stored in the file. A bare `LINEAR_API_KEY` env var overrides all auth unconditionally (`internal/auth/resolve.go`); never export one. Known upstream bug, unfixed: `applySettings` rebuilds the API client without `UseBearer`/`OnUnauthorized`, breaking OAuth sessions after an in-app settings save (doesn't affect API-key workspaces).
+`workspaces` in config reference env vars (`api_key_env`) — keys are never stored in the file. A bare `LINEAR_API_KEY` env var overrides all auth unconditionally (`internal/auth/resolve.go`); never export one. The auth mode is fixed at launch on `apiUseBearer`/`apiOnUnauthorized`, and every rebuilt client has to carry them: `applySettings` once rebuilt from config alone, which downgraded an OAuth session to raw-token auth on an in-app settings save. `TestApplySettingsPreservesOAuthBearer` pins it.
 
 ### GraphQL client
 
