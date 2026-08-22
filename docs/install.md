@@ -37,7 +37,7 @@ The installer and `make install` both put the binary in `~/.local/bin`, and
 `INSTALL_DIR` moves it. `go install` writes to `$(go env GOPATH)/bin` and takes
 neither.
 
-`VERSION` pins the installer to a release, as `VERSION=v0.1.0`. Without it the
+`VERSION` pins the installer to a release, as `VERSION=v0.2.0`. Without it the
 latest is installed.
 
 There is no Homebrew tap.
@@ -116,7 +116,7 @@ From a clone, `git pull && make install`.
 `zen-linear --version` reports what you are running:
 
 ```
-zen-linear 0.1.0 (commit: 1a2b3c4, built: 2026-08-22T14:00:00Z, darwin/arm64)
+zen-linear 0.2.0 (commit: 1a2b3c4, built: 2026-08-22T14:00:00Z, darwin/arm64)
 ```
 
 A binary reporting `dev` was built locally rather than downloaded. That is what
