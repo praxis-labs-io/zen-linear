@@ -467,6 +467,11 @@ func loadIssueFormOptions[T any](
 			if generation != f.openGen.Load() {
 				return
 			}
+			// Nor one from the team the form has since left: every list here
+			// is team-scoped, and Linear refuses an id from another team.
+			if scopeID != f.team.id {
+				return
+			}
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.issue_form: option fetch failed scope_id=%s", scopeID)
 				onFailure()

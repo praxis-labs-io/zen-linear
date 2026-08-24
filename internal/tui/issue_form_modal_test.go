@@ -632,3 +632,52 @@ func selectPickerOption(t *testing.T, picker *FormPicker, label string) {
 	}
 	t.Fatalf("no option labeled %q in the picker, which has %v", label, picker.options)
 }
+
+// TestIssueFormDropsOptionsFromTheTeamItLeft verifies a fetch that answers
+// after the team changed writes nothing: its ids belong to the old team, and
+// Linear refuses each of them.
+func TestIssueFormDropsOptionsFromTheTeamItLeft(t *testing.T) {
+	app, pending := newIssueFormTestApp(t)
+	// Cold, so every list is a fetch rather than the seeded cache.
+	app.metadataTeamID = ""
+	release := make(chan struct{})
+	app.fetchWorkflowStatesFunc = func(_ context.Context, teamID string) ([]linearapi.WorkflowState, error) {
+		if teamID == "team-1" {
+			<-release
+		}
+		return []linearapi.WorkflowState{{ID: "state-" + teamID, Name: "Todo " + teamID}}, nil
+	}
+
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{TeamID: "team-1"})
+	selectPickerOption(t, form.teamField, "Design (DES)")
+	drainQueuedUpdates(t, pending)
+	if !slices.Contains(form.statusField.options, "Todo team-2") {
+		t.Fatalf("status options = %v, want the new team's before the old one answers", form.statusField.options)
+	}
+
+	// team-1's states land only now, with the form already on team-2.
+	close(release)
+	drainQueuedUpdates(t, pending)
+
+	if slices.Contains(form.statusField.options, "Todo team-1") {
+		t.Fatalf("status options = %v, want none from the team the form left", form.statusField.options)
+	}
+}
+
+// drainQueuedUpdates runs every queued UI callback, and the ones a callback
+// queues behind it, until the queue has been quiet for a moment.
+func drainQueuedUpdates(t *testing.T, pending chan func()) {
+	t.Helper()
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case fn := <-pending:
+			fn()
+		case <-time.After(100 * time.Millisecond):
+			return
+		case <-deadline:
+			t.Fatal("queued UI updates never went quiet")
+		}
+	}
+}
