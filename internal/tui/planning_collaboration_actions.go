@@ -221,11 +221,7 @@ func (a *App) showChangeTeamPicker() {
 			a.flashStatus("Already in that team")
 			return
 		}
-		name := ""
-		if team := findTeamByID(a.navTeams, item.ID); team != nil {
-			name = team.Name
-		}
-		a.saveIssueField(issueFieldTeamSave(target, item.ID, name))
+		a.saveIssueField(issueFieldTeamSave(target, item.ID, item.name()))
 	})
 }
 

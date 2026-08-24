@@ -109,16 +109,18 @@ stream by time, so the conversation reads in order.
 opens that field's options in a list under it, on the value the issue already
 holds.
 
-Six fields open a list: state, assignee, priority, project, milestone, cycle.
-Labels opens the same list as a multi-select. Title, due date and estimate are
-typed in the row itself, where the value already is. The description is typed
-in the rows it reads in, with the markdown going raw as the cue.
+Seven fields open a list: team, state, assignee, priority, project, milestone,
+cycle. Labels opens the same list as a multi-select. Title, due date and
+estimate are typed in the row itself, where the value already is. The
+description is typed in the rows it reads in, with the markdown going raw as
+the cue.
 
 Each field saves on its own, so leaving the pane loses nothing.
 
 Options load for the team that owns the issue. Linear refuses a state or a label from another team, so a
 search result or a cross-team favorite offering the tree's options would be a
-write that fails.
+write that fails. Team is the exception, listing the whole workspace: moving
+the issue is what that row is for, and it renumbers the issue.
 
 The full keymap is in [keys.md](keys.md).
 

@@ -101,6 +101,16 @@ func (a *App) teamKey(teamID string) string {
 	return ""
 }
 
+// teamName is the team's own name, empty while the tree has not painted.
+func (a *App) teamName(teamID string) string {
+	for _, team := range a.navTeams {
+		if team.ID == teamID {
+			return team.Name
+		}
+	}
+	return ""
+}
+
 func withoutEmptySegments(line []string) []string {
 	kept := make([]string, 0, len(line))
 	for _, segment := range line {

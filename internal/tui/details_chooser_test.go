@@ -44,6 +44,12 @@ func seedChooserOptions(app *App) {
 		{ID: "project-2", Name: "Beta"},
 	}
 	app.teamCycles = []linearapi.Cycle{{ID: "cycle-1", Name: "Launch", Number: 12, IsActive: true}}
+	// The team row lists the workspace, not the issue's own team, so the tree's
+	// teams are what it reads.
+	app.navTeams = []linearapi.Team{
+		{ID: chooserTeamID, Key: "ENG", Name: "Engineering"},
+		{ID: "team-2", Key: "DES", Name: "Design"},
+	}
 }
 
 // chooserFixture opens the details fixture in edit mode with the cursor on one
@@ -654,5 +660,45 @@ func TestTheChooserKeepsItsFootOnScreen(t *testing.T) {
 	height := viewHeight(app.detailsPageView)
 	if end := app.detailsChooserSpan.end; end >= top+height {
 		t.Fatalf("the chooser ends at row %d and the page shows %d..%d, want its foot on screen", end, top, top+height-1)
+	}
+}
+
+// TestTheTeamRowListsTheWorkspaceAndMovesTheIssue verifies the row opens on
+// the team the issue is in and writes the one picked. It is the only chooser
+// whose options are not the issue's own team's.
+func TestTheTeamRowListsTheWorkspaceAndMovesTheIssue(t *testing.T) {
+	app, writes, _ := chooserFixture(t, issueFieldTeam)
+
+	openChooser(t, app)
+	if lit := litOption(t, app); lit != "Engineering (ENG)" {
+		t.Fatalf("lit option = %q, want the team the issue is in", lit)
+	}
+
+	pressField(app, 'j')
+	pressFieldKey(app, tcell.KeyEnter)
+
+	input := awaitWrite(t, writes)
+	if input.ID != "issue-1" {
+		t.Fatalf("wrote to issue %q, want the one the chooser opened on", input.ID)
+	}
+	if input.TeamID == nil || *input.TeamID != "team-2" {
+		t.Fatalf("TeamID = %v, want the team picked", input.TeamID)
+	}
+	if input.StateID != nil || input.ProjectID != nil {
+		t.Fatal("the move carried a field the chooser was not on")
+	}
+}
+
+// TestTheTeamRowNamesTheTeamTheIssueIsIn verifies read mode says which team
+// the issue belongs to, which the tree no longer implies for a favorited
+// project.
+func TestTheTeamRowNamesTheTeamTheIssueIsIn(t *testing.T) {
+	app := newDetailsTestApp(t)
+	seedChooserOptions(app)
+	app.updateDetailsView()
+
+	lines := drawDetails(t, app, 90)
+	if got := findLine(t, lines, "Team:"); !strings.Contains(got, "Engineering") {
+		t.Fatalf("team row = %q, want it to name the team", got)
 	}
 }
