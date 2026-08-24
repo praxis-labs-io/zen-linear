@@ -40,11 +40,11 @@ neither.
 `VERSION` pins the installer to a release, as `VERSION=v0.2.0`. Without it the
 latest is installed.
 
-There is no Homebrew tap.
+Homebrew is not supported.
 
 ## PATH
 
-`~/.local/bin` is not on every shell's PATH. If the installer says so, add it:
+Some shells do not carry `~/.local/bin` on PATH. If the installer says so, add it:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -57,8 +57,7 @@ Put that in `~/.zshrc` or `~/.bashrc` to keep it.
 Three paths, and they resolve in this order.
 
 **`LINEAR_API_KEY` in the environment wins over everything else.** It is the
-override, not the recommended setup: exporting one in your shell profile means
-no other path can ever be reached.
+override. Exporting one in your shell profile means no other path is reached.
 
 **Browser OAuth** is the default:
 
@@ -72,7 +71,7 @@ their own.
 
 **Per-workspace API keys** are how you run more than one Linear workspace. Each
 entry in `workspaces` names an environment variable to read its key from; the
-key itself is never written to the config file.
+key itself stays out of the config file.
 
 ```json
 "workspaces": [
@@ -92,7 +91,7 @@ zen-linear
 ```
 
 The navigation tree loads your teams and the favorites from Linear's sidebar,
-the issue list fills, and `?` lists every key that works where you are.
+the issue list fills, and `?` lists the keys that work where you are.
 [guide.md](guide.md) is the tour.
 
 Where things are kept:

@@ -15,8 +15,8 @@ Left to right: where you are, what is there, and the issue you are on.
 
 Each pane's title carries its number, and typing that number focuses the pane,
 including when it has been toggled off. Pane 1 is titled with the workspace you
-are in rather than the word Navigation, and pane 2 with the scope the list is
-showing and how many issues are in it.
+are in, and pane 2 with the scope the list is showing and how many issues are
+in it.
 
 `h` and `l` step between the panes, `<` and `>` hide the outer two, and `v`
 zooms the details pane over the issue list.
@@ -67,7 +67,7 @@ Enter, Space or a click collapses one.
 
 ### Sorting
 
-`sort_by` is a chain, not a field. The first entry decides and the rest break
+`sort_by` is a chain of fields. The first entry decides and the rest break
 ties, so `["status", "priority"]` reads as status order with the most urgent
 first inside each. The palette changes it live.
 
@@ -75,11 +75,11 @@ first inside each. The palette changes it live.
 
 The palette holds the rich filters: assignee, labels, status, project, cycle,
 due date, estimate. They combine, and the pane's top border says what is
-applied so a filtered list never looks like a complete one.
+applied, so you can see the list is filtered.
 
 ## The details page
 
-The details pane is **one scrolling page**, not a set of tabs. The issue's
+The details pane is **one scrolling page**. The issue's
 metadata, its description rendered as markdown, then the activity and comments
 in one stream, and a box to write in at the end.
 
@@ -91,7 +91,7 @@ keys of its own for as long as it holds them.
 
 Replies nest under the comment they answer, and replying opens a box inside
 that thread rather than at the foot of the page, so the answer is written where
-it is going to appear. Every box grows with what is written in it. Esc closes
+it is going to appear. A box grows with what is written in it. Esc closes
 one and keeps the words for next time.
 
 Editing turns a card into a box in the place it stood. Deleting asks first, and
@@ -111,11 +111,9 @@ Labels opens the same list as a multi-select. Title, due date and estimate are
 typed in the row itself, where the value already is. The description is typed
 in the rows it reads in, with the markdown going raw as the cue.
 
-Each field saves on its own. There is no form to submit and nothing to lose by
-leaving.
+Each field saves on its own, so leaving the pane loses nothing.
 
-Options are always loaded for the team that owns the issue, not the team you
-navigated through. Linear refuses a state or a label from another team, so a
+Options load for the team that owns the issue. Linear refuses a state or a label from another team, so a
 search result or a cross-team favorite offering the tree's options would be a
 write that fails.
 
@@ -123,8 +121,8 @@ The full keymap is in [keys.md](keys.md).
 
 ## Creating issues
 
-`n` opens the create form. It opens on two defaults it resolves rather than
-guesses: the status is the team's own default state, and the assignee is you,
+`n` opens the create form. It opens on two resolved defaults:
+the status is the team's own default state, and the assignee is you,
 read out of that team's member list. A team whose member list does not name you
 opens Unassigned, because Linear refuses an assignee who is not on the team.
 
@@ -152,7 +150,7 @@ navigating.
 
 **`config.json`** is what you wrote. It is the only one of the three that can
 live under `$XDG_CONFIG_HOME`, because it is the one worth keeping in a
-dotfiles repo; the other two are rewritten every time you quit.
+dotfiles repo; the other two are rewritten on quit.
 
 ## Themes
 

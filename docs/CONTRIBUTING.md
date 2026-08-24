@@ -1,8 +1,8 @@
 # Contributing
 
-zen-linear is an opinionated personal project. It is developed in the open and
-issues and pull requests are welcome, but the shape of it is not up for
-committee.
+zen-linear is an opinionated project, developed in the open. Issues and pull
+requests are welcome. The design decisions are held by the maintainers, so open
+an issue before a large change and we will tell you whether it fits.
 
 ## Setup
 
