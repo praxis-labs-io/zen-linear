@@ -227,9 +227,8 @@ type Favorite struct {
 	IssueTitle      string
 	IssueTeamID     string
 
-	ProjectID     string
-	ProjectName   string
-	ProjectTeamID string
+	ProjectID   string
+	ProjectName string
 
 	CycleID     string
 	CycleName   string

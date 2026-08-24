@@ -46,7 +46,7 @@ func sessionFavorites() []linearapi.Favorite {
 	return []linearapi.Favorite{
 		{ID: "fav-folder", Type: "folder", FolderName: "Saved views"},
 		{ID: "fav-view", Type: "customView", ParentID: "fav-folder", CustomViewID: "view-1", CustomViewName: "My cycle"},
-		{ID: "fav-project", Type: "project", ProjectID: "proj-2", ProjectName: "Mobile App", ProjectTeamID: "team-2"},
+		{ID: "fav-project", Type: "project", ProjectID: "proj-2", ProjectName: "Mobile App"},
 	}
 }
 

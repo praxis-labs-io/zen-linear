@@ -19,10 +19,9 @@ func TestFavoriteNavigationNodesMapsSupportedTypes(t *testing.T) {
 			IssueTeamID:     "team-1",
 		},
 		{
-			Type:          "project",
-			ProjectID:     "project-1",
-			ProjectName:   "Website",
-			ProjectTeamID: "team-1",
+			Type:        "project",
+			ProjectID:   "project-1",
+			ProjectName: "Website",
 		},
 		{
 			Type:        "cycle",
@@ -51,8 +50,8 @@ func TestFavoriteNavigationNodesMapsSupportedTypes(t *testing.T) {
 	}
 
 	project := nodes[1]
-	if !project.IsProject || project.ID != "project-1" || project.TeamID != "team-1" {
-		t.Errorf("project node = %+v, want IsProject with ID project-1 TeamID team-1", project)
+	if !project.IsProject || project.ID != "project-1" || project.TeamID != "" {
+		t.Errorf("project node = %+v, want IsProject with ID project-1 and no team", project)
 	}
 
 	cycle := nodes[2]
@@ -188,7 +187,7 @@ func TestRebuildNavigationTreeOmitsEmptyFavorites(t *testing.T) {
 		t.Fatalf("root children with only unsupported favorites = %d, want 2", got)
 	}
 
-	favorites := []linearapi.Favorite{{Type: "project", ProjectID: "project-1", ProjectName: "Website", ProjectTeamID: "team-1"}}
+	favorites := []linearapi.Favorite{{Type: "project", ProjectID: "project-1", ProjectName: "Website"}}
 	app.rebuildNavigationTree(teams, favorites)
 	children := app.navigationTree.GetRoot().GetChildren()
 	if len(children) != 3 {

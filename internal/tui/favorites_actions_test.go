@@ -121,7 +121,7 @@ func TestFavoriteTargetForNode(t *testing.T) {
 func TestFavoriteForNodeMatchesEntityWithoutFavoriteID(t *testing.T) {
 	favorites := []linearapi.Favorite{
 		{ID: "fav-team", Type: "team", TeamID: "team-1"},
-		{ID: "fav-project", Type: "project", ProjectID: "project-1", ProjectTeamID: "team-1"},
+		{ID: "fav-project", Type: "project", ProjectID: "project-1"},
 		{ID: "fav-triage", Type: "predefinedView", PredefinedViewType: "triage", PredefinedViewTeamID: "team-2"},
 	}
 
@@ -295,7 +295,7 @@ func TestToggleFavoriteAddsProjectAndKeepsTeamExpanded(t *testing.T) {
 		gotTarget = target
 		return linearapi.Favorite{
 			ID: "fav-1", Type: "project", ProjectID: "project-1",
-			ProjectName: "Website", ProjectTeamID: "team-1", SortOrder: 1,
+			ProjectName: "Website", SortOrder: 1,
 		}, nil
 	}
 

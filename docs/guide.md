@@ -39,6 +39,9 @@ folder is stepped over. A folder itself moves whole, over its neighbour
 rather than into it, since Linear has no folder inside a folder. Each of
 those writes to Linear.
 
+A favorited project lists every team's issues. The favorite is the project, not
+one team's slice of it, so a project shared across teams shows the whole of it.
+
 ### Teams
 
 A team expands into its cycles, statuses and projects. Selecting any of them

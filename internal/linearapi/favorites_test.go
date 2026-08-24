@@ -113,7 +113,7 @@ func TestCreateFavoriteParsesProject(t *testing.T) {
 		"id":"fav-1","type":"project","sortOrder":3.5,"title":"Website",
 		"folderName":null,"parent":null,"predefinedViewType":null,
 		"predefinedViewTeam":null,"customView":null,"issue":null,
-		"project":{"id":"project-1","name":"Website","teams":{"nodes":[{"id":"team-1"}]}},
+		"project":{"id":"project-1","name":"Website"},
 		"cycle":null,"team":null}}}}`
 
 	var request map[string]interface{}
@@ -131,9 +131,6 @@ func TestCreateFavoriteParsesProject(t *testing.T) {
 	}
 	if favorite.ProjectID != "project-1" || favorite.ProjectName != "Website" {
 		t.Errorf("favorite project = %q/%q, want project-1/Website", favorite.ProjectID, favorite.ProjectName)
-	}
-	if favorite.ProjectTeamID != "team-1" {
-		t.Errorf("favorite ProjectTeamID = %q, want team-1", favorite.ProjectTeamID)
 	}
 	if favorite.SortOrder != 3.5 {
 		t.Errorf("favorite SortOrder = %v, want 3.5", favorite.SortOrder)

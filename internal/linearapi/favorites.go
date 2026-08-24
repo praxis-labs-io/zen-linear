@@ -37,14 +37,11 @@ type favoriteNode struct {
 			ID graphql.String
 		}
 	}
+	// A favorited project carries no team: it is workspace-level, and Linear
+	// answers a multi-team project's teams in no order the issues follow.
 	Project *struct {
-		ID    graphql.String
-		Name  graphql.String
-		Teams struct {
-			Nodes []struct {
-				ID graphql.String
-			}
-		} `graphql:"teams(first: 1)"`
+		ID   graphql.String
+		Name graphql.String
 	}
 	Cycle *struct {
 		ID     graphql.String
@@ -93,9 +90,6 @@ func parseFavoriteNode(node favoriteNode) Favorite {
 	if node.Project != nil {
 		favorite.ProjectID = string(node.Project.ID)
 		favorite.ProjectName = string(node.Project.Name)
-		if len(node.Project.Teams.Nodes) > 0 {
-			favorite.ProjectTeamID = string(node.Project.Teams.Nodes[0].ID)
-		}
 	}
 	if node.Cycle != nil {
 		favorite.CycleID = string(node.Cycle.ID)
