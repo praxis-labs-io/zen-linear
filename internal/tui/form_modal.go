@@ -63,11 +63,14 @@ type FormModal struct {
 	page           *formPage
 	pickerRow      *pickerRowState
 	focusIdx       int
-	scrollTop      int
-	scrollAbove    bool
-	scrollBelow    bool
-	onCancel       func()
-	onSubmit       func()
+	// initialFocus is the field Show opens on, nil for the first in the tab
+	// order.
+	initialFocus tview.Primitive
+	scrollTop    int
+	scrollAbove  bool
+	scrollBelow  bool
+	onCancel     func()
+	onSubmit     func()
 }
 
 // formPage is what the modal adds to Pages: the form, then any open picker
@@ -748,15 +751,26 @@ func (fm *FormModal) layout() {
 // field (tview primitives remember focus across shows), and raises the page.
 func (fm *FormModal) Show(pageName string) {
 	fm.scrollTop = 0
-	fm.focusIdx = 0
+	fm.focusIdx = fm.initialFocusIdx()
 	fm.openPicker = nil
 	fm.SetStatus("", false)
 	fm.layout()
 	fm.app.pages.AddPage(pageName, fm.page, true, true)
 	fm.app.pages.SendToFront(pageName)
 	if len(fm.order) > 0 {
-		fm.app.app.SetFocus(fm.order[0])
+		fm.app.app.SetFocus(fm.order[fm.focusIdx])
 	}
+}
+
+// initialFocusIdx places the caret where SetInitialFocus asked, and on the
+// first field when it named one the form does not carry.
+func (fm *FormModal) initialFocusIdx() int {
+	for i, candidate := range fm.order {
+		if candidate == fm.initialFocus {
+			return i
+		}
+	}
+	return 0
 }
 
 // Hide removes the page and restores pane focus.
@@ -784,6 +798,10 @@ func (fm *FormModal) ContentBody() *tview.Flex {
 // ButtonsRow returns the centered button row for composed modals that place
 // it themselves. Nil until AddButtons is called.
 func (fm *FormModal) ButtonsRow() *tview.Flex { return fm.buttonsRow }
+
+// SetInitialFocus names the field Show opens on, for a form whose first field
+// is not the one the user came to fill.
+func (fm *FormModal) SetInitialFocus(p tview.Primitive) { fm.initialFocus = p }
 
 // Focus returns keyboard focus to the form's current field — used when an
 // overlay (e.g. a picker) closes over a stacked form modal.

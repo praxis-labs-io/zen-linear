@@ -126,10 +126,15 @@ The full keymap is in [keys.md](keys.md).
 
 ## Creating issues
 
-`n` opens the create form. It opens on two resolved defaults:
-the status is the team's own default state, and the assignee is you,
-read out of that team's member list. A team whose member list does not name you
-opens Unassigned, because Linear refuses an assignee who is not on the team.
+`n` opens the create form. Team is its first field, seeded from wherever you
+are in the tree and changeable: every field under it belongs to one team, so
+changing it reloads them and drops the picks that no longer apply. A scope with
+no team of its own, a favorited project, opens on "Select a team".
+
+The rest opens on two resolved defaults: the status is the team's own default
+state, and the assignee is you, read out of that team's member list. A team
+whose member list does not name you opens Unassigned, because Linear refuses an
+assignee who is not on the team.
 
 ## Workspaces
 

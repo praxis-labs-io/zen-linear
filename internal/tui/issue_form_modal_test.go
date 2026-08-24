@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +33,12 @@ func newIssueFormTestApp(t *testing.T) (*App, chan func()) {
 		{ID: "label-chore", Name: "Chore"},
 	}
 	app.metadataTeamID = "team-1"
+	// The team picker reads the tree's teams, so seeding them keeps its options
+	// synchronous and off the network like every other list here.
+	app.navTeams = []linearapi.Team{
+		{ID: "team-1", Key: "ENG", Name: "Engineering"},
+		{ID: "team-2", Key: "DES", Name: "Design"},
+	}
 
 	app.fetchMilestonesFunc = func(_ context.Context, projectID string) ([]linearapi.ProjectMilestone, error) {
 		return []linearapi.ProjectMilestone{{ID: "milestone-" + projectID, Name: "Milestone " + projectID}}, nil
@@ -53,6 +60,9 @@ func newIssueFormTestApp(t *testing.T) (*App, chan func()) {
 	}
 	app.fetchIssueLabelsFunc = func(_ context.Context, teamID string) ([]linearapi.IssueLabel, error) {
 		return []linearapi.IssueLabel{{ID: "label-" + teamID, Name: "Label " + teamID}}, nil
+	}
+	app.fetchTeamsFunc = func(_ context.Context) ([]linearapi.Team, error) {
+		return app.navTeams, nil
 	}
 
 	pending := make(chan func(), 32)
@@ -348,8 +358,8 @@ func TestIssueFormCreateResetsFieldsAndShowsParent(t *testing.T) {
 	if len(form.labelsField.SelectedIDs()) != 0 {
 		t.Fatalf("labels carried over: %v", form.labelsField.SelectedIDs())
 	}
-	if form.fm.title != "New Sub-Issue" {
-		t.Fatalf("modal title = %q, want New Sub-Issue", form.fm.title)
+	if form.fm.title != "New Sub-Issue · Engineering" {
+		t.Fatalf("modal title = %q, want New Sub-Issue naming the team", form.fm.title)
 	}
 	if got := form.parentView.GetText(true); !strings.Contains(got, "Parent: ZNL-1 - Parent issue") {
 		t.Fatalf("parent line = %q, want the parent identifier and title", got)
@@ -515,9 +525,8 @@ func TestIssueFormStaleSaveDoesNotCloseAReopenedForm(t *testing.T) {
 	}
 }
 
-// TestIssueFormCreateTitleNamesTheTeam pins the team into the border. A create
-// takes its team from the navigation selection and has no picker for it, so
-// the title is the only thing telling the user where the issue lands.
+// TestIssueFormCreateTitleNamesTheTeam pins the team into the border, which is
+// what a form scrolled past its first field still says the create is going to.
 func TestIssueFormCreateTitleNamesTheTeam(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	app.navTeams = []linearapi.Team{
@@ -547,4 +556,79 @@ func TestIssueFormCreateTitleNamesTheTeam(t *testing.T) {
 	if form.fm.title != "New Issue" {
 		t.Fatalf("title = %q, want the base with no team", form.fm.title)
 	}
+}
+
+// TestIssueFormOpensOnTheTeamTheTreeHadSelected verifies the picker seeds from
+// the navigation scope rather than making the user name a team they are
+// already standing in.
+func TestIssueFormOpensOnTheTeamTheTreeHadSelected(t *testing.T) {
+	app, _ := newIssueFormTestApp(t)
+	form := app.issueFormModal
+
+	form.Show(IssueFormOptions{TeamID: "team-2"})
+
+	if _, label := form.teamField.GetCurrentOption(); label != "Design (DES)" {
+		t.Fatalf("team picker opened on %q, want the team the tree had", label)
+	}
+}
+
+// TestIssueFormWithNoTeamOpensOnTheSentinel verifies a scope that carries no
+// team, a favorited project, asks for one rather than failing at submit.
+func TestIssueFormWithNoTeamOpensOnTheSentinel(t *testing.T) {
+	app, _ := newIssueFormTestApp(t)
+	form := app.issueFormModal
+
+	form.Show(IssueFormOptions{ProjectID: "project-1"})
+
+	if _, label := form.teamField.GetCurrentOption(); label != teamSentinel {
+		t.Fatalf("team picker opened on %q, want %q", label, teamSentinel)
+	}
+	form.titleField.SetText("Needs a team")
+	form.submit()
+	if got := form.fm.hintView.GetText(true); !strings.Contains(got, "team") {
+		t.Fatalf("submit status = %q, want it to ask for a team", got)
+	}
+}
+
+// TestIssueFormTeamChangeReloadsTheFieldsUnderIt verifies the picks that
+// belong to the old team go with it: Linear refuses a state or a label from
+// another team, so carrying them over would be a create that fails.
+func TestIssueFormTeamChangeReloadsTheFieldsUnderIt(t *testing.T) {
+	app, pending := newIssueFormTestApp(t)
+	form := app.issueFormModal
+	form.Show(IssueFormOptions{TeamID: "team-1", ProjectID: "project-1"})
+	runUpdatesUntil(t, pending, func() bool { return form.milestone.id != "" || form.project.id == "project-1" })
+
+	selectPickerOption(t, form.teamField, "Design (DES)")
+
+	if form.team.id != "team-2" {
+		t.Fatalf("form team = %q, want the team picked", form.team.id)
+	}
+	if form.project.id != "" || form.state.id != "" || form.assignee.id != "" || form.cycle.id != "" {
+		t.Fatalf("a pick survived the team move: project %q state %q assignee %q cycle %q",
+			form.project.id, form.state.id, form.assignee.id, form.cycle.id)
+	}
+	// The reloads answer for the new team, not out of the caches the old one
+	// warmed: metadataTeamID still names team-1, so warmFor refuses them.
+	hasOption := func(picker *FormPicker, label string) func() bool {
+		return func() bool { return slices.Contains(picker.options, label) }
+	}
+	runUpdatesUntil(t, pending, hasOption(form.statusField, "Todo team-2"))
+	runUpdatesUntil(t, pending, hasOption(form.projectField, "Project team-2"))
+	if form.fm.title != "New Issue · Design" {
+		t.Fatalf("title = %q, want the border to follow the team", form.fm.title)
+	}
+}
+
+// selectPickerOption picks a row by its label, the way a user reading the
+// dropdown does.
+func selectPickerOption(t *testing.T, picker *FormPicker, label string) {
+	t.Helper()
+	for i, option := range picker.options {
+		if option == label {
+			picker.SetCurrentOption(i)
+			return
+		}
+	}
+	t.Fatalf("no option labeled %q in the picker, which has %v", label, picker.options)
 }
