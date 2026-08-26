@@ -73,13 +73,14 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 			a.populateTeamNodeChildren(teamNode, team.ID, projects, states, cycles)
 		}
 		if len(teamNode.GetChildren()) > 0 {
-			teamNode.SetExpanded(true)
+			setNavFold(teamNode, true)
 		}
 
 		target := teamNode
 		if project != nil {
 			if projectNode := findProjectTreeNode(teamNode, project.ID); projectNode != nil {
 				target = projectNode
+				revealNavNode(teamNode, projectNode)
 			}
 		}
 		a.navigationTree.SetCurrentNode(target)
@@ -106,14 +107,12 @@ func (a *App) findTeamTreeNode(teamID string) *tview.TreeNode {
 	return nil
 }
 
-// findProjectTreeNode returns the child node for a project ID, or nil if absent.
+// findProjectTreeNode returns the node for a project ID under a team, or nil if
+// absent. Projects sit inside the team's Projects group, not directly under it.
 func findProjectTreeNode(teamNode *tview.TreeNode, projectID string) *tview.TreeNode {
-	for _, child := range teamNode.GetChildren() {
-		if nav, ok := child.GetReference().(*NavigationNode); ok && nav.IsProject && nav.ID == projectID {
-			return child
-		}
-	}
-	return nil
+	return findTeamDescendant(teamNode, func(nav *NavigationNode) bool {
+		return nav.IsProject && nav.ID == projectID
+	})
 }
 
 // findTeamByKeyOrName returns the team whose key or name matches the query

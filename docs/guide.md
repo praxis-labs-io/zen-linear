@@ -46,8 +46,10 @@ one team's slice of it, so a project shared across teams shows the whole of it.
 
 ### Teams
 
-A team expands into its cycles, statuses and projects. Selecting any of them
-scopes the issue list to it.
+A team expands into three headings — Cycles, Status and Projects — each folded,
+since a team that opened onto all of them at once is more rows than the pane
+has. `⏎` opens one, and the `▸` and `▾` on a row say which way it goes. Selecting
+anything inside scopes the issue list to it.
 
 ### Search
 

@@ -15,7 +15,7 @@ import (
 // a node into query params. Linear has no favorite type for a workflow state,
 // so status nodes report false.
 func favoriteTargetForNode(node *NavigationNode) (linearapi.FavoriteTarget, bool) {
-	if node == nil || node.IsFolder {
+	if node == nil || node.IsFolder || node.IsGroup {
 		return linearapi.FavoriteTarget{}, false
 	}
 	switch {
@@ -537,7 +537,7 @@ func restoreFavoriteExpansion(previous, group *tview.TreeNode) {
 			continue
 		}
 		if was := findFavoriteTreeNode(previous, ref.FavoriteID); was != nil {
-			child.SetExpanded(was.IsExpanded())
+			setNavFold(child, was.IsExpanded())
 		}
 	}
 }

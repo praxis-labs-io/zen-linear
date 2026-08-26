@@ -201,7 +201,11 @@ func (a *App) addFavoriteNodes(parent *tview.TreeNode, nodes []*NavigationNode) 
 		if navNode.IsFolder {
 			color = a.theme.SecondaryText
 		}
-		child := tview.NewTreeNode(navNode.Text).
+		label := navNode.Text
+		if navNode.IsFolder {
+			label = navFoldLabel(label, true)
+		}
+		child := tview.NewTreeNode(label).
 			SetColor(color).
 			SetReference(navNode).
 			SetExpanded(true)

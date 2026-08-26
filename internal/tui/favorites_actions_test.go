@@ -305,7 +305,7 @@ func TestToggleFavoriteAddsProjectAndKeepsTeamExpanded(t *testing.T) {
 	teamNode := app.findTeamTreeNode("team-1")
 	app.populateTeamNodeChildren(teamNode, "team-1", []linearapi.Project{{ID: "project-1", Name: "Website", TeamID: "team-1"}}, nil, nil)
 	teamNode.SetExpanded(true)
-	projectNode := teamNode.GetChildren()[0]
+	projectNode := findProjectTreeNode(teamNode, "project-1")
 	app.navigationTree.SetCurrentNode(projectNode)
 
 	handleToggleFavorite(app)

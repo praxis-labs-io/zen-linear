@@ -176,17 +176,6 @@ func (a *App) focusNavigationTree() {
 	a.updateFocus()
 }
 
-// navigationTreeIsAtTop reports whether the tree's cursor is on its first row,
-// the one an Up steps off. The root is hidden, so that row is its first child.
-func (a *App) navigationTreeIsAtTop() bool {
-	root := a.navigationTree.GetRoot()
-	if root == nil {
-		return false
-	}
-	children := root.GetChildren()
-	return len(children) > 0 && a.navigationTree.GetCurrentNode() == children[0]
-}
-
 // clearNavSearch empties the query and drops the results. Emptying the box
 // schedules a search for the empty string, so cancel that after and do the work
 // here rather than a debounce window later. What the issues pane mounts next is

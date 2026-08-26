@@ -191,35 +191,6 @@ func TestDownAndTabReachTheTree(t *testing.T) {
 	}
 }
 
-// TestUpOffTheTopOfTheTreeReachesTheQueryBox covers the return trip for the
-// Down that left it. Anywhere else in the tree, Up is the tree's own move.
-func TestUpOffTheTopOfTheTreeReachesTheQueryBox(t *testing.T) {
-	for _, key := range []*tcell.EventKey{
-		tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone),
-		tcell.NewEventKey(tcell.KeyRune, 'k', tcell.ModNone),
-	} {
-		app := newUXTestApp(t)
-		app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
-		rows := app.navigationTree.GetRoot().GetChildren()
-		if len(rows) < 2 {
-			t.Fatalf("fixture has %d tree rows, want at least two", len(rows))
-		}
-
-		app.navigationTree.SetCurrentNode(rows[1])
-		if got := app.handleGlobalKey(key); got == nil {
-			t.Errorf("%v was claimed mid-tree, want it left to the tree", key.Key())
-		}
-
-		app.navigationTree.SetCurrentNode(rows[0])
-		if got := app.handleGlobalKey(key); got != nil {
-			t.Errorf("%v leaked past the top of the tree", key.Key())
-		}
-		if !app.navSearchActive() {
-			t.Errorf("%v off the top of the tree did not reach the query box", key.Key())
-		}
-	}
-}
-
 // TestSearchResultsPutOutTheTreeSelection covers a lit row claiming to name the
 // list on screen while what is on screen is a workspace-wide search, which
 // takes no list. Stepping into the tree relights it: an unlit cursor is one

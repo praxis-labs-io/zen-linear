@@ -143,7 +143,7 @@ func (a *App) restoreSessionTeamNode(state session.State, children teamChildren)
 		a.populateTeamNodeChildren(teamNode, state.Nav.TeamID, children.projects, children.states, children.cycles)
 	}
 	if len(teamNode.GetChildren()) > 0 {
-		teamNode.SetExpanded(true)
+		setNavFold(teamNode, true)
 	}
 
 	target := teamNode
@@ -156,6 +156,7 @@ func (a *App) restoreSessionTeamNode(state session.State, children teamChildren)
 			return
 		}
 		target = descendant
+		revealNavNode(teamNode, descendant)
 	}
 	a.selectSessionNode(target, state)
 }

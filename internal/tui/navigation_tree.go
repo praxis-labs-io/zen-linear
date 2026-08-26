@@ -28,6 +28,9 @@ type NavigationNode struct {
 	StateType string
 	// IsFolder marks a favorites folder; selecting it toggles expansion.
 	IsFolder bool
+	// IsGroup marks one of a team's Cycles, Status and Projects headings.
+	// Selecting it toggles expansion; it scopes nothing on its own.
+	IsGroup bool
 	// FavoriteID is set on nodes built from a favorite, so the toggle knows
 	// the node is already favorited and the reorder knows what to move.
 	FavoriteID string
@@ -67,9 +70,9 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 		ref := node.GetReference()
 		if ref != nil {
 			if navNode, ok := ref.(*NavigationNode); ok {
-				// Folders only expand and collapse.
-				if navNode.IsFolder {
-					node.SetExpanded(!node.IsExpanded())
+				// Folders and a team's groups only expand and collapse.
+				if navNode.IsFolder || navNode.IsGroup {
+					setNavFold(node, !node.IsExpanded())
 					return
 				}
 				// For team nodes, handle expand/collapse
@@ -84,4 +87,52 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 	})
 
 	return tree
+}
+
+// The glyphs marking a row that opens and closes. tview draws no expander of
+// its own and its per-level prefixes cannot vary with a node's state, so the
+// row's own label carries it.
+const (
+	navFoldOpen   = "▾ "
+	navFoldClosed = "▸ "
+)
+
+// navFoldLabel is a foldable row's text, marked for the state it is in.
+func navFoldLabel(text string, expanded bool) string {
+	if expanded {
+		return navFoldOpen + text
+	}
+	return navFoldClosed + text
+}
+
+// setNavFold opens or closes a row and re-marks it. The glyph is part of the
+// label, so a toggle that skips this leaves the row claiming the state it left.
+// padNavigationTree re-fits anything relabelled here on the next draw.
+func setNavFold(node *tview.TreeNode, expanded bool) {
+	node.SetExpanded(expanded)
+	if nav, ok := node.GetReference().(*NavigationNode); ok && navIsFoldable(nav) {
+		node.SetText(navFoldLabel(nav.Text, expanded))
+	}
+}
+
+// navIsFoldable reports whether a row opens and closes rather than scoping the
+// issue list.
+func navIsFoldable(nav *NavigationNode) bool {
+	return nav.IsTeam || nav.IsGroup || nav.IsFolder
+}
+
+// revealNavNode opens every row above a node so a restored selection lands on
+// one that is drawn. A team's groups start folded, so expanding the team alone
+// leaves the cursor on a row nobody can see.
+func revealNavNode(ancestor, target *tview.TreeNode) bool {
+	if ancestor == target {
+		return true
+	}
+	for _, child := range ancestor.GetChildren() {
+		if revealNavNode(child, target) {
+			setNavFold(ancestor, true)
+			return true
+		}
+	}
+	return false
 }

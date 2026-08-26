@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
@@ -156,7 +157,7 @@ func (a *App) buildTeamsGroup(teams []linearapi.Team) *tview.TreeNode {
 	for _, team := range teams {
 		// Selection is the tree's own SetSelectedFunc. A callback here would
 		// fire alongside it.
-		group.AddChild(tview.NewTreeNode(team.Name).
+		group.AddChild(tview.NewTreeNode(navFoldLabel(team.Name, false)).
 			SetColor(a.theme.Foreground).
 			SetReference(&NavigationNode{
 				ID:     team.ID,
@@ -197,7 +198,7 @@ func navSectionSpacer() *tview.TreeNode {
 func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 	// If already has children (projects loaded), just toggle expand
 	if len(teamNode.GetChildren()) > 0 {
-		teamNode.SetExpanded(!teamNode.IsExpanded())
+		setNavFold(teamNode, !teamNode.IsExpanded())
 		return
 	}
 
@@ -229,11 +230,11 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 		a.app.QueueUpdateDraw(func() {
 			// Double-check children haven't been added by another goroutine
 			if len(teamNode.GetChildren()) > 0 {
-				teamNode.SetExpanded(true)
+				setNavFold(teamNode, true)
 				return
 			}
 			a.populateTeamNodeChildren(teamNode, teamID, projects, states, cycles)
-			teamNode.SetExpanded(true)
+			setNavFold(teamNode, true)
 		})
 	}()
 }
@@ -242,15 +243,7 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, projects []linearapi.Project, states []linearapi.WorkflowState, cycles []linearapi.Cycle) {
 	if len(cycles) > 0 {
 		sortCyclesForNavigation(cycles)
-		cyclesGroup := tview.NewTreeNode("Cycles").
-			SetColor(a.theme.SecondaryText).
-			SetSelectable(false).
-			SetReference(&NavigationNode{
-				ID:      fmt.Sprintf("%s-cycles", teamID),
-				Text:    "Cycles",
-				TeamID:  teamID,
-				IsCycle: true,
-			})
+		cyclesGroup := a.newTeamGroupNode(teamID, "Cycles")
 		for _, cycle := range cycles {
 			label := cycle.DisplayName()
 			switch {
@@ -279,15 +272,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		sort.Slice(states, func(i, j int) bool {
 			return states[i].Position < states[j].Position
 		})
-		statusGroup := tview.NewTreeNode("Status").
-			SetColor(a.theme.SecondaryText).
-			SetSelectable(false).
-			SetReference(&NavigationNode{
-				ID:       fmt.Sprintf("%s-status", teamID),
-				Text:     "Status",
-				TeamID:   teamID,
-				IsStatus: true,
-			})
+		statusGroup := a.newTeamGroupNode(teamID, "Status")
 		for _, state := range states {
 			stateNode := tview.NewTreeNode(state.Name).
 				SetColor(a.theme.SecondaryText).
@@ -303,18 +288,36 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		}
 		teamNode.AddChild(statusGroup)
 	}
-	for _, proj := range projects {
-		projNode := tview.NewTreeNode(proj.Name).
-			SetColor(a.theme.SecondaryText).
-			SetReference(&NavigationNode{
-				ID:        proj.ID,
-				Text:      proj.Name,
-				IsProject: true,
-				TeamID:    teamID,
-			})
-		teamNode.AddChild(projNode)
+	if len(projects) > 0 {
+		projectsGroup := a.newTeamGroupNode(teamID, "Projects")
+		for _, proj := range projects {
+			projectsGroup.AddChild(tview.NewTreeNode(proj.Name).
+				SetColor(a.theme.SecondaryText).
+				SetReference(&NavigationNode{
+					ID:        proj.ID,
+					Text:      proj.Name,
+					IsProject: true,
+					TeamID:    teamID,
+				}))
+		}
+		teamNode.AddChild(projectsGroup)
 	}
 	a.applyNavSelectionStyle(teamNode)
+}
+
+// newTeamGroupNode is one of a team's three headings. They open folded: a team
+// otherwise expands onto every cycle and every status at once, which is more
+// rows than the pane has. Selecting one toggles it and scopes nothing.
+func (a *App) newTeamGroupNode(teamID, name string) *tview.TreeNode {
+	return tview.NewTreeNode(navFoldLabel(name, false)).
+		SetColor(a.theme.SecondaryText).
+		SetExpanded(false).
+		SetReference(&NavigationNode{
+			ID:      fmt.Sprintf("%s-%s", teamID, strings.ToLower(name)),
+			Text:    name,
+			TeamID:  teamID,
+			IsGroup: true,
+		})
 }
 
 func sortCyclesForNavigation(cycles []linearapi.Cycle) {

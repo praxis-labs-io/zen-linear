@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -142,6 +143,17 @@ func TestApplyDefaultNavigationSelectsProject(t *testing.T) {
 	}
 	if app.selectedNavigation == nil || !app.selectedNavigation.IsProject {
 		t.Fatalf("selectedNavigation = %+v, want project selection", app.selectedNavigation)
+	}
+
+	// Projects open folded, so the cursor would otherwise land on a row the
+	// pane never draws.
+	projectNode := app.navigationTree.GetCurrentNode()
+	group := app.findTeamTreeNode("team-2").GetChildren()[0]
+	if !group.IsExpanded() {
+		t.Fatalf("%q stayed folded over the project the cursor is on", group.GetText())
+	}
+	if !slices.Contains(group.GetChildren(), projectNode) {
+		t.Fatal("the opened heading is not the one holding the project")
 	}
 }
 

@@ -57,8 +57,12 @@ attachments, and the agent.
 
 ## The navigation pane
 
+    ⏎           open the row, or scope the issue list to it
     F           favorite or unfavorite the item under the cursor
     J/K         move a favorite down or up
+
+A row that opens and closes says so with `▸` or `▾`: a team, one of its three
+headings, and a favorites folder. `⏎` toggles it and scopes nothing.
 
 `J` and `K` step a favorite through the tree as it is drawn. Stepping onto
 an open folder moves the favorite into it, stepping off the end of a folder
