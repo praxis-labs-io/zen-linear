@@ -121,9 +121,10 @@ everything. Paste is the terminal's own.
 on the value the issue already holds; `j`/`k` move it, Enter saves that field on
 its own, Esc closes the list. Esc again leaves the mode.
 
-State, assignee, priority, project, milestone and cycle open a list. Labels
-opens the same list with a box on every row: space toggles one, Enter applies
-the set, Esc drops it.
+Team, state, assignee, priority, project, milestone and cycle open a list.
+Labels opens the same list with a box on every row: space toggles one, Enter
+applies the set, Esc drops it. The team list is the whole workspace, and
+picking one moves the issue, which renumbers it.
 
 Title, due date and estimate are typed in the row itself, where the value
 already is: Enter saves, Esc discards, and emptying the field clears the due

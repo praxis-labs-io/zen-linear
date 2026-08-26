@@ -297,6 +297,11 @@ func TestCurrentFetchParamsScopesNavigationSelection(t *testing.T) {
 			wantTeamID:    "team-1",
 			wantProjectID: "proj-1",
 		},
+		{
+			name:          "a favorited project filters by the project alone",
+			node:          &NavigationNode{ID: "proj-1", IsProject: true},
+			wantProjectID: "proj-1",
+		},
 	}
 
 	for _, tc := range tests {

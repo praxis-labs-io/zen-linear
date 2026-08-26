@@ -54,6 +54,7 @@ type IssueFormModal struct {
 
 	parentView     *tview.TextView
 	parentRowIdx   int
+	teamField      *FormPicker
 	titleField     *tview.InputField
 	descField      *tview.TextArea
 	statusField    *FormPicker
@@ -66,9 +67,12 @@ type IssueFormModal struct {
 	dueDateField   *tview.InputField
 	labelsField    *FormMultiSelect
 
-	teamID   string
 	parentID string
+	// formTitle is the border's base text, kept so a team change can retitle
+	// without re-deriving whether this is a sub-issue.
+	formTitle string
 
+	team      pickerOption
 	state     pickerOption
 	assignee  pickerOption
 	project   pickerOption
@@ -97,6 +101,8 @@ func NewIssueFormModal(app *App) *IssueFormModal {
 
 	f.parentView = f.fm.AddStatic("")
 	f.parentRowIdx = f.fm.RowCount() - 1
+	// First, because every field below it is loaded for whatever it holds.
+	f.teamField = f.fm.AddPicker("Team", []string{"Loading..."}, 0, nil)
 	f.titleField = f.fm.AddInput("Title", "")
 	f.descField = f.fm.AddTextArea("Description", "", 4)
 
@@ -126,6 +132,9 @@ func NewIssueFormModal(app *App) *IssueFormModal {
 	)
 	f.fm.SetOnSubmit(f.submit)
 	f.fm.SetOnCancel(f.Hide)
+	// The team governs the form, so it reads first; the title is what the user
+	// opened the form to type.
+	f.fm.SetInitialFocus(f.titleField)
 
 	return f
 }
@@ -133,15 +142,15 @@ func NewIssueFormModal(app *App) *IssueFormModal {
 // Show opens the form for one create.
 func (f *IssueFormModal) Show(options IssueFormOptions) {
 	f.openGen.Add(1)
-	f.teamID = options.TeamID
 	f.parentID = options.ParentID
 
 	f.saving = false
 	f.reset(options)
 
-	logger.Debug("tui.issue_form: showing form team_id=%s parent_id=%s", f.teamID, f.parentID)
+	logger.Debug("tui.issue_form: showing form team_id=%s parent_id=%s", f.team.id, f.parentID)
 	f.fm.Show("issue_form")
 
+	f.loadTeams()
 	f.loadStatuses()
 	f.loadAssignees()
 	f.loadProjects()
@@ -153,11 +162,14 @@ func (f *IssueFormModal) Show(options IssueFormOptions) {
 // reset empties every field and seeds the ids a create takes from whatever the
 // navigation tree had selected.
 func (f *IssueFormModal) reset(options IssueFormOptions) {
-	title := "New Issue"
+	// Before the title, which names the team the create is going to.
+	f.team = pickerOption{id: options.TeamID}
+
+	f.formTitle = "New Issue"
 	if options.Parent != nil {
-		title = "New Sub-Issue"
+		f.formTitle = "New Sub-Issue"
 	}
-	f.fm.SetTitle(f.createTitle(title))
+	f.fm.SetTitle(f.createTitle(f.formTitle))
 	f.fm.SetHint("Esc cancel · Tab next · Space toggle · ⏎ open dropdown · ⌃⏎ create")
 
 	f.fm.SetRowHidden(f.parentRowIdx, options.Parent == nil)
@@ -181,6 +193,7 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 
 	f.priorityField.SetCurrentOption(f.priority)
 	f.labelsField.SetPlaceholder("Loading...")
+	f.setPicker(f.teamField, teamSentinel, nil, f.team, f.assignTeam)
 	f.setPicker(f.statusField, statusSentinel, nil, f.state, f.assignState)
 	f.setPicker(f.assigneeField, "Unassigned", nil, f.assignee, f.assignAssignee)
 	f.setPicker(f.projectField, "No project", nil, f.project, f.assignProject)
@@ -188,15 +201,49 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 	f.setPicker(f.cycleField, "No cycle", nil, f.cycle, f.assignCycle)
 }
 
-// createTitle names the team the new issue will land in. A create takes its
-// team from the navigation selection and offers no way to change it, so the
-// border is the only place that says where the issue is going.
+// createTitle names the team the new issue will land in, so a form scrolled
+// down to its buttons still says where the issue is going.
 func (f *IssueFormModal) createTitle(base string) string {
-	team := findTeamByID(f.app.navTeams, f.teamID)
+	team := findTeamByID(f.app.navTeams, f.team.id)
 	if team == nil {
 		return base
 	}
 	return base + " · " + team.Name
+}
+
+// teamSentinel is the row a create offers before a team is chosen. A scope
+// with no team of its own opens here: a favorited project spans teams, and
+// Linear takes the team as the one field a create cannot do without.
+const teamSentinel = "Select a team"
+
+// assignTeam moves the whole form to another team. Every field below it is
+// loaded for one team and refused by Linear for any other, so the picks go
+// with the team that offered them.
+func (f *IssueFormModal) assignTeam(option pickerOption) {
+	if option.id == f.team.id {
+		return
+	}
+	f.team = option
+	f.fm.SetTitle(f.createTitle(f.formTitle))
+
+	f.state = pickerOption{}
+	f.assignee = pickerOption{}
+	f.project = pickerOption{}
+	f.milestone = pickerOption{}
+	f.cycle = pickerOption{}
+	f.setPicker(f.statusField, statusSentinel, nil, f.state, f.assignState)
+	f.setPicker(f.assigneeField, "Unassigned", nil, f.assignee, f.assignAssignee)
+	f.setPicker(f.projectField, "No project", nil, f.project, f.assignProject)
+	f.setPicker(f.cycleField, "No cycle", nil, f.cycle, f.assignCycle)
+	f.labelsField.SetPlaceholder("Loading...")
+	f.labelsField.SetItems(nil, nil)
+
+	f.loadStatuses()
+	f.loadAssignees()
+	f.loadProjects()
+	f.loadCycles()
+	f.loadLabels()
+	f.loadMilestones("")
 }
 
 func (f *IssueFormModal) assignState(option pickerOption)     { f.state = option }
@@ -360,12 +407,12 @@ func (f *IssueFormModal) fail(err error) {
 }
 
 func (f *IssueFormModal) submitCreate(values issueFormValues, estimate *float64) {
-	if f.teamID == "" {
+	if f.team.id == "" {
 		f.fail(fmt.Errorf("please select a team first"))
 		return
 	}
 	input := linearapi.CreateIssueInput{
-		TeamID:             f.teamID,
+		TeamID:             f.team.id,
 		Title:              values.title,
 		Description:        values.description,
 		ProjectID:          values.projectID,
@@ -387,7 +434,7 @@ func (f *IssueFormModal) submitCreate(values issueFormValues, estimate *float64)
 // warmFor returns the cached metadata only when it belongs to the team being
 // created in. The cache lags a team switch, and Linear rejects a foreign state.
 func warmFor[T any](f *IssueFormModal, cached []T) []T {
-	if f.app.metadataTeamID != f.teamID {
+	if f.app.metadataTeamID != f.team.id {
 		return nil
 	}
 	return cached
@@ -420,6 +467,11 @@ func loadIssueFormOptions[T any](
 			if generation != f.openGen.Load() {
 				return
 			}
+			// Nor one from the team the form has since left: every list here
+			// is team-scoped, and Linear refuses an id from another team.
+			if scopeID != f.team.id {
+				return
+			}
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.issue_form: option fetch failed scope_id=%s", scopeID)
 				onFailure()
@@ -430,11 +482,44 @@ func loadIssueFormOptions[T any](
 	}()
 }
 
+// loadTeams fills the team picker from the workspace's teams. It is the one
+// option list a create does not scope to a team, so it never reloads on a
+// team change.
+func (f *IssueFormModal) loadTeams() {
+	generation := f.openGen.Load()
+	f.app.teamOptions(func(items []PickerItem) {
+		if generation != f.openGen.Load() {
+			return
+		}
+		options := make([]pickerOption, 0, len(items))
+		for _, item := range items {
+			options = append(options, pickerOption{id: item.ID, label: item.Label})
+			if item.ID == f.team.id {
+				f.team.label = item.Label
+			}
+		}
+		// The sentinel stood for a team nobody had chosen. Once one is on the
+		// row, leaving it would be a second row meaning no team.
+		sentinel := teamSentinel
+		if f.team.id != "" {
+			sentinel = ""
+		}
+		f.setPicker(f.teamField, sentinel, options, f.team, f.assignTeam)
+	}, func(err error) {
+		if generation != f.openGen.Load() {
+			return
+		}
+		logger.ErrorWithErr(err, "tui.issue_form: team fetch failed")
+		f.setPicker(f.teamField, teamSentinel, nil, f.team, f.assignTeam)
+		f.fm.SetStatus("Could not load teams", true)
+	})
+}
+
 func (f *IssueFormModal) loadStatuses() {
 	fetch := func(teamID string) ([]linearapi.WorkflowState, error) {
 		return f.app.fetchWorkflowStatesFunc(context.Background(), teamID)
 	}
-	loadIssueFormOptions(f, warmFor(f, f.app.workflowStates), f.teamID, fetch, func(states []linearapi.WorkflowState) {
+	loadIssueFormOptions(f, warmFor(f, f.app.workflowStates), f.team.id, fetch, func(states []linearapi.WorkflowState) {
 		options := make([]pickerOption, 0, len(states))
 		for _, state := range states {
 			options = append(options, pickerOption{id: state.ID, label: state.Name})
@@ -458,7 +543,7 @@ func (f *IssueFormModal) loadStatuses() {
 }
 
 func (f *IssueFormModal) loadAssignees() {
-	loadIssueFormOptions(f, warmFor(f, f.app.GetTeamUsers()), f.teamID, f.app.FetchTeamUsers, func(users []linearapi.User) {
+	loadIssueFormOptions(f, warmFor(f, f.app.GetTeamUsers()), f.team.id, f.app.FetchTeamUsers, func(users []linearapi.User) {
 		options := make([]pickerOption, 0, len(users))
 		for _, user := range users {
 			label := user.Name
@@ -482,7 +567,7 @@ func (f *IssueFormModal) loadProjects() {
 	fetch := func(teamID string) ([]linearapi.Project, error) {
 		return f.app.fetchProjectsFunc(context.Background(), teamID)
 	}
-	loadIssueFormOptions(f, warmFor(f, f.app.teamProjects), f.teamID, fetch, func(projects []linearapi.Project) {
+	loadIssueFormOptions(f, warmFor(f, f.app.teamProjects), f.team.id, fetch, func(projects []linearapi.Project) {
 		options := make([]pickerOption, 0, len(projects))
 		for _, project := range projects {
 			options = append(options, pickerOption{id: project.ID, label: project.Name})
@@ -494,7 +579,7 @@ func (f *IssueFormModal) loadProjects() {
 }
 
 func (f *IssueFormModal) loadCycles() {
-	loadIssueFormOptions(f, warmFor(f, f.app.GetTeamCycles()), f.teamID, f.app.FetchTeamCycles, func(cycles []linearapi.Cycle) {
+	loadIssueFormOptions(f, warmFor(f, f.app.GetTeamCycles()), f.team.id, f.app.FetchTeamCycles, func(cycles []linearapi.Cycle) {
 		options := make([]pickerOption, 0, len(cycles))
 		for _, cycle := range cycles {
 			label := cycle.DisplayName()
@@ -521,7 +606,7 @@ func (f *IssueFormModal) loadLabels() {
 	fetch := func(teamID string) ([]linearapi.IssueLabel, error) {
 		return f.app.fetchIssueLabelsFunc(context.Background(), teamID)
 	}
-	loadIssueFormOptions(f, warmFor(f, f.app.teamLabels), f.teamID, fetch, func(labels []linearapi.IssueLabel) {
+	loadIssueFormOptions(f, warmFor(f, f.app.teamLabels), f.team.id, fetch, func(labels []linearapi.IssueLabel) {
 		items := make([]MultiSelectItem, 0, len(labels))
 		for _, label := range labels {
 			items = append(items, MultiSelectItem{ID: label.ID, Label: label.Name})

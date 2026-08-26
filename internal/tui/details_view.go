@@ -543,6 +543,15 @@ func (a *App) updateDetailsView() {
 	headerRows = append(headerRows, a.detailsGridRow(issueFieldLabels, "Labels",
 		fmt.Sprintf("%s%s[-]", valColor, labelsText)))
 
+	// Named rather than left to the identifier's prefix: a favorited project
+	// spans teams, so the row the issue is in is no longer the tree's.
+	team := a.teamName(issue.TeamID)
+	if team == "" {
+		team, _, _ = strings.Cut(issue.Identifier, "-")
+	}
+	headerRows = append(headerRows, a.detailsGridRow(issueFieldTeam, "Team",
+		fmt.Sprintf("%s%s[-]", valColor, team)))
+
 	project := "No project"
 	if issue.ProjectName != "" {
 		project = issue.ProjectName

@@ -43,6 +43,16 @@ func newReviewGraphQLServer(t *testing.T, onQuery func(string)) *httptest.Server
 					"email":       "test@example.com",
 				},
 			}
+		case strings.Contains(query, "favorites"):
+			data = map[string]any{
+				"favorites": map[string]any{
+					"nodes": []any{},
+					"pageInfo": map[string]any{
+						"hasNextPage": false,
+						"endCursor":   "",
+					},
+				},
+			}
 		case strings.Contains(query, "teams"):
 			data = map[string]any{
 				"teams": map[string]any{

@@ -39,6 +39,9 @@ folder is stepped over. A folder itself moves whole, over its neighbour
 rather than into it, since Linear has no folder inside a folder. Each of
 those writes to Linear.
 
+A favorited project lists every team's issues. The favorite is the project, not
+one team's slice of it, so a project shared across teams shows the whole of it.
+
 ### Teams
 
 A team expands into its cycles, statuses and projects. Selecting any of them
@@ -106,25 +109,32 @@ stream by time, so the conversation reads in order.
 opens that field's options in a list under it, on the value the issue already
 holds.
 
-Six fields open a list: state, assignee, priority, project, milestone, cycle.
-Labels opens the same list as a multi-select. Title, due date and estimate are
-typed in the row itself, where the value already is. The description is typed
-in the rows it reads in, with the markdown going raw as the cue.
+Seven fields open a list: team, state, assignee, priority, project, milestone,
+cycle. Labels opens the same list as a multi-select. Title, due date and
+estimate are typed in the row itself, where the value already is. The
+description is typed in the rows it reads in, with the markdown going raw as
+the cue.
 
 Each field saves on its own, so leaving the pane loses nothing.
 
 Options load for the team that owns the issue. Linear refuses a state or a label from another team, so a
 search result or a cross-team favorite offering the tree's options would be a
-write that fails.
+write that fails. Team is the exception, listing the whole workspace: moving
+the issue is what that row is for, and it renumbers the issue.
 
 The full keymap is in [keys.md](keys.md).
 
 ## Creating issues
 
-`n` opens the create form. It opens on two resolved defaults:
-the status is the team's own default state, and the assignee is you,
-read out of that team's member list. A team whose member list does not name you
-opens Unassigned, because Linear refuses an assignee who is not on the team.
+`n` opens the create form. Team is its first field, seeded from wherever you
+are in the tree and changeable: every field under it belongs to one team, so
+changing it reloads them and drops the picks that no longer apply. A scope with
+no team of its own, a favorited project, opens on "Select a team".
+
+The rest opens on two resolved defaults: the status is the team's own default
+state, and the assignee is you, read out of that team's member list. A team
+whose member list does not name you opens Unassigned, because Linear refuses an
+assignee who is not on the team.
 
 ## Workspaces
 

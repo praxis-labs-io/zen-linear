@@ -25,10 +25,11 @@ func favoriteLeafNode(favorite linearapi.Favorite) *NavigationNode {
 		if favorite.ProjectID == "" {
 			return nil
 		}
+		// No team: a favorited project is workspace-level, and narrowing it to
+		// one of a multi-team project's teams asks for issues that are not there.
 		return &NavigationNode{
 			ID:        favorite.ProjectID,
 			Text:      favorite.ProjectName,
-			TeamID:    favorite.ProjectTeamID,
 			IsProject: true,
 		}
 	case "cycle":

@@ -365,6 +365,7 @@ func TestTheHeaderReportsWhereItsFieldsLanded(t *testing.T) {
 		{issueFieldAssignee, "Assignee:", detailsLabelGutter},
 		{issueFieldPriority, "Priority:", detailsLabelGutter},
 		{issueFieldLabels, "Labels:", detailsLabelGutter},
+		{issueFieldTeam, "Team:", detailsLabelGutter},
 		{issueFieldProject, "Project:", detailsLabelGutter},
 		{issueFieldMilestone, "Milestone:", detailsLabelGutter},
 		{issueFieldCycle, "Cycle:", detailsLabelGutter},

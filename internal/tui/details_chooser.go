@@ -33,7 +33,7 @@ var chooserClearLabels = map[issueField]string{
 // own commands.
 func fieldHasChooser(field issueField) bool {
 	switch field {
-	case issueFieldState, issueFieldAssignee, issueFieldPriority,
+	case issueFieldState, issueFieldAssignee, issueFieldPriority, issueFieldTeam,
 		issueFieldProject, issueFieldMilestone, issueFieldCycle, issueFieldLabels:
 		return true
 	}
@@ -199,8 +199,9 @@ func chooserUnchanged(edit detailsEditState, now linearapi.Issue, picked []strin
 // while they still do. A refresh that moved the issue makes every id refusable.
 func chooserScopeMoved(field issueField, opened, now linearapi.Issue) string {
 	switch field {
-	case issueFieldPriority:
-		// A local list, scoped to nothing.
+	case issueFieldPriority, issueFieldTeam:
+		// Scoped to nothing: priority is a local list, and the workspace's teams
+		// are every team a move can name wherever the issue has got to.
 		return ""
 	case issueFieldMilestone:
 		if now.ProjectID != opened.ProjectID {
@@ -263,6 +264,8 @@ func chooserSave(edit detailsEditState, issue linearapi.Issue, picked []string) 
 			return issueFieldCycleClear(issue), true
 		}
 		return issueFieldCycleSave(issue, item.ID, item.name()), true
+	case issueFieldTeam:
+		return issueFieldTeamSave(issue, item.ID, item.name()), true
 	}
 	return issueFieldSave{}, false
 }
@@ -287,6 +290,8 @@ func currentFieldOptionID(field issueField, issue linearapi.Issue) string {
 		if issue.Cycle != nil {
 			return issue.Cycle.ID
 		}
+	case issueFieldTeam:
+		return issue.TeamID
 	}
 	return ""
 }

@@ -190,6 +190,8 @@ func (a *App) issueFieldOptions(field issueField, scope optionScope, onLoaded fu
 		})
 	case issueFieldMilestone:
 		a.projectMilestoneOptions(scope.projectID, onLoaded, onFail)
+	case issueFieldTeam:
+		a.teamOptions(onLoaded, onFail)
 	case issueFieldPriority:
 		items := make([]PickerItem, 0, len(priorityLabels))
 		for value, label := range priorityLabels {
@@ -289,13 +291,13 @@ func (a *App) ShowFieldPicker(field issueField, scope optionScope, contextLine s
 	})
 }
 
-// ShowTeamPicker shows a picker for the workspace's teams. The navigation tree
-// is built from that same list, so this only fetches in the window before the
-// tree has painted. contextLine names the issue being moved.
-func (a *App) ShowTeamPicker(contextLine string, onSelect func(item PickerItem)) {
-	logger.Debug("tui.app: showing team picker")
+// teamOptions loads the workspace's teams. They are scoped to nothing: a team
+// move is the one write whose options do not belong to the issue's own team.
+// The navigation tree is built from that same list, so this only fetches in the
+// window before the tree has painted.
+func (a *App) teamOptions(onLoaded func(items []PickerItem), onFail func(error)) {
 	if len(a.navTeams) > 0 {
-		a.showTeamPickerWithTeams(a.navTeams, contextLine, onSelect)
+		onLoaded(teamPickerItems(a.navTeams))
 		return
 	}
 	// Snapshotted on the UI thread: applySettings reassigns linearDeps whole,
@@ -306,29 +308,42 @@ func (a *App) ShowTeamPicker(contextLine string, onSelect func(item PickerItem))
 		a.QueueUpdateDraw(func() {
 			if err != nil {
 				logger.ErrorWithErr(err, "tui.app: failed to load teams for picker")
-				a.updateStatusBarWithError(err)
+				if onFail != nil {
+					onFail(err)
+				}
 				return
 			}
-			a.showTeamPickerWithTeams(teams, contextLine, onSelect)
+			onLoaded(teamPickerItems(teams))
 		})
 	}()
 }
 
-func (a *App) showTeamPickerWithTeams(teams []linearapi.Team, contextLine string, onSelect func(item PickerItem)) {
-	if len(teams) == 0 {
-		logger.Warning("tui.app: no teams available for picker")
-		a.updateStatusBarWithError(fmt.Errorf("no teams available"))
-		return
-	}
+// teamPickerItems names a team by its key as well, which is how a workspace
+// with two teams of similar names is read.
+func teamPickerItems(teams []linearapi.Team) []PickerItem {
 	items := make([]PickerItem, 0, len(teams))
 	for _, team := range teams {
 		items = append(items, PickerItem{
 			ID:    team.ID,
 			Label: fmt.Sprintf("%s (%s)", team.Name, team.Key),
+			Name:  team.Name,
 		})
 	}
+	return items
+}
 
-	a.presentPicker("Select Team", contextLine, items, onSelect)
+// ShowTeamPicker shows a picker for the workspace's teams. contextLine names
+// the issue being moved.
+func (a *App) ShowTeamPicker(contextLine string, onSelect func(item PickerItem)) {
+	logger.Debug("tui.app: showing team picker")
+	a.teamOptions(func(items []PickerItem) {
+		if len(items) == 0 {
+			logger.Warning("tui.app: no teams available for picker")
+			a.updateStatusBarWithError(fmt.Errorf("no teams available"))
+			return
+		}
+		a.presentPicker("Select Team", contextLine, items, onSelect)
+	}, a.updateStatusBarWithError)
 }
 
 // ShowParentIssuePicker shows a picker for selecting a parent issue.
