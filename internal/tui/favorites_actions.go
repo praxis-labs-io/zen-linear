@@ -487,29 +487,16 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 	}
 	restoreFavoriteExpansion(previous, group)
 
-	children := root.GetChildren()
-	rebuilt := make([]*tview.TreeNode, 0, len(children)+1)
-	if previous != nil {
-		for _, child := range children {
-			if child == previous {
-				if group != nil {
-					rebuilt = append(rebuilt, group)
-				}
-				continue
-			}
-			rebuilt = append(rebuilt, child)
+	// The rows the reassembly drops: the old section, and the blank rows that
+	// are built fresh with it. Nothing else clears their label cache entries.
+	for _, child := range root.GetChildren() {
+		if child != a.allIssuesNode && child != a.teamsGroup {
+			a.forgetNavNodeLabels(child)
 		}
-		a.forgetNavNodeLabels(previous)
-	} else {
-		// No section yet: it belongs directly under "All Issues".
-		at := min(1, len(children))
-		rebuilt = append(rebuilt, children[:at]...)
-		rebuilt = append(rebuilt, group)
-		rebuilt = append(rebuilt, children[at:]...)
 	}
 
 	a.favoritesGroup = group
-	root.SetChildren(rebuilt)
+	root.SetChildren(a.navRootChildren())
 	a.applyNavSelectionStyle(root)
 	a.restoreNavigationCursor(root, group, preferFavoriteID)
 	// The disk copy is what the next launch paints, so a toggle or a reorder

@@ -26,8 +26,10 @@ work.
 
 ## Navigation
 
-The tree is the Linear sidebar. **Favorites** first, in the order you keep them
-there, then your teams.
+The tree is the Linear sidebar, in three sections with a blank row between
+them: All Issues, then **Favorites** in the order you keep them there, then
+**Teams**. The two headings are labels rather than rows, so the cursor steps
+over them, and a section with nothing in it is left out.
 
 ### Favorites
 

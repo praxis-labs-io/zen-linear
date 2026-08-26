@@ -67,7 +67,9 @@ type App struct {
 	navLoadingNode        *tview.TreeNode // "Loading teams" node, until a tree replaces it
 	navNodeLabels         map[*tview.TreeNode]navNodeLabel
 	favorites             []linearapi.Favorite
+	allIssuesNode         *tview.TreeNode
 	favoritesGroup        *tview.TreeNode
+	teamsGroup            *tview.TreeNode
 	listIssuesTable       *tview.Table
 	searchResultsTable    *tview.Table
 	issuesPlaceholder     *tview.Flex     // Stands in for a table with no rows

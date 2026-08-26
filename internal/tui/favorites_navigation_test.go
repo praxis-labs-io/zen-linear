@@ -178,24 +178,20 @@ func TestRebuildNavigationTreeOmitsEmptyFavorites(t *testing.T) {
 	teams := []linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}
 
 	app.rebuildNavigationTree(teams, nil)
-	if got := len(app.navigationTree.GetRoot().GetChildren()); got != 2 {
-		t.Fatalf("root children without favorites = %d, want 2 (All Issues + team)", got)
+	if app.favoritesGroup != nil {
+		t.Fatal("a Favorites section rendered with nothing favorited")
 	}
 
 	app.rebuildNavigationTree(teams, []linearapi.Favorite{{Type: "customView", ID: "fav-1"}})
-	if got := len(app.navigationTree.GetRoot().GetChildren()); got != 2 {
-		t.Fatalf("root children with only unsupported favorites = %d, want 2", got)
+	if app.favoritesGroup != nil {
+		t.Fatal("a Favorites section rendered for a favorite it cannot display")
 	}
 
 	favorites := []linearapi.Favorite{{Type: "project", ProjectID: "project-1", ProjectName: "Website"}}
 	app.rebuildNavigationTree(teams, favorites)
-	children := app.navigationTree.GetRoot().GetChildren()
-	if len(children) != 3 {
-		t.Fatalf("root children with favorites = %d, want 3 (All Issues + Favorites + team)", len(children))
-	}
-	group := children[1]
-	if group.GetText() != "Favorites" {
-		t.Fatalf("second root child = %q, want Favorites group", group.GetText())
+	group := app.favoritesGroup
+	if group == nil {
+		t.Fatal("no Favorites section for a favorited project")
 	}
 	if got := len(group.GetChildren()); got != 1 {
 		t.Fatalf("favorites group children = %d, want 1", got)

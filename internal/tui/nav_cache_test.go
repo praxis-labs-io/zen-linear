@@ -9,7 +9,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/cache"
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
-	"github.com/rivo/tview"
 )
 
 // newNavCacheTestApp builds an App whose navigation fetch is held open, so a
@@ -79,31 +78,16 @@ func waitForNavSettled(t *testing.T, done <-chan struct{}) {
 
 // treeTeamNames lists the team nodes on screen, in order.
 func treeTeamNames(app *App) []string {
-	root := app.navigationTree.GetRoot()
-	if root == nil {
+	if app.teamsGroup == nil {
 		return nil
 	}
 	var names []string
-	for _, child := range root.GetChildren() {
+	for _, child := range app.teamsGroup.GetChildren() {
 		if nav, ok := child.GetReference().(*NavigationNode); ok && nav.IsTeam {
 			names = append(names, nav.Text)
 		}
 	}
 	return names
-}
-
-// findTreeTeamNode returns the tree node for a team id.
-func findTreeTeamNode(app *App, teamID string) *tview.TreeNode {
-	root := app.navigationTree.GetRoot()
-	if root == nil {
-		return nil
-	}
-	for _, child := range root.GetChildren() {
-		if nav, ok := child.GetReference().(*NavigationNode); ok && nav.IsTeam && nav.TeamID == teamID {
-			return child
-		}
-	}
-	return nil
 }
 
 // TestLoadInitialDataPaintsCachedTreeBeforeTheFetch is the point of the cache:
@@ -140,7 +124,7 @@ func TestLoadInitialDataLeavesTheCursorOnAnUnchangedRefetch(t *testing.T) {
 	waitForRefreshCompletion(t, refreshDone)
 
 	// The user moves to a team while the fetch is still out.
-	teamNode := findTreeTeamNode(app, "team-2")
+	teamNode := app.findTeamTreeNode("team-2")
 	if teamNode == nil {
 		t.Fatal("cached tree has no node for team-2")
 	}
@@ -317,7 +301,7 @@ func TestRebuildKeepsTheUserPutWhenTheirListIsGone(t *testing.T) {
 
 	app.loadInitialData()
 	waitForRefreshCompletion(t, refreshDone)
-	if node := findTreeTeamNode(app, "team-9"); node != nil {
+	if node := app.findTeamTreeNode("team-9"); node != nil {
 		app.navigationTree.SetCurrentNode(node)
 		app.onNavigationSelected(node.GetReference().(*NavigationNode), "")
 		waitForRefreshCompletion(t, refreshDone)

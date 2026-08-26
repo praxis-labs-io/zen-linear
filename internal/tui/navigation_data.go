@@ -105,7 +105,9 @@ func (a *App) resetNavigationTree() {
 	}
 	a.navNodeLabels = make(map[*tview.TreeNode]navNodeLabel)
 	a.favorites = nil
+	a.allIssuesNode = nil
 	a.favoritesGroup = nil
+	a.teamsGroup = nil
 	a.navTeams = nil
 	root := a.buildWaitingNavigationRoot()
 	a.navigationTree.SetRoot(root)
@@ -128,13 +130,33 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearap
 		SetColor(a.theme.Foreground).
 		SetReference(&NavigationNode{ID: "all", Text: "All Issues"}).
 		SetExpanded(true)
-	root.AddChild(allIssues)
+	a.allIssuesNode = allIssues
+	a.favoritesGroup = a.buildFavoritesGroup(favorites)
+	a.teamsGroup = a.buildTeamsGroup(teams)
+	root.SetChildren(a.navRootChildren())
 
-	a.appendFavoritesSection(root, favorites)
+	a.applyNavSelectionStyle(root)
+	a.navigationTree.SetRoot(root)
+	a.navigationTree.SetCurrentNode(allIssues)
+	a.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
+}
 
-	// Add teams
+// buildTeamsGroup renders the Teams heading and the teams under it, or nil
+// when the workspace has none.
+func (a *App) buildTeamsGroup(teams []linearapi.Team) *tview.TreeNode {
+	if len(teams) == 0 {
+		return nil
+	}
+
+	group := tview.NewTreeNode("Teams").
+		SetColor(a.theme.Accent).
+		SetSelectable(false).
+		SetExpanded(true)
+
 	for _, team := range teams {
-		teamNode := tview.NewTreeNode(team.Name).
+		// Selection is the tree's own SetSelectedFunc. A callback here would
+		// fire alongside it.
+		group.AddChild(tview.NewTreeNode(team.Name).
 			SetColor(a.theme.Foreground).
 			SetReference(&NavigationNode{
 				ID:     team.ID,
@@ -142,18 +164,33 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearap
 				IsTeam: true,
 				TeamID: team.ID,
 			}).
-			SetExpanded(false)
-
-		// Note: Team selection is handled by the tree's SetSelectedFunc in buildNavigationTree()
-		// Do NOT set SetSelectedFunc here as it causes duplicate callbacks
-
-		root.AddChild(teamNode)
+			SetExpanded(false))
 	}
+	return group
+}
 
-	a.applyNavSelectionStyle(root)
-	a.navigationTree.SetRoot(root)
-	a.navigationTree.SetCurrentNode(allIssues)
-	a.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
+// navRootChildren orders the tree's rows: All Issues, then each section that has
+// anything in it, each under a blank row that sets it apart. It is the one place
+// that order is written down, because a favorites change rebuilds the root
+// rather than splicing into it and the two have to agree on where a section is.
+func (a *App) navRootChildren() []*tview.TreeNode {
+	children := make([]*tview.TreeNode, 0, 5)
+	for _, section := range []*tview.TreeNode{a.allIssuesNode, a.favoritesGroup, a.teamsGroup} {
+		if section == nil {
+			continue
+		}
+		if len(children) > 0 {
+			children = append(children, navSectionSpacer())
+		}
+		children = append(children, section)
+	}
+	return children
+}
+
+// navSectionSpacer is the blank row above a section. It carries no reference and
+// takes no cursor, so every walk that reads one steps over it.
+func navSectionSpacer() *tview.TreeNode {
+	return tview.NewTreeNode("").SetSelectable(false)
 }
 
 // onTeamExpanded loads projects for a team when it's expanded.

@@ -121,7 +121,7 @@ func TestPadNavigationTree_PicksUpALabelChangedElsewhere(t *testing.T) {
 	app.rebuildNavigationTree(navTestTeams(3), nil)
 	app.padNavigationTree(30)
 
-	teamNode := app.navigationTree.GetRoot().GetChildren()[1]
+	teamNode := app.teamsGroup.GetChildren()[0]
 	teamNode.SetText("Renamed elsewhere")
 
 	app.padNavigationTree(30)
@@ -130,8 +130,8 @@ func TestPadNavigationTree_PicksUpALabelChangedElsewhere(t *testing.T) {
 	if !strings.HasPrefix(got, "Renamed elsewhere") {
 		t.Fatalf("node text = %q, want the relabel to survive the redraw", got)
 	}
-	if width := runeCellWidth(got); width != 30 {
-		t.Fatalf("relabelled node fitted to width %d, want 30 for its level", width)
+	if width := runeCellWidth(got); width != 28 {
+		t.Fatalf("relabelled node fitted to width %d, want 28 for its level", width)
 	}
 }
 
@@ -162,7 +162,7 @@ func TestPadNavigationTree_FitsNodesAddedAfterTheFirstDraw(t *testing.T) {
 	app.rebuildNavigationTree(navTestTeams(1), nil)
 	app.padNavigationTree(30)
 
-	teamNode := app.navigationTree.GetRoot().GetChildren()[1]
+	teamNode := app.teamsGroup.GetChildren()[0]
 	added := tview.NewTreeNode("A child added long after the first draw completed")
 	teamNode.AddChild(added)
 
@@ -171,8 +171,8 @@ func TestPadNavigationTree_FitsNodesAddedAfterTheFirstDraw(t *testing.T) {
 	if got := added.GetText(); got == "A child added long after the first draw completed" {
 		t.Fatal("a node added after the first draw was never fitted")
 	}
-	if width := runeCellWidth(added.GetText()); width != 28 {
-		t.Fatalf("added node fitted to width %d, want 28 for its level", width)
+	if width := runeCellWidth(added.GetText()); width != 26 {
+		t.Fatalf("added node fitted to width %d, want 26 for its level", width)
 	}
 }
 
@@ -181,7 +181,7 @@ func TestForgetNavNodeLabels_DropsTheSubtree(t *testing.T) {
 	app.rebuildNavigationTree(navTestTeams(2), nil)
 	app.padNavigationTree(30)
 
-	teamNode := app.navigationTree.GetRoot().GetChildren()[1]
+	teamNode := app.teamsGroup.GetChildren()[0]
 	child := tview.NewTreeNode("child")
 	teamNode.AddChild(child)
 	app.padNavigationTree(30)

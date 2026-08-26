@@ -302,7 +302,7 @@ func TestToggleFavoriteAddsProjectAndKeepsTeamExpanded(t *testing.T) {
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
 
 	root := app.navigationTree.GetRoot()
-	teamNode := root.GetChildren()[1]
+	teamNode := app.findTeamTreeNode("team-1")
 	app.populateTeamNodeChildren(teamNode, "team-1", []linearapi.Project{{ID: "project-1", Name: "Website", TeamID: "team-1"}}, nil, nil)
 	teamNode.SetExpanded(true)
 	projectNode := teamNode.GetChildren()[0]
@@ -320,8 +320,8 @@ func TestToggleFavoriteAddsProjectAndKeepsTeamExpanded(t *testing.T) {
 	if app.favoritesGroup == nil {
 		t.Fatal("favorites group was not rendered")
 	}
-	if got := root.GetChildren()[1]; got != app.favoritesGroup {
-		t.Errorf("favorites group is at index %d, want directly under All Issues", indexOfChild(root, app.favoritesGroup))
+	if got := root.GetChildren()[2]; got != app.favoritesGroup {
+		t.Errorf("favorites group is at index %d, want under All Issues and its blank row", indexOfChild(root, app.favoritesGroup))
 	}
 	if !teamNode.IsExpanded() {
 		t.Error("team collapsed after favoriting; the section refresh must not rebuild the whole tree")
@@ -379,8 +379,7 @@ func TestToggleFavoriteRejectsWorkflowStatus(t *testing.T) {
 	app := newFavoritesTestApp(t)
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
 
-	root := app.navigationTree.GetRoot()
-	teamNode := root.GetChildren()[1]
+	teamNode := app.findTeamTreeNode("team-1")
 	app.populateTeamNodeChildren(teamNode, "team-1", nil, []linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}}, nil)
 	statusNode := teamNode.GetChildren()[0].GetChildren()[0]
 	app.navigationTree.SetCurrentNode(statusNode)
@@ -450,8 +449,7 @@ func TestMoveFavoriteRejectsNonFavoriteNode(t *testing.T) {
 	app := newFavoritesTestApp(t)
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
 
-	root := app.navigationTree.GetRoot()
-	app.navigationTree.SetCurrentNode(root.GetChildren()[1])
+	app.navigationTree.SetCurrentNode(app.findTeamTreeNode("team-1"))
 
 	// The stub fails the test if it is called.
 	if app.moveFavorite(app.currentNavigationNode(), 1) {
@@ -468,7 +466,7 @@ func TestFavoritesMutationErrorLeavesStateAlone(t *testing.T) {
 	}
 
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
-	app.navigationTree.SetCurrentNode(app.navigationTree.GetRoot().GetChildren()[1])
+	app.navigationTree.SetCurrentNode(app.findTeamTreeNode("team-1"))
 
 	handleToggleFavorite(app)
 	waitForFavorites(t, settled)
@@ -739,7 +737,7 @@ func TestMoveFavoriteIgnoresNonFavorites(t *testing.T) {
 		return nil
 	}
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
-	app.navigationTree.SetCurrentNode(app.navigationTree.GetRoot().GetChildren()[1])
+	app.navigationTree.SetCurrentNode(app.findTeamTreeNode("team-1"))
 
 	if app.moveFavorite(app.currentNavigationNode(), 1) {
 		t.Error("moveFavorite landed on a team node")

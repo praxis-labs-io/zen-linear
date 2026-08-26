@@ -95,11 +95,10 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 
 // findTeamTreeNode returns the tree node for a team ID, or nil if absent.
 func (a *App) findTeamTreeNode(teamID string) *tview.TreeNode {
-	root := a.navigationTree.GetRoot()
-	if root == nil {
+	if a.teamsGroup == nil {
 		return nil
 	}
-	for _, child := range root.GetChildren() {
+	for _, child := range a.teamsGroup.GetChildren() {
 		if nav, ok := child.GetReference().(*NavigationNode); ok && nav.IsTeam && nav.TeamID == teamID {
 			return child
 		}
