@@ -69,10 +69,10 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 			return
 		}
 		// Leave children unpopulated on fetch errors so expanding the team retries.
-		if childrenLoaded && len(teamNode.GetChildren()) == 0 {
+		if childrenLoaded && !teamChildrenLoaded(teamNode) {
 			a.populateTeamNodeChildren(teamNode, team.ID, projects, states, cycles)
 		}
-		if len(teamNode.GetChildren()) > 0 {
+		if teamChildrenLoaded(teamNode) {
 			setNavFold(teamNode, true)
 		}
 

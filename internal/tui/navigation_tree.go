@@ -28,6 +28,10 @@ type NavigationNode struct {
 	StateType string
 	// IsFolder marks a favorites folder; selecting it toggles expansion.
 	IsFolder bool
+	// ChildrenLoaded says a fetch has built this team's rows. Counting the
+	// rows cannot say it: a team holds its own All Issues either way, and a
+	// load that came back with nothing would never be retried.
+	ChildrenLoaded bool
 	// IsGroup marks one of a team's Cycles, Status and Projects headings.
 	// Selecting it toggles expansion; it scopes nothing on its own.
 	IsGroup bool

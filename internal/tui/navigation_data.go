@@ -196,8 +196,7 @@ func navSectionSpacer() *tview.TreeNode {
 
 // onTeamExpanded loads projects for a team when it's expanded.
 func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
-	// If already has children (projects loaded), just toggle expand
-	if len(teamNode.GetChildren()) > 0 {
+	if teamChildrenLoaded(teamNode) {
 		setNavFold(teamNode, !teamNode.IsExpanded())
 		return
 	}
@@ -228,8 +227,8 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 		logger.Debug("tui.app: loaded navigation children team_id=%s projects=%d states=%d cycles=%d", teamID, len(projects), len(states), len(cycles))
 
 		a.app.QueueUpdateDraw(func() {
-			// Double-check children haven't been added by another goroutine
-			if len(teamNode.GetChildren()) > 0 {
+			// Double-check another goroutine has not built them already.
+			if teamChildrenLoaded(teamNode) {
 				setNavFold(teamNode, true)
 				return
 			}
@@ -241,6 +240,16 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 
 // populateTeamNodeChildren renders cycle, status, and project child nodes under a team node.
 func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, projects []linearapi.Project, states []linearapi.WorkflowState, cycles []linearapi.Cycle) {
+	logger.Debug("tui.app: building team rows team_id=%s projects=%d states=%d cycles=%d", teamID, len(projects), len(states), len(cycles))
+	// A retry rebuilds rather than appends, since the rows a failed load left
+	// behind are the reason it is being retried.
+	teamNode.SetChildren(nil)
+	if nav, ok := teamNode.GetReference().(*NavigationNode); ok {
+		// Every Linear team has workflow states. None is a load that answered
+		// without answering, and the next open has to go back for them.
+		nav.ChildrenLoaded = len(states) > 0
+	}
+
 	// The team's own row folds and nothing else, so this is what scopes the
 	// list to the whole team. It carries a team and none of the other flags,
 	// which is the shape currentFetchParams reads as exactly that.
@@ -314,6 +323,12 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		teamNode.AddChild(projectsGroup)
 	}
 	a.applyNavSelectionStyle(teamNode)
+}
+
+// teamChildrenLoaded reports whether a fetch has built a team's rows.
+func teamChildrenLoaded(teamNode *tview.TreeNode) bool {
+	nav, ok := teamNode.GetReference().(*NavigationNode)
+	return ok && nav.ChildrenLoaded
 }
 
 // newTeamGroupNode is one of a team's three headings. They open folded: a team

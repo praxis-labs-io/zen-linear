@@ -314,3 +314,30 @@ func TestATeamsOwnAllIssuesScopesToTheTeam(t *testing.T) {
 		t.Fatal("selecting a team's All Issues never fetched")
 	}
 }
+
+func TestATeamThatLoadedNothingGoesBackForIt(t *testing.T) {
+	app := newUXTestApp(t)
+	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}, nil)
+	teamNode := app.findTeamTreeNode("team-1")
+
+	// A load that answered without answering. Every Linear team has states,
+	// so this is a failure wearing the shape of an empty team.
+	app.populateTeamNodeChildren(teamNode, "team-1", nil, nil, nil)
+	if teamChildrenLoaded(teamNode) {
+		t.Fatal("a team with no states counted as loaded, so nothing will go back for it")
+	}
+
+	app.populateTeamNodeChildren(teamNode, "team-1",
+		[]linearapi.Project{{ID: "project-1", Name: "Website", TeamID: "team-1"}},
+		[]linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}},
+		nil,
+	)
+
+	if !teamChildrenLoaded(teamNode) {
+		t.Fatal("a real load did not count as loaded")
+	}
+	want := []string{"All Issues", "▸ Status", "▸ Projects"}
+	if got := teamGroupLabels(teamNode); !slices.Equal(got, want) {
+		t.Fatalf("team rows after the retry = %q, want %q", got, want)
+	}
+}

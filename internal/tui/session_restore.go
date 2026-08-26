@@ -139,10 +139,10 @@ func (a *App) restoreSessionTeamNode(state session.State, children teamChildren)
 		return
 	}
 	// Leave children unpopulated on fetch errors so expanding the team retries.
-	if children.loaded && len(teamNode.GetChildren()) == 0 {
+	if children.loaded && !teamChildrenLoaded(teamNode) {
 		a.populateTeamNodeChildren(teamNode, state.Nav.TeamID, children.projects, children.states, children.cycles)
 	}
-	if len(teamNode.GetChildren()) > 0 {
+	if teamChildrenLoaded(teamNode) {
 		setNavFold(teamNode, true)
 	}
 

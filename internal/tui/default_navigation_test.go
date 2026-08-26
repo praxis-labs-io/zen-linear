@@ -81,8 +81,10 @@ func newDefaultNavTestApp(t testing.TB, cfg config.Config) *App {
 			{ID: "proj-2", Name: "Mobile App", TeamID: teamID},
 		}, nil
 	}
+	// Every Linear team has states, and a load that brings back none is the
+	// one the tree treats as unloaded.
 	app.fetchWorkflowStatesFunc = func(context.Context, string) ([]linearapi.WorkflowState, error) {
-		return nil, nil
+		return []linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}}, nil
 	}
 	app.fetchCyclesFunc = func(context.Context, string) ([]linearapi.Cycle, error) {
 		return nil, nil
