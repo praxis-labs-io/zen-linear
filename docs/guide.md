@@ -46,10 +46,12 @@ one team's slice of it, so a project shared across teams shows the whole of it.
 
 ### Teams
 
-A team expands into three headings — Cycles, Status and Projects — each folded,
-since a team that opened onto all of them at once is more rows than the pane
-has. `⏎` opens one, and the `▸` and `▾` on a row say which way it goes. Selecting
-anything inside scopes the issue list to it.
+A team's own row only opens and closes, so folding one never costs a fetch. It
+opens onto its All Issues, which scopes the list to the whole team, and three
+headings — Cycles, Status and Projects — each folded, since a team that opened
+onto all of them at once is more rows than the pane has. `⏎` opens one, and the
+`▸` and `▾` on a row say which way it goes. Selecting anything inside scopes the
+issue list to it.
 
 ### Search
 

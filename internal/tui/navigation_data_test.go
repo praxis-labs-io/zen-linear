@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 
@@ -193,11 +194,11 @@ func TestATeamOpensOntoThreeFoldedHeadings(t *testing.T) {
 	app := newUXTestApp(t)
 	teamNode := openTestTeam(t, app)
 
-	want := []string{"▸ Cycles", "▸ Status", "▸ Projects"}
+	want := []string{"All Issues", "▸ Cycles", "▸ Status", "▸ Projects"}
 	if got := teamGroupLabels(teamNode); !slices.Equal(got, want) {
 		t.Fatalf("team children = %q, want %q", got, want)
 	}
-	for _, group := range teamNode.GetChildren() {
+	for _, group := range teamNode.GetChildren()[1:] {
 		if group.IsExpanded() {
 			t.Errorf("%q opened expanded, which is the wall of rows this replaced", group.GetText())
 		}
@@ -215,7 +216,7 @@ func TestOpeningAHeadingShowsWhatIsInside(t *testing.T) {
 	}
 	teamNode := openTestTeam(t, app)
 
-	cycles := teamNode.GetChildren()[0]
+	cycles := teamNode.GetChildren()[1]
 	app.navigationTree.SetCurrentNode(cycles)
 	pressEnterOnNavigation(app)
 
@@ -238,7 +239,7 @@ func TestOpeningAHeadingShowsWhatIsInside(t *testing.T) {
 func TestAHeadingCannotBeFavorited(t *testing.T) {
 	app := newFavoritesTestApp(t)
 	teamNode := openTestTeam(t, app)
-	app.navigationTree.SetCurrentNode(teamNode.GetChildren()[1])
+	app.navigationTree.SetCurrentNode(teamNode.GetChildren()[2])
 
 	// The stubs fail the test if any mutation fires. A heading stands for
 	// nothing Linear can hold a favorite on.
@@ -264,5 +265,52 @@ func TestUpAtTheTopOfTheTreeStaysOnTheTree(t *testing.T) {
 		if app.navSearchFocused {
 			t.Fatalf("%v walked into the query box", event.Key())
 		}
+	}
+}
+
+func TestFoldingATeamCostsNoFetch(t *testing.T) {
+	app := newUXTestApp(t)
+	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
+		t.Error("folding a team refetched the issue list")
+		return linearapi.IssuePage{}, nil
+	}
+	teamNode := openTestTeam(t, app)
+	app.navigationTree.SetCurrentNode(teamNode)
+
+	pressEnterOnNavigation(app)
+	if teamNode.IsExpanded() {
+		t.Fatal("Enter did not close the team")
+	}
+	pressEnterOnNavigation(app)
+	if !teamNode.IsExpanded() {
+		t.Fatal("Enter did not open the team again")
+	}
+}
+
+func TestATeamsOwnAllIssuesScopesToTheTeam(t *testing.T) {
+	app := newUXTestApp(t)
+	scoped := make(chan linearapi.FetchIssuesParams, 1)
+	app.fetchIssuesPage = func(_ context.Context, params linearapi.FetchIssuesParams, _ *string) (linearapi.IssuePage, error) {
+		select {
+		case scoped <- params:
+		default:
+		}
+		return linearapi.IssuePage{}, nil
+	}
+	teamNode := openTestTeam(t, app)
+
+	app.navigationTree.SetCurrentNode(teamNode.GetChildren()[0])
+	pressEnterOnNavigation(app)
+
+	select {
+	case params := <-scoped:
+		if params.TeamID != "team-1" {
+			t.Fatalf("fetch params = %+v, want the whole of team-1", params)
+		}
+		if params.ProjectID != "" || params.StateID != "" || params.CycleID != "" {
+			t.Fatalf("fetch params = %+v, want nothing narrowing the team", params)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("selecting a team's All Issues never fetched")
 	}
 }

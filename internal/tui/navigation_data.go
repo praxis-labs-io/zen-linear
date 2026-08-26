@@ -241,6 +241,17 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 
 // populateTeamNodeChildren renders cycle, status, and project child nodes under a team node.
 func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, projects []linearapi.Project, states []linearapi.WorkflowState, cycles []linearapi.Cycle) {
+	// The team's own row folds and nothing else, so this is what scopes the
+	// list to the whole team. It carries a team and none of the other flags,
+	// which is the shape currentFetchParams reads as exactly that.
+	teamNode.AddChild(tview.NewTreeNode("All Issues").
+		SetColor(a.theme.Foreground).
+		SetReference(&NavigationNode{
+			ID:     fmt.Sprintf("%s-all", teamID),
+			Text:   "All Issues",
+			TeamID: teamID,
+		}))
+
 	if len(cycles) > 0 {
 		sortCyclesForNavigation(cycles)
 		cyclesGroup := a.newTeamGroupNode(teamID, "Cycles")

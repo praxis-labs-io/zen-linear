@@ -381,7 +381,9 @@ func TestToggleFavoriteRejectsWorkflowStatus(t *testing.T) {
 
 	teamNode := app.findTeamTreeNode("team-1")
 	app.populateTeamNodeChildren(teamNode, "team-1", nil, []linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}}, nil)
-	statusNode := teamNode.GetChildren()[0].GetChildren()[0]
+	statusNode := findTeamDescendant(teamNode, func(nav *NavigationNode) bool {
+		return nav.IsStatus && nav.StateID == "state-1"
+	})
 	app.navigationTree.SetCurrentNode(statusNode)
 
 	// The stubs fail the test if any mutation fires. Linear has no favorite

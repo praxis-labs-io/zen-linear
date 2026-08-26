@@ -75,9 +75,12 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 					setNavFold(node, !node.IsExpanded())
 					return
 				}
-				// For team nodes, handle expand/collapse
+				// A team row only opens and closes. Its own All Issues row is
+				// what scopes the list to the whole team, so folding never
+				// costs a fetch.
 				if navNode.IsTeam {
 					a.onTeamExpanded(navNode.TeamID, node)
+					return
 				}
 				// Update selection and refresh issues. Focus stays in the
 				// navigation pane so the next pick is one keypress away.

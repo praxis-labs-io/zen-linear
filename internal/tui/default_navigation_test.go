@@ -10,6 +10,7 @@ import (
 
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/rivo/tview"
 )
 
 func TestFindTeamByKeyOrName(t *testing.T) {
@@ -148,12 +149,17 @@ func TestApplyDefaultNavigationSelectsProject(t *testing.T) {
 	// Projects open folded, so the cursor would otherwise land on a row the
 	// pane never draws.
 	projectNode := app.navigationTree.GetCurrentNode()
-	group := app.findTeamTreeNode("team-2").GetChildren()[0]
+	var group *tview.TreeNode
+	for _, child := range app.findTeamTreeNode("team-2").GetChildren() {
+		if slices.Contains(child.GetChildren(), projectNode) {
+			group = child
+		}
+	}
+	if group == nil {
+		t.Fatal("the project is not under any of the team's headings")
+	}
 	if !group.IsExpanded() {
 		t.Fatalf("%q stayed folded over the project the cursor is on", group.GetText())
-	}
-	if !slices.Contains(group.GetChildren(), projectNode) {
-		t.Fatal("the opened heading is not the one holding the project")
 	}
 }
 
