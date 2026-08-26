@@ -196,7 +196,10 @@ func navSectionSpacer() *tview.TreeNode {
 
 // onTeamExpanded loads projects for a team when it's expanded.
 func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
-	if teamChildrenLoaded(teamNode) {
+	// An open team closes on its own. Only a closed one whose rows were never
+	// built goes back for them, or a team that answered with nothing would
+	// refetch on the way shut and spring open again.
+	if teamChildrenLoaded(teamNode) || teamNode.IsExpanded() {
 		setNavFold(teamNode, !teamNode.IsExpanded())
 		return
 	}
@@ -243,6 +246,9 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 	logger.Debug("tui.app: building team rows team_id=%s projects=%d states=%d cycles=%d", teamID, len(projects), len(states), len(cycles))
 	// A retry rebuilds rather than appends, since the rows a failed load left
 	// behind are the reason it is being retried.
+	for _, child := range teamNode.GetChildren() {
+		a.forgetNavNodeLabels(child)
+	}
 	teamNode.SetChildren(nil)
 	if nav, ok := teamNode.GetReference().(*NavigationNode); ok {
 		// Every Linear team has workflow states. None is a load that answered

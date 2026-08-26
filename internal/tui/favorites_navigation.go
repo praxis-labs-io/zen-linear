@@ -201,14 +201,17 @@ func (a *App) addFavoriteNodes(parent *tview.TreeNode, nodes []*NavigationNode) 
 		if navNode.IsFolder {
 			color = a.theme.SecondaryText
 		}
+		// A favorited team holds none of its rows until it is opened, so it
+		// reads closed. A folder holds its own and reads open.
+		expanded := !navNode.IsTeam
 		label := navNode.Text
-		if navNode.IsFolder {
-			label = navFoldLabel(label, true)
+		if navIsFoldable(navNode) {
+			label = navFoldLabel(label, expanded)
 		}
 		child := tview.NewTreeNode(label).
 			SetColor(color).
 			SetReference(navNode).
-			SetExpanded(true)
+			SetExpanded(expanded)
 		if len(navNode.Children) > 0 {
 			a.addFavoriteNodes(child, navNode.Children)
 		}

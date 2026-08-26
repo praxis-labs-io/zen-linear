@@ -367,3 +367,24 @@ func TestApplySessionNavigationWithoutPendingState(t *testing.T) {
 		t.Fatal("applySessionNavigation() = true, want false")
 	}
 }
+
+// A restore that needs no team children must not build the team's rows out of
+// the empty slices it never fetched. That left the team holding its own All
+// Issues row and nothing else, with no open able to go back for the rest.
+func TestRestoringATeamLeavesItsRowsToBeLoaded(t *testing.T) {
+	app, _ := newSessionRestoreTestApp(t, session.State{
+		Nav: session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
+	})
+
+	if !restoreSession(t, app, nil) {
+		t.Fatal("applySessionNavigation() = false, want true")
+	}
+
+	teamNode := app.findTeamTreeNode("team-1")
+	if teamChildrenLoaded(teamNode) {
+		t.Fatal("a restore that fetched nothing claimed the team's rows were built")
+	}
+	if got := len(teamNode.GetChildren()); got != 0 {
+		t.Fatalf("team rows after the restore = %d, want none until it is opened", got)
+	}
+}

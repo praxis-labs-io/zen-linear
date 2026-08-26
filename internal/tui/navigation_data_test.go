@@ -341,3 +341,70 @@ func TestATeamThatLoadedNothingGoesBackForIt(t *testing.T) {
 		t.Fatalf("team rows after the retry = %q, want %q", got, want)
 	}
 }
+
+func TestAnOpenTeamClosesWithoutGoingBackForItsRows(t *testing.T) {
+	app := newUXTestApp(t)
+	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}, nil)
+	teamNode := app.findTeamTreeNode("team-1")
+
+	// The shape a load that answered with nothing leaves behind.
+	app.populateTeamNodeChildren(teamNode, "team-1", nil, nil, nil)
+	setNavFold(teamNode, true)
+
+	app.navigationTree.SetCurrentNode(teamNode)
+	pressEnterOnNavigation(app)
+
+	if teamNode.IsExpanded() {
+		t.Fatal("an open team sprang back open instead of closing")
+	}
+}
+
+func TestAFavoritedTeamStillScopesTheList(t *testing.T) {
+	app := newUXTestApp(t)
+	scoped := make(chan linearapi.FetchIssuesParams, 1)
+	app.fetchIssuesPage = func(_ context.Context, params linearapi.FetchIssuesParams, _ *string) (linearapi.IssuePage, error) {
+		select {
+		case scoped <- params:
+		default:
+		}
+		return linearapi.IssuePage{}, nil
+	}
+	app.rebuildNavigationTree(
+		[]linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}},
+		[]linearapi.Favorite{{ID: "fav-a", Type: "team", TeamID: "team-1", TeamName: "Engineering", SortOrder: 1}},
+	)
+
+	favorite := app.favoritesGroup.GetChildren()[0]
+	if got := favorite.GetText(); got != "▸ Engineering" {
+		t.Fatalf("favorited team reads %q, want it marked closed", got)
+	}
+
+	app.navigationTree.SetCurrentNode(favorite)
+	pressEnterOnNavigation(app)
+
+	select {
+	case params := <-scoped:
+		if params.TeamID != "team-1" {
+			t.Fatalf("fetch params = %+v, want the whole of team-1", params)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a favorited team no longer scopes the issue list")
+	}
+}
+
+func TestRebuildingATeamsRowsForgetsTheOnesItDropped(t *testing.T) {
+	app := newUXTestApp(t)
+	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}, nil)
+	teamNode := app.findTeamTreeNode("team-1")
+
+	app.populateTeamNodeChildren(teamNode, "team-1", nil, nil, nil)
+	app.padNavigationTree(30)
+	dropped := teamNode.GetChildren()[0]
+
+	app.populateTeamNodeChildren(teamNode, "team-1", nil,
+		[]linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}}, nil)
+
+	if _, held := app.navNodeLabels[dropped]; held {
+		t.Fatal("the label cache still holds a row the rebuild dropped")
+	}
+}

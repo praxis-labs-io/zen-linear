@@ -87,7 +87,10 @@ func (a *App) applySessionNavigation(ctx context.Context, state *session.State, 
 		return false
 	}
 
-	children := teamChildren{loaded: true}
+	// loaded says a fetch answered, so a restore that needs no children leaves
+	// it false. Claiming otherwise built the team's rows out of three empty
+	// slices, which is a team stubbed to its own All Issues row.
+	var children teamChildren
 	if navKindNeedsTeamChildren(nav.Kind) {
 		children = fetchTeamChildren(ctx, fetchers, nav.TeamID)
 		if !children.loaded || !children.contain(nav) {
