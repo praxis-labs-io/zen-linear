@@ -159,10 +159,16 @@ func runTUI() int {
 	}
 
 	logLevel := parseLogLevel(cfg.LogLevel)
-	// The effective path is adopted so the settings modal names where logs
-	// really go, and so saving from it does not write the refused path back.
 	opened, warning := logger.Start(cfg.LogFile, config.DefaultLogFile(), logLevel)
-	cfg.LogFile = opened
+	// Only a path that actually opened is adopted, so the settings modal names
+	// where logs really go and saving from it does not write the refused path
+	// back. Logging off is what the app fell back to rather than what the user
+	// asked for: adopting it would write "log_file": "" on the next save and
+	// turn one launch's permission problem into a permanent setting.
+	if opened != "" {
+		cfg.LogFile = opened
+	}
+	// Also on stderr, which is all there is when the TUI never starts.
 	if warning != "" {
 		fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 	}
@@ -203,6 +209,9 @@ func runTUI() int {
 	tui.DetectTerminalColors()
 
 	app := tui.NewApp(clientCfg, cfg, promptTemplates)
+	// tcell clears the screen the moment it takes the tty, so the stderr line
+	// above is gone before it can be read. The app says it again once it is up.
+	app.WarnAtStartup(warning)
 	app.UseSettingsFile(settingsPath)
 	app.UseSession(sessionPath, sessionFile)
 	app.UseNavCache(navCachePath, navCacheFile)

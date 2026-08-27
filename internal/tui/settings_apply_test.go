@@ -109,13 +109,27 @@ func TestApplySettingsPreservesOAuthBearer(t *testing.T) {
 	waitForRefreshCompletion(t, refreshDone)
 }
 
+// isolateLogging keeps a test that reinitializes the process-global logger from
+// writing into the developer's own ~/.zen-linear and from leaving the logger
+// pointing at a temp directory the next test no longer has.
+func isolateLogging(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(func() {
+		if _, warning := logger.Restart("", "", logger.LevelWarning); warning != "" {
+			t.Errorf("restoring the logger: %s", warning)
+		}
+	})
+}
+
 // A log path the app cannot open used to abort applySettings: logger.Reinit
 // returned an error, the handler reported it and returned early, and everything
 // after it — the rebuilt API client included — never ran. Saving a bad log path
 // took the rest of the settings with it.
 func TestApplySettingsSurvivesAnUnwritableLogPath(t *testing.T) {
+	isolateLogging(t)
+
 	app := newUXTestApp(t)
-	logger.Close()
 
 	tmpDir := t.TempDir()
 	// A regular file where the refused path wants a directory.
@@ -142,7 +156,51 @@ func TestApplySettingsSurvivesAnUnwritableLogPath(t *testing.T) {
 	if app.config.LogFile == refused {
 		t.Errorf("config.LogFile = %q, want the path actually opened", app.config.LogFile)
 	}
-	if !strings.Contains(app.statusMessage, refused) {
-		t.Errorf("status %q does not name the refused path %q", app.statusMessage, refused)
+	// Held for the reload to settle, since the reload repaints the hint line.
+	if !strings.Contains(app.pendingWarning, refused) {
+		t.Errorf("held warning %q does not name the refused path %q", app.pendingWarning, refused)
+	}
+
+	// And it lands on the hint line rather than the toast corner, which
+	// truncates to half the row and would drop the half that says what happened.
+	app.reportPendingWarning()
+	if status := app.statusBar.GetText(true); !strings.Contains(status, refused) {
+		t.Errorf("status %q does not name the refused path %q", status, refused)
+	}
+	if app.statusMessage != "" {
+		t.Errorf("toast corner = %q, want the warning on the hint line", app.statusMessage)
+	}
+}
+
+// Falling back all the way to no logging is where this save landed, not a
+// setting the user chose. Adopting it would write "log_file": "" on the next
+// save and turn one unwritable path into logging off for good.
+func TestApplySettingsDoesNotAdoptLoggingOffAsASetting(t *testing.T) {
+	isolateLogging(t)
+
+	app := newUXTestApp(t)
+
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, nil, 0644); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	refused := filepath.Join(blocker, "nested", "app.log")
+
+	// Nowhere left to fall back to: HOME is a file, so the default fails too.
+	home := filepath.Join(t.TempDir(), "home-is-a-file")
+	if err := os.WriteFile(home, nil, 0644); err != nil {
+		t.Fatalf("write home: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	cfg := app.config
+	cfg.LogFile = refused
+	app.applySettings(cfg)
+
+	if app.config.LogFile == "" {
+		t.Error("config.LogFile = \"\", which saves as a deliberate logging-off")
+	}
+	if got := config.SettingsFromConfig(app.config).LogFile; got != nil && *got == "" {
+		t.Error("settings would write log_file: \"\" after a failed open")
 	}
 }

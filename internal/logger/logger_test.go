@@ -457,3 +457,44 @@ func TestRestartMovesToTheNewPath(t *testing.T) {
 		t.Errorf("second log missing the entry, got %q", content)
 	}
 }
+
+// Init is a no-op once a logger exists, so a naive Start would report a path it
+// never opened and leave the session logging to the previous file.
+func TestStartReplacesALoggerAlreadyRunning(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	firstPath := filepath.Join(tmpDir, "first.log")
+	secondPath := filepath.Join(tmpDir, "second.log")
+	if err := Init(firstPath, LevelInfo); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+
+	opened, warning := Start(secondPath, filepath.Join(tmpDir, "fallback.log"), LevelInfo)
+	if opened != secondPath {
+		t.Errorf("Start() opened %q, want %q", opened, secondPath)
+	}
+	if warning != "" {
+		t.Errorf("warning = %q, want none", warning)
+	}
+
+	Info("Only the second log")
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	second, err := os.ReadFile(secondPath)
+	if err != nil {
+		t.Fatalf("read second log file: %v", err)
+	}
+	if !strings.Contains(string(second), "Only the second log") {
+		t.Errorf("second log missing the entry, got %q", second)
+	}
+	first, err := os.ReadFile(firstPath)
+	if err != nil {
+		t.Fatalf("read first log file: %v", err)
+	}
+	if strings.Contains(string(first), "Only the second log") {
+		t.Error("Start() reported the new path but kept logging to the old one")
+	}
+}

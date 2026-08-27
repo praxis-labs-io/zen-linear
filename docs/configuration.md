@@ -148,7 +148,12 @@ Set to a path it uses that path.
 
 A log path that cannot be opened is reported and stepped over, not fatal: the
 app falls back to `~/.zen-linear/app.log`, and to no logging if that fails too.
-Saving from the settings modal then writes the working path back.
+The warning appears on the status bar once the app is up.
+
+The fallback is only where this session logs, never a new setting. Falling back
+to the default leaves the key omitted, and falling back to no logging leaves
+`log_file` alone, so a launch that could not write does not turn logging off for
+good. Clearing the field in the settings modal is the only thing that does.
 
 Each of these can also be set from the environment, which wins over the file:
 `LINEAR_API_ENDPOINT`, `LINEAR_TIMEOUT`, `LINEAR_PAGE_SIZE`,

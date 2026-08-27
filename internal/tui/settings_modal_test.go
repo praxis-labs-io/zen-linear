@@ -137,7 +137,7 @@ func TestSettingsPickersSpanMultipleRows(t *testing.T) {
 // resolved is right — the field should name where logs really go — but saving
 // it back verbatim is what pinned a shared config.json to one machine's home.
 func TestSettingsFormDropsTheMachineDefaultLogPath(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateLogging(t)
 
 	app := newUXTestApp(t)
 	app.config.LogFile = config.DefaultLogFile()
@@ -216,6 +216,8 @@ func TestSettingsFormRoundTripsLogLevel(t *testing.T) {
 // shows the resolved path, so only the normalization on the way out keeps this
 // machine's home directory out of a config file shared with another machine.
 func TestSavingSettingsLeavesNoMachineSpecificLogPathOnDisk(t *testing.T) {
+	isolateLogging(t)
+
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
@@ -257,6 +259,8 @@ func TestSavingSettingsLeavesNoMachineSpecificLogPathOnDisk(t *testing.T) {
 
 // A path the user typed is theirs and does get written out.
 func TestSavingSettingsKeepsAnExplicitLogPathOnDisk(t *testing.T) {
+	isolateLogging(t)
+
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))

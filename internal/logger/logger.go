@@ -226,6 +226,18 @@ func ErrorWithErr(err error, format string, args ...interface{}) {
 // warning that is empty on a clean open. Callers should adopt the returned path
 // as the effective one so the settings UI names where logs really go.
 func Start(path, fallback string, minLevel LogLevel) (opened, warning string) {
+	// Init is a no-op once a logger exists, and would report success without
+	// opening anything. Starting means starting.
+	globalMu.Lock()
+	previous := defaultLogger
+	defaultLogger = nil
+	globalMu.Unlock()
+	if previous != nil {
+		// Nowhere to report a close failure to: this is the logger being torn
+		// down, and the one replacing it is not open yet.
+		_ = previous.close()
+	}
+
 	return openWithFallback(Init, path, fallback, minLevel)
 }
 
@@ -236,6 +248,9 @@ func Restart(path, fallback string, minLevel LogLevel) (opened, warning string) 
 	return openWithFallback(Reinit, path, fallback, minLevel)
 }
 
+// openWithFallback reads a nil error as "this path is now the log". Init breaks
+// that on a second call, where nil means it left an existing logger alone, so
+// Start clears the logger first rather than reporting a path it never opened.
 func openWithFallback(open func(string, LogLevel) error, path, fallback string, minLevel LogLevel) (opened, warning string) {
 	err := open(path, minLevel)
 	if err == nil {

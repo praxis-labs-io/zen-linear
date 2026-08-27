@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -204,6 +205,7 @@ type App struct {
 	configuredSortFields []SortField
 	collapsedGroups      map[string]bool
 	statusMessage        string
+	pendingWarning       string
 	statusLevel          statusLevel
 
 	// Display settings of the active custom view, overriding config until
@@ -321,6 +323,25 @@ const (
 
 // UseSettingsFile installs the config file the settings modal saves back to.
 func (a *App) UseSettingsFile(path string) { a.settingsPath = path }
+
+// WarnAtStartup holds a launch problem worth telling the user about once the UI
+// is up. Anything printed before Run is painted over the moment tcell takes the
+// tty, so a warning that only reached stderr is a warning nobody read.
+func (a *App) WarnAtStartup(warning string) { a.pendingWarning = warning }
+
+// reportPendingWarning shows a held warning and forgets it, so a later reload
+// does not repeat it. It runs where the launch or reload has settled, since
+// anything set before that is painted over by the loading chatter, and it goes
+// on the hint line rather than the toast corner, which truncates to half the
+// row and would drop the half that says what happened.
+func (a *App) reportPendingWarning() {
+	if a.pendingWarning == "" {
+		return
+	}
+	warning := a.pendingWarning
+	a.pendingWarning = ""
+	a.updateStatusBarWithError(errors.New(warning))
+}
 
 // NewApp creates a new application instance.
 func NewApp(clientCfg linearapi.ClientConfig, cfg config.Config, templates []config.AgentPromptTemplate) *App {
@@ -453,6 +474,7 @@ func (a *App) loadInitialData() {
 		logger.Debug("tui.app: startup fetches completed elapsed=%s", time.Since(started))
 		a.QueueUpdateDraw(func() {
 			a.setNavLoading(false)
+			a.reportPendingWarning()
 		})
 		if fetched.err != nil {
 			logger.ErrorWithErr(fetched.err, "tui.app: failed to load teams")
@@ -606,14 +628,17 @@ func (a *App) applySettings(newCfg config.Config) {
 	opened, warning := logger.Restart(newCfg.LogFile, config.DefaultLogFile(), logLevel)
 	// a.config is already newCfg; adopt the path actually opened so the settings
 	// modal names where logs really go rather than the path that was refused.
-	newCfg.LogFile = opened
-	a.config.LogFile = opened
+	// Logging off is not adopted: it is where this save landed, not a setting,
+	// and writing it back would turn one bad path into logging off for good.
+	if opened != "" {
+		newCfg.LogFile = opened
+		a.config.LogFile = opened
+	}
 	if warning != "" {
 		logger.Warning("tui.app: %s", warning)
-		// Queueing here would hang the app: the settings save and the workspace
-		// switcher both call this from the event loop, and QueueUpdateDraw waits
-		// on that same loop to drain it.
-		a.flashError(warning)
+		// Held rather than shown: the reload this ends in paints the hint line
+		// back over anything set here. It surfaces when that reload settles.
+		a.pendingWarning = warning
 	}
 	logger.Debug("tui.app: settings applied log_file=%s log_level=%s", newCfg.LogFile, newCfg.LogLevel)
 
