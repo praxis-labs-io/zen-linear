@@ -603,13 +603,17 @@ func (a *App) applySettings(newCfg config.Config) {
 	a.applyThemeAndDensity()
 
 	logLevel := parseLogLevel(newCfg.LogLevel)
-	if err := logger.Reinit(newCfg.LogFile, logLevel); err != nil {
-		logger.ErrorWithErr(err, "tui.app: failed to reinitialize logger")
+	opened, warning := logger.Restart(newCfg.LogFile, config.DefaultLogFile(), logLevel)
+	// a.config is already newCfg; adopt the path actually opened so the settings
+	// modal names where logs really go rather than the path that was refused.
+	newCfg.LogFile = opened
+	a.config.LogFile = opened
+	if warning != "" {
+		logger.Warning("tui.app: %s", warning)
 		// Queueing here would hang the app: the settings save and the workspace
 		// switcher both call this from the event loop, and QueueUpdateDraw waits
 		// on that same loop to drain it.
-		a.updateStatusBarWithError(err)
-		return
+		a.flashError(warning)
 	}
 	logger.Debug("tui.app: settings applied log_file=%s log_level=%s", newCfg.LogFile, newCfg.LogLevel)
 

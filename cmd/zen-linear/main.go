@@ -159,9 +159,12 @@ func runTUI() int {
 	}
 
 	logLevel := parseLogLevel(cfg.LogLevel)
-	if err := logger.Init(cfg.LogFile, logLevel); err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing logger: %v\n", err)
-		return 1
+	// The effective path is adopted so the settings modal names where logs
+	// really go, and so saving from it does not write the refused path back.
+	opened, warning := logger.Start(cfg.LogFile, config.DefaultLogFile(), logLevel)
+	cfg.LogFile = opened
+	if warning != "" {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 	}
 	defer func() {
 		if err := logger.Close(); err != nil {

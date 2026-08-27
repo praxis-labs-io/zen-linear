@@ -343,3 +343,117 @@ func resetLogger() {
 	}
 	defaultLogger = nil
 }
+
+// A log path that cannot be opened used to end the process: Init failed, main
+// printed the error and returned 1, and the setting that caused it lived in a
+// modal the app never got far enough to show. Logging is diagnostics, so it
+// degrades instead.
+func TestStartFallsBackWhenThePathCannotBeOpened(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	// A regular file where the refused path wants a directory.
+	blocker := filepath.Join(tmpDir, "blocker")
+	if err := os.WriteFile(blocker, nil, 0644); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	refused := filepath.Join(blocker, "nested", "app.log")
+	fallback := filepath.Join(tmpDir, "fallback.log")
+
+	opened, warning := Start(refused, fallback, LevelInfo)
+	if opened != fallback {
+		t.Errorf("Start() opened %q, want %q", opened, fallback)
+	}
+	if !strings.Contains(warning, refused) {
+		t.Errorf("warning %q does not name the refused path %q", warning, refused)
+	}
+
+	Info("Logging after the fallback")
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	content, err := os.ReadFile(fallback)
+	if err != nil {
+		t.Fatalf("read fallback log file: %v", err)
+	}
+	if !strings.Contains(string(content), "Logging after the fallback") {
+		t.Errorf("fallback log missing the entry, got %q", content)
+	}
+}
+
+func TestStartWithNowhereToLogLeavesLoggingOff(t *testing.T) {
+	resetLogger()
+
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, nil, 0644); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	refused := filepath.Join(blocker, "nested", "app.log")
+
+	opened, warning := Start(refused, filepath.Join(blocker, "also", "app.log"), LevelInfo)
+	if opened != "" {
+		t.Errorf("Start() opened %q, want logging off", opened)
+	}
+	if !strings.Contains(warning, refused) {
+		t.Errorf("warning %q does not name the refused path %q", warning, refused)
+	}
+
+	// Logging off is still a working logger, not a nil one.
+	Info("Goes nowhere")
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+}
+
+func TestStartOnAWritablePathReportsNoWarning(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "nested", "app.log")
+
+	opened, warning := Start(path, filepath.Join(tmpDir, "fallback.log"), LevelInfo)
+	if opened != path {
+		t.Errorf("Start() opened %q, want %q", opened, path)
+	}
+	if warning != "" {
+		t.Errorf("warning = %q, want none", warning)
+	}
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+}
+
+// Restart must not fall back over a close failure on the file being left
+// behind: the new path opened, which is the only thing the caller retries on.
+func TestRestartMovesToTheNewPath(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	firstPath := filepath.Join(tmpDir, "first.log")
+	secondPath := filepath.Join(tmpDir, "second.log")
+	if err := Init(firstPath, LevelInfo); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+
+	opened, warning := Restart(secondPath, filepath.Join(tmpDir, "fallback.log"), LevelInfo)
+	if opened != secondPath {
+		t.Errorf("Restart() opened %q, want %q", opened, secondPath)
+	}
+	if warning != "" {
+		t.Errorf("warning = %q, want none", warning)
+	}
+
+	Info("After the restart")
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	content, err := os.ReadFile(secondPath)
+	if err != nil {
+		t.Fatalf("read second log file: %v", err)
+	}
+	if !strings.Contains(string(content), "After the restart") {
+		t.Errorf("second log missing the entry, got %q", content)
+	}
+}

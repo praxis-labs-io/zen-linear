@@ -122,8 +122,8 @@ func TestDefaultLogFileStaysUnderTheAppDir(t *testing.T) {
 	writeConfigJSON(t, filepath.Join(home, ".config", xdgDirName))
 
 	want := filepath.Join(home, dirName, "app.log")
-	if got := getDefaultLogFile(); got != want {
-		t.Errorf("getDefaultLogFile() = %q, want %q", got, want)
+	if got := DefaultLogFile(); got != want {
+		t.Errorf("DefaultLogFile() = %q, want %q", got, want)
 	}
 }
 

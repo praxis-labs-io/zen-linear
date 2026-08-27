@@ -131,3 +131,80 @@ func TestSettingsPickersSpanMultipleRows(t *testing.T) {
 		t.Fatalf("widest picker row = %d columns, want at most 3: the settings pickers lost a row break and will clip", widest)
 	}
 }
+
+// The log path is the one setting whose default is machine-specific. Showing it
+// resolved is right — the field should name where logs really go — but saving
+// it back verbatim is what pinned a shared config.json to one machine's home.
+func TestSettingsFormDropsTheMachineDefaultLogPath(t *testing.T) {
+	app := newUXTestApp(t)
+	app.config.LogFile = config.DefaultLogFile()
+
+	sm := app.settingsModal
+	sm.Show()
+
+	if got := sm.logFileField.GetText(); got != config.DefaultLogFile() {
+		t.Fatalf("log file field = %q, want the resolved default %q", got, config.DefaultLogFile())
+	}
+
+	settings, err := sm.settingsFromForm()
+	if err != nil {
+		t.Fatalf("settingsFromForm: %v", err)
+	}
+	if settings.LogFile != nil {
+		t.Fatalf("log file saved as %q, want unset", *settings.LogFile)
+	}
+	if got := settings.ResolvedLogFile(); got != config.DefaultLogFile() {
+		t.Fatalf("ResolvedLogFile() = %q, want %q", got, config.DefaultLogFile())
+	}
+}
+
+// A path the user typed is theirs, and an empty field stays "logging off".
+func TestSettingsFormKeepsAnExplicitLogPath(t *testing.T) {
+	app := newUXTestApp(t)
+	custom := filepath.Join(t.TempDir(), "elsewhere.log")
+
+	tests := []struct {
+		name string
+		text string
+		want *string
+	}{
+		{name: "explicit path survives", text: custom, want: &custom},
+		{name: "blank is logging off", text: "", want: new(string)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sm := app.settingsModal
+			sm.Show()
+			sm.logFileField.SetText(tt.text)
+
+			settings, err := sm.settingsFromForm()
+			if err != nil {
+				t.Fatalf("settingsFromForm: %v", err)
+			}
+			if settings.LogFile == nil {
+				t.Fatalf("log file saved as unset, want %q", *tt.want)
+			}
+			if *settings.LogFile != *tt.want {
+				t.Fatalf("log file saved as %q, want %q", *settings.LogFile, *tt.want)
+			}
+		})
+	}
+}
+
+// The log level has a form control but no coverage; it rides along here so a
+// picker read off the wrong index cannot silently reset it.
+func TestSettingsFormRoundTripsLogLevel(t *testing.T) {
+	app := newUXTestApp(t)
+	app.config.LogLevel = "debug"
+
+	sm := app.settingsModal
+	sm.Show()
+	settings, err := sm.settingsFromForm()
+	if err != nil {
+		t.Fatalf("settingsFromForm: %v", err)
+	}
+	if settings.LogLevel != "debug" {
+		t.Fatalf("log level = %q, want %q", settings.LogLevel, "debug")
+	}
+}

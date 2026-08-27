@@ -40,12 +40,14 @@ type SettingsFile struct {
 
 // Settings contains concrete settings values for UI and persistence.
 type Settings struct {
-	APIEndpoint      string            `json:"api_endpoint"`
-	Timeout          string            `json:"timeout"`
-	PageSize         int               `json:"page_size"`
-	CacheTTL         string            `json:"cache_ttl"`
-	SearchDebounce   string            `json:"search_debounce"`
-	LogFile          string            `json:"log_file"`
+	APIEndpoint    string `json:"api_endpoint"`
+	Timeout        string `json:"timeout"`
+	PageSize       int    `json:"page_size"`
+	CacheTTL       string `json:"cache_ttl"`
+	SearchDebounce string `json:"search_debounce"`
+	// LogFile is nil when unset (use DefaultLogFile) and empty when logging is
+	// off. Storing the resolved default would pin the file to one machine.
+	LogFile          *string           `json:"log_file,omitempty"`
 	LogLevel         string            `json:"log_level"`
 	Theme            string            `json:"theme"`
 	Density          string            `json:"density"`
@@ -74,7 +76,6 @@ func DefaultSettings() Settings {
 		PageSize:       DefaultPageSize,
 		CacheTTL:       DefaultCacheTTL.String(),
 		SearchDebounce: DefaultSearchDebounce.String(),
-		LogFile:        getDefaultLogFile(),
 		LogLevel:       DefaultLogLevel,
 		Theme:          DefaultTheme,
 		Density:        DefaultDensity,
@@ -91,6 +92,25 @@ func DefaultSettings() Settings {
 	}
 }
 
+// ResolvedLogFile returns the log path to open: this machine's default when the
+// setting is unset, and the configured value otherwise. An empty value is a
+// deliberate "logging off" and stays empty.
+func (s Settings) ResolvedLogFile() string {
+	if s.LogFile == nil {
+		return DefaultLogFile()
+	}
+	return *s.LogFile
+}
+
+// LogFileSetting is the inverse: a resolved path matching this machine's default
+// goes back to unset, so saving never writes one machine's home into the file.
+func LogFileSetting(logFile string) *string {
+	if logFile == DefaultLogFile() {
+		return nil
+	}
+	return &logFile
+}
+
 // SettingsFromConfig converts runtime config into settings values.
 func SettingsFromConfig(cfg Config) Settings {
 	return Settings{
@@ -99,7 +119,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		PageSize:         cfg.PageSize,
 		CacheTTL:         cfg.CacheTTL.String(),
 		SearchDebounce:   cfg.SearchDebounce.String(),
-		LogFile:          cfg.LogFile,
+		LogFile:          LogFileSetting(cfg.LogFile),
 		LogLevel:         cfg.LogLevel,
 		Theme:            cfg.Theme,
 		Density:          cfg.Density,
@@ -205,7 +225,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		PageSize:         settings.PageSize,
 		CacheTTL:         cacheTTL,
 		SearchDebounce:   searchDebounce,
-		LogFile:          settings.LogFile,
+		LogFile:          settings.ResolvedLogFile(),
 		LogLevel:         settings.LogLevel,
 		Theme:            theme,
 		Density:          density,
@@ -303,9 +323,7 @@ func LoadSettings(path string) (Settings, error) {
 	if file.SearchDebounce != nil {
 		settings.SearchDebounce = *file.SearchDebounce
 	}
-	if file.LogFile != nil {
-		settings.LogFile = *file.LogFile
-	}
+	settings.LogFile = file.LogFile
 	if file.LogLevel != nil {
 		settings.LogLevel = *file.LogLevel
 	}
