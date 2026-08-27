@@ -136,3 +136,64 @@ func writeConfigJSON(t *testing.T, dir string) {
 		t.Fatalf("writing config in %s: %v", dir, err)
 	}
 }
+
+// Four writers used to race to create ~/.zen-linear, three of them at 0755.
+// MkdirAll no-ops on one that exists, so whichever ran first decided the mode
+// of the directory holding credentials.json.
+func TestEnsureDirForOwnsTheAppDirsMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	appDir := filepath.Join(home, ".zen-linear")
+
+	t.Run("creates it private", func(t *testing.T) {
+		dir, err := EnsureDirFor(filepath.Join(appDir, "app.log"))
+		if err != nil {
+			t.Fatalf("EnsureDirFor() error: %v", err)
+		}
+		if dir != appDir {
+			t.Errorf("dir = %q, want %q", dir, appDir)
+		}
+		assertDirMode(t, appDir, DirMode)
+	})
+
+	t.Run("tightens one an older build left open", func(t *testing.T) {
+		if err := os.Chmod(appDir, 0o755); err != nil {
+			t.Fatalf("loosen the dir: %v", err)
+		}
+		if _, err := EnsureDirFor(filepath.Join(appDir, "credentials.json")); err != nil {
+			t.Fatalf("EnsureDirFor() error: %v", err)
+		}
+		assertDirMode(t, appDir, DirMode)
+	})
+}
+
+// The settings file is often written to $XDG_CONFIG_HOME/zen-linear, which is
+// usually a dotfiles checkout. Narrowing a directory that is not ours would be
+// a surprise in someone else's repo.
+func TestEnsureDirForLeavesTheXDGDirAlone(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	xdg := filepath.Join(home, ".config", "zen-linear")
+	if err := os.MkdirAll(xdg, 0o755); err != nil {
+		t.Fatalf("create the XDG dir: %v", err)
+	}
+
+	if _, err := EnsureDirFor(filepath.Join(xdg, "config.json")); err != nil {
+		t.Fatalf("EnsureDirFor() error: %v", err)
+	}
+	assertDirMode(t, xdg, 0o755)
+}
+
+func assertDirMode(t *testing.T, dir string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat %s: %v", dir, err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Errorf("%s mode = %o, want %o", dir, got, want)
+	}
+}
