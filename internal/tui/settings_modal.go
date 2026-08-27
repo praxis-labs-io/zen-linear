@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -318,6 +319,7 @@ func (sm *SettingsModal) Show() {
 	sm.cacheTTLField.SetText(settings.CacheTTL)
 	sm.searchDebounceField.SetText(settings.SearchDebounce)
 	sm.logFileField.SetText(settings.ResolvedLogFile())
+	sm.fm.SetContext(envOverrideNotice(sm.app.envOverrides))
 	sm.setLogLevelSelection(settings.LogLevel)
 	sm.setThemeSelection(settings.Theme)
 	sm.setDensitySelection(settings.Density)
@@ -398,7 +400,17 @@ func (sm *SettingsModal) saveSettings() {
 		return
 	}
 
-	newCfg, err := config.ConfigFromSettings(sm.app.config.LinearAPIKey, settings)
+	// settings is what goes on disk; the session keeps running with the
+	// environment on top, or a save would quietly drop an override that is
+	// still exported.
+	effective, overrides, err := config.ApplyEnvOverrides(settings)
+	if err != nil {
+		logger.ErrorWithErr(err, "tui.settings: failed to apply environment overrides")
+		sm.app.updateStatusBarWithError(err)
+		return
+	}
+
+	newCfg, err := config.ConfigFromSettings(sm.app.config.LinearAPIKey, effective)
 	if err != nil {
 		logger.ErrorWithErr(err, "tui.settings: failed to parse settings")
 		sm.app.updateStatusBarWithError(err)
@@ -411,6 +423,10 @@ func (sm *SettingsModal) saveSettings() {
 		sm.app.updateStatusBarWithError(err)
 		return
 	}
+
+	// The file has moved on, so a second save must restore against what is
+	// there now rather than what launch read.
+	sm.app.UseFileSettings(settings, overrides)
 
 	logger.Debug("tui.settings: settings saved successfully path=%s", settingsPath)
 	sm.Hide()
@@ -490,7 +506,51 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		Workspaces:       sm.app.config.Workspaces,
 		DefaultWorkspace: sm.app.config.DefaultWorkspace,
 	}
+
+	// The environment is where this session's value came from, not where the
+	// next one's should. Writing it back would turn a variable exported for one
+	// launch into a stored setting, which is the ZNL-145 shape.
+	restoreEnvOverrides(&settings, sm.app.fileSettings, sm.app.envOverrides)
+
 	return settings, nil
+}
+
+// envOverrideNotice names the fields the environment owns, for the line pinned
+// above the form. Empty when it owns none, which hides the line.
+func envOverrideNotice(overrides config.EnvOverrides) string {
+	if len(overrides) == 0 {
+		return ""
+	}
+	named := make([]string, 0, len(overrides))
+	for field, variable := range overrides {
+		named = append(named, fmt.Sprintf("%s ($%s)", field, variable))
+	}
+	sort.Strings(named)
+	return "From the environment, shown but not saved: " + strings.Join(named, ", ")
+}
+
+// restoreEnvOverrides puts the file's value back for every field the
+// environment took over, so a save writes what config.json should hold rather
+// than what this launch happened to run with.
+func restoreEnvOverrides(settings *config.Settings, fromFile config.Settings, overrides config.EnvOverrides) {
+	if overrides.Has(config.FieldAPIEndpoint) {
+		settings.APIEndpoint = fromFile.APIEndpoint
+	}
+	if overrides.Has(config.FieldTimeout) {
+		settings.Timeout = fromFile.Timeout
+	}
+	if overrides.Has(config.FieldPageSize) {
+		settings.PageSize = fromFile.PageSize
+	}
+	if overrides.Has(config.FieldCacheTTL) {
+		settings.CacheTTL = fromFile.CacheTTL
+	}
+	if overrides.Has(config.FieldLogFile) {
+		settings.LogFile = fromFile.LogFile
+	}
+	if overrides.Has(config.FieldLogLevel) {
+		settings.LogLevel = fromFile.LogLevel
+	}
 }
 
 // setLogLevelSelection updates the dropdown selection to match the provided level.

@@ -146,6 +146,10 @@ never writes the key itself: a config shared between machines would otherwise
 carry one machine's home directory to another. Set to `""` it turns logging off.
 Set to a path it uses that path.
 
+The log is capped at 5 MB. Past that it is moved to `app.log.1`, replacing any
+previous one, and a fresh `app.log` is started. Two files is what answers "what
+happened just before this"; nothing older is kept.
+
 A log path that cannot be opened is reported and stepped over, not fatal: the
 app falls back to `~/.zen-linear/app.log`, and to no logging if that fails too.
 The warning appears on the status bar once the app is up.
@@ -155,6 +159,17 @@ to the default leaves the key omitted, and falling back to no logging leaves
 `log_file` alone, so a launch that could not write does not turn logging off for
 good. Clearing the field in the settings modal is the only thing that does.
 
-Each of these can also be set from the environment, which wins over the file:
+Six of these can also be set from the environment, which wins over the file:
 `LINEAR_API_ENDPOINT`, `LINEAR_TIMEOUT`, `LINEAR_PAGE_SIZE`,
-`LINEAR_CACHE_TTL`, `LINEAR_LOG_FILE`, `LINEAR_LOG_LEVEL`.
+`LINEAR_CACHE_TTL`, `LINEAR_LOG_FILE`, `LINEAR_LOG_LEVEL`. `search_debounce`
+has no variable. A malformed value stops the launch rather than being ignored.
+
+An override belongs to the launch, not to the config. The settings modal shows
+the value the session is running with and names the variable it came from
+above the fields, and a save writes what the file held rather than what the
+environment supplied, so a variable exported for one run does not become a
+stored setting. Unset the variable and the file's value is what you get back.
+
+`log_file` reads the difference between unset and empty here too: an unset
+`LINEAR_LOG_FILE` leaves whatever the file said, and one set to the empty
+string turns logging off for that run.

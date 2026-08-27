@@ -206,6 +206,8 @@ type App struct {
 	collapsedGroups      map[string]bool
 	statusMessage        string
 	pendingWarning       string
+	fileSettings         config.Settings
+	envOverrides         config.EnvOverrides
 	statusLevel          statusLevel
 
 	// Display settings of the active custom view, overriding config until
@@ -323,6 +325,14 @@ const (
 
 // UseSettingsFile installs the config file the settings modal saves back to.
 func (a *App) UseSettingsFile(path string) { a.settingsPath = path }
+
+// UseFileSettings records what config.json holds and which fields the
+// environment took over. The settings modal shows the effective value but
+// saves the file's, so an ephemeral variable cannot become a stored setting.
+func (a *App) UseFileSettings(settings config.Settings, overrides config.EnvOverrides) {
+	a.fileSettings = settings
+	a.envOverrides = overrides
+}
 
 // WarnAtStartup holds a launch problem worth telling the user about once the UI
 // is up. Anything printed before Run is painted over the moment tcell takes the
