@@ -63,9 +63,10 @@ attachments, and the agent.
 
 A row that opens and closes carries a folder icon that says which way it is: a
 team, one of its three headings, and a favorites folder. `⏎` toggles it and
-scopes nothing. A row that scopes a list holds that column blank, so every
-title lines up. The tree draws no nesting lines; depth is the column each
-level indents by.
+does nothing else, a favorited team included: it opens onto its own All
+Issues, the same as one under Teams. A row that scopes a list carries a `╰` in
+the same column, so every title lines up. The tree draws no nesting lines;
+depth is the column each level indents by.
 
 `J` and `K` step a favorite through the tree as it is drawn. Stepping onto
 an open folder moves the favorite into it, stepping off the end of a folder

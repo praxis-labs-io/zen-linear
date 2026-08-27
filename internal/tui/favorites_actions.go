@@ -480,6 +480,13 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 		return
 	}
 
+	// The reassembly builds the root from the rows this holds, so a tree that
+	// went back to waiting under it has none to build from. Leave it; the
+	// fetch that replaces the waiting root brings the section with it.
+	if a.allIssuesNode == nil {
+		return
+	}
+
 	previous := a.favoritesGroup
 	group := a.buildFavoritesGroup(a.favorites)
 	if previous == nil && group == nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 	"github.com/rivo/tview"
 )
@@ -376,14 +377,10 @@ func TestAnOpenTeamClosesWithoutGoingBackForItsRows(t *testing.T) {
 	}
 }
 
-func TestAFavoritedTeamStillScopesTheList(t *testing.T) {
+func TestAFavoritedTeamOnlyFolds(t *testing.T) {
 	app := newUXTestApp(t)
-	scoped := make(chan linearapi.FetchIssuesParams, 1)
-	app.fetchIssuesPage = func(_ context.Context, params linearapi.FetchIssuesParams, _ *string) (linearapi.IssuePage, error) {
-		select {
-		case scoped <- params:
-		default:
-		}
+	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
+		t.Error("opening a favorited team refetched the issue list")
 		return linearapi.IssuePage{}, nil
 	}
 	app.rebuildNavigationTree(
@@ -395,17 +392,22 @@ func TestAFavoritedTeamStillScopesTheList(t *testing.T) {
 	if !navRowStarts(app, favorite, navIconClosed) {
 		t.Fatalf("favorited team = %q, want a closed folder at the edge", favorite.GetText())
 	}
+	// The rows its own open would fetch, so the toggle is what this drives.
+	app.populateTeamNodeChildren(favorite, "team-1", nil,
+		[]linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}}, nil)
 
 	app.navigationTree.SetCurrentNode(favorite)
 	pressEnterOnNavigation(app)
+	if !favorite.IsExpanded() {
+		t.Fatal("Enter did not open the favorited team")
+	}
+	if got := favorite.GetChildren()[0].GetText(); !strings.Contains(got, "All Issues") {
+		t.Errorf("favorited team opens onto %q, want its own All Issues", got)
+	}
 
-	select {
-	case params := <-scoped:
-		if params.TeamID != "team-1" {
-			t.Fatalf("fetch params = %+v, want the whole of team-1", params)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("a favorited team no longer scopes the issue list")
+	pressEnterOnNavigation(app)
+	if favorite.IsExpanded() {
+		t.Fatal("Enter did not close it again")
 	}
 }
 
@@ -469,5 +471,41 @@ func TestExpandableRowsAreMutedAndSelectableOnesAreNot(t *testing.T) {
 				t.Errorf("%q color = %v, want %v", test.node.GetText(), got, want)
 			}
 		})
+	}
+}
+
+// A favorited team folds and nothing else, the same as one under Teams, so it
+// reads as structure rather than as a row a selection lands on.
+func TestAFavoritedTeamReadsAsStructure(t *testing.T) {
+	app := newUXTestApp(t)
+	app.rebuildNavigationTree(
+		[]linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}},
+		[]linearapi.Favorite{{ID: "fav-a", Type: "team", TeamID: "team-1", TeamName: "Engineering", SortOrder: 1}},
+	)
+
+	favorite := app.favoritesGroup.GetChildren()[0]
+	if got := favorite.GetColor(); got != app.theme.SecondaryText {
+		t.Errorf("favorited team color = %v, want it muted %v", got, app.theme.SecondaryText)
+	}
+	if got := app.findTeamTreeNode("team-1").GetColor(); got != app.theme.SecondaryText {
+		t.Errorf("the team's own row = %v, want it muted %v", got, app.theme.SecondaryText)
+	}
+}
+
+// The tree measures its own rows rather than taking go-runewidth's default,
+// which counts the icons as two cells under a CJK locale and leaves every row a
+// cell short of the border.
+func TestTheRowMeasureIgnoresTheLocale(t *testing.T) {
+	for _, prefix := range []string{navIconOpen, navIconClosed, navIconBranch, navIconBlank} {
+		if got := navCellWidth.StringWidth(prefix); got != 2 {
+			t.Errorf("prefix %q measured %d cells, want 2", prefix, got)
+		}
+	}
+	wide := (&runewidth.Condition{EastAsianWidth: true}).StringWidth(navIconBranch)
+	if wide == 2 {
+		t.Skip("the branch is not ambiguous in this build, so there is nothing to pin")
+	}
+	if got := fitToWidth(navIconBranch+"Alpha", 20); navCellWidth.StringWidth(got) != 20 {
+		t.Errorf("fitted row measured %d cells, want the full 20", navCellWidth.StringWidth(got))
 	}
 }

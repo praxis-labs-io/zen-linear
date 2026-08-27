@@ -80,10 +80,15 @@ func (a *App) padNavigationNode(node *tview.TreeNode, level, width int, owned bo
 	if isNavSectionHeading(node) {
 		childLevel = level
 	}
-	// Everything under the tree's own top row belongs to something, whether
-	// that is a heading, a team or a folder.
+	// A row hangs off the one above it only where that row opens and closes. A
+	// section heading is a label, so the rows under it are not its children and
+	// must not be drawn as though they were.
+	childOwned := false
+	if nav, ok := node.GetReference().(*NavigationNode); ok {
+		childOwned = navIsFoldable(nav)
+	}
 	for _, child := range node.GetChildren() {
-		a.padNavigationNode(child, childLevel, width, true)
+		a.padNavigationNode(child, childLevel, width, childOwned)
 	}
 }
 
@@ -119,12 +124,20 @@ func isNavSectionHeading(node *tview.TreeNode) bool {
 	return !isNav && len(node.GetChildren()) > 0
 }
 
+// navCellWidth measures the tree's rows. go-runewidth's default reads the
+// locale and counts an East Asian Ambiguous rune as two cells, which the folder
+// glyphs and the branch all are: under a CJK locale every row would measure a
+// cell wider than the terminal draws it, truncating early and leaving the
+// cursor line short of the border. A genuinely wide rune measures two either
+// way, so pinning this narrow costs nothing.
+var navCellWidth = &runewidth.Condition{EastAsianWidth: false}
+
 // fitToWidth truncates text to the given cell width with an ellipsis, or pads
 // it with spaces to exactly that width.
 func fitToWidth(text string, width int) string {
-	textWidth := runewidth.StringWidth(text)
+	textWidth := navCellWidth.StringWidth(text)
 	if textWidth > width {
-		return runewidth.Truncate(text, width, "…")
+		return navCellWidth.Truncate(text, width, "…")
 	}
 	return text + strings.Repeat(" ", width-textWidth)
 }

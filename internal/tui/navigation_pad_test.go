@@ -267,7 +267,7 @@ func TestEveryRowBeginsWithItsColumnAndStepsAColumnALevel(t *testing.T) {
 		want string
 	}{
 		{"a section's own row sits at the edge", folder, navIconOpen + "Current Projects"},
-		{"a leaf beside it takes a branch", app.favoritesGroup.GetChildren()[1], navIconBranch + "My Current Cycle"},
+		{"a leaf beside it hangs off nothing", app.favoritesGroup.GetChildren()[1], navIconBlank + "My Current Cycle"},
 		{"what it holds steps a column in", folder.GetChildren()[0], "  " + navIconBranch + "Alpha"},
 		{"a team's leaf steps in the same", teamNode.GetChildren()[0], "  " + navIconBranch + "All Issues"},
 		{"and lines up with its headings", cycles, "  " + navIconOpen + "Cycles"},

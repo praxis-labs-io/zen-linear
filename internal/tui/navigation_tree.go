@@ -82,15 +82,12 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 					setNavFold(node, !node.IsExpanded())
 					return
 				}
-				// A team in the Teams section only opens and closes. Its own
-				// All Issues row is what scopes the list to the whole team, so
-				// folding never costs a fetch. A favorited team is a shortcut
-				// to that list rather than a container, so it still scopes.
+				// A team only opens and closes, favorited or not. Its own All
+				// Issues row is what scopes the list to the whole team, so
+				// folding never costs a fetch and the rule has no exception.
 				if navNode.IsTeam {
 					a.onTeamExpanded(navNode.TeamID, node)
-					if navNode.FavoriteID == "" {
-						return
-					}
+					return
 				}
 				// Update selection and refresh issues. Focus stays in the
 				// navigation pane so the next pick is one keypress away.
@@ -102,10 +99,11 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 	return tree
 }
 
-// The column every row that can hold one begins with. A folder says the row
-// opens and closes and which way it is; a row that does neither takes the same
-// two cells blank, so the titles line up down the pane either way. These are
-// Nerd Font glyphs, which the terminal's font has to carry.
+// The column every row begins with. A folder says the row opens and closes and
+// which way it is, a branch says it is one of the rows a selection lands on,
+// and the tree's own top row takes the same width blank. The two folders are
+// Nerd Font glyphs, which the terminal's font has to carry; the branch is plain
+// box drawing.
 const (
 	navIconOpen   = "\uf07c "
 	navIconClosed = "\uf07b "
@@ -119,9 +117,9 @@ func setNavFold(node *tview.TreeNode, expanded bool) {
 	node.SetExpanded(expanded)
 }
 
-// navRowColor mutes a row that opens and closes. Those are the tree's
-// structure, and their folder already says so, which leaves the color free to
-// mark the rows a selection can actually land on.
+// navRowColor mutes a row that does nothing but open and close. Those are the
+// tree's structure, and their folder already says so, which leaves the color
+// free to mark the rows a selection lands on.
 func (a *App) navRowColor(nav *NavigationNode) tcell.Color {
 	if navIsFoldable(nav) {
 		return a.theme.SecondaryText
