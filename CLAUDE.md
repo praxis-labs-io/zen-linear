@@ -59,7 +59,9 @@ Five long-running buckets. They never complete; every ticket belongs to exactly 
 - **Website**: the public site, its copy, its SEO.
 - **Release & Distribution**: how the binary gets from `main` to a user and stays current (`install.sh`, the release workflow, versioning, release notes).
 
-A body of work big enough to need milestones gets its own finite epic project, named for what it delivers, completed and closed when it ships. An epic is a Linear Project, never a tracking issue. When an epic closes, follow-ups move to the matching bucket.
+A body of work big enough to need milestones gets its own finite epic project, named for what it delivers, completed and closed when it ships. An epic that size is a Linear Project, never a tracking issue, and its follow-ups move to the matching bucket when it closes.
+
+A handful of tickets that only ship together is not that size. Those get a parent ticket in the bucket they belong to and the work as its sub-issues, the way ZNL-138 held the navigation tree's four. Milestones are the test: needing them means a Project, not needing them means a parent ticket.
 
 ### Tickets
 
