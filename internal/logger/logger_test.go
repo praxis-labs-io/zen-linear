@@ -498,3 +498,109 @@ func TestStartReplacesALoggerAlreadyRunning(t *testing.T) {
 		t.Error("Start() reported the new path but kept logging to the old one")
 	}
 }
+
+// A log that is already at the cap when it opens rotates on the first write
+// rather than growing forever. Truncate makes the fixture sparse, so the test
+// costs no real bytes.
+func TestAFullLogRotatesAndKeepsWriting(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "app.log")
+	if err := os.WriteFile(logPath, []byte("old contents\n"), 0644); err != nil {
+		t.Fatalf("seed log: %v", err)
+	}
+	if err := os.Truncate(logPath, maxLogSize); err != nil {
+		t.Fatalf("grow log to the cap: %v", err)
+	}
+
+	if err := Init(logPath, LevelInfo); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+	Info("After the rotation")
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	rotated, err := os.ReadFile(logPath + rotatedSuffix)
+	if err != nil {
+		t.Fatalf("read the rotated log: %v", err)
+	}
+	if !strings.HasPrefix(string(rotated), "old contents") {
+		t.Errorf("rotated log lost what it held, got %q", rotated[:min(32, len(rotated))])
+	}
+
+	current, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read the current log: %v", err)
+	}
+	if !strings.Contains(string(current), "After the rotation") {
+		t.Errorf("current log missing the entry, got %q", current)
+	}
+	if int64(len(current)) >= maxLogSize {
+		t.Errorf("current log is %d bytes, want a fresh one", len(current))
+	}
+}
+
+// One generation, not a chain: a second rotation replaces app.log.1 rather
+// than shifting it to app.log.2.
+func TestRotatingTwiceKeepsOneGeneration(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "app.log")
+
+	for _, marker := range []string{"first round", "second round"} {
+		if err := os.WriteFile(logPath, []byte(marker+"\n"), 0644); err != nil {
+			t.Fatalf("seed log: %v", err)
+		}
+		if err := os.Truncate(logPath, maxLogSize); err != nil {
+			t.Fatalf("grow log to the cap: %v", err)
+		}
+		resetLogger()
+		if err := Init(logPath, LevelInfo); err != nil {
+			t.Fatalf("Init() error: %v", err)
+		}
+		Info("rotated")
+		if err := Close(); err != nil {
+			t.Fatalf("Close() error: %v", err)
+		}
+	}
+
+	rotated, err := os.ReadFile(logPath + rotatedSuffix)
+	if err != nil {
+		t.Fatalf("read the rotated log: %v", err)
+	}
+	if !strings.HasPrefix(string(rotated), "second round") {
+		t.Error("app.log.1 was not replaced by the newer generation")
+	}
+	if _, err := os.Stat(logPath + rotatedSuffix + rotatedSuffix); !os.IsNotExist(err) {
+		t.Error("rotation chained to app.log.1.1 instead of keeping one generation")
+	}
+}
+
+func TestALogUnderTheCapDoesNotRotate(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "app.log")
+
+	if err := Init(logPath, LevelInfo); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+	Info("Well under the cap")
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	if _, err := os.Stat(logPath + rotatedSuffix); !os.IsNotExist(err) {
+		t.Errorf("a short log rotated: %v", err)
+	}
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	if !strings.Contains(string(content), "Well under the cap") {
+		t.Errorf("log missing the entry, got %q", content)
+	}
+}
