@@ -196,19 +196,19 @@ func (l *Logger) log(level LogLevel, message string) {
 // l.mu, which is the only thing guarding l.file: close is the sole other
 // holder, and Reinit builds a separate Logger rather than touching this one's.
 //
-// A failed rotation leaves the log where it is and keeps writing. An oversized
-// log is worth less than a session with nowhere to report why it has one.
+// A failed rotation keeps writing to the log it has. An oversized log is worth
+// less than a session with nowhere to report why it has one.
 func (l *Logger) rotateIfFull() {
 	if !l.enabled || l.closed || l.file == nil || l.size < maxLogSize || l.path == "" {
 		return
 	}
 
-	if err := l.file.Close(); err != nil {
-		return
-	}
+	// Close releases the handle even when it reports an error, so there is no
+	// branch here that can keep writing to l.file. Everything past this point
+	// has to end in a reopen or the session logs nowhere for the rest of its
+	// life, with write discarding the error that would have said so.
+	_ = l.file.Close()
 	if err := os.Rename(l.path, l.path+rotatedSuffix); err != nil {
-		// The handle is gone either way, so the log has to be reopened even
-		// when the rename failed, or the rest of the session writes nowhere.
 		l.reopen()
 		return
 	}
@@ -216,6 +216,10 @@ func (l *Logger) rotateIfFull() {
 }
 
 // reopen replaces l.file after a rotation. Callers hold l.mu.
+//
+// The size is re-read rather than zeroed: a rotation whose rename failed
+// reopens the same full file, and a counter starting from nought there would
+// let it grow another whole cap before the next attempt, and again after that.
 func (l *Logger) reopen() {
 	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -225,6 +229,9 @@ func (l *Logger) reopen() {
 	}
 	l.file = file
 	l.size = 0
+	if info, err := file.Stat(); err == nil {
+		l.size = info.Size()
+	}
 }
 
 // write appends one line. Callers hold l.mu.

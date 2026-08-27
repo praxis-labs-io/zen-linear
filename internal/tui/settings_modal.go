@@ -17,6 +17,9 @@ import (
 const (
 	defaultAgentModelLabel = "default (use provider default)"
 	settingsModalWidth     = 110
+	// envNoticeMaxFields keeps the one-line context row inside a narrow
+	// terminal. Past it the count stands in for the names.
+	envNoticeMaxFields = 3
 )
 
 // agentModelOption pairs a model id with its display label.
@@ -320,6 +323,7 @@ func (sm *SettingsModal) Show() {
 	sm.searchDebounceField.SetText(settings.SearchDebounce)
 	sm.logFileField.SetText(settings.ResolvedLogFile())
 	sm.fm.SetContext(envOverrideNotice(sm.app.envOverrides))
+	sm.lockEnvOverriddenFields()
 	sm.setLogLevelSelection(settings.LogLevel)
 	sm.setThemeSelection(settings.Theme)
 	sm.setDensitySelection(settings.Density)
@@ -515,18 +519,50 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 	return settings, nil
 }
 
+// lockEnvOverriddenFields makes the fields the environment owns read-only.
+// They are shown, because the reader should see what the session is running
+// with, but an edit to one is discarded by restoreEnvOverrides on the way to
+// disk and by ApplyEnvOverrides on the way back: a field that took the typing
+// and then dropped it silently is worse than one that never took it.
+func (sm *SettingsModal) lockEnvOverriddenFields() {
+	overrides := sm.app.envOverrides
+	for field, primitive := range map[string]tview.Primitive{
+		config.FieldAPIEndpoint: sm.endpointField,
+		config.FieldTimeout:     sm.timeoutField,
+		config.FieldPageSize:    sm.pageSizeField,
+		config.FieldCacheTTL:    sm.cacheTTLField,
+		config.FieldLogFile:     sm.logFileField,
+		config.FieldLogLevel:    sm.logLevelField.View(),
+	} {
+		sm.fm.SetLocked(primitive, overrides.Has(field))
+	}
+}
+
 // envOverrideNotice names the fields the environment owns, for the line pinned
 // above the form. Empty when it owns none, which hides the line.
 func envOverrideNotice(overrides config.EnvOverrides) string {
 	if len(overrides) == 0 {
 		return ""
 	}
-	named := make([]string, 0, len(overrides))
-	for field, variable := range overrides {
-		named = append(named, fmt.Sprintf("%s ($%s)", field, variable))
+	// The context row is one line and does not grow, so this has to fit a narrow
+	// terminal at every length. Naming the variable beside each field overflowed
+	// it at two overrides, and a list of all six overflows it at 80 columns:
+	// either way the reader is told about one field and never sees the rest.
+	// Field ids alone, capped, with the remainder counted rather than dropped.
+	// The variable is LINEAR_ plus the field, so the id is enough to find it.
+	fields := make([]string, 0, len(overrides))
+	for field := range overrides {
+		fields = append(fields, field)
 	}
-	sort.Strings(named)
-	return "From the environment, shown but not saved: " + strings.Join(named, ", ")
+	sort.Strings(fields)
+
+	listed := fields
+	suffix := ""
+	if len(fields) > envNoticeMaxFields {
+		listed = fields[:envNoticeMaxFields]
+		suffix = fmt.Sprintf(", and %d more", len(fields)-envNoticeMaxFields)
+	}
+	return "From the environment: " + strings.Join(listed, ", ") + suffix
 }
 
 // restoreEnvOverrides puts the file's value back for every field the

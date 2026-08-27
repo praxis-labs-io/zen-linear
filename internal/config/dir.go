@@ -63,9 +63,12 @@ func EnsureDirFor(path string) (string, error) {
 	}
 	// MkdirAll no-ops on a directory that exists, so a 0755 one left by an
 	// older build is only tightened here.
-	if err := os.Chmod(dir, DirMode); err != nil {
-		return "", fmt.Errorf("set permissions on %s: %w", dir, err)
-	}
+	//
+	// A refusal is not fatal to the write this was guarding. Not every
+	// filesystem a home directory can live on implements chmod, and breaking
+	// every settings, credentials and log write on one of them would cost more
+	// than the hardening buys.
+	_ = os.Chmod(dir, DirMode)
 	return dir, nil
 }
 

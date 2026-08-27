@@ -58,6 +58,7 @@ type FormModal struct {
 	checkboxLabels map[*tview.Checkbox]*tview.TextView
 	multiSelects   map[*tview.List]*FormMultiSelect
 	pickers        map[*tview.TextView]*FormPicker
+	locked         map[tview.Primitive]bool
 	openPicker     *FormPicker
 	menu           *tview.List
 	page           *formPage
@@ -101,6 +102,7 @@ func NewFormModal(app *App, title string) *FormModal {
 		checkboxLabels: make(map[*tview.Checkbox]*tview.TextView),
 		multiSelects:   make(map[*tview.List]*FormMultiSelect),
 		pickers:        make(map[*tview.TextView]*FormPicker),
+		locked:         make(map[tview.Primitive]bool),
 	}
 
 	fm.rowsBox = tview.NewFlex().SetDirection(tview.FlexRow)
@@ -197,6 +199,35 @@ func (fm *FormModal) SetStatus(message string, isError bool) {
 	fm.hintView.SetTextColor(color)
 	fm.hintView.SetText(message)
 }
+
+// SetLocked makes a field read-only, for a value the form is showing but does
+// not own. It still takes focus and still reads, so the value stays visible and
+// copyable; it just refuses to change. A field that silently discarded what was
+// typed into it would be worse than one that never accepted it.
+//
+// Dimmed to the secondary text color, which is what the rest of the chrome
+// uses for something present but not actionable.
+func (fm *FormModal) SetLocked(p tview.Primitive, locked bool) {
+	fm.locked[p] = locked
+
+	color := fm.app.theme.Foreground
+	if locked {
+		color = fm.app.theme.SecondaryText
+	}
+	switch field := p.(type) {
+	case *tview.InputField:
+		// The acceptance func is the only hook that refuses a rune before the
+		// widget has taken it; a SetChangedFunc that put the old text back
+		// would fight the caret.
+		field.SetAcceptanceFunc(func(string, rune) bool { return !fm.locked[p] })
+		field.SetFieldTextColor(color)
+	case *tview.TextView:
+		field.SetTextColor(color)
+	}
+}
+
+// isLocked reports whether this field refuses input.
+func (fm *FormModal) isLocked(p tview.Primitive) bool { return fm.locked[p] }
 
 // SetContext sets the issue line pinned above the fields, so the form names
 // the issue it modifies. An empty string hides the line.

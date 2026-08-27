@@ -331,8 +331,15 @@ func TestSavingSettingsDoesNotWriteAnEnvOverrideToDisk(t *testing.T) {
 	if _, got := app.settingsModal.logLevelField.GetCurrentOption(); got != "debug" {
 		t.Errorf("log level field = %q, want the effective %q", got, "debug")
 	}
-	if got := app.settingsModal.fm.contextText; !strings.Contains(got, "LINEAR_LOG_LEVEL") {
-		t.Errorf("context line %q does not name the variable", got)
+	if got := app.settingsModal.fm.contextText; !strings.Contains(got, config.FieldLogLevel) {
+		t.Errorf("context line %q does not name the field", got)
+	}
+	// And it refuses the typing rather than taking it and dropping it later.
+	if !app.settingsModal.fm.isLocked(app.settingsModal.logLevelField.View()) {
+		t.Error("an overridden field is still editable")
+	}
+	if app.settingsModal.fm.isLocked(app.settingsModal.themeField.View()) {
+		t.Error("a field the environment does not own was locked")
 	}
 
 	app.settingsModal.saveSettings()
@@ -367,7 +374,7 @@ func TestTheEnvOverrideNoticeNamesOnlyWhatIsSet(t *testing.T) {
 		{
 			name:      "one field",
 			overrides: config.EnvOverrides{config.FieldLogLevel: "LINEAR_LOG_LEVEL"},
-			want:      "From the environment, shown but not saved: log_level ($LINEAR_LOG_LEVEL)",
+			want:      "From the environment: log_level",
 		},
 		{
 			name: "sorted, so the line does not reshuffle between opens",
@@ -375,7 +382,7 @@ func TestTheEnvOverrideNoticeNamesOnlyWhatIsSet(t *testing.T) {
 				config.FieldLogLevel: "LINEAR_LOG_LEVEL",
 				config.FieldTimeout:  "LINEAR_TIMEOUT",
 			},
-			want: "From the environment, shown but not saved: log_level ($LINEAR_LOG_LEVEL), timeout ($LINEAR_TIMEOUT)",
+			want: "From the environment: log_level, timeout",
 		},
 	}
 
@@ -385,5 +392,29 @@ func TestTheEnvOverrideNoticeNamesOnlyWhatIsSet(t *testing.T) {
 				t.Errorf("envOverrideNotice() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// The notice line is one fixed row that does not grow, so it has to fit a
+// narrow terminal at every length. Naming the variable beside each field
+// overflowed it at two overrides, which told the reader about one field and
+// hid the rest.
+func TestTheEnvOverrideNoticeStaysOnOneLine(t *testing.T) {
+	all := config.EnvOverrides{
+		config.FieldAPIEndpoint: "LINEAR_API_ENDPOINT",
+		config.FieldCacheTTL:    "LINEAR_CACHE_TTL",
+		config.FieldLogFile:     "LINEAR_LOG_FILE",
+		config.FieldLogLevel:    "LINEAR_LOG_LEVEL",
+		config.FieldPageSize:    "LINEAR_PAGE_SIZE",
+		config.FieldTimeout:     "LINEAR_TIMEOUT",
+	}
+
+	notice := envOverrideNotice(all)
+	// 74 is what an 80-column terminal leaves after the border and padding.
+	if len(notice) > 74 {
+		t.Errorf("notice is %d chars and will be cut: %q", len(notice), notice)
+	}
+	if !strings.Contains(notice, "and 3 more") {
+		t.Errorf("notice %q drops the fields it cannot list instead of counting them", notice)
 	}
 }

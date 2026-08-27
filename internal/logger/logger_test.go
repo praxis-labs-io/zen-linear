@@ -604,3 +604,48 @@ func TestALogUnderTheCapDoesNotRotate(t *testing.T) {
 		t.Errorf("log missing the entry, got %q", content)
 	}
 }
+
+// A rotation whose rename fails reopens the same full log rather than starting
+// a counter from nought against it, which would let the file grow another whole
+// cap before the next attempt, and again after that.
+func TestAFailedRotationDoesNotResetTheCounter(t *testing.T) {
+	resetLogger()
+
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "app.log")
+	if err := os.WriteFile(logPath, nil, 0644); err != nil {
+		t.Fatalf("seed log: %v", err)
+	}
+	if err := os.Truncate(logPath, maxLogSize); err != nil {
+		t.Fatalf("grow log to the cap: %v", err)
+	}
+
+	// A directory where the rotation wants to put the file, so Rename fails.
+	if err := os.Mkdir(logPath+rotatedSuffix, 0o755); err != nil {
+		t.Fatalf("block the rotation target: %v", err)
+	}
+
+	if err := Init(logPath, LevelInfo); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+	Info("Still logging after a refused rotation")
+
+	current()
+	globalMu.RLock()
+	size := defaultLogger.size
+	globalMu.RUnlock()
+	if size < maxLogSize {
+		t.Errorf("size = %d after a refused rotation, want the full log's %d", size, int64(maxLogSize))
+	}
+
+	if err := Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	if !strings.Contains(string(content), "Still logging after a refused rotation") {
+		t.Error("a refused rotation stopped the session logging")
+	}
+}

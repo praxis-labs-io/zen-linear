@@ -165,10 +165,10 @@ Six of these can also be set from the environment, which wins over the file:
 has no variable. A malformed value stops the launch rather than being ignored.
 
 An override belongs to the launch, not to the config. The settings modal shows
-the value the session is running with and names the variable it came from
-above the fields, and a save writes what the file held rather than what the
-environment supplied, so a variable exported for one run does not become a
-stored setting. Unset the variable and the file's value is what you get back.
+the value the session is running with, names the fields above the form, and
+makes them read-only, so an exported variable cannot become a stored setting
+and no edit is taken and then quietly dropped. A save writes what the file
+held. Unset the variable and the file's value is what you get back.
 
 `log_file` reads the difference between unset and empty here too: an unset
 `LINEAR_LOG_FILE` leaves whatever the file said, and one set to the empty
