@@ -2,8 +2,18 @@
 
 ## Requirements
 
-A terminal that speaks 256 colors, a font carrying the Nerd Font glyphs the
-navigation tree marks its folders with, and a Linear account.
+A terminal that speaks 256 colors, a [Nerd Font](https://www.nerdfonts.com) for
+the navigation tree's folder icons, and a Linear account.
+
+Without a Nerd Font those icons draw as empty boxes. Nothing else depends on
+them, so the app still runs. Most terminal fonts have a patched build:
+
+```sh
+brew install --cask font-jetbrains-mono-nerd-font
+```
+
+Then set it as your terminal's font. On other platforms take an archive from
+[the Nerd Fonts releases](https://github.com/ryanoasis/nerd-fonts/releases).
 
 Nothing else is needed to run a release binary. Building from source needs
 Go 1.24 or later.
