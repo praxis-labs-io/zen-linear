@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -98,8 +99,14 @@ func TestLoadSettingsPreservesEmptyLogFile(t *testing.T) {
 	}
 
 	expected := DefaultSettings()
-	expected.LogFile = ""
+	off := ""
+	expected.LogFile = &off
 	assertSettingsEqual(t, settings, expected)
+
+	// An empty path is off, not unset: resolving must not reach for the default.
+	if resolved := settings.ResolvedLogFile(); resolved != "" {
+		t.Errorf("ResolvedLogFile() = %q, want %q", resolved, "")
+	}
 }
 
 // TestConfigFromSettingsAcceptsAllThemes checks every registered theme name validates.
@@ -653,4 +660,83 @@ func TestValidateKeybindings(t *testing.T) {
 	if _, err := ConfigFromSettings("test-key", settings); err == nil {
 		t.Error("expected error for duplicate key")
 	}
+}
+
+// TestEnsureSettingsFileOmitsTheDefaultLogPath pins the reason this field is a
+// pointer: writing the resolved default would put one machine's home directory
+// into a config file that is often shared between machines.
+func TestEnsureSettingsFileOmitsTheDefaultLogPath(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "config.json")
+
+	if _, err := EnsureSettingsFile(settingsPath); err != nil {
+		t.Fatalf("EnsureSettingsFile() error: %v", err)
+	}
+
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings file: %v", err)
+	}
+
+	var written map[string]any
+	if err := json.Unmarshal(data, &written); err != nil {
+		t.Fatalf("unmarshal settings file: %v", err)
+	}
+	if value, ok := written["log_file"]; ok {
+		t.Errorf("log_file written as %q, want the key omitted", value)
+	}
+
+	// Omitted still has to resolve to a usable path.
+	settings, err := LoadSettings(settingsPath)
+	if err != nil {
+		t.Fatalf("LoadSettings() error: %v", err)
+	}
+	if got := settings.ResolvedLogFile(); got != DefaultLogFile() {
+		t.Errorf("ResolvedLogFile() = %q, want %q", got, DefaultLogFile())
+	}
+}
+
+// TestLogFileRoundTripDropsTheMachineDefault covers the save path: whatever the
+// settings modal shows, a value matching this machine's default goes back to
+// unset rather than being written out.
+func TestLogFileRoundTripDropsTheMachineDefault(t *testing.T) {
+	custom := filepath.Join(t.TempDir(), "elsewhere.log")
+	machineDefault := DefaultLogFile()
+	off := ""
+
+	tests := []struct {
+		name string
+		file *string
+		want *string
+	}{
+		{name: "unset stays unset", file: nil, want: nil},
+		{name: "machine default goes back to unset", file: &machineDefault, want: nil},
+		{name: "explicit path survives", file: &custom, want: &custom},
+		{name: "logging off survives", file: &off, want: &off},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := DefaultSettings()
+			settings.LogFile = tt.file
+
+			cfg, err := ConfigFromSettings("test-key", settings)
+			if err != nil {
+				t.Fatalf("ConfigFromSettings() error: %v", err)
+			}
+			if cfg.LogFile != settings.ResolvedLogFile() {
+				t.Errorf("Config.LogFile = %q, want %q", cfg.LogFile, settings.ResolvedLogFile())
+			}
+
+			if got := SettingsFromConfig(cfg).LogFile; !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("SettingsFromConfig().LogFile = %v, want %v", derefLogFile(got), derefLogFile(tt.want))
+			}
+		})
+	}
+}
+
+func derefLogFile(logFile *string) string {
+	if logFile == nil {
+		return "<unset>"
+	}
+	return *logFile
 }

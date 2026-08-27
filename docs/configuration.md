@@ -140,6 +140,21 @@ share one key.
 
 Durations are Go duration strings.
 
+`log_file` has three states. Left out of the file it resolves to
+`~/.zen-linear/app.log` on whichever machine is running, which is why the app
+never writes the key itself: a config shared between machines would otherwise
+carry one machine's home directory to another. Set to `""` it turns logging off.
+Set to a path it uses that path.
+
+A log path that cannot be opened is reported and stepped over, not fatal: the
+app falls back to `~/.zen-linear/app.log`, and to no logging if that fails too.
+The warning appears on the status bar once the app is up.
+
+The fallback is only where this session logs, never a new setting. Falling back
+to the default leaves the key omitted, and falling back to no logging leaves
+`log_file` alone, so a launch that could not write does not turn logging off for
+good. Clearing the field in the settings modal is the only thing that does.
+
 Each of these can also be set from the environment, which wins over the file:
 `LINEAR_API_ENDPOINT`, `LINEAR_TIMEOUT`, `LINEAR_PAGE_SIZE`,
 `LINEAR_CACHE_TTL`, `LINEAR_LOG_FILE`, `LINEAR_LOG_LEVEL`.

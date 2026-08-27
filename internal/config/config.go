@@ -42,8 +42,10 @@ const (
 	DefaultAgentSandbox   = "enabled"
 )
 
-// getDefaultLogFile returns the default log file path: $HOME/.zen-linear/app.log
-func getDefaultLogFile() string {
+// DefaultLogFile returns this machine's default log path: $HOME/.zen-linear/app.log.
+// It is resolved at use rather than stored, so a config file shared between
+// machines does not carry one machine's home directory to another.
+func DefaultLogFile() string {
 	dir, err := Dir()
 	if err != nil {
 		// Fallback to empty string if home directory cannot be determined
@@ -207,7 +209,7 @@ func LoadFromEnv() (Config, error) {
 		PageSize:       DefaultPageSize,
 		CacheTTL:       DefaultCacheTTL,
 		SearchDebounce: DefaultSearchDebounce,
-		LogFile:        getDefaultLogFile(), // Default: $HOME/.zen-linear/app.log
+		LogFile:        DefaultLogFile(), // Default: $HOME/.zen-linear/app.log
 		LogLevel:       DefaultLogLevel,
 		Theme:          DefaultTheme,
 		Density:        DefaultDensity,

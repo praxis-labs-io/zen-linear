@@ -116,14 +116,20 @@ func Reinit(logPath string, minLevel LogLevel) error {
 		return err
 	}
 
-	var closeErr error
-	if defaultLogger != nil {
-		closeErr = defaultLogger.close()
-	}
+	previous := defaultLogger
 	defaultLogger = replacement
 	// Write session start marker
 	defaultLogger.log(LevelInfo, "=== Session started ===")
-	return closeErr
+
+	// A close failure is about the file being left behind and is not actionable,
+	// so it is reported rather than returned: the error here means the new path
+	// could not be opened, which is what a caller retries on.
+	if previous != nil {
+		if err := previous.close(); err != nil {
+			defaultLogger.log(LevelWarning, fmt.Sprintf("closing previous log: %v", err))
+		}
+	}
+	return nil
 }
 
 // Close closes the log file. Should be called when the application exits.
@@ -210,4 +216,55 @@ func ErrorWithErr(err error, format string, args ...interface{}) {
 		message := fmt.Sprintf(format, args...)
 		l.log(LevelError, fmt.Sprintf("%s: %v", message, err))
 	}
+}
+
+// Start opens the log at path, falling back to fallback when path cannot be
+// opened and to no logging when neither can. Logging is diagnostics: a path the
+// app cannot write is worth reporting, never worth refusing to launch over.
+//
+// It returns the path actually opened, empty when logging ended up off, and a
+// warning that is empty on a clean open. Callers should adopt the returned path
+// as the effective one so the settings UI names where logs really go.
+func Start(path, fallback string, minLevel LogLevel) (opened, warning string) {
+	// Init is a no-op once a logger exists, and would report success without
+	// opening anything. Starting means starting.
+	globalMu.Lock()
+	previous := defaultLogger
+	defaultLogger = nil
+	globalMu.Unlock()
+	if previous != nil {
+		// Nowhere to report a close failure to: this is the logger being torn
+		// down, and the one replacing it is not open yet.
+		_ = previous.close()
+	}
+
+	return openWithFallback(Init, path, fallback, minLevel)
+}
+
+// Restart is Start for a logger that is already running. A refused path never
+// closes the log in hand until a replacement is open, so the session is never
+// left with nowhere to report this failure.
+func Restart(path, fallback string, minLevel LogLevel) (opened, warning string) {
+	return openWithFallback(Reinit, path, fallback, minLevel)
+}
+
+// openWithFallback reads a nil error as "this path is now the log". Init breaks
+// that on a second call, where nil means it left an existing logger alone, so
+// Start clears the logger first rather than reporting a path it never opened.
+func openWithFallback(open func(string, LogLevel) error, path, fallback string, minLevel LogLevel) (opened, warning string) {
+	err := open(path, minLevel)
+	if err == nil {
+		return path, ""
+	}
+
+	if fallback != "" && fallback != path {
+		if fallbackErr := open(fallback, minLevel); fallbackErr == nil {
+			return fallback, fmt.Sprintf("cannot log to %s (%v); logging to %s instead", path, err, fallback)
+		}
+	}
+
+	// Disabling cannot fail: newLogger returns a disabled logger for an empty
+	// path without touching the filesystem.
+	_ = open("", minLevel)
+	return "", fmt.Sprintf("cannot log to %s (%v); logging is off", path, err)
 }

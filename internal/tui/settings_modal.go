@@ -317,7 +317,7 @@ func (sm *SettingsModal) Show() {
 	sm.pageSizeField.SetText(strconv.Itoa(settings.PageSize))
 	sm.cacheTTLField.SetText(settings.CacheTTL)
 	sm.searchDebounceField.SetText(settings.SearchDebounce)
-	sm.logFileField.SetText(settings.LogFile)
+	sm.logFileField.SetText(settings.ResolvedLogFile())
 	sm.setLogLevelSelection(settings.LogLevel)
 	sm.setThemeSelection(settings.Theme)
 	sm.setDensitySelection(settings.Density)
@@ -464,7 +464,7 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		PageSize:       pageSize,
 		CacheTTL:       strings.TrimSpace(sm.cacheTTLField.GetText()),
 		SearchDebounce: strings.TrimSpace(sm.searchDebounceField.GetText()),
-		LogFile:        strings.TrimSpace(sm.logFileField.GetText()),
+		LogFile:        config.LogFileSetting(strings.TrimSpace(sm.logFileField.GetText())),
 		LogLevel:       logLevel,
 		Theme:          theme,
 		Density:        density,

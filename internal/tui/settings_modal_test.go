@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -129,5 +130,163 @@ func TestSettingsPickersSpanMultipleRows(t *testing.T) {
 	}
 	if widest > 3 {
 		t.Fatalf("widest picker row = %d columns, want at most 3: the settings pickers lost a row break and will clip", widest)
+	}
+}
+
+// The log path is the one setting whose default is machine-specific. Showing it
+// resolved is right — the field should name where logs really go — but saving
+// it back verbatim is what pinned a shared config.json to one machine's home.
+func TestSettingsFormDropsTheMachineDefaultLogPath(t *testing.T) {
+	isolateLogging(t)
+
+	app := newUXTestApp(t)
+	app.config.LogFile = config.DefaultLogFile()
+
+	sm := app.settingsModal
+	sm.Show()
+
+	if got := sm.logFileField.GetText(); got != config.DefaultLogFile() {
+		t.Fatalf("log file field = %q, want the resolved default %q", got, config.DefaultLogFile())
+	}
+
+	settings, err := sm.settingsFromForm()
+	if err != nil {
+		t.Fatalf("settingsFromForm: %v", err)
+	}
+	if settings.LogFile != nil {
+		t.Fatalf("log file saved as %q, want unset", *settings.LogFile)
+	}
+	if got := settings.ResolvedLogFile(); got != config.DefaultLogFile() {
+		t.Fatalf("ResolvedLogFile() = %q, want %q", got, config.DefaultLogFile())
+	}
+}
+
+// A path the user typed is theirs, and an empty field stays "logging off".
+func TestSettingsFormKeepsAnExplicitLogPath(t *testing.T) {
+	app := newUXTestApp(t)
+	custom := filepath.Join(t.TempDir(), "elsewhere.log")
+
+	tests := []struct {
+		name string
+		text string
+		want *string
+	}{
+		{name: "explicit path survives", text: custom, want: &custom},
+		{name: "blank is logging off", text: "", want: new(string)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sm := app.settingsModal
+			sm.Show()
+			sm.logFileField.SetText(tt.text)
+
+			settings, err := sm.settingsFromForm()
+			if err != nil {
+				t.Fatalf("settingsFromForm: %v", err)
+			}
+			if settings.LogFile == nil {
+				t.Fatalf("log file saved as unset, want %q", *tt.want)
+			}
+			if *settings.LogFile != *tt.want {
+				t.Fatalf("log file saved as %q, want %q", *settings.LogFile, *tt.want)
+			}
+		})
+	}
+}
+
+// The log level has a form control but no coverage; it rides along here so a
+// picker read off the wrong index cannot silently reset it.
+func TestSettingsFormRoundTripsLogLevel(t *testing.T) {
+	app := newUXTestApp(t)
+	app.config.LogLevel = "debug"
+
+	sm := app.settingsModal
+	sm.Show()
+	settings, err := sm.settingsFromForm()
+	if err != nil {
+		t.Fatalf("settingsFromForm: %v", err)
+	}
+	if settings.LogLevel != "debug" {
+		t.Fatalf("log level = %q, want %q", settings.LogLevel, "debug")
+	}
+}
+
+// The end of the chain: what an in-app save actually leaves on disk. The form
+// shows the resolved path, so only the normalization on the way out keeps this
+// machine's home directory out of a config file shared with another machine.
+func TestSavingSettingsLeavesNoMachineSpecificLogPathOnDisk(t *testing.T) {
+	isolateLogging(t)
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	launch := filepath.Join(home, ".zen-linear", "config.json")
+	app := newUXTestApp(t)
+	// The save validates before it writes, so the form needs values that pass.
+	app.config.LinearAPIKey = "k-acme"
+	app.config.APIEndpoint = "https://api.linear.app/graphql"
+	app.config.Timeout = 30 * time.Second
+	app.config.SearchDebounce = 300 * time.Millisecond
+	app.config.LogFile = config.DefaultLogFile()
+	app.UseSettingsFile(launch)
+
+	app.settingsModal.Show()
+	app.settingsModal.saveSettings()
+
+	data, err := os.ReadFile(launch)
+	if err != nil {
+		t.Fatalf("reading the saved config: %v", err)
+	}
+	var written map[string]any
+	if err := json.Unmarshal(data, &written); err != nil {
+		t.Fatalf("unmarshal saved config: %v", err)
+	}
+	if value, ok := written["log_file"]; ok {
+		t.Errorf("log_file written as %q, want the key omitted", value)
+	}
+
+	// Omitted still has to come back as a usable path on the next launch.
+	settings, err := config.LoadSettings(launch)
+	if err != nil {
+		t.Fatalf("LoadSettings() error: %v", err)
+	}
+	if got := settings.ResolvedLogFile(); got != config.DefaultLogFile() {
+		t.Errorf("ResolvedLogFile() = %q, want %q", got, config.DefaultLogFile())
+	}
+}
+
+// A path the user typed is theirs and does get written out.
+func TestSavingSettingsKeepsAnExplicitLogPathOnDisk(t *testing.T) {
+	isolateLogging(t)
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+
+	launch := filepath.Join(home, ".zen-linear", "config.json")
+	custom := filepath.Join(home, "logs", "zen.log")
+	app := newUXTestApp(t)
+	app.config.LinearAPIKey = "k-acme"
+	app.config.APIEndpoint = "https://api.linear.app/graphql"
+	app.config.Timeout = 30 * time.Second
+	app.config.SearchDebounce = 300 * time.Millisecond
+	app.UseSettingsFile(launch)
+
+	app.settingsModal.Show()
+	app.settingsModal.logFileField.SetText(custom)
+	app.settingsModal.saveSettings()
+
+	data, err := os.ReadFile(launch)
+	if err != nil {
+		t.Fatalf("reading the saved config: %v", err)
+	}
+	var written map[string]any
+	if err := json.Unmarshal(data, &written); err != nil {
+		t.Fatalf("unmarshal saved config: %v", err)
+	}
+	if written["log_file"] != custom {
+		t.Errorf("log_file = %v, want %q", written["log_file"], custom)
 	}
 }
