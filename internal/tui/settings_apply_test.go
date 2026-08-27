@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
 // TestApplySettingsPreservesOAuthBearer guards the bug where an in-app settings
@@ -104,4 +107,42 @@ func TestApplySettingsPreservesOAuthBearer(t *testing.T) {
 		t.Fatalf("Authorization after settings save = %q, want %q", got, "Bearer oauth-token")
 	}
 	waitForRefreshCompletion(t, refreshDone)
+}
+
+// A log path the app cannot open used to abort applySettings: logger.Reinit
+// returned an error, the handler reported it and returned early, and everything
+// after it — the rebuilt API client included — never ran. Saving a bad log path
+// took the rest of the settings with it.
+func TestApplySettingsSurvivesAnUnwritableLogPath(t *testing.T) {
+	app := newUXTestApp(t)
+	logger.Close()
+
+	tmpDir := t.TempDir()
+	// A regular file where the refused path wants a directory.
+	blocker := filepath.Join(tmpDir, "blocker")
+	if err := os.WriteFile(blocker, nil, 0644); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	refused := filepath.Join(blocker, "nested", "app.log")
+
+	// The API client is rebuilt after the logger line, so the old pointer
+	// surviving is what an early return there looks like from outside.
+	before := app.api
+
+	cfg := app.config
+	cfg.APIEndpoint = "https://example.invalid/graphql"
+	cfg.LogFile = refused
+	app.applySettings(cfg)
+
+	if app.api == before {
+		t.Error("API client not rebuilt: applySettings stopped at the refused log path")
+	}
+
+	// The config names where logs actually go, not the path that was refused.
+	if app.config.LogFile == refused {
+		t.Errorf("config.LogFile = %q, want the path actually opened", app.config.LogFile)
+	}
+	if !strings.Contains(app.statusMessage, refused) {
+		t.Errorf("status %q does not name the refused path %q", app.statusMessage, refused)
+	}
 }
