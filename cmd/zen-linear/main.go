@@ -152,7 +152,16 @@ func runTUI() int {
 		return 1
 	}
 
-	cfg, err := config.ConfigFromSettings(resolved.Token, settings)
+	// The environment wins over the file, and it has to be applied here rather
+	// than to the Config below: a settings save rebuilds the Config from the
+	// form, which would drop an override layered on afterwards.
+	effective, envOverrides, err := config.ApplyEnvOverrides(settings)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading environment: %v\n", err)
+		return 1
+	}
+
+	cfg, err := config.ConfigFromSettings(resolved.Token, effective)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
 		return 1
@@ -213,6 +222,9 @@ func runTUI() int {
 	// above is gone before it can be read. The app says it again once it is up.
 	app.WarnAtStartup(warning)
 	app.UseSettingsFile(settingsPath)
+	// What is on disk, kept apart from what the environment made of it: a save
+	// must write the file's value back, not the variable's.
+	app.UseFileSettings(settings, envOverrides)
 	app.UseSession(sessionPath, sessionFile)
 	app.UseNavCache(navCachePath, navCacheFile)
 

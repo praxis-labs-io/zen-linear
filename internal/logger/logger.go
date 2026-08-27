@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
 // LogLevel represents the severity level of a log message.
@@ -43,10 +44,21 @@ func (l LogLevel) String() string {
 type Logger struct {
 	mu       sync.Mutex
 	file     *os.File
+	path     string
+	size     int64
 	minLevel LogLevel
 	enabled  bool
 	closed   bool
 }
+
+const (
+	// maxLogSize is where the log is moved aside. One previous generation is
+	// what answers "what happened just before this" for a single-user TUI;
+	// more would be an archive nobody reads.
+	maxLogSize = 5 << 20
+	// rotatedSuffix names that generation: app.log.1 beside app.log.
+	rotatedSuffix = ".1"
+)
 
 var (
 	// globalMu guards defaultLogger. A settings save reinitializes the logger
@@ -85,8 +97,7 @@ func newLogger(logPath string, minLevel LogLevel) (*Logger, error) {
 	}
 
 	// Create log directory if it doesn't exist
-	logDir := filepath.Dir(logPath)
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if _, err := config.EnsureDirFor(logPath); err != nil {
 		return nil, fmt.Errorf("create log directory: %w", err)
 	}
 
@@ -96,8 +107,17 @@ func newLogger(logPath string, minLevel LogLevel) (*Logger, error) {
 		return nil, fmt.Errorf("open log file: %w", err)
 	}
 
+	// Seeded from what is already there, since the file is opened O_APPEND and
+	// a relaunch would otherwise start counting from nought against a full log.
+	var size int64
+	if info, err := file.Stat(); err == nil {
+		size = info.Size()
+	}
+
 	return &Logger{
 		file:     file,
+		path:     logPath,
+		size:     size,
 		minLevel: minLevel,
 		enabled:  true,
 	}, nil
@@ -168,7 +188,50 @@ func (l *Logger) close() error {
 func (l *Logger) log(level LogLevel, message string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.rotateIfFull()
 	l.write(level, message)
+}
+
+// rotateIfFull moves a full log aside and opens an empty one. Callers hold
+// l.mu, which is the only thing guarding l.file: close is the sole other
+// holder, and Reinit builds a separate Logger rather than touching this one's.
+//
+// A failed rotation keeps writing to the log it has. An oversized log is worth
+// less than a session with nowhere to report why it has one.
+func (l *Logger) rotateIfFull() {
+	if !l.enabled || l.closed || l.file == nil || l.size < maxLogSize || l.path == "" {
+		return
+	}
+
+	// Close releases the handle even when it reports an error, so there is no
+	// branch here that can keep writing to l.file. Everything past this point
+	// has to end in a reopen or the session logs nowhere for the rest of its
+	// life, with write discarding the error that would have said so.
+	_ = l.file.Close()
+	if err := os.Rename(l.path, l.path+rotatedSuffix); err != nil {
+		l.reopen()
+		return
+	}
+	l.reopen()
+}
+
+// reopen replaces l.file after a rotation. Callers hold l.mu.
+//
+// The size is re-read rather than zeroed: a rotation whose rename failed
+// reopens the same full file, and a counter starting from nought there would
+// let it grow another whole cap before the next attempt, and again after that.
+func (l *Logger) reopen() {
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		l.file = nil
+		l.enabled = false
+		return
+	}
+	l.file = file
+	l.size = 0
+	if info, err := file.Stat(); err == nil {
+		l.size = info.Size()
+	}
 }
 
 // write appends one line. Callers hold l.mu.
@@ -179,7 +242,8 @@ func (l *Logger) write(level LogLevel, message string) {
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
 	logLine := fmt.Sprintf("[%s] %s: %s\n", timestamp, level.String(), message)
-	_, _ = io.WriteString(l.file, logLine)
+	n, _ := io.WriteString(l.file, logLine)
+	l.size += int64(n)
 }
 
 // Debug logs a debug-level message.

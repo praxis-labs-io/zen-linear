@@ -388,8 +388,7 @@ func SaveSettings(path string, settings Settings) error {
 		return fmt.Errorf("settings path is empty")
 	}
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if _, err := EnsureDirFor(path); err != nil {
 		return fmt.Errorf("create settings directory: %w", err)
 	}
 

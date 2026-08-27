@@ -84,6 +84,10 @@ func (picker *FormPicker) GetCurrentOption() (int, string) {
 	return picker.selected, picker.options[picker.selected]
 }
 
+// View is the primitive the picker draws into, which is what FormModal keys
+// its focus and lock state by.
+func (picker *FormPicker) View() tview.Primitive { return picker.view }
+
 // IsOpen reports whether this picker's menu is showing.
 func (picker *FormPicker) IsOpen() bool { return picker.isOpen() }
 
@@ -91,7 +95,7 @@ func (picker *FormPicker) isOpen() bool { return picker.fm.openPicker == picker 
 
 // openMenu drops the menu under the field, highlighting the current value.
 func (picker *FormPicker) openMenu() {
-	if len(picker.options) == 0 {
+	if len(picker.options) == 0 || picker.fm.isLocked(picker.view) {
 		return
 	}
 	picker.fm.openPicker = picker

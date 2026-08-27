@@ -1,10 +1,8 @@
 package config
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -191,88 +189,4 @@ func StartupWorkspaceNames(settings Settings, lastSession string) []string {
 		return []string{lastSession, settings.DefaultWorkspace}
 	}
 	return []string{settings.DefaultWorkspace}
-}
-
-// LoadFromEnv loads configuration from environment variables.
-// Returns an error if LINEAR_API_KEY is not set.
-// Other values use sensible defaults if not specified.
-func LoadFromEnv() (Config, error) {
-	apiKey := os.Getenv(LinearAPIKeyEnv)
-	if apiKey == "" {
-		return Config{}, fmt.Errorf("%s environment variable is not set", LinearAPIKeyEnv)
-	}
-
-	cfg := Config{
-		LinearAPIKey:   apiKey,
-		APIEndpoint:    DefaultAPIEndpoint,
-		Timeout:        DefaultTimeout,
-		PageSize:       DefaultPageSize,
-		CacheTTL:       DefaultCacheTTL,
-		SearchDebounce: DefaultSearchDebounce,
-		LogFile:        DefaultLogFile(), // Default: $HOME/.zen-linear/app.log
-		LogLevel:       DefaultLogLevel,
-		Theme:          DefaultTheme,
-		Density:        DefaultDensity,
-		AgentProvider:  DefaultAgentProvider,
-		AgentSandbox:   DefaultAgentSandbox,
-		AgentModel:     "",
-		AgentWorkspace: "",
-	}
-
-	// Parse optional API endpoint override.
-	if endpoint := os.Getenv(LinearAPIEndpoint); endpoint != "" {
-		cfg.APIEndpoint = endpoint
-	}
-
-	// Parse optional timeout.
-	if timeoutStr := os.Getenv(TimeoutEnv); timeoutStr != "" {
-		timeout, err := parseDuration(timeoutStr, TimeoutEnv)
-		if err != nil {
-			return Config{}, err
-		}
-		cfg.Timeout = timeout
-	}
-
-	// Parse optional page size.
-	if pageSizeStr := os.Getenv(PageSizeEnv); pageSizeStr != "" {
-		pageSize, err := strconv.Atoi(pageSizeStr)
-		if err != nil {
-			return Config{}, fmt.Errorf("invalid %s value %q: %w", PageSizeEnv, pageSizeStr, err)
-		}
-		if err := validatePageSize(pageSize, PageSizeEnv); err != nil {
-			return Config{}, err
-		}
-		cfg.PageSize = pageSize
-	}
-
-	// Parse optional cache TTL.
-	if cacheTTLStr := os.Getenv(CacheTTLEnv); cacheTTLStr != "" {
-		cacheTTL, err := parseDuration(cacheTTLStr, CacheTTLEnv)
-		if err != nil {
-			return Config{}, err
-		}
-		cfg.CacheTTL = cacheTTL
-	}
-
-	// Parse optional log file path.
-	// If LINEAR_LOG_FILE is set to empty string, disable logging.
-	// If not set, use default: $HOME/.zen-linear/app.log
-	if logFile, ok := os.LookupEnv(LogFileEnv); ok {
-		if logFile == "" {
-			cfg.LogFile = "" // Explicitly disable logging
-		} else {
-			cfg.LogFile = logFile
-		}
-	}
-	// If LINEAR_LOG_FILE is not set, cfg.LogFile already has the default value
-
-	// Parse optional log level.
-	if logLevel := os.Getenv(LogLevelEnv); logLevel != "" {
-		if err := validateLogLevel(logLevel, LogLevelEnv); err != nil {
-			return Config{}, err
-		}
-		cfg.LogLevel = logLevel
-	}
-
-	return cfg, nil
 }

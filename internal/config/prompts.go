@@ -92,8 +92,7 @@ func SavePromptTemplates(path string, templates []AgentPromptTemplate) error {
 		return fmt.Errorf("prompts path is empty")
 	}
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if _, err := EnsureDirFor(path); err != nil {
 		return fmt.Errorf("create prompts directory: %w", err)
 	}
 

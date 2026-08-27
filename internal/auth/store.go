@@ -49,8 +49,7 @@ func SaveCredentials(path string, creds Credentials) error {
 	if path == "" {
 		return fmt.Errorf("credentials path is empty")
 	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if _, err := config.EnsureDirFor(path); err != nil {
 		return fmt.Errorf("create credentials directory: %w", err)
 	}
 	data, err := json.MarshalIndent(creds, "", "  ")

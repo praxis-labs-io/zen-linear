@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -288,5 +289,132 @@ func TestSavingSettingsKeepsAnExplicitLogPathOnDisk(t *testing.T) {
 	}
 	if written["log_file"] != custom {
 		t.Errorf("log_file = %v, want %q", written["log_file"], custom)
+	}
+}
+
+// An environment override is where this session's value came from, not where
+// the next one's should. The modal shows it, so without protection a save
+// would write $LINEAR_LOG_LEVEL into config.json permanently — the same shape
+// as the log path ZNL-145 froze into a config shared between machines.
+func TestSavingSettingsDoesNotWriteAnEnvOverrideToDisk(t *testing.T) {
+	isolateLogging(t)
+	t.Setenv("LINEAR_LOG_LEVEL", "debug")
+
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	launch := filepath.Join(home, ".zen-linear", "config.json")
+
+	fileSettings := config.DefaultSettings()
+	fileSettings.LogLevel = "warning"
+
+	effective, overrides, err := config.ApplyEnvOverrides(fileSettings)
+	if err != nil {
+		t.Fatalf("ApplyEnvOverrides() error: %v", err)
+	}
+	if !overrides.Has(config.FieldLogLevel) {
+		t.Fatal("log_level not taken over by the environment")
+	}
+
+	app := newUXTestApp(t)
+	app.config.LinearAPIKey = "k-acme"
+	app.config.APIEndpoint = "https://api.linear.app/graphql"
+	app.config.Timeout = 30 * time.Second
+	app.config.SearchDebounce = 300 * time.Millisecond
+	app.config.LogLevel = effective.LogLevel
+	app.UseSettingsFile(launch)
+	app.UseFileSettings(fileSettings, overrides)
+
+	app.settingsModal.Show()
+
+	// Shown: the field reads what the session is actually running with, and the
+	// line above the fields says where that came from.
+	if _, got := app.settingsModal.logLevelField.GetCurrentOption(); got != "debug" {
+		t.Errorf("log level field = %q, want the effective %q", got, "debug")
+	}
+	if got := app.settingsModal.fm.contextText; !strings.Contains(got, config.FieldLogLevel) {
+		t.Errorf("context line %q does not name the field", got)
+	}
+	// And it refuses the typing rather than taking it and dropping it later.
+	if !app.settingsModal.fm.isLocked(app.settingsModal.logLevelField.View()) {
+		t.Error("an overridden field is still editable")
+	}
+	if app.settingsModal.fm.isLocked(app.settingsModal.themeField.View()) {
+		t.Error("a field the environment does not own was locked")
+	}
+
+	app.settingsModal.saveSettings()
+
+	data, err := os.ReadFile(launch)
+	if err != nil {
+		t.Fatalf("reading the saved config: %v", err)
+	}
+	var written map[string]any
+	if err := json.Unmarshal(data, &written); err != nil {
+		t.Fatalf("unmarshal saved config: %v", err)
+	}
+	if written["log_level"] != "warning" {
+		t.Errorf("log_level written as %v, want the file's %q", written["log_level"], "warning")
+	}
+
+	// And the session keeps the override rather than reverting to the file.
+	if app.config.LogLevel != "debug" {
+		t.Errorf("session log level = %q, want the override to survive the save", app.config.LogLevel)
+	}
+}
+
+// With nothing in the environment the notice line stays empty, so an ordinary
+// settings modal is unchanged.
+func TestTheEnvOverrideNoticeNamesOnlyWhatIsSet(t *testing.T) {
+	tests := []struct {
+		name      string
+		overrides config.EnvOverrides
+		want      string
+	}{
+		{name: "nothing set", overrides: config.EnvOverrides{}, want: ""},
+		{
+			name:      "one field",
+			overrides: config.EnvOverrides{config.FieldLogLevel: "LINEAR_LOG_LEVEL"},
+			want:      "From the environment: log_level",
+		},
+		{
+			name: "sorted, so the line does not reshuffle between opens",
+			overrides: config.EnvOverrides{
+				config.FieldLogLevel: "LINEAR_LOG_LEVEL",
+				config.FieldTimeout:  "LINEAR_TIMEOUT",
+			},
+			want: "From the environment: log_level, timeout",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := envOverrideNotice(tt.overrides); got != tt.want {
+				t.Errorf("envOverrideNotice() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// The notice line is one fixed row that does not grow, so it has to fit a
+// narrow terminal at every length. Naming the variable beside each field
+// overflowed it at two overrides, which told the reader about one field and
+// hid the rest.
+func TestTheEnvOverrideNoticeStaysOnOneLine(t *testing.T) {
+	all := config.EnvOverrides{
+		config.FieldAPIEndpoint: "LINEAR_API_ENDPOINT",
+		config.FieldCacheTTL:    "LINEAR_CACHE_TTL",
+		config.FieldLogFile:     "LINEAR_LOG_FILE",
+		config.FieldLogLevel:    "LINEAR_LOG_LEVEL",
+		config.FieldPageSize:    "LINEAR_PAGE_SIZE",
+		config.FieldTimeout:     "LINEAR_TIMEOUT",
+	}
+
+	notice := envOverrideNotice(all)
+	// 74 is what an 80-column terminal leaves after the border and padding.
+	if len(notice) > 74 {
+		t.Errorf("notice is %d chars and will be cut: %q", len(notice), notice)
+	}
+	if !strings.Contains(notice, "and 3 more") {
+		t.Errorf("notice %q drops the fields it cannot list instead of counting them", notice)
 	}
 }
