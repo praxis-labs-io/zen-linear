@@ -87,7 +87,10 @@ func (a *App) applySessionNavigation(ctx context.Context, state *session.State, 
 		return false
 	}
 
-	children := teamChildren{loaded: true}
+	// loaded says a fetch answered, so a restore that needs no children leaves
+	// it false. Claiming otherwise built the team's rows out of three empty
+	// slices, which is a team stubbed to its own All Issues row.
+	var children teamChildren
 	if navKindNeedsTeamChildren(nav.Kind) {
 		children = fetchTeamChildren(ctx, fetchers, nav.TeamID)
 		if !children.loaded || !children.contain(nav) {
@@ -139,11 +142,11 @@ func (a *App) restoreSessionTeamNode(state session.State, children teamChildren)
 		return
 	}
 	// Leave children unpopulated on fetch errors so expanding the team retries.
-	if children.loaded && len(teamNode.GetChildren()) == 0 {
+	if children.loaded && !teamChildrenLoaded(teamNode) {
 		a.populateTeamNodeChildren(teamNode, state.Nav.TeamID, children.projects, children.states, children.cycles)
 	}
-	if len(teamNode.GetChildren()) > 0 {
-		teamNode.SetExpanded(true)
+	if teamChildrenLoaded(teamNode) {
+		setNavFold(teamNode, true)
 	}
 
 	target := teamNode
@@ -156,6 +159,7 @@ func (a *App) restoreSessionTeamNode(state session.State, children teamChildren)
 			return
 		}
 		target = descendant
+		revealNavNode(teamNode, descendant)
 	}
 	a.selectSessionNode(target, state)
 }

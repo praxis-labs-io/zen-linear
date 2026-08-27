@@ -45,7 +45,7 @@ var keySections = []keySection{
 	}},
 	{keyContextNavigation, "Navigation tree", func(a *App) []hint {
 		return []hint{
-			{"j / k", "move, and out of the top"},
+			{"j / k", "move"},
 			{"⏎", "open"},
 			{"h / l", "collapse, issues pane"},
 			{"g / G", "first / last"},

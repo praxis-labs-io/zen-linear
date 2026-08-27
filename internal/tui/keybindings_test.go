@@ -403,7 +403,7 @@ func TestFavoriteMoveKeysAreSwallowedOnNonFavorites(t *testing.T) {
 		return nil
 	}
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
-	app.navigationTree.SetCurrentNode(app.navigationTree.GetRoot().GetChildren()[1])
+	app.navigationTree.SetCurrentNode(app.findTeamTreeNode("team-1"))
 
 	for _, r := range []rune{'J', 'K'} {
 		if app.handleNavigationKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone)) != nil {

@@ -26,8 +26,10 @@ work.
 
 ## Navigation
 
-The tree is the Linear sidebar. **Favorites** first, in the order you keep them
-there, then your teams.
+The tree is the Linear sidebar, in three sections with a blank row between
+them: All Issues, then **Favorites** in the order you keep them there, then
+**Teams**. The two headings are labels rather than rows, so the cursor steps
+over them, and a section with nothing in it is left out.
 
 ### Favorites
 
@@ -44,8 +46,12 @@ one team's slice of it, so a project shared across teams shows the whole of it.
 
 ### Teams
 
-A team expands into its cycles, statuses and projects. Selecting any of them
-scopes the issue list to it.
+A team's own row only opens and closes, so folding one never costs a fetch. It
+opens onto its All Issues, which scopes the list to the whole team, and three
+headings — Cycles, Status and Projects — each folded, since a team that opened
+onto all of them at once is more rows than the pane has. `⏎` opens one, and the
+folder icon on a row says which way it goes. Selecting anything inside scopes the
+issue list to it.
 
 ### Search
 

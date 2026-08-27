@@ -57,8 +57,16 @@ attachments, and the agent.
 
 ## The navigation pane
 
+    ⏎           open the row, or scope the issue list to it
     F           favorite or unfavorite the item under the cursor
     J/K         move a favorite down or up
+
+A row that opens and closes carries a folder icon that says which way it is: a
+team, one of its three headings, and a favorites folder. `⏎` toggles it and
+does nothing else, a favorited team included: it opens onto its own All
+Issues, the same as one under Teams. A row that scopes a list carries a `╰` in
+the same column, so every title lines up. The tree draws no nesting lines;
+depth is the column each level indents by.
 
 `J` and `K` step a favorite through the tree as it is drawn. Stepping onto
 an open folder moves the favorite into it, stepping off the end of a folder

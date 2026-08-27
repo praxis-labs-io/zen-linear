@@ -15,7 +15,7 @@ import (
 // a node into query params. Linear has no favorite type for a workflow state,
 // so status nodes report false.
 func favoriteTargetForNode(node *NavigationNode) (linearapi.FavoriteTarget, bool) {
-	if node == nil || node.IsFolder {
+	if node == nil || node.IsFolder || node.IsGroup {
 		return linearapi.FavoriteTarget{}, false
 	}
 	switch {
@@ -480,6 +480,13 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 		return
 	}
 
+	// The reassembly builds the root from the rows this holds, so a tree that
+	// went back to waiting under it has none to build from. Leave it; the
+	// fetch that replaces the waiting root brings the section with it.
+	if a.allIssuesNode == nil {
+		return
+	}
+
 	previous := a.favoritesGroup
 	group := a.buildFavoritesGroup(a.favorites)
 	if previous == nil && group == nil {
@@ -487,29 +494,17 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 	}
 	restoreFavoriteExpansion(previous, group)
 
-	children := root.GetChildren()
-	rebuilt := make([]*tview.TreeNode, 0, len(children)+1)
-	if previous != nil {
-		for _, child := range children {
-			if child == previous {
-				if group != nil {
-					rebuilt = append(rebuilt, group)
-				}
-				continue
-			}
-			rebuilt = append(rebuilt, child)
+	// The rows the reassembly drops: the old section, and the blank rows that
+	// are built fresh with it. Nothing else clears their label cache entries.
+	for _, child := range root.GetChildren() {
+		if child != a.allIssuesNode && child != a.teamsGroup {
+			a.forgetNavNodeLabels(child)
 		}
-		a.forgetNavNodeLabels(previous)
-	} else {
-		// No section yet: it belongs directly under "All Issues".
-		at := min(1, len(children))
-		rebuilt = append(rebuilt, children[:at]...)
-		rebuilt = append(rebuilt, group)
-		rebuilt = append(rebuilt, children[at:]...)
 	}
 
 	a.favoritesGroup = group
-	root.SetChildren(rebuilt)
+	root.SetChildren(a.navRootChildren())
+	a.applyNavigationNodeColors(root)
 	a.applyNavSelectionStyle(root)
 	a.restoreNavigationCursor(root, group, preferFavoriteID)
 	// The disk copy is what the next launch paints, so a toggle or a reorder
@@ -550,7 +545,7 @@ func restoreFavoriteExpansion(previous, group *tview.TreeNode) {
 			continue
 		}
 		if was := findFavoriteTreeNode(previous, ref.FavoriteID); was != nil {
-			child.SetExpanded(was.IsExpanded())
+			setNavFold(child, was.IsExpanded())
 		}
 	}
 }

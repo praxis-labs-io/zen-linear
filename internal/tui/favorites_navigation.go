@@ -193,27 +193,16 @@ func (a *App) buildFavoritesGroup(favorites []linearapi.Favorite) *tview.TreeNod
 	return group
 }
 
-// appendFavoritesSection adds a Favorites group under the navigation root.
-func (a *App) appendFavoritesSection(root *tview.TreeNode, favorites []linearapi.Favorite) {
-	group := a.buildFavoritesGroup(favorites)
-	a.favoritesGroup = group
-	if group != nil {
-		root.AddChild(group)
-	}
-}
-
 // addFavoriteNodes renders favorite navigation nodes under a tree node,
 // recursing into folders.
 func (a *App) addFavoriteNodes(parent *tview.TreeNode, nodes []*NavigationNode) {
 	for _, navNode := range nodes {
-		color := a.theme.Foreground
-		if navNode.IsFolder {
-			color = a.theme.SecondaryText
-		}
+		// A favorited team holds none of its rows until it is opened, so it
+		// reads closed. A folder holds its own and reads open.
+		expanded := !navNode.IsTeam
 		child := tview.NewTreeNode(navNode.Text).
-			SetColor(color).
 			SetReference(navNode).
-			SetExpanded(true)
+			SetExpanded(expanded)
 		if len(navNode.Children) > 0 {
 			a.addFavoriteNodes(child, navNode.Children)
 		}

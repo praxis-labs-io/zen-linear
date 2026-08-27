@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
@@ -105,7 +106,9 @@ func (a *App) resetNavigationTree() {
 	}
 	a.navNodeLabels = make(map[*tview.TreeNode]navNodeLabel)
 	a.favorites = nil
+	a.allIssuesNode = nil
 	a.favoritesGroup = nil
+	a.teamsGroup = nil
 	a.navTeams = nil
 	root := a.buildWaitingNavigationRoot()
 	a.navigationTree.SetRoot(root)
@@ -125,42 +128,78 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearap
 
 	// Add "All Issues" at the top
 	allIssues := tview.NewTreeNode("All Issues").
-		SetColor(a.theme.Foreground).
 		SetReference(&NavigationNode{ID: "all", Text: "All Issues"}).
 		SetExpanded(true)
-	root.AddChild(allIssues)
+	a.allIssuesNode = allIssues
+	a.favoritesGroup = a.buildFavoritesGroup(favorites)
+	a.teamsGroup = a.buildTeamsGroup(teams)
+	root.SetChildren(a.navRootChildren())
 
-	a.appendFavoritesSection(root, favorites)
-
-	// Add teams
-	for _, team := range teams {
-		teamNode := tview.NewTreeNode(team.Name).
-			SetColor(a.theme.Foreground).
-			SetReference(&NavigationNode{
-				ID:     team.ID,
-				Text:   team.Name,
-				IsTeam: true,
-				TeamID: team.ID,
-			}).
-			SetExpanded(false)
-
-		// Note: Team selection is handled by the tree's SetSelectedFunc in buildNavigationTree()
-		// Do NOT set SetSelectedFunc here as it causes duplicate callbacks
-
-		root.AddChild(teamNode)
-	}
-
+	a.applyNavigationNodeColors(root)
 	a.applyNavSelectionStyle(root)
 	a.navigationTree.SetRoot(root)
 	a.navigationTree.SetCurrentNode(allIssues)
 	a.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
 }
 
+// buildTeamsGroup renders the Teams heading and the teams under it, or nil
+// when the workspace has none.
+func (a *App) buildTeamsGroup(teams []linearapi.Team) *tview.TreeNode {
+	if len(teams) == 0 {
+		return nil
+	}
+
+	group := tview.NewTreeNode("Teams").
+		SetColor(a.theme.Accent).
+		SetSelectable(false).
+		SetExpanded(true)
+
+	for _, team := range teams {
+		// Selection is the tree's own SetSelectedFunc. A callback here would
+		// fire alongside it.
+		group.AddChild(tview.NewTreeNode(team.Name).
+			SetReference(&NavigationNode{
+				ID:     team.ID,
+				Text:   team.Name,
+				IsTeam: true,
+				TeamID: team.ID,
+			}).
+			SetExpanded(false))
+	}
+	return group
+}
+
+// navRootChildren orders the tree's rows: All Issues, then each section that has
+// anything in it, each under a blank row that sets it apart. It is the one place
+// that order is written down, because a favorites change rebuilds the root
+// rather than splicing into it and the two have to agree on where a section is.
+func (a *App) navRootChildren() []*tview.TreeNode {
+	children := make([]*tview.TreeNode, 0, 5)
+	for _, section := range []*tview.TreeNode{a.allIssuesNode, a.favoritesGroup, a.teamsGroup} {
+		if section == nil {
+			continue
+		}
+		if len(children) > 0 {
+			children = append(children, navSectionSpacer())
+		}
+		children = append(children, section)
+	}
+	return children
+}
+
+// navSectionSpacer is the blank row above a section. It carries no reference and
+// takes no cursor, so every walk that reads one steps over it.
+func navSectionSpacer() *tview.TreeNode {
+	return tview.NewTreeNode("").SetSelectable(false)
+}
+
 // onTeamExpanded loads projects for a team when it's expanded.
 func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
-	// If already has children (projects loaded), just toggle expand
-	if len(teamNode.GetChildren()) > 0 {
-		teamNode.SetExpanded(!teamNode.IsExpanded())
+	// An open team closes on its own. Only a closed one whose rows were never
+	// built goes back for them, or a team that answered with nothing would
+	// refetch on the way shut and spring open again.
+	if teamChildrenLoaded(teamNode) || teamNode.IsExpanded() {
+		setNavFold(teamNode, !teamNode.IsExpanded())
 		return
 	}
 
@@ -190,30 +229,45 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 		logger.Debug("tui.app: loaded navigation children team_id=%s projects=%d states=%d cycles=%d", teamID, len(projects), len(states), len(cycles))
 
 		a.app.QueueUpdateDraw(func() {
-			// Double-check children haven't been added by another goroutine
-			if len(teamNode.GetChildren()) > 0 {
-				teamNode.SetExpanded(true)
+			// Double-check another goroutine has not built them already.
+			if teamChildrenLoaded(teamNode) {
+				setNavFold(teamNode, true)
 				return
 			}
 			a.populateTeamNodeChildren(teamNode, teamID, projects, states, cycles)
-			teamNode.SetExpanded(true)
+			setNavFold(teamNode, true)
 		})
 	}()
 }
 
 // populateTeamNodeChildren renders cycle, status, and project child nodes under a team node.
 func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, projects []linearapi.Project, states []linearapi.WorkflowState, cycles []linearapi.Cycle) {
+	logger.Debug("tui.app: building team rows team_id=%s projects=%d states=%d cycles=%d", teamID, len(projects), len(states), len(cycles))
+	// A retry rebuilds rather than appends, since the rows a failed load left
+	// behind are the reason it is being retried.
+	for _, child := range teamNode.GetChildren() {
+		a.forgetNavNodeLabels(child)
+	}
+	teamNode.SetChildren(nil)
+	if nav, ok := teamNode.GetReference().(*NavigationNode); ok {
+		// Every Linear team has workflow states. None is a load that answered
+		// without answering, and the next open has to go back for them.
+		nav.ChildrenLoaded = len(states) > 0
+	}
+
+	// The team's own row folds and nothing else, so this is what scopes the
+	// list to the whole team. It carries a team and none of the other flags,
+	// which is the shape currentFetchParams reads as exactly that.
+	teamNode.AddChild(tview.NewTreeNode("All Issues").
+		SetReference(&NavigationNode{
+			ID:     fmt.Sprintf("%s-all", teamID),
+			Text:   "All Issues",
+			TeamID: teamID,
+		}))
+
 	if len(cycles) > 0 {
 		sortCyclesForNavigation(cycles)
-		cyclesGroup := tview.NewTreeNode("Cycles").
-			SetColor(a.theme.SecondaryText).
-			SetSelectable(false).
-			SetReference(&NavigationNode{
-				ID:      fmt.Sprintf("%s-cycles", teamID),
-				Text:    "Cycles",
-				TeamID:  teamID,
-				IsCycle: true,
-			})
+		cyclesGroup := a.newTeamGroupNode(teamID, "Cycles")
 		for _, cycle := range cycles {
 			label := cycle.DisplayName()
 			switch {
@@ -225,7 +279,6 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 				label += " (previous)"
 			}
 			cycleNode := tview.NewTreeNode(label).
-				SetColor(a.theme.SecondaryText).
 				SetReference(&NavigationNode{
 					ID:        cycle.ID,
 					Text:      label,
@@ -242,18 +295,9 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		sort.Slice(states, func(i, j int) bool {
 			return states[i].Position < states[j].Position
 		})
-		statusGroup := tview.NewTreeNode("Status").
-			SetColor(a.theme.SecondaryText).
-			SetSelectable(false).
-			SetReference(&NavigationNode{
-				ID:       fmt.Sprintf("%s-status", teamID),
-				Text:     "Status",
-				TeamID:   teamID,
-				IsStatus: true,
-			})
+		statusGroup := a.newTeamGroupNode(teamID, "Status")
 		for _, state := range states {
 			stateNode := tview.NewTreeNode(state.Name).
-				SetColor(a.theme.SecondaryText).
 				SetReference(&NavigationNode{
 					ID:        state.ID,
 					Text:      state.Name,
@@ -266,18 +310,41 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		}
 		teamNode.AddChild(statusGroup)
 	}
-	for _, proj := range projects {
-		projNode := tview.NewTreeNode(proj.Name).
-			SetColor(a.theme.SecondaryText).
-			SetReference(&NavigationNode{
-				ID:        proj.ID,
-				Text:      proj.Name,
-				IsProject: true,
-				TeamID:    teamID,
-			})
-		teamNode.AddChild(projNode)
+	if len(projects) > 0 {
+		projectsGroup := a.newTeamGroupNode(teamID, "Projects")
+		for _, proj := range projects {
+			projectsGroup.AddChild(tview.NewTreeNode(proj.Name).
+				SetReference(&NavigationNode{
+					ID:        proj.ID,
+					Text:      proj.Name,
+					IsProject: true,
+					TeamID:    teamID,
+				}))
+		}
+		teamNode.AddChild(projectsGroup)
 	}
+	a.applyNavigationNodeColors(teamNode)
 	a.applyNavSelectionStyle(teamNode)
+}
+
+// teamChildrenLoaded reports whether a fetch has built a team's rows.
+func teamChildrenLoaded(teamNode *tview.TreeNode) bool {
+	nav, ok := teamNode.GetReference().(*NavigationNode)
+	return ok && nav.ChildrenLoaded
+}
+
+// newTeamGroupNode is one of a team's three headings. They open folded: a team
+// otherwise expands onto every cycle and every status at once, which is more
+// rows than the pane has. Selecting one toggles it and scopes nothing.
+func (a *App) newTeamGroupNode(teamID, name string) *tview.TreeNode {
+	return tview.NewTreeNode(name).
+		SetExpanded(false).
+		SetReference(&NavigationNode{
+			ID:      fmt.Sprintf("%s-%s", teamID, strings.ToLower(name)),
+			Text:    name,
+			TeamID:  teamID,
+			IsGroup: true,
+		})
 }
 
 func sortCyclesForNavigation(cycles []linearapi.Cycle) {

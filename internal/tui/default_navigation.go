@@ -69,17 +69,18 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 			return
 		}
 		// Leave children unpopulated on fetch errors so expanding the team retries.
-		if childrenLoaded && len(teamNode.GetChildren()) == 0 {
+		if childrenLoaded && !teamChildrenLoaded(teamNode) {
 			a.populateTeamNodeChildren(teamNode, team.ID, projects, states, cycles)
 		}
-		if len(teamNode.GetChildren()) > 0 {
-			teamNode.SetExpanded(true)
+		if teamChildrenLoaded(teamNode) {
+			setNavFold(teamNode, true)
 		}
 
 		target := teamNode
 		if project != nil {
 			if projectNode := findProjectTreeNode(teamNode, project.ID); projectNode != nil {
 				target = projectNode
+				revealNavNode(teamNode, projectNode)
 			}
 		}
 		a.navigationTree.SetCurrentNode(target)
@@ -95,11 +96,10 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 
 // findTeamTreeNode returns the tree node for a team ID, or nil if absent.
 func (a *App) findTeamTreeNode(teamID string) *tview.TreeNode {
-	root := a.navigationTree.GetRoot()
-	if root == nil {
+	if a.teamsGroup == nil {
 		return nil
 	}
-	for _, child := range root.GetChildren() {
+	for _, child := range a.teamsGroup.GetChildren() {
 		if nav, ok := child.GetReference().(*NavigationNode); ok && nav.IsTeam && nav.TeamID == teamID {
 			return child
 		}
@@ -107,14 +107,12 @@ func (a *App) findTeamTreeNode(teamID string) *tview.TreeNode {
 	return nil
 }
 
-// findProjectTreeNode returns the child node for a project ID, or nil if absent.
+// findProjectTreeNode returns the node for a project ID under a team, or nil if
+// absent. Projects sit inside the team's Projects group, not directly under it.
 func findProjectTreeNode(teamNode *tview.TreeNode, projectID string) *tview.TreeNode {
-	for _, child := range teamNode.GetChildren() {
-		if nav, ok := child.GetReference().(*NavigationNode); ok && nav.IsProject && nav.ID == projectID {
-			return child
-		}
-	}
-	return nil
+	return findTeamDescendant(teamNode, func(nav *NavigationNode) bool {
+		return nav.IsProject && nav.ID == projectID
+	})
 }
 
 // findTeamByKeyOrName returns the team whose key or name matches the query

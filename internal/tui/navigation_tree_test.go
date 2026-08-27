@@ -101,7 +101,9 @@ func TestNavigationPaneDrawsItsControlsInOrder(t *testing.T) {
 	if got := lines[3]; !strings.Contains(got, "└") {
 		t.Errorf("third row = %q, want the frame closing under the query box", got)
 	}
-	if got := lines[4]; !strings.HasPrefix(strings.TrimPrefix(got, "│"), " All Issues") {
-		t.Errorf("first tree row = %q, want All Issues one column off the border", got)
+	// One column of border padding, then the row's own blank column, which is
+	// what lines its title up with every other row a selection can land on.
+	if got := lines[4]; !strings.HasPrefix(strings.TrimPrefix(got, "│"), " "+navIconBlank+"All Issues") {
+		t.Errorf("first tree row = %q, want All Issues past the padding and its column", got)
 	}
 }

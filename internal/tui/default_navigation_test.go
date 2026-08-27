@@ -3,12 +3,14 @@ package tui
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
+	"github.com/rivo/tview"
 )
 
 func TestFindTeamByKeyOrName(t *testing.T) {
@@ -79,8 +81,10 @@ func newDefaultNavTestApp(t testing.TB, cfg config.Config) *App {
 			{ID: "proj-2", Name: "Mobile App", TeamID: teamID},
 		}, nil
 	}
+	// Every Linear team has states, and a load that brings back none is the
+	// one the tree treats as unloaded.
 	app.fetchWorkflowStatesFunc = func(context.Context, string) ([]linearapi.WorkflowState, error) {
-		return nil, nil
+		return []linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}}, nil
 	}
 	app.fetchCyclesFunc = func(context.Context, string) ([]linearapi.Cycle, error) {
 		return nil, nil
@@ -142,6 +146,22 @@ func TestApplyDefaultNavigationSelectsProject(t *testing.T) {
 	}
 	if app.selectedNavigation == nil || !app.selectedNavigation.IsProject {
 		t.Fatalf("selectedNavigation = %+v, want project selection", app.selectedNavigation)
+	}
+
+	// Projects open folded, so the cursor would otherwise land on a row the
+	// pane never draws.
+	projectNode := app.navigationTree.GetCurrentNode()
+	var group *tview.TreeNode
+	for _, child := range app.findTeamTreeNode("team-2").GetChildren() {
+		if slices.Contains(child.GetChildren(), projectNode) {
+			group = child
+		}
+	}
+	if group == nil {
+		t.Fatal("the project is not under any of the team's headings")
+	}
+	if !group.IsExpanded() {
+		t.Fatalf("%q stayed folded over the project the cursor is on", group.GetText())
 	}
 }
 
