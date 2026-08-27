@@ -2,7 +2,8 @@
 
 ## Requirements
 
-A terminal that speaks 256 colors, and a Linear account.
+A terminal that speaks 256 colors, a font carrying the Nerd Font glyphs the
+navigation tree marks its folders with, and a Linear account.
 
 Nothing else is needed to run a release binary. Building from source needs
 Go 1.24 or later.

@@ -172,11 +172,7 @@ func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
 	if ref == nil {
 		node.SetColor(a.theme.Accent)
 	} else if navNode, ok := ref.(*NavigationNode); ok {
-		if navNode.IsProject || navNode.IsStatus {
-			node.SetColor(a.theme.SecondaryText)
-		} else {
-			node.SetColor(a.theme.Foreground)
-		}
+		node.SetColor(a.navRowColor(navNode))
 	}
 	for _, child := range node.GetChildren() {
 		a.applyNavigationNodeColors(child)

@@ -53,6 +53,9 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 
 	tree.SetBorder(false)
 	tree.SetBackgroundColor(a.theme.Background)
+	// No nesting lines. Depth is carried by the icon column each level indents
+	// by, which says what a row is as well as where it sits.
+	tree.SetGraphics(false)
 	// The other half of the pane's click handling; see claimNavFocus. Without
 	// it a click on the tree leaves the query box holding the keys, and Esc
 	// there wipes a query the user never went back to.
@@ -99,30 +102,31 @@ func (a *App) buildNavigationTree() *tview.TreeView {
 	return tree
 }
 
-// The glyphs marking a row that opens and closes. tview draws no expander of
-// its own and its per-level prefixes cannot vary with a node's state, so the
-// row's own label carries it.
+// The column every row that can hold one begins with. A folder says the row
+// opens and closes and which way it is; a row that does neither takes the same
+// two cells blank, so the titles line up down the pane either way. These are
+// Nerd Font glyphs, which the terminal's font has to carry.
 const (
-	navFoldOpen   = "▾ "
-	navFoldClosed = "▸ "
+	navIconOpen   = "\uf07c "
+	navIconClosed = "\uf07b "
+	navIconBranch = "\u2570 "
+	navIconBlank  = "  "
 )
 
-// navFoldLabel is a foldable row's text, marked for the state it is in.
-func navFoldLabel(text string, expanded bool) string {
-	if expanded {
-		return navFoldOpen + text
-	}
-	return navFoldClosed + text
-}
-
-// setNavFold opens or closes a row and re-marks it. The glyph is part of the
-// label, so a toggle that skips this leaves the row claiming the state it left.
-// padNavigationTree re-fits anything relabelled here on the next draw.
+// setNavFold opens or closes a row. Its icon is drawn from that state by
+// padNavigationTree, so nothing here relabels it.
 func setNavFold(node *tview.TreeNode, expanded bool) {
 	node.SetExpanded(expanded)
-	if nav, ok := node.GetReference().(*NavigationNode); ok && navIsFoldable(nav) {
-		node.SetText(navFoldLabel(nav.Text, expanded))
+}
+
+// navRowColor mutes a row that opens and closes. Those are the tree's
+// structure, and their folder already says so, which leaves the color free to
+// mark the rows a selection can actually land on.
+func (a *App) navRowColor(nav *NavigationNode) tcell.Color {
+	if navIsFoldable(nav) {
+		return a.theme.SecondaryText
 	}
+	return a.theme.Foreground
 }
 
 // navIsFoldable reports whether a row opens and closes rather than scoping the

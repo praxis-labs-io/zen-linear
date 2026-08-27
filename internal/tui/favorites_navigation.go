@@ -197,19 +197,10 @@ func (a *App) buildFavoritesGroup(favorites []linearapi.Favorite) *tview.TreeNod
 // recursing into folders.
 func (a *App) addFavoriteNodes(parent *tview.TreeNode, nodes []*NavigationNode) {
 	for _, navNode := range nodes {
-		color := a.theme.Foreground
-		if navNode.IsFolder {
-			color = a.theme.SecondaryText
-		}
 		// A favorited team holds none of its rows until it is opened, so it
 		// reads closed. A folder holds its own and reads open.
 		expanded := !navNode.IsTeam
-		label := navNode.Text
-		if navIsFoldable(navNode) {
-			label = navFoldLabel(label, expanded)
-		}
-		child := tview.NewTreeNode(label).
-			SetColor(color).
+		child := tview.NewTreeNode(navNode.Text).
 			SetReference(navNode).
 			SetExpanded(expanded)
 		if len(navNode.Children) > 0 {

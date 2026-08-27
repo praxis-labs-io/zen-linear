@@ -14,6 +14,10 @@ type navNodeLabel struct {
 	original    string
 	fitted      string
 	fittedWidth int
+	// fittedPrefix is the indent and column the row was last drawn with. A
+	// toggle changes no text, so without this the row would keep the icon it
+	// had.
+	fittedPrefix string
 }
 
 // padNavigationTree truncates and pads every node label to the tree's inner
@@ -39,17 +43,18 @@ func (a *App) padNavigationTree(width int) {
 	}
 	// The root is hidden, so its children are the rows drawn at level 0.
 	for _, child := range root.GetChildren() {
-		a.padNavigationNode(child, 0, width)
+		a.padNavigationNode(child, 0, width, false)
 	}
 }
 
-func (a *App) padNavigationNode(node *tview.TreeNode, level int, width int) {
+func (a *App) padNavigationNode(node *tview.TreeNode, level, width int, owned bool) {
 	label, cached := a.navNodeLabels[node]
 	text := node.GetText()
 	if !cached {
-		// Tighten tview's default indent of two to one, so each level advances
-		// two cells (one graphics offset plus one indent).
-		node.SetIndent(1)
+		// Every row's label starts at the pane's left edge, so the cursor line
+		// runs the full width rather than beginning where the text does. The
+		// indent is written into the label instead.
+		node.SetIndent(0)
 	}
 	if !cached || text != label.fitted {
 		// Either the node is new or something relabelled it; the text on it now
@@ -57,20 +62,61 @@ func (a *App) padNavigationNode(node *tview.TreeNode, level int, width int) {
 		label = navNodeLabel{original: text}
 	}
 
-	available := width - 2*level
-	needsFit := available > 0 && (label.fittedWidth != available || label.fitted != text)
+	prefix := navRowPrefix(node, level, owned)
+	needsFit := label.fittedWidth != width || label.fitted != text || label.fittedPrefix != prefix
 	if needsFit {
-		label.fitted = fitToWidth(label.original, available)
-		label.fittedWidth = available
+		label.fitted = fitToWidth(prefix+label.original, width)
+		label.fittedWidth = width
+		label.fittedPrefix = prefix
 		node.SetText(label.fitted)
 	}
 	if !cached || needsFit {
 		a.navNodeLabels[node] = label
 	}
 
-	for _, child := range node.GetChildren() {
-		a.padNavigationNode(child, level+1, width)
+	// A section heading is a label over the rows beneath it rather than a level
+	// of its own, so those rows begin at the edge with it.
+	childLevel := level + 1
+	if isNavSectionHeading(node) {
+		childLevel = level
 	}
+	// Everything under the tree's own top row belongs to something, whether
+	// that is a heading, a team or a folder.
+	for _, child := range node.GetChildren() {
+		a.padNavigationNode(child, childLevel, width, true)
+	}
+}
+
+// navRowPrefix is the indent a row carries and the column it begins with: a
+// folder where the row opens and closes, and a branch where it is one of the
+// rows a selection can land on, so every title lines up with its siblings and
+// sits a column in from whatever it hangs off.
+func navRowPrefix(node *tview.TreeNode, level int, owned bool) string {
+	// Two cells a level, the width of the column each row begins with, so a
+	// row sits under the title of the one it hangs off.
+	indent := strings.Repeat("  ", level)
+	nav, ok := node.GetReference().(*NavigationNode)
+	if !ok {
+		return indent
+	}
+	switch {
+	case !navIsFoldable(nav):
+		if !owned {
+			return indent + navIconBlank
+		}
+		return indent + navIconBranch
+	case node.IsExpanded():
+		return indent + navIconOpen
+	default:
+		return indent + navIconClosed
+	}
+}
+
+// isNavSectionHeading reports whether a row is one of the tree's section labels
+// rather than something the cursor can rest on.
+func isNavSectionHeading(node *tview.TreeNode) bool {
+	_, isNav := node.GetReference().(*NavigationNode)
+	return !isNav && len(node.GetChildren()) > 0
 }
 
 // fitToWidth truncates text to the given cell width with an ellipsis, or pads

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +28,13 @@ func currentNavText(app *App) string {
 		return ""
 	}
 	return nav.Text
+}
+
+// navRowStarts renders the tree the way a draw does and reports whether the row
+// begins with what a reader should see: its indent, then its column.
+func navRowStarts(app *App, node *tview.TreeNode, want string) bool {
+	app.padNavigationTree(30)
+	return strings.HasPrefix(node.GetText(), want)
 }
 
 // navRowLabels reads the tree's top-level rows, blank spacers included, so a
@@ -194,7 +202,7 @@ func TestATeamOpensOntoThreeFoldedHeadings(t *testing.T) {
 	app := newUXTestApp(t)
 	teamNode := openTestTeam(t, app)
 
-	want := []string{"All Issues", "▸ Cycles", "▸ Status", "▸ Projects"}
+	want := []string{"All Issues", "Cycles", "Status", "Projects"}
 	if got := teamGroupLabels(teamNode); !slices.Equal(got, want) {
 		t.Fatalf("team children = %q, want %q", got, want)
 	}
@@ -202,9 +210,18 @@ func TestATeamOpensOntoThreeFoldedHeadings(t *testing.T) {
 		if group.IsExpanded() {
 			t.Errorf("%q opened expanded, which is the wall of rows this replaced", group.GetText())
 		}
+		if !navRowStarts(app, group, "  "+navIconClosed) {
+			t.Errorf("%q does not begin with an indent and a closed folder", group.GetText())
+		}
 	}
-	if got := teamNode.GetText(); got != "▾ Engineering" {
-		t.Errorf("open team reads %q, want it marked open", got)
+	// A team heads its section, so it takes no indent of its own.
+	if !navRowStarts(app, teamNode, navIconOpen) {
+		t.Errorf("open team = %q, want it to begin with an open folder at the edge", teamNode.GetText())
+	}
+	// All Issues opens nothing, so its column carries the branch that says what
+	// it hangs off, and its title lines up with the rows that do open.
+	if !navRowStarts(app, teamNode.GetChildren()[0], "  "+navIconBranch) {
+		t.Errorf("All Issues = %q, want a branch in its column", teamNode.GetChildren()[0].GetText())
 	}
 }
 
@@ -223,16 +240,16 @@ func TestOpeningAHeadingShowsWhatIsInside(t *testing.T) {
 	if !cycles.IsExpanded() {
 		t.Fatal("Enter did not open the heading")
 	}
-	if got := cycles.GetText(); got != "▾ Cycles" {
-		t.Errorf("opened heading reads %q, want it marked open", got)
+	if !navRowStarts(app, cycles, "  "+navIconOpen) {
+		t.Errorf("opened heading = %q, want an open folder", cycles.GetText())
 	}
 
 	pressEnterOnNavigation(app)
 	if cycles.IsExpanded() {
 		t.Fatal("Enter did not close the heading again")
 	}
-	if got := cycles.GetText(); got != "▸ Cycles" {
-		t.Errorf("closed heading reads %q, want it marked closed", got)
+	if !navRowStarts(app, cycles, "  "+navIconClosed) {
+		t.Errorf("closed heading = %q, want a closed folder", cycles.GetText())
 	}
 }
 
@@ -336,7 +353,7 @@ func TestATeamThatLoadedNothingGoesBackForIt(t *testing.T) {
 	if !teamChildrenLoaded(teamNode) {
 		t.Fatal("a real load did not count as loaded")
 	}
-	want := []string{"All Issues", "▸ Status", "▸ Projects"}
+	want := []string{"All Issues", "Status", "Projects"}
 	if got := teamGroupLabels(teamNode); !slices.Equal(got, want) {
 		t.Fatalf("team rows after the retry = %q, want %q", got, want)
 	}
@@ -375,8 +392,8 @@ func TestAFavoritedTeamStillScopesTheList(t *testing.T) {
 	)
 
 	favorite := app.favoritesGroup.GetChildren()[0]
-	if got := favorite.GetText(); got != "▸ Engineering" {
-		t.Fatalf("favorited team reads %q, want it marked closed", got)
+	if !navRowStarts(app, favorite, navIconClosed) {
+		t.Fatalf("favorited team = %q, want a closed folder at the edge", favorite.GetText())
 	}
 
 	app.navigationTree.SetCurrentNode(favorite)
@@ -406,5 +423,51 @@ func TestRebuildingATeamsRowsForgetsTheOnesItDropped(t *testing.T) {
 
 	if _, held := app.navNodeLabels[dropped]; held {
 		t.Fatal("the label cache still holds a row the rebuild dropped")
+	}
+}
+
+// A row that opens and closes is the tree's structure and reads muted; the rows
+// a selection can land on are the ones in the foreground. One rule, so a theme
+// change cannot restore the mix this replaced.
+func TestExpandableRowsAreMutedAndSelectableOnesAreNot(t *testing.T) {
+	app := newUXTestApp(t)
+	app.rebuildNavigationTree(
+		[]linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}},
+		[]linearapi.Favorite{
+			{ID: "folder-1", Type: "folder", FolderName: "Current Projects", SortOrder: 1},
+			{ID: "fav-a", Type: "project", ProjectID: "p1", ProjectName: "Alpha", ParentID: "folder-1", SortOrder: 2},
+		},
+	)
+	teamNode := app.findTeamTreeNode("team-1")
+	app.populateTeamNodeChildren(teamNode, "team-1",
+		[]linearapi.Project{{ID: "project-1", Name: "Website", TeamID: "team-1"}},
+		[]linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}},
+		nil,
+	)
+
+	tests := []struct {
+		name  string
+		node  *tview.TreeNode
+		muted bool
+	}{
+		{"a team", teamNode, true},
+		{"one of its headings", teamNode.GetChildren()[1], true},
+		{"a favorites folder", app.favoritesGroup.GetChildren()[0], true},
+		{"the team's All Issues", teamNode.GetChildren()[0], false},
+		{"a status", teamNode.GetChildren()[1].GetChildren()[0], false},
+		{"a project", teamNode.GetChildren()[2].GetChildren()[0], false},
+		{"a favorite", app.favoritesGroup.GetChildren()[0].GetChildren()[0], false},
+		{"All Issues", app.allIssuesNode, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			want := app.theme.Foreground
+			if test.muted {
+				want = app.theme.SecondaryText
+			}
+			if got := test.node.GetColor(); got != want {
+				t.Errorf("%q color = %v, want %v", test.node.GetText(), got, want)
+			}
+		})
 	}
 }

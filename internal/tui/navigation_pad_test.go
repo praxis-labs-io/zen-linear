@@ -71,7 +71,10 @@ func navTreeLabelsByLevel(app *App) []struct {
 	return out
 }
 
-func TestPadNavigationTree_FitsEveryNodeToItsLevelWidth(t *testing.T) {
+// Every row is fitted to the whole pane, whatever its depth, so the cursor line
+// spans the width rather than starting where the text does. The depth is inside
+// the label.
+func TestPadNavigationTree_FitsEveryNodeToTheFullWidth(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(3), nil)
 
@@ -80,9 +83,8 @@ func TestPadNavigationTree_FitsEveryNodeToItsLevelWidth(t *testing.T) {
 
 	truncated := false
 	for _, node := range navTreeLabelsByLevel(app) {
-		want := width - 2*node.level
-		if got := runeCellWidth(node.label); got != want {
-			t.Fatalf("level %d label %q fitted to width %d, want %d", node.level, node.label, got, want)
+		if got := runeCellWidth(node.label); got != width {
+			t.Fatalf("level %d label %q fitted to width %d, want the full %d", node.level, node.label, got, width)
 		}
 		if strings.Contains(node.label, "…") {
 			truncated = true
@@ -127,11 +129,11 @@ func TestPadNavigationTree_PicksUpALabelChangedElsewhere(t *testing.T) {
 	app.padNavigationTree(30)
 
 	got := teamNode.GetText()
-	if !strings.HasPrefix(got, "Renamed elsewhere") {
+	if !strings.HasPrefix(got, navIconClosed+"Renamed elsewhere") {
 		t.Fatalf("node text = %q, want the relabel to survive the redraw", got)
 	}
-	if width := runeCellWidth(got); width != 28 {
-		t.Fatalf("relabelled node fitted to width %d, want 28 for its level", width)
+	if width := runeCellWidth(got); width != 30 {
+		t.Fatalf("relabelled node fitted to width %d, want the full 30", width)
 	}
 }
 
@@ -163,7 +165,8 @@ func TestPadNavigationTree_FitsNodesAddedAfterTheFirstDraw(t *testing.T) {
 	app.padNavigationTree(30)
 
 	teamNode := app.teamsGroup.GetChildren()[0]
-	added := tview.NewTreeNode("A child added long after the first draw completed")
+	added := tview.NewTreeNode("A child added long after the first draw completed").
+		SetReference(&NavigationNode{ID: "p1", Text: "A child added long after the first draw completed", IsProject: true})
 	teamNode.AddChild(added)
 
 	app.padNavigationTree(30)
@@ -171,8 +174,11 @@ func TestPadNavigationTree_FitsNodesAddedAfterTheFirstDraw(t *testing.T) {
 	if got := added.GetText(); got == "A child added long after the first draw completed" {
 		t.Fatal("a node added after the first draw was never fitted")
 	}
-	if width := runeCellWidth(added.GetText()); width != 26 {
-		t.Fatalf("added node fitted to width %d, want 26 for its level", width)
+	if width := runeCellWidth(added.GetText()); width != 30 {
+		t.Fatalf("added node fitted to width %d, want the full 30", width)
+	}
+	if !strings.HasPrefix(added.GetText(), "  "+navIconBranch+"A child") {
+		t.Errorf("added node = %q, want it a level in on a branch", added.GetText())
 	}
 }
 
@@ -226,5 +232,52 @@ func BenchmarkPadNavigationTree_AfterResize(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
 		app.padNavigationTree(30 + i%2)
+	}
+}
+
+// Every row begins with a column, a folder where it opens and the same width
+// blank where it does not, so siblings line up. The indent is a column a level,
+// which is what puts a row under the title of the one it hangs off.
+func TestEveryRowBeginsWithItsColumnAndStepsAColumnALevel(t *testing.T) {
+	app := newUXTestApp(t)
+	app.rebuildNavigationTree(
+		[]linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}},
+		[]linearapi.Favorite{
+			{ID: "folder-1", Type: "folder", FolderName: "Current Projects", SortOrder: 1},
+			{ID: "fav-a", Type: "project", ProjectID: "p1", ProjectName: "Alpha", ParentID: "folder-1", SortOrder: 2},
+			{ID: "fav-b", Type: "cycle", CycleID: "c1", CycleName: "My Current Cycle", CycleTeamID: "team-1", SortOrder: 3},
+		},
+	)
+	teamNode := app.findTeamTreeNode("team-1")
+	app.populateTeamNodeChildren(teamNode, "team-1",
+		[]linearapi.Project{{ID: "project-1", Name: "Website", TeamID: "team-1"}},
+		[]linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}},
+		[]linearapi.Cycle{{ID: "cycle-1", Number: 12}},
+	)
+	setNavFold(teamNode, true)
+	cycles := teamNode.GetChildren()[1]
+	setNavFold(cycles, true)
+	app.padNavigationTree(40)
+
+	folder := app.favoritesGroup.GetChildren()[0]
+
+	tests := []struct {
+		name string
+		node *tview.TreeNode
+		want string
+	}{
+		{"a section's own row sits at the edge", folder, navIconOpen + "Current Projects"},
+		{"a leaf beside it takes a branch", app.favoritesGroup.GetChildren()[1], navIconBranch + "My Current Cycle"},
+		{"what it holds steps a column in", folder.GetChildren()[0], "  " + navIconBranch + "Alpha"},
+		{"a team's leaf steps in the same", teamNode.GetChildren()[0], "  " + navIconBranch + "All Issues"},
+		{"and lines up with its headings", cycles, "  " + navIconOpen + "Cycles"},
+		{"a heading's own rows step in again", cycles.GetChildren()[0], "    " + navIconBranch + "Cycle 12"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.node.GetText(); !strings.HasPrefix(got, test.want) {
+				t.Errorf("row = %q, want it to begin %q", got, test.want)
+			}
+		})
 	}
 }

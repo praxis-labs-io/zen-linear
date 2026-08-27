@@ -128,7 +128,6 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearap
 
 	// Add "All Issues" at the top
 	allIssues := tview.NewTreeNode("All Issues").
-		SetColor(a.theme.Foreground).
 		SetReference(&NavigationNode{ID: "all", Text: "All Issues"}).
 		SetExpanded(true)
 	a.allIssuesNode = allIssues
@@ -136,6 +135,7 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearap
 	a.teamsGroup = a.buildTeamsGroup(teams)
 	root.SetChildren(a.navRootChildren())
 
+	a.applyNavigationNodeColors(root)
 	a.applyNavSelectionStyle(root)
 	a.navigationTree.SetRoot(root)
 	a.navigationTree.SetCurrentNode(allIssues)
@@ -157,8 +157,7 @@ func (a *App) buildTeamsGroup(teams []linearapi.Team) *tview.TreeNode {
 	for _, team := range teams {
 		// Selection is the tree's own SetSelectedFunc. A callback here would
 		// fire alongside it.
-		group.AddChild(tview.NewTreeNode(navFoldLabel(team.Name, false)).
-			SetColor(a.theme.Foreground).
+		group.AddChild(tview.NewTreeNode(team.Name).
 			SetReference(&NavigationNode{
 				ID:     team.ID,
 				Text:   team.Name,
@@ -260,7 +259,6 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 	// list to the whole team. It carries a team and none of the other flags,
 	// which is the shape currentFetchParams reads as exactly that.
 	teamNode.AddChild(tview.NewTreeNode("All Issues").
-		SetColor(a.theme.Foreground).
 		SetReference(&NavigationNode{
 			ID:     fmt.Sprintf("%s-all", teamID),
 			Text:   "All Issues",
@@ -281,7 +279,6 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 				label += " (previous)"
 			}
 			cycleNode := tview.NewTreeNode(label).
-				SetColor(a.theme.SecondaryText).
 				SetReference(&NavigationNode{
 					ID:        cycle.ID,
 					Text:      label,
@@ -301,7 +298,6 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		statusGroup := a.newTeamGroupNode(teamID, "Status")
 		for _, state := range states {
 			stateNode := tview.NewTreeNode(state.Name).
-				SetColor(a.theme.SecondaryText).
 				SetReference(&NavigationNode{
 					ID:        state.ID,
 					Text:      state.Name,
@@ -318,7 +314,6 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		projectsGroup := a.newTeamGroupNode(teamID, "Projects")
 		for _, proj := range projects {
 			projectsGroup.AddChild(tview.NewTreeNode(proj.Name).
-				SetColor(a.theme.SecondaryText).
 				SetReference(&NavigationNode{
 					ID:        proj.ID,
 					Text:      proj.Name,
@@ -328,6 +323,7 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 		}
 		teamNode.AddChild(projectsGroup)
 	}
+	a.applyNavigationNodeColors(teamNode)
 	a.applyNavSelectionStyle(teamNode)
 }
 
@@ -341,8 +337,7 @@ func teamChildrenLoaded(teamNode *tview.TreeNode) bool {
 // otherwise expands onto every cycle and every status at once, which is more
 // rows than the pane has. Selecting one toggles it and scopes nothing.
 func (a *App) newTeamGroupNode(teamID, name string) *tview.TreeNode {
-	return tview.NewTreeNode(navFoldLabel(name, false)).
-		SetColor(a.theme.SecondaryText).
+	return tview.NewTreeNode(name).
 		SetExpanded(false).
 		SetReference(&NavigationNode{
 			ID:      fmt.Sprintf("%s-%s", teamID, strings.ToLower(name)),
