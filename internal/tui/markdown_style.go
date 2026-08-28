@@ -25,6 +25,8 @@ func hexPtr(color tcell.Color) *string {
 
 func uintPtr(value uint) *uint { return &value }
 
+func boolPtr(value bool) *bool { return &value }
+
 // themeMarkdownStyle derives a glamour style from the active theme so rendered
 // markdown matches the rest of the UI instead of glamour's stock palette. The
 // document margin is dropped and wrapping is left to the surrounding text
@@ -44,9 +46,15 @@ func themeMarkdownStyle(theme Theme) ansi.StyleConfig {
 
 	style.HorizontalRule.Color = hexPtr(theme.Border)
 
+	// Links carry no underline: tview's own attribute reset ("[-:-:-]") clears
+	// tcell's attribute mask but not the underline style beside it, so an
+	// underline the page opens can never be closed and runs to the end of the
+	// pane. Color is what marks a link here.
 	style.Link.Color = hexPtr(theme.StatusDone)
+	style.Link.Underline = boolPtr(false)
 	style.LinkText.Color = hexPtr(theme.Accent)
 	style.Image.Color = hexPtr(theme.StatusDone)
+	style.Image.Underline = boolPtr(false)
 	style.ImageText.Color = hexPtr(theme.SecondaryText)
 
 	// Inline code keeps a highlight color but loses the stock background chip,

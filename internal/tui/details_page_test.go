@@ -253,3 +253,60 @@ func TestAWritingBoxDropsItsFrameInANarrowPane(t *testing.T) {
 		}
 	}
 }
+
+// TestAStyledDescriptionLineDoesNotBleedDownThePage covers the reset glamour
+// puts at the end of a line and the padding trimmer used to take with it. A
+// description ending inside a link left the underline open, and every tag below
+// it names a color rather than a full style, so the rule, the cards and the
+// compose box all came out underlined.
+func TestAStyledDescriptionLineDoesNotBleedDownThePage(t *testing.T) {
+	app := newDetailsTestApp(t)
+	issue := detailsFixture()
+	issue.Description = "> A quote above it.\n\n" +
+		"[a link whose text is long enough that it has to wrap onto a second row of the pane before it ends](https://example.com/a)\n\n" +
+		"![image.png](https://uploads.linear.app/9e76ca0c-0fe9-4629-b86a-5a701c1c48de/51d67805-0f7c-492b-aea5-e6681d89bc2e)"
+	issue.Comments = threadedComments()
+	app.selectedIssue = issue
+	app.updateDetailsView()
+
+	const width, height = 105, 60
+	screen := tcell.NewSimulationScreen("UTF-8")
+	if err := screen.Init(); err != nil {
+		t.Fatalf("init simulation screen: %v", err)
+	}
+	t.Cleanup(screen.Fini)
+	screen.SetSize(width, height)
+	app.detailsView.SetRect(0, 0, width, height)
+	app.detailsView.Draw(screen)
+	screen.Show()
+
+	// Everything from the Activity heading down belongs to the page, not to the
+	// description, so nothing there may wear a style the description opened.
+	cells, screenWidth, screenHeight := screen.GetContents()
+	below := false
+	for y := 0; y < screenHeight; y++ {
+		row := make([]rune, 0, screenWidth)
+		styled := ""
+		for x := 0; x < screenWidth; x++ {
+			cell := cells[y*screenWidth+x]
+			if cell.Style.GetUnderlineStyle() != tcell.UnderlineStyleNone {
+				styled = "underlined"
+			}
+			if _, _, attr := cell.Style.Decompose(); attr&tcell.AttrBold != 0 {
+				styled = "bold"
+			}
+			if len(cell.Runes) == 0 || cell.Runes[0] == 0 {
+				row = append(row, ' ')
+				continue
+			}
+			row = append(row, cell.Runes[0])
+		}
+		line := strings.TrimRight(string(row), " ")
+		if strings.Contains(line, "Activity") {
+			below = true
+		}
+		if below && styled != "" {
+			t.Errorf("row %d is %s below the description: %q", y, styled, line)
+		}
+	}
+}
