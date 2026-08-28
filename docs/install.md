@@ -78,7 +78,8 @@ zen-linear auth logout    # revokes and removes the stored credentials
 ```
 
 Credentials land in `~/.zen-linear/credentials.json`, mode 0600, and refresh on
-their own.
+their own. The directory around them is 0700, and is tightened to it if an
+older build left it open.
 
 **Per-workspace API keys** are how you run more than one Linear workspace. Each
 entry in `workspaces` names an environment variable to read its key from; the
@@ -126,7 +127,7 @@ From a clone, `git pull && make install`.
 `zen-linear --version` reports what you are running:
 
 ```
-zen-linear 0.2.0 (commit: 1a2b3c4, built: 2026-08-22T14:00:00Z, darwin/arm64)
+zen-linear 0.3.0 (commit: 1a2b3c4, built: 2026-08-28T14:00:00Z, darwin/arm64)
 ```
 
 A binary reporting `dev` was built locally rather than downloaded. That is what
