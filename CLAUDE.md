@@ -281,7 +281,7 @@ The three auth paths and how a reader sets them up are in [docs/install.md](docs
 
 ### GraphQL client
 
-`internal/linearapi` splits by domain: `client.go` (construction, auth transport), `retry.go` (429/5xx backoff, wrapping the auth transport), `types.go` (domain structs plus every input type's `GetGraphQLType` and `MarshalJSON`), `teams.go`, `favorites.go`, `metadata.go` (projects, milestones, cycles, users, workflow states, labels), `issue_filters.go`, `issues_query.go`, `issue_parse.go` (`toIssue`/`toRef` conversions off the query node types), `issue_activity.go` (history entries to feed events), `issue_detail.go`, `issue_mutations.go`, `comments.go`. Tests did not follow the split: `client_test.go` covers most of the package, alongside `favorites_test.go`, `retry_test.go`, and `query_golden_test.go`.
+`internal/linearapi` splits by domain: `client.go` (construction, auth transport), `retry.go` (backoff, wrapping the auth transport), `ratelimit.go` (the budgets and the refusal that spends them), `types.go` (domain structs plus every input type's `GetGraphQLType` and `MarshalJSON`), `teams.go`, `favorites.go`, `metadata.go` (projects, milestones, cycles, users, workflow states, labels), `issue_filters.go`, `issues_query.go`, `issue_parse.go` (`toIssue`/`toRef` conversions off the query node types), `issue_activity.go` (history entries to feed events), `issue_detail.go`, `issue_mutations.go`, `comments.go`. Tests did not follow the split: `client_test.go` covers most of the package, alongside `favorites_test.go`, `retry_test.go`, `ratelimit_test.go`, and `query_golden_test.go`.
 
 Queries are struct-tagged shurcooL/graphql selections. A field the schema doesn't allow in that position makes Linear reject the entire query — one bad field in the `Attachments` node once silently broke attachments, comments, and GitHub links together. Verify field placement against the Linear schema when extending a selection, and live-test fetches.
 
@@ -292,6 +292,24 @@ One issue selection serves every call site. `issueQueryNode` (`issues_query.go`)
 ```sh
 ZEN_UPDATE_GOLDENS=1 go test ./internal/linearapi -run TestQueryGoldens
 ```
+
+**A rate limit is a 400, not a 429.** Linear names it with the GraphQL code
+`RATELIMITED` in the body and sends no `Retry-After`, so `isRateLimited`
+(`ratelimit.go`) reads the body of a 400 and puts back what it read — the
+caller is handed that response when we stop retrying, and a body half consumed
+by the peek is an error that arrives truncated. It decodes the error envelope
+rather than matching the code anywhere in the bytes, because a write refused for
+its own content echoes that content back.
+
+The wait comes off `X-RateLimit-*-Reset` (UTC epoch ms) rather than a header
+that never arrives, and it waits for the **latest** spent budget's window, not
+the soonest: retrying while a second one is still empty spends a request to be
+refused again. A window past `maxRetryAfterWait` is abandoned, the same rule a
+long `Retry-After` follows. `rateLimitTracker` holds the last snapshot behind
+`Client.RateLimit()`, and a response naming no budget leaves it standing —
+no news is not an empty budget. **Mutations stay non-replayable**: `shouldRetry`
+refuses a non-replayable context before it looks at anything else, so nothing
+here can resend a write.
 
 ### Issue activity
 

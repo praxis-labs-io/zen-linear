@@ -40,6 +40,7 @@ type Client struct {
 	endpoint   string
 	token      string
 	client     *gqlClient
+	limits     *rateLimitTracker
 }
 
 // NewClient creates a new Linear API client with the provided configuration.
@@ -84,6 +85,7 @@ func NewClient(cfg ClientConfig) *Client {
 		endpoint:   endpoint,
 		token:      cfg.Token,
 		client:     &gqlClient{inner: graphql.NewClient(endpoint, httpClient)},
+		limits:     &retry.limits,
 	}
 }
 
@@ -206,6 +208,15 @@ func cloneRequestForRetry(req *http.Request) (*http.Request, error) {
 	clone.GetBody = req.GetBody
 	clone.ContentLength = int64(len(data))
 	return clone, nil
+}
+
+// RateLimit reports what the last answered request said about the user's
+// budgets. The zero value is a client nothing has answered yet.
+func (c *Client) RateLimit() RateLimitSnapshot {
+	if c.limits == nil {
+		return RateLimitSnapshot{}
+	}
+	return c.limits.snapshot()
 }
 
 // Endpoint returns the GraphQL endpoint being used.
