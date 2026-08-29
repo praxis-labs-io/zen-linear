@@ -306,8 +306,15 @@ that never arrives, and it waits for the **latest** spent budget's window, not
 the soonest: retrying while a second one is still empty spends a request to be
 refused again. A window past `maxRetryAfterWait` is abandoned, the same rule a
 long `Retry-After` follows. `rateLimitTracker` holds the last snapshot behind
-`Client.RateLimit()`, and a response naming no budget leaves it standing —
-no news is not an empty budget. **Mutations stay non-replayable**: `shouldRetry`
+`Client.RateLimit()`, and it merges **per budget**: one a response was silent
+about keeps what it last held, because no news is not an empty budget. A cost
+is not a budget either — `X-Complexity` says what a query spent, never what is
+left to spend. The wait is taken only from a window the **current** response
+named, since one carried over may have closed already and waiting nothing on it
+spends an attempt to be refused again. And a budget is spent only where the
+server counted it down (`remainingSaid`): a missing or oversized `-Remaining`
+is unknown, not zero, which is why the counts parse through `strconv.Atoi`
+rather than a narrowed `ParseInt`. **Mutations stay non-replayable**: `shouldRetry`
 refuses a non-replayable context before it looks at anything else, so nothing
 here can resend a write.
 
