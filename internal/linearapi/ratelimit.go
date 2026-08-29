@@ -35,6 +35,11 @@ type RateLimit struct {
 	Limit     int
 	Remaining int
 	Reset     time.Time
+
+	// remainingSaid separates a budget the server counted down to nothing from
+	// one it never quantified. Both leave Remaining at zero, and only the first
+	// is something to wait on.
+	remainingSaid bool
 }
 
 // Known reports whether the server said anything about this budget. A budget it
@@ -43,9 +48,10 @@ func (b RateLimit) Known() bool {
 	return b.Limit > 0 || !b.Reset.IsZero()
 }
 
-// Exhausted is a budget the server named and that has nothing left in it.
+// Exhausted is a budget the server counted down to nothing. A budget whose
+// remaining count was never sent is unknown, not spent.
 func (b RateLimit) Exhausted() bool {
-	return b.Known() && b.Remaining <= 0
+	return b.Known() && b.remainingSaid && b.Remaining <= 0
 }
 
 // RateLimitSnapshot is what the last response said about the budgets, plus what
@@ -96,17 +102,36 @@ type rateLimitTracker struct {
 	snap RateLimitSnapshot
 }
 
-// record adopts a response's headers. A response carrying none leaves the last
-// snapshot standing rather than zeroing it: no news is not an empty budget.
-func (t *rateLimitTracker) record(header http.Header, at time.Time) RateLimitSnapshot {
-	snap, ok := parseRateLimitSnapshot(header, at)
-	if !ok {
-		return t.snapshot()
-	}
+// record folds a response's headers into the standing snapshot and reports
+// whether this response named a budget of its own. The merge is per budget:
+// one the response was silent about keeps what it last held, because no news is
+// not an empty budget. The bool is what a caller needs to tell a window this
+// response named from one carried over from an older answer.
+func (t *rateLimitTracker) record(header http.Header, at time.Time) (RateLimitSnapshot, bool) {
+	fresh, named, hasCost := parseRateLimitSnapshot(header, at)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.snap = snap
-	return snap
+	if !named && !hasCost {
+		return t.snap, false
+	}
+	t.snap.Requests = pickBudget(t.snap.Requests, fresh.Requests)
+	t.snap.Complexity = pickBudget(t.snap.Complexity, fresh.Complexity)
+	t.snap.Endpoint = pickBudget(t.snap.Endpoint, fresh.Endpoint)
+	if hasCost {
+		t.snap.Cost = fresh.Cost
+	}
+	t.snap.At = at
+	return t.snap, named
+}
+
+// pickBudget takes the fresh budget where the response named one, and keeps the
+// standing value where it did not.
+func pickBudget(standing, fresh RateLimit) RateLimit {
+	if fresh.Known() {
+		return fresh
+	}
+	return standing
 }
 
 func (t *rateLimitTracker) snapshot() RateLimitSnapshot {
@@ -115,41 +140,51 @@ func (t *rateLimitTracker) snapshot() RateLimitSnapshot {
 	return t.snap
 }
 
-// parseRateLimitSnapshot reads the budgets off a response, reporting false when
-// the response named none of them.
-func parseRateLimitSnapshot(header http.Header, at time.Time) (RateLimitSnapshot, bool) {
+// parseRateLimitSnapshot reads the budgets off a response. named reports
+// whether any budget was there, and hasCost whether the query's own cost was;
+// they are separate because a cost says nothing about what is left to spend.
+func parseRateLimitSnapshot(header http.Header, at time.Time) (snap RateLimitSnapshot, named, hasCost bool) {
 	if header == nil {
-		return RateLimitSnapshot{}, false
+		return RateLimitSnapshot{}, false, false
 	}
-	snap := RateLimitSnapshot{
+	snap = RateLimitSnapshot{
 		Requests:   parseRateLimit(header, headerRequestsPrefix),
 		Complexity: parseRateLimit(header, headerComplexityPrefix),
 		Endpoint:   parseRateLimit(header, headerEndpointPrefix),
 		At:         at,
 	}
-	cost, hasCost := parseHeaderInt(header, headerQueryComplexity)
-	snap.Cost = cost
-	if !snap.Requests.Known() && !snap.Complexity.Known() && !snap.Endpoint.Known() && !hasCost {
-		return RateLimitSnapshot{}, false
-	}
-	return snap, true
+	snap.Cost, hasCost = parseHeaderInt(header, headerQueryComplexity)
+	named = snap.Requests.Known() || snap.Complexity.Known() || snap.Endpoint.Known()
+	return snap, named, hasCost
 }
 
 func parseRateLimit(header http.Header, prefix string) RateLimit {
 	var budget RateLimit
 	budget.Limit, _ = parseHeaderInt(header, prefix+"-Limit")
-	budget.Remaining, _ = parseHeaderInt(header, prefix+"-Remaining")
+	budget.Remaining, budget.remainingSaid = parseHeaderInt(header, prefix+"-Remaining")
 	if millis, ok := parseHeaderInt64(header, prefix+"-Reset"); ok && millis > 0 {
 		budget.Reset = time.UnixMilli(millis).UTC()
 	}
 	return budget
 }
 
+// parseHeaderInt reads a count. Atoi rather than a narrowed ParseInt, so a
+// value past this platform's int is an error rather than a wrap: a remaining
+// count that wrapped to zero would read as a spent budget.
 func parseHeaderInt(header http.Header, name string) (int, bool) {
-	value, ok := parseHeaderInt64(header, name)
-	return int(value), ok
+	raw := strings.TrimSpace(header.Get(name))
+	if raw == "" {
+		return 0, false
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false
+	}
+	return value, true
 }
 
+// parseHeaderInt64 reads the reset stamp, which is epoch milliseconds and needs
+// the full width on every platform.
 func parseHeaderInt64(header http.Header, name string) (int64, bool) {
 	raw := strings.TrimSpace(header.Get(name))
 	if raw == "" {

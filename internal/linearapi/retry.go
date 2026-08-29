@@ -88,11 +88,11 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		resp, err := t.base.RoundTrip(attemptReq)
-		snap, limited := t.observe(resp)
+		snap, named, limited := t.observe(resp)
 		if attempt == t.maxAttempts-1 || !shouldRetry(resp, err, replayable, limited) {
 			return resp, err
 		}
-		delay, ok := t.retryDelay(attempt, resp, snap, limited)
+		delay, ok := t.retryDelay(attempt, resp, snap, limited && named)
 		if !ok || !fitsInDeadline(ctx, delay) {
 			// Both stop paths hand the response back unread, so the caller
 			// still gets the status and body it would have seen without a
@@ -114,19 +114,19 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // observe records what a response said about the user's budgets and reports
 // whether it was a refusal to spend more. Every response is read for it,
 // mutations included: the budget belongs to the user, not to the request.
-func (t *retryTransport) observe(resp *http.Response) (RateLimitSnapshot, bool) {
+func (t *retryTransport) observe(resp *http.Response) (snap RateLimitSnapshot, named, limited bool) {
 	if resp == nil {
-		return RateLimitSnapshot{}, false
+		return RateLimitSnapshot{}, false, false
 	}
-	snap := t.limits.record(resp.Header, time.Now())
+	snap, named = t.limits.record(resp.Header, time.Now())
 	if !isRateLimited(resp) {
-		return snap, false
+		return snap, named, false
 	}
 	refill, _ := snap.wait(time.Now())
 	logger.Warning("linearapi.retry: rate limited status=%s requests=%d/%d complexity=%d/%d refill=%s",
 		resp.Status, snap.Requests.Remaining, snap.Requests.Limit,
 		snap.Complexity.Remaining, snap.Complexity.Limit, refill)
-	return snap, true
+	return snap, named, true
 }
 
 // shouldRetry classifies one attempt. Only a replayable operation is ever sent
@@ -176,7 +176,10 @@ func (t *retryTransport) retryDelay(attempt int, resp *http.Response, snap RateL
 			return wait + rand.N(retryAfterJitter), true
 		}
 		// Linear sends no Retry-After, so the end of the window its own headers
-		// count down is the only floor there is. Same rule, same jitter.
+		// count down is the only floor there is. Same rule, same jitter. Only a
+		// window this response named is trusted: one carried over from an older
+		// answer may have closed already, and waiting nothing on it spends an
+		// attempt to be refused again.
 		if limited {
 			if wait, ok := snap.wait(time.Now()); ok {
 				if wait > maxRetryAfterWait {
