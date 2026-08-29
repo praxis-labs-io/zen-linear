@@ -198,23 +198,92 @@ func TestNamesRateLimit(t *testing.T) {
 	}
 }
 
+// hugeRateLimitedJSON pushes the error code past maxErrorPeekBytes, so the peek
+// reads a prefix that is not parseable JSON and the rest stays on the wire.
+var hugeRateLimitedJSON = `{"errors":[{"message":"` + strings.Repeat("x", maxErrorPeekBytes+8<<10) +
+	`","extensions":{"code":"RATELIMITED"}}]}`
+
+// closeRecorder is a body that reports whether Close reached it. peekedBody
+// wraps the original, and a wrapper that swallows Close leaks the connection.
+type closeRecorder struct {
+	io.Reader
+	closed bool
+}
+
+func (c *closeRecorder) Close() error {
+	c.closed = true
+	return nil
+}
+
 // TestIsRateLimitedLeavesTheBodyReadable pins the peek putting back what it
 // read. The caller is handed this response when we stop retrying, and a body
 // half consumed here is an error message that arrives truncated.
 func TestIsRateLimitedLeavesTheBodyReadable(t *testing.T) {
-	resp := &http.Response{
-		StatusCode: http.StatusBadRequest,
-		Body:       io.NopCloser(strings.NewReader(rateLimitedJSON)),
+	tests := []struct {
+		name     string
+		body     string
+		detected bool
+	}{
+		{name: "a rate limit fits in the peek", body: rateLimitedJSON, detected: true},
+		{
+			// The code sits past the peek limit, so the prefix will not parse and
+			// the refusal is missed. That costs a retry we could have made; a body
+			// truncated for the caller would cost the error message itself, which
+			// is the worse half. The size is the tradeoff, not an oversight.
+			name: "a body larger than the peek limit",
+			body: hugeRateLimitedJSON,
+		},
 	}
-	if !isRateLimited(resp) {
-		t.Fatal("isRateLimited() = false on a 400 naming RATELIMITED")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := &closeRecorder{Reader: strings.NewReader(tt.body)}
+			resp := &http.Response{StatusCode: http.StatusBadRequest, Body: body}
+
+			if got := isRateLimited(resp); got != tt.detected {
+				t.Fatalf("isRateLimited() = %v, want %v", got, tt.detected)
+			}
+			got, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("reading the body back: %v", err)
+			}
+			if len(got) != len(tt.body) || string(got) != tt.body {
+				t.Fatalf("body came back %d bytes, want %d", len(got), len(tt.body))
+			}
+			if err := resp.Body.Close(); err != nil {
+				t.Fatalf("Close() error: %v", err)
+			}
+			if !body.closed {
+				t.Fatal("Close did not reach the original body: the connection leaks")
+			}
+		})
 	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("reading the body back: %v", err)
+}
+
+// TestRetryTransportReusesConnectionThroughARateLimit is the connection-reuse
+// rule on the path that replaces resp.Body. A peek that consumed the body
+// without restitching it leaves the connection unreadable, and the next attempt
+// opens a fresh one.
+func TestRetryTransportReusesConnectionThroughARateLimit(t *testing.T) {
+	var recorder callRecorder
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if recorder.record(r) == 1 {
+			writeRateLimitHeaders(w, 0, time.Now())
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(rateLimitedJSON))
+			return
+		}
+		writeRateLimitHeaders(w, 2499, time.Now().Add(time.Hour))
+		_, _ = w.Write([]byte(teamsOK))
+	}))
+	defer server.Close()
+
+	client := newFastRetryClient(t, ClientConfig{Endpoint: server.URL})
+	if _, err := client.ListTeams(context.Background()); err != nil {
+		t.Fatalf("ListTeams() error: %v", err)
 	}
-	if string(body) != rateLimitedJSON {
-		t.Fatalf("body = %q, want %q", body, rateLimitedJSON)
+	if got := recorder.distinctRemotes(); got != 1 {
+		t.Fatalf("distinct client ports = %d, want 1: a retry must reuse the connection", got)
 	}
 }
 
@@ -262,6 +331,15 @@ func TestRetryTransportDoesNotRetryMutationOnRateLimited400(t *testing.T) {
 	}
 	if got := recorder.count(); got != 1 {
 		t.Fatalf("handler calls = %d, want 1: a mutation must not be resent after a rate limit", got)
+	}
+	// The budget belongs to the user, not to the request, so a refused write
+	// still tells us what is left of it.
+	snap := client.RateLimit()
+	if snap.Requests.Limit != 2500 || snap.Requests.Remaining != 0 {
+		t.Fatalf("requests budget = %+v, want 0/2500 recorded off the refused mutation", snap.Requests)
+	}
+	if snap.At.IsZero() {
+		t.Fatal("At is zero: the mutation's response was never observed")
 	}
 }
 
