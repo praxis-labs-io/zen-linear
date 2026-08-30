@@ -27,6 +27,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Nothing in CI writes. Without this every job takes the default token scope,
+# which CodeQL flags per job (actions/missing-workflow-permissions) and which is
+# more than a checkout, a build and a test need. release.yml has always said so;
+# this file never did.
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint + Format
