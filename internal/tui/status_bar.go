@@ -352,6 +352,19 @@ func (a *App) updateStatusBarWithError(err error) {
 	a.statusBar.SetText(fmt.Sprintf("%sError: %s[-]", a.themeTags.Error, tview.Escape(err.Error())))
 }
 
+// updateStatusBarWithNotice leaves a nudge on the bar until something else
+// takes it. It sits with the hints for the same reason a failure does, the
+// message corner being sized to a few words, but carries no "Error:" and takes
+// the secondary foreground: a release being available is not something that
+// went wrong, and coloring it as one would say it was.
+func (a *App) updateStatusBarWithNotice(notice string) {
+	a.cancelStatusFlash()
+	a.statusMessage = ""
+	a.statusLevel = statusInfo
+	a.fitStatusToast()
+	a.statusBar.SetText(fmt.Sprintf("%s%s[-]", a.themeTags.SecondaryText, tview.Escape(notice)))
+}
+
 // statusLevel is what a flashed message is: something the user should know,
 // something that finished, or something that failed.
 type statusLevel int

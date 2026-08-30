@@ -137,6 +137,11 @@ type Config struct {
 	// focused issue on startup. When off, DefaultWorkspace, DefaultTeam, and
 	// DefaultProject decide where the app opens.
 	SessionRestore bool
+
+	// UpdateCheck asks GitHub once a day whether a newer release has been
+	// published and says so on the status bar. Nothing is downloaded, and no
+	// token or identifier goes with the request.
+	UpdateCheck bool
 }
 
 // Workspace describes a switchable Linear workspace. The API key is read from

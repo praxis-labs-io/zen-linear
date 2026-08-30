@@ -206,9 +206,17 @@ type App struct {
 	collapsedGroups      map[string]bool
 	statusMessage        string
 	pendingWarning       string
-	fileSettings         config.Settings
-	envOverrides         config.EnvOverrides
-	statusLevel          statusLevel
+	pendingNotice        string
+	// warningReported is what keeps a nudge from painting over a real
+	// problem, since the two share the hint line and arrive out of order.
+	warningReported bool
+	// version is what the release workflow stamped, "dev" in a working tree.
+	version string
+	// checkUpdateFunc is the update seam, replaced by tests.
+	checkUpdateFunc checkForUpdate
+	fileSettings    config.Settings
+	envOverrides    config.EnvOverrides
+	statusLevel     statusLevel
 
 	// Display settings of the active custom view, overriding config until
 	// the user picks another list. The overridden flags keep in-session
@@ -350,7 +358,25 @@ func (a *App) reportPendingWarning() {
 	}
 	warning := a.pendingWarning
 	a.pendingWarning = ""
+	a.warningReported = true
 	a.updateStatusBarWithError(errors.New(warning))
+}
+
+// UseVersion records what the release workflow stamped into this build, which
+// is what the update check compares against. Nothing else in the app reads it:
+// a working tree reports "dev" and is not behind anything.
+func (a *App) UseVersion(version string) { a.version = version }
+
+// reportPendingNotice shows a held notice and forgets it. A launch warning
+// takes the line ahead of it and is not displaced: a log the app could not open
+// is a problem, where this is a nudge that keeps until the next launch.
+func (a *App) reportPendingNotice() {
+	if a.pendingNotice == "" || a.warningReported {
+		return
+	}
+	notice := a.pendingNotice
+	a.pendingNotice = ""
+	a.updateStatusBarWithNotice(notice)
 }
 
 // NewApp creates a new application instance.
@@ -439,6 +465,9 @@ func (a *App) loadInitialData() {
 	workspace := a.activeWorkspaceName
 	cached, hasCache := a.cachedNavData()
 	a.setNavLoading(true)
+	// Off the launch's critical path: nothing below waits on it, and it
+	// reports through the status bar whenever it answers.
+	a.startUpdateCheck()
 	go func() {
 		// Signals that the navigation fetch has been dealt with, whichever way
 		// it went, for tests that have to wait on a launch with no refresh of

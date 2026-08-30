@@ -93,7 +93,7 @@ The version policy is in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md), and the c
 
 ## Architecture
 
-`cmd/zen-linear` is the entrypoint; everything lives in `internal/`: `linearapi` (GraphQL client via shurcooL/graphql), `tui` (tview app — the bulk), `config`, `session`, `auth`, `cache`, `agents`, `logger`.
+`cmd/zen-linear` is the entrypoint; everything lives in `internal/`: `linearapi` (GraphQL client via shurcooL/graphql), `tui` (tview app — the bulk), `config`, `session`, `auth`, `cache`, `agents`, `logger`, `update`.
 
 ### App wiring
 
@@ -148,6 +148,10 @@ Config, credentials, prompts, the session, and the log live under `~/.zen-linear
 `internal/session` owns `session.json` (last workspace, and per workspace the nav selection, focused issue, filters, and search). It sits outside `internal/config` because config models what the user writes and this is what the app writes: `config.json` is a symlink into Drew's dotfiles repo, and a per-quit write there would dirty that repo on every launch. `App.Run` flushes it after the event loop stops, `switchWorkspace` flushes the outgoing workspace before `resetCachedState` wipes it, and the restore is a locator resolved against the live tree, never a serialized node.
 
 `internal/cache` owns `nav-cache.json` beside it: the teams and favorites the tree is built from, keyed by workspace, versioned and discarded rather than migrated. **A session with no configured workspace name gets no entry** (a bare `LINEAR_API_KEY` or OAuth): nothing on disk tells two Linear workspaces reached that way apart, one shared entry would paint the wrong teams, and fingerprinting the token to tell them apart puts a derivative of a live credential in a cache file. It is cached API data, not user state, which is why it sits outside `internal/session`. Both write through `config.WriteFileAtomic` (temp file plus rename, mode 0600).
+
+`internal/update` owns `update-check.json` beside them: the tag GitHub calls latest, and when it was asked. **It stores a tag, never a verdict** — whether an update is available is derived against the running version every time, so upgrading silences the notice immediately rather than after the TTL runs out. A day's TTL keeps it to one request a launch-day and well clear of the 60/hour unauthenticated limit; the request carries the running version in the User-Agent, which GitHub requires, and nothing else. **A build reporting `dev` is never checked**, which is what `make install` and a plain `go build` produce. Every failure is silent at the UI: `Check` returns the error for the log and the caller shows nothing, because a nudge that reports why it could not nudge is worse than one that stays quiet. `/releases/latest` excludes pre-releases by GitHub's own definition, which is what the release workflow's `--prerelease` on a suffixed tag buys, so a stable build is never pointed at an rc.
+
+The notice reaches the user through `App.pendingNotice`, the sibling of `pendingWarning`, and `updateStatusBarWithNotice` is `updateStatusBarWithError` without the `Error:` and on `SecondaryText`: an available release is not a failure and coloring it as one would say it was. **A launch warning wins** (`warningReported`), since a log the app could not open is a problem and this is a nudge that keeps until the next launch.
 
 Drew's live config is a **hardlink**, not a symlink: `~/.config/zen-linear/config.json` and `drucial-dots/configs/zen-linear/config.json` are one inode. It works because `SaveSettings` is a plain `os.WriteFile` rather than `WriteFileAtomic` — a truncate-in-place keeps the inode, where a temp-file-plus-rename would break the link and leave the dotfiles copy frozen at the old contents. In-app saves showing up as diffs in the dotfiles repo is intentional; moving that write onto `WriteFileAtomic` would silently end it.
 
