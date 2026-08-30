@@ -222,6 +222,7 @@ func runTUI() int {
 	// above is gone before it can be read. The app says it again once it is up.
 	app.WarnAtStartup(warning)
 	app.UseSettingsFile(settingsPath)
+	app.UseVersion(Version)
 	// What is on disk, kept apart from what the environment made of it: a save
 	// must write the file's value back, not the variable's.
 	app.UseFileSettings(settings, envOverrides)

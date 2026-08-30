@@ -112,9 +112,16 @@ Where things are kept:
     ~/.zen-linear/credentials.json    OAuth tokens, 0600
     ~/.zen-linear/session.json        what to reopen on
     ~/.zen-linear/nav-cache.json      the navigation tree, so launch is not blank
+    ~/.zen-linear/update-check.json   the last update check
     ~/.zen-linear/app.log             the log
 
 ## Upgrading
+
+The app checks once a day whether a newer release has been published, and says
+so on the status bar when there is one. It never downloads or installs
+anything. Turn it off with `"update_check": false`, or from the settings modal;
+[configuration.md](configuration.md) covers what the request does and does not
+carry.
 
 Re-run the installer. It takes the latest release and replaces the binary.
 

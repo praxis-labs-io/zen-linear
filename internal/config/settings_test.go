@@ -200,6 +200,52 @@ func TestLoadSettingsParsesSessionRestore(t *testing.T) {
 	}
 }
 
+// The update check travels the same triple, and an explicit false has to
+// survive it: the whole point of the setting is turning the request off.
+func TestLoadSettingsParsesUpdateCheck(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want bool
+	}{
+		{name: "absent defaults to on", data: `{}`, want: true},
+		{name: "explicit false stays off", data: `{"update_check": false}`, want: false},
+		{name: "explicit true stays on", data: `{"update_check": true}`, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settingsPath := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(settingsPath, []byte(tt.data), 0644); err != nil {
+				t.Fatalf("write settings file: %v", err)
+			}
+
+			settings, err := LoadSettings(settingsPath)
+			if err != nil {
+				t.Fatalf("LoadSettings() error: %v", err)
+			}
+			if settings.UpdateCheck != tt.want {
+				t.Errorf("UpdateCheck = %v, want %v", settings.UpdateCheck, tt.want)
+			}
+
+			cfg, err := ConfigFromSettings("test-key", settings)
+			if err != nil {
+				t.Fatalf("ConfigFromSettings() error: %v", err)
+			}
+			if cfg.UpdateCheck != tt.want {
+				t.Errorf("Config.UpdateCheck = %v, want %v", cfg.UpdateCheck, tt.want)
+			}
+			if got := SettingsFromConfig(cfg).UpdateCheck; got != tt.want {
+				t.Errorf("SettingsFromConfig().UpdateCheck = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	if !DefaultSettings().UpdateCheck {
+		t.Error("DefaultSettings().UpdateCheck = false, want true")
+	}
+}
+
 // TestConfigFromSettingsValidation checks invalid settings are rejected.
 func TestConfigFromSettingsValidation(t *testing.T) {
 	base := DefaultSettings()

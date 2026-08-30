@@ -22,6 +22,7 @@ it was loaded from.
   "columns": ["priority", "id", "state", "title", "labels", "assignee", "updated"],
   "default_workspace": "Work",
   "session_restore": true,
+  "update_check": true,
   "agent_provider": "cursor",
   "workspaces": [
     { "name": "Work", "api_key_env": "LINEAR_API_KEY_WORK" },
@@ -77,6 +78,7 @@ ties. Omit it to sort by most recently updated.
 | `default_team` | none | a team name |
 | `default_project` | none | a project name |
 | `session_restore` | `true` | a boolean |
+| `update_check` | `true` | a boolean |
 
 `workspaces` reads each key from the named environment variable. **Keys are
 never stored in the file.** See [install.md](install.md) for the auth paths.
@@ -85,6 +87,17 @@ never stored in the file.** See [install.md](install.md) for the auth paths.
 issue, saved to `~/.zen-linear/session.json` on quit. It is on by default,
 which makes `default_workspace`, `default_team` and `default_project` first-run
 settings. Turn it off to open on those every time.
+
+`update_check` asks GitHub once a day whether a newer release has been
+published, and says so on the status bar when there is one. Nothing is
+downloaded and nothing is installed: upgrading is still re-running the
+installer. The answer is kept in `~/.zen-linear/update-check.json` so the
+request happens once a day rather than once a launch.
+
+The request carries the running version and nothing else. No token, no
+workspace, no identifier of any kind goes with it, and a build you compiled
+yourself reports `dev` and is never checked at all. Set it to `false` to stop
+the request entirely.
 
 ## Agents
 

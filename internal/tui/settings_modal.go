@@ -230,6 +230,7 @@ type SettingsModal struct {
 	densityField        *FormPicker
 	roundedBordersField *FormPicker
 	sessionRestoreField *FormPicker
+	updateCheckField    *FormPicker
 	// booleanOptions backs every on/off picker, so they read the same way.
 	booleanOptions       []string
 	densityOptions       []string
@@ -284,6 +285,7 @@ func NewSettingsModal(app *App) *SettingsModal {
 
 	sm.roundedBordersField = sm.fm.AddPicker("Rounded borders", sm.booleanOptions, booleanOptionIndex(false), nil)
 	sm.sessionRestoreField = sm.fm.AddPicker("Restore last session", sm.booleanOptions, booleanOptionIndex(true), nil)
+	sm.updateCheckField = sm.fm.AddPicker("Check for updates", sm.booleanOptions, booleanOptionIndex(true), nil)
 	sm.fm.EndRow()
 
 	sm.agentProviderField = sm.fm.AddPicker("Agent provider", sm.agentProviderOptions, 0, func(text string, index int) {
@@ -329,6 +331,7 @@ func (sm *SettingsModal) Show() {
 	sm.setDensitySelection(settings.Density)
 	sm.roundedBordersField.SetCurrentOption(booleanOptionIndex(settings.RoundedBorders))
 	sm.sessionRestoreField.SetCurrentOption(booleanOptionIndex(settings.SessionRestore))
+	sm.updateCheckField.SetCurrentOption(booleanOptionIndex(settings.UpdateCheck))
 	sm.setAgentProviderSelection(selectedProvider)
 	sm.setAgentSandboxSelection(settings.AgentSandbox)
 	sm.setAgentModelOptionsForProvider(selectedProvider)
@@ -496,6 +499,7 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 		Columns:        sm.app.config.Columns,
 		RoundedBorders: booleanOptionValue(sm.roundedBordersField),
 		SessionRestore: booleanOptionValue(sm.sessionRestoreField),
+		UpdateCheck:    booleanOptionValue(sm.updateCheckField),
 		AgentProvider:  agentProvider,
 		AgentSandbox:   agentSandbox,
 		AgentModel:     agentModel,

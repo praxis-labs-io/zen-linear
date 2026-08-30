@@ -293,7 +293,11 @@ func TestErrorTextIsNotReadAsColorTags(t *testing.T) {
 
 // statusText is the whole strip, the hints and the message corner both, so a
 // test asserting on what the app said does not have to know which half said it.
+// The read goes through uiUpdateMu, the lock the immediate queueUpdateDraw stub
+// applies around anything a background goroutine queues onto the bar.
 func statusText(app *App) string {
+	app.uiUpdateMu.Lock()
+	defer app.uiUpdateMu.Unlock()
 	return app.statusBar.GetText(true) + " " + app.statusToast.GetText(true)
 }
 

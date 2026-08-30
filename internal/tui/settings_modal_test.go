@@ -99,6 +99,7 @@ func TestSettingsFormRoundTripsFlags(t *testing.T) {
 		app := newUXTestApp(t)
 		app.config.SessionRestore = want
 		app.config.RoundedBorders = want
+		app.config.UpdateCheck = want
 
 		sm := app.settingsModal
 		sm.Show()
@@ -111,6 +112,9 @@ func TestSettingsFormRoundTripsFlags(t *testing.T) {
 		}
 		if settings.RoundedBorders != want {
 			t.Errorf("RoundedBorders = %v, want %v", settings.RoundedBorders, want)
+		}
+		if settings.UpdateCheck != want {
+			t.Errorf("UpdateCheck = %v, want %v", settings.UpdateCheck, want)
 		}
 	}
 }

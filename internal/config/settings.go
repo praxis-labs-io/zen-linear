@@ -36,6 +36,7 @@ type SettingsFile struct {
 	DefaultTeam      *string           `json:"default_team"`
 	DefaultProject   *string           `json:"default_project"`
 	SessionRestore   *bool             `json:"session_restore"`
+	UpdateCheck      *bool             `json:"update_check"`
 }
 
 // Settings contains concrete settings values for UI and persistence.
@@ -66,6 +67,7 @@ type Settings struct {
 	DefaultTeam      string            `json:"default_team"`
 	DefaultProject   string            `json:"default_project"`
 	SessionRestore   bool              `json:"session_restore"`
+	UpdateCheck      bool              `json:"update_check"`
 }
 
 // DefaultSettings returns the default settings for the config file and UI.
@@ -89,6 +91,7 @@ func DefaultSettings() Settings {
 		DefaultTeam:    "",
 		DefaultProject: "",
 		SessionRestore: true,
+		UpdateCheck:    true,
 	}
 }
 
@@ -138,6 +141,7 @@ func SettingsFromConfig(cfg Config) Settings {
 		DefaultTeam:      cfg.DefaultTeam,
 		DefaultProject:   cfg.DefaultProject,
 		SessionRestore:   cfg.SessionRestore,
+		UpdateCheck:      cfg.UpdateCheck,
 	}
 }
 
@@ -244,6 +248,7 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 		DefaultTeam:      settings.DefaultTeam,
 		DefaultProject:   settings.DefaultProject,
 		SessionRestore:   settings.SessionRestore,
+		UpdateCheck:      settings.UpdateCheck,
 	}, nil
 }
 
@@ -377,6 +382,9 @@ func LoadSettings(path string) (Settings, error) {
 	}
 	if file.SessionRestore != nil {
 		settings.SessionRestore = *file.SessionRestore
+	}
+	if file.UpdateCheck != nil {
+		settings.UpdateCheck = *file.UpdateCheck
 	}
 
 	return settings, nil
