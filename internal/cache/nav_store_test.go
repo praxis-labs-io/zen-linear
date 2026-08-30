@@ -3,6 +3,7 @@ package cache
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
@@ -131,6 +132,10 @@ func TestLoadNavDiscardsOtherVersions(t *testing.T) {
 }
 
 func TestRecordNavUsesPrivatePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("NTFS has no unix permission bits and os.Chmod only toggles the read-only flag there, so this is not a guarantee Windows makes")
+	}
+
 	path := filepath.Join(t.TempDir(), "nested", "nav-cache.json")
 
 	if err := RecordNav(path, "Alpha", navFixture()); err != nil {

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -57,7 +58,7 @@ func TestConfigFilePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			home := t.TempDir()
-			t.Setenv("HOME", home)
+			setHomeDir(t, home)
 
 			xdgBase := filepath.Join(home, ".config")
 			if tt.xdgHome {
@@ -89,7 +90,7 @@ func TestConfigFilePath(t *testing.T) {
 // the path.
 func TestLoadSettingsReadsTheXDGConfig(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	t.Setenv(xdgConfigHomeEnv, "")
 
 	dir := filepath.Join(home, ".config", xdgDirName)
@@ -117,7 +118,7 @@ func TestLoadSettingsReadsTheXDGConfig(t *testing.T) {
 // per-launch write into a dotfiles repo dirties it on every run.
 func TestDefaultLogFileStaysUnderTheAppDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	t.Setenv(xdgConfigHomeEnv, "")
 	writeConfigJSON(t, filepath.Join(home, ".config", xdgDirName))
 
@@ -142,7 +143,7 @@ func writeConfigJSON(t *testing.T, dir string) {
 // of the directory holding credentials.json.
 func TestEnsureDirForOwnsTheAppDirsMode(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 
 	appDir := filepath.Join(home, ".zen-linear")
 
@@ -173,7 +174,7 @@ func TestEnsureDirForOwnsTheAppDirsMode(t *testing.T) {
 // a surprise in someone else's repo.
 func TestEnsureDirForLeavesTheXDGDirAlone(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	xdg := filepath.Join(home, ".config", "zen-linear")
@@ -189,6 +190,11 @@ func TestEnsureDirForLeavesTheXDGDirAlone(t *testing.T) {
 
 func assertDirMode(t *testing.T, dir string, want os.FileMode) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		// NTFS has no unix permission bits, and os.Chmod there only toggles the
+		// read-only flag. There is no mode here to assert against.
+		return
+	}
 	info, err := os.Stat(dir)
 	if err != nil {
 		t.Fatalf("stat %s: %v", dir, err)
@@ -196,4 +202,13 @@ func assertDirMode(t *testing.T, dir string, want os.FileMode) {
 	if got := info.Mode().Perm(); got != want {
 		t.Errorf("%s mode = %o, want %o", dir, got, want)
 	}
+}
+
+// setHomeDir points os.UserHomeDir at dir on every platform. It reads $HOME on
+// unix and %USERPROFILE% on Windows, so a test setting only one of them runs
+// against the real profile on the other.
+func setHomeDir(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 }

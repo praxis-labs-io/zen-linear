@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -253,7 +254,7 @@ func TestSaveSetsCurrentVersion(t *testing.T) {
 // TestPathUnderConfigDir verifies the file sits beside the other app state.
 func TestPathUnderConfigDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 
 	got, err := Path()
 	if err != nil {
@@ -269,6 +270,10 @@ func TestPathUnderConfigDir(t *testing.T) {
 // other local users. It holds the search text and the issues the user was
 // reading, so it follows the credentials store rather than the config file.
 func TestSaveUsesPrivatePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("NTFS has no unix permission bits and os.Chmod only toggles the read-only flag there, so this is not a guarantee Windows makes")
+	}
+
 	path := filepath.Join(t.TempDir(), "nested", "session.json")
 
 	if err := Save(path, File{LastWorkspace: "Alpha"}); err != nil {
@@ -288,6 +293,10 @@ func TestSaveUsesPrivatePermissions(t *testing.T) {
 // an earlier build is narrowed on the next write. os.WriteFile would have left
 // it wide open forever.
 func TestSaveTightensExistingPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("NTFS has no unix permission bits and os.Chmod only toggles the read-only flag there, so this is not a guarantee Windows makes")
+	}
+
 	path := filepath.Join(t.TempDir(), "session.json")
 	if err := os.WriteFile(path, []byte(`{"version":1}`), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -329,4 +338,13 @@ func TestSaveLeavesNoTempFiles(t *testing.T) {
 		}
 		t.Fatalf("directory holds %v, want only session.json", names)
 	}
+}
+
+// setHomeDir points os.UserHomeDir at dir on every platform. It reads $HOME on
+// unix and %USERPROFILE% on Windows, so a test setting only one of them runs
+// against the real profile on the other.
+func setHomeDir(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -25,6 +26,10 @@ func TestWriteFileAtomicCreatesParentDirectories(t *testing.T) {
 // TestWriteFileAtomicTightensExistingPermissions covers the file an earlier
 // build left at 0644: the rename replaces the inode, so the new mode wins.
 func TestWriteFileAtomicTightensExistingPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("NTFS has no unix permission bits and os.Chmod only toggles the read-only flag there, so this is not a guarantee Windows makes")
+	}
+
 	path := filepath.Join(t.TempDir(), "file.json")
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)

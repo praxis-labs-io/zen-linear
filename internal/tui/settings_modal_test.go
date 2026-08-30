@@ -15,7 +15,7 @@ import (
 // followed an XDG copy that appeared mid-session and wrote to a stranger.
 func TestSavingSettingsWritesBackToTheLaunchFile(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	launch := filepath.Join(home, ".zen-linear", "config.json")
@@ -220,7 +220,7 @@ func TestSavingSettingsLeavesNoMachineSpecificLogPathOnDisk(t *testing.T) {
 	isolateLogging(t)
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	launch := filepath.Join(home, ".zen-linear", "config.json")
@@ -263,7 +263,7 @@ func TestSavingSettingsKeepsAnExplicitLogPathOnDisk(t *testing.T) {
 	isolateLogging(t)
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	launch := filepath.Join(home, ".zen-linear", "config.json")
@@ -417,4 +417,13 @@ func TestTheEnvOverrideNoticeStaysOnOneLine(t *testing.T) {
 	if !strings.Contains(notice, "and 3 more") {
 		t.Errorf("notice %q drops the fields it cannot list instead of counting them", notice)
 	}
+}
+
+// setHomeDir points os.UserHomeDir at dir on every platform. It reads $HOME on
+// unix and %USERPROFILE% on Windows, so a test setting only one of them runs
+// against the real profile on the other.
+func setHomeDir(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 }
