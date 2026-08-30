@@ -123,7 +123,7 @@ it is read at merge time and again before a release:
 | `internal/agents/**` | [`agents.md`](agents.md) |
 | `internal/auth/**` | [`install.md`](install.md) |
 | `internal/linearapi/**`, `internal/session/**`, `internal/cache/**` | [`guide.md`](guide.md) |
-| `install.sh`, `Makefile`, `.github/workflows/**` | [`install.md`](install.md), [`README.md`](../README.md) |
+| `install.sh`, `install.ps1`, `Makefile`, `.github/workflows/**` | [`install.md`](install.md), [`README.md`](../README.md) |
 | `.claude/rules/**`, the test conventions | this file |
 
 `git diff --name-only <ref>..HEAD` gives the left column, so the set of

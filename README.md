@@ -51,14 +51,20 @@ way to retire an issue.
 
 ## Install
 
+macOS and Linux, on arm64 or amd64:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.sh | sh
 ```
 
-Downloads the binary for macOS or Linux, on arm64 or amd64. Windows takes the
-`.zip` off the
-[releases page](https://github.com/praxis-labs-io/zen-linear/releases), the
-installer being a POSIX script. On anything else:
+Windows, on arm64 or amd64:
+
+```powershell
+irm https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.ps1 | iex
+```
+
+Both check the download against the checksums the release publishes. On any
+other platform:
 
 ```sh
 go install github.com/praxis-labs-io/zen-linear/cmd/zen-linear@latest

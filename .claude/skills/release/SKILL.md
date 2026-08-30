@@ -6,7 +6,7 @@ description: Cut a zen-linear release end to end. Resolves the version from the 
 # Release (zen-linear)
 
 `.github/workflows/release.yml` already handles the mechanical half: it runs the
-tests, cross-compiles five targets, writes the checksums, and cuts the release
+tests, cross-compiles six targets, writes the checksums, and cuts the release
 from the notes in the tagged commit. This skill does not reimplement any of it.
 
 What it does not do is judgement. Which commits a stranger cares about, what the
@@ -151,14 +151,16 @@ gh release create vX.Y.Z dist/* --notes-file docs/release-notes/vX.Y.Z.md --veri
 Resume once Drew reports the tag pushed, and check what landed rather than
 trusting the workflow's exit code.
 
-- `gh release view vX.Y.Z --json assets` shows **six** assets: four tarballs, the
-  windows zip, and `checksums.txt`. A missing archive is a matrix leg that failed
-  after the others published.
+- `gh release view vX.Y.Z --json assets` shows **seven** assets: four tarballs,
+  two windows zips (amd64 and arm64), and `checksums.txt`. A missing archive is a
+  matrix leg that failed after the others published.
 - Download one archive and match it against the published checksum. The
   checksums are generated in a different job from the builds.
 - **Run the installer against the live release**, with `INSTALL_DIR` at a scratch
   path. Nothing before a release exists can exercise its download path, so this
-  is the only time it is ever tested.
+  is the only time it is ever tested. `install.ps1` is covered by the
+  `install-script` job in CI on every PR, so it needs no hand check here; it
+  cannot be run from a mac anyway.
 - The installed binary reports the version rather than `dev`. A `dev` here means
   the ldflags stamp broke, and the binary is otherwise fine, which is why nothing
   else catches it.

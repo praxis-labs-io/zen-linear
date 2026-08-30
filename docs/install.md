@@ -23,14 +23,21 @@ It is not affiliated with Linear.
 
 ## Install
 
+macOS and Linux, on arm64 or amd64:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.sh | sh
 ```
 
-Downloads the binary for macOS or Linux, on arm64 or amd64. Windows takes the
-`.zip` off the
-[releases page](https://github.com/praxis-labs-io/zen-linear/releases), the
-installer being a POSIX script. On anything else:
+Windows, on arm64 or amd64:
+
+```powershell
+irm https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.ps1 | iex
+```
+
+Both take the binary for your machine, check it against the checksums the
+release publishes, and refuse to install anything that does not match. On any
+other platform:
 
 ```sh
 go install github.com/praxis-labs-io/zen-linear/cmd/zen-linear@latest
@@ -44,12 +51,12 @@ cd zen-linear
 make install
 ```
 
-The installer and `make install` both put the binary in `~/.local/bin`, and
-`INSTALL_DIR` moves it. `go install` writes to `$(go env GOPATH)/bin` and takes
-neither.
+`install.sh` and `make install` both put the binary in `~/.local/bin`;
+`install.ps1` puts it in `%LOCALAPPDATA%\Programs\zen-linear`. `INSTALL_DIR`
+moves either. `go install` writes to `$(go env GOPATH)/bin` and takes neither.
 
-`VERSION` pins the installer to a release, as `VERSION=v0.2.0`. Without it the
-latest is installed.
+`VERSION` pins either installer to a release, as `VERSION=v0.2.0`. Without it
+the latest is installed.
 
 Homebrew is not supported.
 
@@ -62,6 +69,14 @@ export PATH="$HOME/.local/bin:$PATH"
 ```
 
 Put that in `~/.zshrc` or `~/.bashrc` to keep it.
+
+On Windows, if the installer says the directory is not on PATH:
+
+```powershell
+[Environment]::SetEnvironmentVariable('Path', "$env:PATH;$env:LOCALAPPDATA\Programs\zen-linear", 'User')
+```
+
+Then open a new terminal. Neither installer edits PATH on your behalf.
 
 ## Authenticating
 
@@ -123,10 +138,15 @@ anything. Turn it off with `"update_check": false`, or from the settings modal;
 [configuration.md](configuration.md) covers what the request does and does not
 carry.
 
-Re-run the installer. It takes the latest release and replaces the binary.
+Re-run the installer. It takes the latest release and replaces the binary,
+including over a copy that is currently running.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.sh | sh
+```
+
+```powershell
+irm https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.ps1 | iex
 ```
 
 From a clone, `git pull && make install`.

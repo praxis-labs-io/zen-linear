@@ -53,7 +53,7 @@ jobs:
 
     # Everything is pure Go, so one linux runner cross-compiles every target
     # and there is no macOS runner in the bill. The set matches the one CI
-    # builds, windows/arm64 excluded there and so absent here.
+    # builds.
     strategy:
       matrix:
         include:
@@ -67,6 +67,8 @@ jobs:
             goarch: arm64
           - goos: windows
             goarch: amd64
+          - goos: windows
+            goarch: arm64
 
     steps:
       - name: Checkout

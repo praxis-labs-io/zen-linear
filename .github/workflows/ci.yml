@@ -117,9 +117,6 @@ jobs:
       matrix:
         goos: [darwin, linux, windows]
         goarch: [amd64, arm64]
-        exclude:
-          - goos: windows
-            goarch: arm64
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -136,3 +133,43 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: go build -v ./cmd/zen-linear
+
+  install-script:
+    name: Install script (${{ matrix.shell }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 5.1 is what ships with Windows and what `irm | iex` reaches by
+        # default, and it is the one with the TLS 1.2 default this script works
+        # around. 7 is what a developer is likely to have. Both have to work.
+        shell: [powershell, pwsh]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # Against the published release rather than this branch's build: what is
+      # being tested is the download, the checksum match, the extraction and the
+      # move, none of which a local binary exercises.
+      - name: Install the latest release
+        shell: ${{ matrix.shell }}
+        run: ./install.ps1
+
+      - name: Check it runs and reports a released version
+        shell: ${{ matrix.shell }}
+        run: |
+          $exe = Join-Path $env:LOCALAPPDATA 'Programs\zen-linear\zen-linear.exe'
+          if (-not (Test-Path $exe)) { throw "the installer left no binary at $exe" }
+          $reported = & $exe --version
+          Write-Host $reported
+          # "dev" is what a local build reports, so seeing it here means the
+          # installer ran something other than the release it downloaded.
+          if ($reported -match 'zen-linear dev') { throw "installed binary reports dev: $reported" }
+          if ($reported -notmatch 'zen-linear \d+\.\d+\.\d+') { throw "unexpected version line: $reported" }
+
+      # An upgrade over an existing binary is the case Windows makes awkward,
+      # and the one a second run covers.
+      - name: Install again over the first
+        shell: ${{ matrix.shell }}
+        run: ./install.ps1

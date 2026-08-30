@@ -16,7 +16,7 @@ The repo moved to the `praxis-labs-io` org on 2026-08-18, so the module path is 
 
 **User-facing behaviour lives in `docs/`**: [the guide](docs/guide.md) for the panes and what they do, [keys](docs/keys.md) for the keymap, [configuration](docs/configuration.md) for every setting, [install](docs/install.md) for the install and auth paths, [agents](docs/agents.md) for the agent runs, and [CONTRIBUTING](docs/CONTRIBUTING.md) for the checks, the conventions and the version policy. What follows here is what the code has to keep true, not what a reader sees. Change one and the other says the wrong thing.
 
-**There is no Homebrew tap.** Distribution is `install.sh` and the tagged release workflow, both mirroring zen-review's. The emptied `zen-linear` org is held on purpose: a tap there would install as `brew install zen-linear/tap/zen-linear`, and one under `praxis-labs-io` would not read as the product. Homebrew 6 refuses formulae from untrusted taps and naming the tap is its consent signal, so a bare `brew install zen-linear` cannot work from a tap at all. If a tap is ever wanted, it gets designed then rather than carried as dead detail here.
+**There is no Homebrew tap.** Distribution is `install.sh`, `install.ps1` and the tagged release workflow, the shell path mirroring zen-review's. `install.ps1` is `install.sh` for Windows and follows its decisions rather than making its own: the same checksum gate, the same `VERSION` and `INSTALL_DIR`, and PATH printed rather than edited. It cannot be run from a mac, so the `install-script` job in `ci.yml` runs it on every PR against the published release, under Windows PowerShell 5.1 as well as 7 — 5.1 is what ships with Windows and what `irm | iex` reaches, and it is the one needing the explicit TLS 1.2. Windows refuses to overwrite a running executable, so the upgrade renames the old binary aside where the shell script stages the new one beside the target. The emptied `zen-linear` org is held on purpose: a tap there would install as `brew install zen-linear/tap/zen-linear`, and one under `praxis-labs-io` would not read as the product. Homebrew 6 refuses formulae from untrusted taps and naming the tap is its consent signal, so a bare `brew install zen-linear` cannot work from a tap at all. If a tap is ever wanted, it gets designed then rather than carried as dead detail here.
 
 Anything published under Drew's name (PR bodies, issues, README) must be shown to him word-for-word before pushing. His voice: terse, considerate, stoic, no strong adverbs, no em-dashes.
 
@@ -57,7 +57,7 @@ Five long-running buckets. They never complete; every ticket belongs to exactly 
 - **Feature Backlog**: net-new capabilities. Ideas live here until promoted.
 - **Performance and Code-Quality**: improves the code, no user-visible change (perf, refactors, tests, hygiene).
 - **Website**: the public site, its copy, its SEO.
-- **Release & Distribution**: how the binary gets from `main` to a user and stays current (`install.sh`, the release workflow, versioning, release notes).
+- **Release & Distribution**: how the binary gets from `main` to a user and stays current (`install.sh`, `install.ps1`, the release workflow, versioning, release notes, the update check).
 
 A body of work big enough to need milestones gets its own finite epic project, named for what it delivers, completed and closed when it ships. An epic that size is a Linear Project, never a tracking issue, and its follow-ups move to the matching bucket when it closes.
 
