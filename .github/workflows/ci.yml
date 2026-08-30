@@ -159,12 +159,14 @@ jobs:
       # Against the published release rather than this branch's build: what is
       # being tested is the download, the checksum match, the extraction and the
       # move, none of which a local binary exercises.
+      #
+      # `shell:` takes no matrix context, so the shell under test is launched as
+      # a child of the runner's default one rather than named as the step's own.
       - name: Install the latest release
-        shell: ${{ matrix.shell }}
-        run: ./install.ps1
+        run: ${{ matrix.shell }} -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
 
+      # Assertions only, so this runs in the default shell whichever leg it is.
       - name: Check it runs and reports a released version
-        shell: ${{ matrix.shell }}
         run: |
           $exe = Join-Path $env:LOCALAPPDATA 'Programs\zen-linear\zen-linear.exe'
           if (-not (Test-Path $exe)) { throw "the installer left no binary at $exe" }
@@ -176,7 +178,8 @@ jobs:
           if ($reported -notmatch 'zen-linear \d+\.\d+\.\d+') { throw "unexpected version line: $reported" }
 
       # An upgrade over an existing binary is the case Windows makes awkward,
-      # and the one a second run covers.
-      - name: Install again over the first
-        shell: ${{ matrix.shell }}
-        run: ./install.ps1
+      # and the one a second run covers. Piped rather than run as a file,
+      # because `irm | iex` is what the docs tell people to run and it is a
+      # different execution path from -File.
+      - name: Install again, the way the docs say to run it
+        run: ${{ matrix.shell }} -NoProfile -Command "Get-Content ./install.ps1 -Raw | Invoke-Expression"
