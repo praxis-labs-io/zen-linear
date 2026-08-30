@@ -28,7 +28,7 @@ every change or you keep testing the old binary.
 | --- | --- |
 | `make all` | lint, test, build. What has to be green |
 | `make test` | `go test -v -race -coverprofile ./...` |
-| `make lint` | gofmt, go.mod tidiness, golangci-lint |
+| `make lint` | gofmt, go.mod tidiness, actionlint, golangci-lint |
 | `make fmt-fix` | `gofmt -w .` |
 | `make install` | build to `~/.local/bin/zen-linear` |
 | `make coverage` | coverage report from the last test run |
@@ -41,6 +41,12 @@ through repeatedly.
 CI pins golangci-lint to **v2.12.2** in `.github/workflows/ci.yml`, matching
 what brew currently ships. Keep the pin current with the local version or CI
 and local runs stop agreeing.
+
+actionlint checks the workflow files against the Actions schema, and is pinned
+in both `ci.yml` and the Makefile's `ACTIONLINT_VERSION`. The two have to agree.
+It runs through `go run`, so there is nothing to install. It is worth having
+because a workflow the schema rejects produces a run with no jobs in it rather
+than a failing job, which reads as a failure with nothing inside.
 
 ## Layout
 

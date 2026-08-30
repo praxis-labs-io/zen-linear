@@ -29,7 +29,7 @@ Anything published under Drew's name (PR bodies, issues, README) must be shown t
 ```sh
 make all              # lint (gofmt + mod-tidy + golangci-lint) + test + build
 make test             # go test -v -race -coverprofile ./...
-make lint             # includes gofmt check and go.mod tidiness
+make lint             # includes gofmt check, go.mod tidiness, and actionlint
 make fmt-fix          # gofmt -w .
 make install          # build to ~/.local/bin/zen-linear
 go test ./internal/tui/ -run TestName   # single test
@@ -42,6 +42,8 @@ Run checks directly, never through a pipe that swallows exit codes (`make lint |
 CI pins golangci-lint **v2.12.2** (`.github/workflows/ci.yml`), matching what brew currently ships. `make lint` needs no `GOTOOLCHAIN` override and reports what CI reports.
 
 Keep the pin current with the local version. The old v2.8.0 pin drifted four versions behind, which meant local runs and CI disagreed and v2.8.0 panicked under newer Go toolchains.
+
+**actionlint is pinned twice, in `ci.yml` and in the Makefile's `ACTIONLINT_VERSION`, and the two have to agree.** It runs the workflow files against the Actions schema, which nothing else does: a workflow the schema rejects produces a run with **no jobs in it** rather than a failing job, so it reads as a failure with nothing inside, and `yq` parses those files happily. `shell: ${{ matrix.shell }}` is the shape that cost two fifteen-minute round trips before this existed — `shell:` takes no matrix context, and there is no way to learn that from a local parse. It goes through `go run ...@version`, so it needs no install beyond the Go already required.
 
 ## Project Management
 

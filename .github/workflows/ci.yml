@@ -69,6 +69,13 @@ jobs:
         with:
           version: v2.12.2
 
+      # A workflow the schema rejects does not fail a job, it produces a run
+      # with no jobs in it, which reads as a failure with nothing inside rather
+      # than as a syntax error. yq parses those files happily, so nothing local
+      # catches it either. Pinned like golangci-lint above, for the same reason.
+      - name: Run actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
+
   # Deliberately NOT a matrix with the Windows leg below. "Test" is a required
   # status check on main, and a matrix renames it to "Test (ubuntu-latest)",
   # which the rule would then wait forever for. Renaming a required check is a
