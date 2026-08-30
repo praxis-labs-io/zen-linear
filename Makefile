@@ -8,6 +8,9 @@ BINARY_NAME := zen-linear
 MAIN_PACKAGE := ./cmd/zen-linear
 COVERAGE_FILE := coverage.out
 INSTALL_DIR := $(HOME)/.local/bin
+# Kept in step with the pin in .github/workflows/ci.yml, so a local run and CI
+# report the same thing.
+ACTIONLINT_VERSION := v1.7.11
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -57,10 +60,14 @@ mod-tidy: ## Check if go.mod and go.sum are tidy
 	fi
 	@echo "go.mod and go.sum are tidy."
 
-lint: fmt mod-tidy ## Run all linting checks (gofmt, mod-tidy, golangci-lint)
+lint: fmt mod-tidy lint-actions ## Run all linting checks (gofmt, mod-tidy, actionlint, golangci-lint)
 	@echo "Running golangci-lint..."
 	@golangci-lint run
 	@echo "All linting checks passed."
+
+lint-actions: ## Check the workflow files against the Actions schema
+	@echo "Running actionlint..."
+	@go run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION) .github/workflows/*.yml
 
 lint-fix: fmt-fix ## Fix linting issues automatically
 	@echo "Fixing linting issues..."

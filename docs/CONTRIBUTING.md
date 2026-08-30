@@ -28,7 +28,7 @@ every change or you keep testing the old binary.
 | --- | --- |
 | `make all` | lint, test, build. What has to be green |
 | `make test` | `go test -v -race -coverprofile ./...` |
-| `make lint` | gofmt, go.mod tidiness, golangci-lint |
+| `make lint` | gofmt, go.mod tidiness, actionlint, golangci-lint |
 | `make fmt-fix` | `gofmt -w .` |
 | `make install` | build to `~/.local/bin/zen-linear` |
 | `make coverage` | coverage report from the last test run |
@@ -41,6 +41,17 @@ through repeatedly.
 CI pins golangci-lint to **v2.12.2** in `.github/workflows/ci.yml`, matching
 what brew currently ships. Keep the pin current with the local version or CI
 and local runs stop agreeing.
+
+actionlint checks the workflow files against the Actions schema, and is pinned
+in both `ci.yml` and the Makefile's `ACTIONLINT_VERSION`. The two have to agree.
+It runs through `go run`, so there is nothing to install. It is worth having
+because a workflow the schema rejects produces a run with no jobs in it rather
+than a failing job, which reads as a failure with nothing inside.
+
+The pin has a ceiling. CI builds it with the Go it already has and cannot fetch
+a newer toolchain, so a version needing a Go above this repo's fails in CI while
+passing locally. v1.7.12 is the first that needs Go 1.25, so v1.7.11 stands
+until the repo's Go moves.
 
 ## Layout
 
@@ -123,7 +134,7 @@ it is read at merge time and again before a release:
 | `internal/agents/**` | [`agents.md`](agents.md) |
 | `internal/auth/**` | [`install.md`](install.md) |
 | `internal/linearapi/**`, `internal/session/**`, `internal/cache/**` | [`guide.md`](guide.md) |
-| `install.sh`, `Makefile`, `.github/workflows/**` | [`install.md`](install.md), [`README.md`](../README.md) |
+| `install.sh`, `install.ps1`, `Makefile`, `.github/workflows/**` | [`install.md`](install.md), [`README.md`](../README.md) |
 | `.claude/rules/**`, the test conventions | this file |
 
 `git diff --name-only <ref>..HEAD` gives the left column, so the set of

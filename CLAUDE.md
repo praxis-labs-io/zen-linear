@@ -16,7 +16,7 @@ The repo moved to the `praxis-labs-io` org on 2026-08-18, so the module path is 
 
 **User-facing behaviour lives in `docs/`**: [the guide](docs/guide.md) for the panes and what they do, [keys](docs/keys.md) for the keymap, [configuration](docs/configuration.md) for every setting, [install](docs/install.md) for the install and auth paths, [agents](docs/agents.md) for the agent runs, and [CONTRIBUTING](docs/CONTRIBUTING.md) for the checks, the conventions and the version policy. What follows here is what the code has to keep true, not what a reader sees. Change one and the other says the wrong thing.
 
-**There is no Homebrew tap.** Distribution is `install.sh` and the tagged release workflow, both mirroring zen-review's. The emptied `zen-linear` org is held on purpose: a tap there would install as `brew install zen-linear/tap/zen-linear`, and one under `praxis-labs-io` would not read as the product. Homebrew 6 refuses formulae from untrusted taps and naming the tap is its consent signal, so a bare `brew install zen-linear` cannot work from a tap at all. If a tap is ever wanted, it gets designed then rather than carried as dead detail here.
+**There is no Homebrew tap.** Distribution is `install.sh`, `install.ps1` and the tagged release workflow, the shell path mirroring zen-review's. `install.ps1` is `install.sh` for Windows and follows its decisions rather than making its own: the same checksum gate, the same `VERSION` and `INSTALL_DIR`, and PATH printed rather than edited. It cannot be run from a mac, so the `install-script` job in `ci.yml` runs it on every PR against the published release, under Windows PowerShell 5.1 as well as 7 — 5.1 is what ships with Windows and what `irm | iex` reaches, and it is the one needing the explicit TLS 1.2. Windows refuses to overwrite a running executable, so the upgrade renames the old binary aside where the shell script stages the new one beside the target. The emptied `zen-linear` org is held on purpose: a tap there would install as `brew install zen-linear/tap/zen-linear`, and one under `praxis-labs-io` would not read as the product. Homebrew 6 refuses formulae from untrusted taps and naming the tap is its consent signal, so a bare `brew install zen-linear` cannot work from a tap at all. If a tap is ever wanted, it gets designed then rather than carried as dead detail here.
 
 Anything published under Drew's name (PR bodies, issues, README) must be shown to him word-for-word before pushing. His voice: terse, considerate, stoic, no strong adverbs, no em-dashes.
 
@@ -29,7 +29,7 @@ Anything published under Drew's name (PR bodies, issues, README) must be shown t
 ```sh
 make all              # lint (gofmt + mod-tidy + golangci-lint) + test + build
 make test             # go test -v -race -coverprofile ./...
-make lint             # includes gofmt check and go.mod tidiness
+make lint             # includes gofmt check, go.mod tidiness, and actionlint
 make fmt-fix          # gofmt -w .
 make install          # build to ~/.local/bin/zen-linear
 go test ./internal/tui/ -run TestName   # single test
@@ -42,6 +42,14 @@ Run checks directly, never through a pipe that swallows exit codes (`make lint |
 CI pins golangci-lint **v2.12.2** (`.github/workflows/ci.yml`), matching what brew currently ships. `make lint` needs no `GOTOOLCHAIN` override and reports what CI reports.
 
 Keep the pin current with the local version. The old v2.8.0 pin drifted four versions behind, which meant local runs and CI disagreed and v2.8.0 panicked under newer Go toolchains.
+
+**actionlint is pinned twice, in `ci.yml` and in the Makefile's `ACTIONLINT_VERSION`, and the two have to agree.** It runs the workflow files against the Actions schema, which nothing else does: a workflow the schema rejects produces a run with **no jobs in it** rather than a failing job, so it reads as a failure with nothing inside, and `yq` parses those files happily. `shell: ${{ matrix.shell }}` is the shape that cost two fifteen-minute round trips before this existed — `shell:` takes no matrix context, and there is no way to learn that from a local parse. It goes through `go run ...@version`, so it needs no install beyond the Go already required.
+
+**That is also what caps the pin.** `setup-go` exports `GOTOOLCHAIN=local`, so `go run` builds actionlint with the Go CI already has and cannot fetch a newer toolchain to do it. A version whose own `go` directive is above this repo's Go fails there with `requires go >= 1.25.0` while passing on a machine running a newer Go, which is the CI-and-local-disagree shape the golangci-lint pin exists to avoid. **v1.7.12 is the first version that needs Go 1.25, so the pin stays at v1.7.11 until this repo's Go moves.** Check the candidate's `go` directive before bumping:
+
+```sh
+curl -s https://proxy.golang.org/github.com/rhysd/actionlint/@v/vX.Y.Z.mod | grep '^go '
+```
 
 ## Project Management
 
@@ -57,7 +65,7 @@ Five long-running buckets. They never complete; every ticket belongs to exactly 
 - **Feature Backlog**: net-new capabilities. Ideas live here until promoted.
 - **Performance and Code-Quality**: improves the code, no user-visible change (perf, refactors, tests, hygiene).
 - **Website**: the public site, its copy, its SEO.
-- **Release & Distribution**: how the binary gets from `main` to a user and stays current (`install.sh`, the release workflow, versioning, release notes).
+- **Release & Distribution**: how the binary gets from `main` to a user and stays current (`install.sh`, `install.ps1`, the release workflow, versioning, release notes, the update check).
 
 A body of work big enough to need milestones gets its own finite epic project, named for what it delivers, completed and closed when it ships. An epic that size is a Linear Project, never a tracking issue, and its follow-ups move to the matching bucket when it closes.
 
