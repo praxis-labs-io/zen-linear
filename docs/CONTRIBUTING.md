@@ -48,6 +48,11 @@ It runs through `go run`, so there is nothing to install. It is worth having
 because a workflow the schema rejects produces a run with no jobs in it rather
 than a failing job, which reads as a failure with nothing inside.
 
+The pin has a ceiling. CI builds it with the Go it already has and cannot fetch
+a newer toolchain, so a version needing a Go above this repo's fails in CI while
+passing locally. v1.7.12 is the first that needs Go 1.25, so v1.7.11 stands
+until the repo's Go moves.
+
 ## Layout
 
 ```

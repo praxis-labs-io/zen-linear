@@ -45,6 +45,12 @@ Keep the pin current with the local version. The old v2.8.0 pin drifted four ver
 
 **actionlint is pinned twice, in `ci.yml` and in the Makefile's `ACTIONLINT_VERSION`, and the two have to agree.** It runs the workflow files against the Actions schema, which nothing else does: a workflow the schema rejects produces a run with **no jobs in it** rather than a failing job, so it reads as a failure with nothing inside, and `yq` parses those files happily. `shell: ${{ matrix.shell }}` is the shape that cost two fifteen-minute round trips before this existed — `shell:` takes no matrix context, and there is no way to learn that from a local parse. It goes through `go run ...@version`, so it needs no install beyond the Go already required.
 
+**That is also what caps the pin.** `setup-go` exports `GOTOOLCHAIN=local`, so `go run` builds actionlint with the Go CI already has and cannot fetch a newer toolchain to do it. A version whose own `go` directive is above this repo's Go fails there with `requires go >= 1.25.0` while passing on a machine running a newer Go, which is the CI-and-local-disagree shape the golangci-lint pin exists to avoid. **v1.7.12 is the first version that needs Go 1.25, so the pin stays at v1.7.11 until this repo's Go moves.** Check the candidate's `go` directive before bumping:
+
+```sh
+curl -s https://proxy.golang.org/github.com/rhysd/actionlint/@v/vX.Y.Z.mod | grep '^go '
+```
+
 ## Project Management
 
 Work is tracked in Linear: Praxis Labs workspace, **Zen Linear** team (key `ZNL`, tickets `ZNL-###`), reached through the `linear-zen-linear` MCP server declared in `.mcp.json`. Address projects and statuses **by name, never a UUID**; ids don't survive workspace moves.

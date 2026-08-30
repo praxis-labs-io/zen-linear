@@ -10,7 +10,7 @@ COVERAGE_FILE := coverage.out
 INSTALL_DIR := $(HOME)/.local/bin
 # Kept in step with the pin in .github/workflows/ci.yml, so a local run and CI
 # report the same thing.
-ACTIONLINT_VERSION := v1.7.12
+ACTIONLINT_VERSION := v1.7.11
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'

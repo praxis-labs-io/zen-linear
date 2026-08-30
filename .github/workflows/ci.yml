@@ -74,7 +74,7 @@ jobs:
       # than as a syntax error. yq parses those files happily, so nothing local
       # catches it either. Pinned like golangci-lint above, for the same reason.
       - name: Run actionlint
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 .github/workflows/*.yml
 
   # Deliberately NOT a matrix with the Windows leg below. "Test" is a required
   # status check on main, and a matrix renames it to "Test (ubuntu-latest)",
@@ -163,6 +163,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # The tag is resolved here rather than left to the script's own lookup.
+      # api.github.com rate-limits unauthenticated calls by IP, Actions runners
+      # share those, and a 403 fails this job for a reason that has nothing to
+      # do with the script. Everything the two shells actually differ over is
+      # downstream of the lookup: TLS, the download, Get-FileHash, the checksum
+      # match, Expand-Archive and the move.
+      - name: Resolve the release to install
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = gh release view --repo ${{ github.repository }} --json tagName --jq .tagName
+          if (-not $tag) { throw "could not resolve a published release to install" }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       # Against the published release rather than this branch's build: what is
       # being tested is the download, the checksum match, the extraction and the
       # move, none of which a local binary exercises.
@@ -170,6 +185,8 @@ jobs:
       # `shell:` takes no matrix context, so the shell under test is launched as
       # a child of the runner's default one rather than named as the step's own.
       - name: Install the latest release
+        env:
+          VERSION: ${{ steps.release.outputs.tag }}
         run: ${{ matrix.shell }} -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
 
       # Assertions only, so this runs in the default shell whichever leg it is.
@@ -189,4 +206,6 @@ jobs:
       # because `irm | iex` is what the docs tell people to run and it is a
       # different execution path from -File.
       - name: Install again, the way the docs say to run it
+        env:
+          VERSION: ${{ steps.release.outputs.tag }}
         run: ${{ matrix.shell }} -NoProfile -Command "Get-Content ./install.ps1 -Raw | Invoke-Expression"
