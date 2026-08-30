@@ -1,0 +1,5 @@
+# Line endings are LF in the working tree on every platform. Git's autocrlf
+# rewrites text files to CRLF on a Windows checkout, and the GraphQL goldens in
+# internal/linearapi/testdata are compared to the outgoing query byte for byte:
+# every one of them failed on Windows until this file existed.
+* text=auto eol=lf

@@ -114,7 +114,7 @@ func TestApplySettingsPreservesOAuthBearer(t *testing.T) {
 // pointing at a temp directory the next test no longer has.
 func isolateLogging(t *testing.T) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	setHomeDir(t, t.TempDir())
 	t.Cleanup(func() {
 		if _, warning := logger.Restart("", "", logger.LevelWarning); warning != "" {
 			t.Errorf("restoring the logger: %s", warning)
@@ -191,7 +191,7 @@ func TestApplySettingsDoesNotAdoptLoggingOffAsASetting(t *testing.T) {
 	if err := os.WriteFile(home, nil, 0644); err != nil {
 		t.Fatalf("write home: %v", err)
 	}
-	t.Setenv("HOME", home)
+	setHomeDir(t, home)
 
 	cfg := app.config
 	cfg.LogFile = refused
