@@ -215,8 +215,8 @@ jobs:
             $after = [Net.ServicePointManager]::SecurityProtocol
             [pscustomobject]@{
               ErrorAction = "$ErrorActionPreference"
-              StrictMode = try { $null = $undefinedAfterInstall; 'off' } catch { 'on' }
-              KeptProtocols = if ([int]$before -eq 0) { [int]$after -eq 0 } else { ($after -band $before) -eq $before }
+              StrictMode = $(try { $null = $undefinedAfterInstall; 'off' } catch { 'on' })
+              KeptProtocols = $(if ([int]$before -eq 0) { [int]$after -eq 0 } else { ($after -band $before) -eq $before })
               AllowsTls12 = [int]$after -eq 0 -or ($after -band [Net.SecurityProtocolType]::Tls12) -ne 0
             }
           }
