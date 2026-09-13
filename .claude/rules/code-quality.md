@@ -8,7 +8,7 @@ Hard conventions for this repo. The stack is Go 1.24, tview/tcell, shurcooL/grap
 - Don't add features or improvements beyond what was asked.
 - Don't refactor adjacent code while fixing a bug.
 - No dead code or commented-out blocks.
-- WHY comments only, never WHAT. If code needs a "what" comment, rename instead.
+- Comments follow the global rules: file purpose, contract docs on exported names, and one-line whys. Never a what; rename instead.
 - Don't modify generated files.
 
 ## Naming
