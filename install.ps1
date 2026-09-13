@@ -30,7 +30,10 @@ function Install-ZenLinear {
     go install github.com/$repo/cmd/zen-linear@latest"
 	}
 
-	[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+	$protocols = [Net.ServicePointManager]::SecurityProtocol
+	if ([int]$protocols -ne 0 -and -not ($protocols -band [Net.SecurityProtocolType]::Tls12)) {
+		[Net.ServicePointManager]::SecurityProtocol = $protocols -bor [Net.SecurityProtocolType]::Tls12
+	}
 
 	if ($env:VERSION) {
 		$tag = $env:VERSION
@@ -129,14 +132,4 @@ function Install-ZenLinear {
 	Write-Host '    zen-linear auth login'
 }
 
-# Exit only when run as a file: under `irm | iex` an exit closes the user's terminal, so the error is left to surface instead.
-if ($PSCommandPath) {
-	try {
-		Install-ZenLinear
-	} catch {
-		[Console]::Error.WriteLine($_.Exception.Message)
-		exit 1
-	}
-} else {
-	Install-ZenLinear
-}
+Install-ZenLinear

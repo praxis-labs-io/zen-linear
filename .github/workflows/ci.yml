@@ -216,15 +216,15 @@ jobs:
             [pscustomobject]@{
               ErrorAction = "$ErrorActionPreference"
               StrictMode = try { $null = $undefinedAfterInstall; 'off' } catch { 'on' }
-              KeptProtocols = ($after -band $before) -eq $before
-              AddedTls12 = ($after -band [Net.SecurityProtocolType]::Tls12) -ne 0
+              KeptProtocols = if ([int]$before -eq 0) { [int]$after -eq 0 } else { ($after -band $before) -eq $before }
+              AllowsTls12 = [int]$after -eq 0 -or ($after -band [Net.SecurityProtocolType]::Tls12) -ne 0
             }
           }
           $report | Format-List | Out-String | Write-Host
           if ($report.ErrorAction -ne 'Continue') { throw "the install left ErrorActionPreference at $($report.ErrorAction)" }
           if ($report.StrictMode -ne 'off') { throw 'the install left StrictMode on in the session' }
-          if (-not $report.KeptProtocols) { throw 'the install dropped security protocols the session allowed' }
-          if (-not $report.AddedTls12) { throw 'the install did not allow TLS 1.2' }
+          if (-not $report.KeptProtocols) { throw 'the install narrowed the security protocols the session allowed' }
+          if (-not $report.AllowsTls12) { throw 'the install left TLS 1.2 disallowed' }
 
       # An exit under `irm | iex` closes the user's terminal, so the marker only prints if the failure left the session alive.
       - name: A failed install under iex leaves the session running
@@ -236,6 +236,13 @@ jobs:
             'session survived'
           }
           if ($out -notcontains 'session survived') { throw 'a failed install ended the session' }
+          $bootstrap = Join-Path $env:RUNNER_TEMP 'bootstrap.ps1'
+          Set-Content -Path $bootstrap -Value @'
+          try { Get-Content ./install.ps1 -Raw | Invoke-Expression } catch { Write-Host $_ }
+          'script survived'
+          '@
+          $out = & ${{ matrix.shell }} -NoProfile -ExecutionPolicy Bypass -File $bootstrap
+          if ($out -notcontains 'script survived') { throw 'a failed install ended the script that piped it' }
 
       - name: A failed install run as a file exits 1
         env:
