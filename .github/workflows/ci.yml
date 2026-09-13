@@ -208,4 +208,47 @@ jobs:
       - name: Install again, the way the docs say to run it
         env:
           VERSION: ${{ steps.release.outputs.tag }}
-        run: ${{ matrix.shell }} -NoProfile -Command "Get-Content ./install.ps1 -Raw | Invoke-Expression"
+        run: |
+          $report = & ${{ matrix.shell }} -NoProfile -Command {
+            $before = [Net.ServicePointManager]::SecurityProtocol
+            Get-Content ./install.ps1 -Raw | Invoke-Expression
+            $after = [Net.ServicePointManager]::SecurityProtocol
+            [pscustomobject]@{
+              ErrorAction = "$ErrorActionPreference"
+              StrictMode = $(try { $null = $undefinedAfterInstall; 'off' } catch { 'on' })
+              KeptProtocols = $(if ([int]$before -eq 0) { [int]$after -eq 0 } else { ($after -band $before) -eq $before })
+              AllowsTls12 = [int]$after -eq 0 -or ($after -band [Net.SecurityProtocolType]::Tls12) -ne 0
+            }
+          }
+          $report | Format-List | Out-String | Write-Host
+          if ($report.ErrorAction -ne 'Continue') { throw "the install left ErrorActionPreference at $($report.ErrorAction)" }
+          if ($report.StrictMode -ne 'off') { throw 'the install left StrictMode on in the session' }
+          if (-not $report.KeptProtocols) { throw 'the install narrowed the security protocols the session allowed' }
+          if (-not $report.AllowsTls12) { throw 'the install left TLS 1.2 disallowed' }
+
+      # An exit under `irm | iex` closes the user's terminal, so the marker only prints if the failure left the session alive.
+      - name: A failed install under iex leaves the session running
+        env:
+          VERSION: v0.0.0
+        run: |
+          $out = & ${{ matrix.shell }} -NoProfile -Command {
+            try { Get-Content ./install.ps1 -Raw | Invoke-Expression } catch { Write-Host $_ }
+            'session survived'
+          }
+          if ($out -notcontains 'session survived') { throw 'a failed install ended the session' }
+          $bootstrap = Join-Path $env:RUNNER_TEMP 'bootstrap.ps1'
+          Set-Content -Path $bootstrap -Value @'
+          try { Get-Content ./install.ps1 -Raw | Invoke-Expression } catch { Write-Host $_ }
+          'script survived'
+          '@
+          $out = & ${{ matrix.shell }} -NoProfile -ExecutionPolicy Bypass -File $bootstrap
+          if ($out -notcontains 'script survived') { throw 'a failed install ended the script that piped it' }
+
+      - name: A failed install run as a file exits 1
+        env:
+          VERSION: v0.0.0
+        run: |
+          & ${{ matrix.shell }} -NoProfile -ExecutionPolicy Bypass -File ./install.ps1
+          $code = $LASTEXITCODE
+          $global:LASTEXITCODE = 0
+          if ($code -ne 1) { throw "a failed install run as a file exited $code, not 1" }
