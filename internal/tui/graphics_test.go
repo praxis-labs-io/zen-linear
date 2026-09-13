@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// Nothing here can prove a terminal accepts these bytes, only that they do not
-// drift, so each is pinned whole against a literal.
 func TestKittyWritesTheSequencesItMeansTo(t *testing.T) {
 	tests := []struct {
 		name string
@@ -51,11 +49,7 @@ func TestKittyWritesTheSequencesItMeansTo(t *testing.T) {
 	}
 }
 
-// A screenshot is far past one chunk, and the protocol reads m=1 as "another
-// follows". Getting the last chunk's m wrong leaves the terminal waiting for a
-// continuation that never comes and nothing is ever drawn.
 func TestKittyChunksALargeImage(t *testing.T) {
-	// Three chunks' worth of base64, so there is a middle chunk to get wrong.
 	data := bytes.Repeat([]byte("z"), kittyChunk*2)
 
 	var buf bytes.Buffer
@@ -89,8 +83,6 @@ func TestKittyChunksALargeImage(t *testing.T) {
 			t.Errorf("sequence %d control = %q, want it to end in %s", i, control, wantMore)
 		}
 
-		// The keys ride on the first sequence only; a later one repeating them
-		// restarts the transfer.
 		if i == 0 && !strings.HasPrefix(control, "a=t,f=100,t=d,i=3,q=2") {
 			t.Errorf("first control = %q, want the transmit keys", control)
 		}
@@ -108,8 +100,6 @@ func TestKittyChunksALargeImage(t *testing.T) {
 	}
 }
 
-// The terminal scales a picture into exactly the box it is given, so a box that
-// does not match the picture's own shape distorts it.
 func TestImageBoxKeepsTheShapeAndTheCap(t *testing.T) {
 	state := &graphicsState{cellWidth: 10, cellHeight: 20}
 
@@ -122,9 +112,7 @@ func TestImageBoxKeepsTheShapeAndTheCap(t *testing.T) {
 		wantRows      int
 	}{
 		{
-			name: "a wide screenshot fills the measure",
-			// 800x400 at 10x20 cells is 80 columns and 20 half-height rows,
-			// so a 60-column measure asks for 30 pixels-worth: 15 rows.
+			name:    "a wide screenshot fills the measure",
 			maxCols: 60, maxRows: maxImageRows, width: 800, height: 400, wantCols: 60, wantRows: 15,
 		},
 		{
@@ -136,8 +124,6 @@ func TestImageBoxKeepsTheShapeAndTheCap(t *testing.T) {
 			maxCols: 60, maxRows: maxImageRows, width: 2000, height: 20, wantCols: 60, wantRows: 1,
 		},
 		{
-			// A short pane cannot show a picture that does not fit whole, so
-			// the budget narrows it rather than reserving rows that stay blank.
 			name:    "a short pane narrows the picture",
 			maxCols: 60, maxRows: 6, width: 800, height: 400, wantCols: 24, wantRows: 6,
 		},

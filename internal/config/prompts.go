@@ -9,13 +9,11 @@ import (
 	"strings"
 )
 
-// AgentPromptTemplate represents a named agent prompt preset.
 type AgentPromptTemplate struct {
 	Name   string `json:"name"`
 	Prompt string `json:"prompt"`
 }
 
-// DefaultAgentPromptTemplates returns the built-in agent prompt templates.
 func DefaultAgentPromptTemplates() []AgentPromptTemplate {
 	return []AgentPromptTemplate{
 		{
@@ -33,7 +31,6 @@ func DefaultAgentPromptTemplates() []AgentPromptTemplate {
 	}
 }
 
-// PromptTemplatesFilePath returns the default prompts file path.
 func PromptTemplatesFilePath() (string, error) {
 	dir, err := Dir()
 	if err != nil {
@@ -42,7 +39,6 @@ func PromptTemplatesFilePath() (string, error) {
 	return filepath.Join(dir, "prompts.json"), nil
 }
 
-// EnsurePromptTemplatesFile ensures the prompts file exists and returns its templates.
 func EnsurePromptTemplatesFile(path string) ([]AgentPromptTemplate, error) {
 	if path == "" {
 		return nil, fmt.Errorf("prompts path is empty")
@@ -62,7 +58,6 @@ func EnsurePromptTemplatesFile(path string) ([]AgentPromptTemplate, error) {
 	return templates, nil
 }
 
-// LoadPromptTemplates loads prompt templates from a JSON file and validates them.
 func LoadPromptTemplates(path string) ([]AgentPromptTemplate, error) {
 	if path == "" {
 		return nil, fmt.Errorf("prompts path is empty")
@@ -86,7 +81,6 @@ func LoadPromptTemplates(path string) ([]AgentPromptTemplate, error) {
 	return valid, nil
 }
 
-// SavePromptTemplates writes prompt templates to a JSON file, creating directories as needed.
 func SavePromptTemplates(path string, templates []AgentPromptTemplate) error {
 	if path == "" {
 		return fmt.Errorf("prompts path is empty")
@@ -109,7 +103,6 @@ func SavePromptTemplates(path string, templates []AgentPromptTemplate) error {
 	return nil
 }
 
-// normalizePromptTemplates trims and filters templates to ensure required fields are present.
 func normalizePromptTemplates(templates []AgentPromptTemplate) []AgentPromptTemplate {
 	valid := make([]AgentPromptTemplate, 0, len(templates))
 	for _, template := range templates {

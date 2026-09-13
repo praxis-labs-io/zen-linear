@@ -10,12 +10,10 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
-// CursorProvider invokes the Cursor Agent CLI.
 type CursorProvider struct {
 	lookPath func(string) (string, error)
 }
 
-// NewCursorProvider creates a Cursor provider with an optional lookPath override.
 func NewCursorProvider(lookPath func(string) (string, error)) *CursorProvider {
 	if lookPath == nil {
 		lookPath = exec.LookPath
@@ -23,12 +21,10 @@ func NewCursorProvider(lookPath func(string) (string, error)) *CursorProvider {
 	return &CursorProvider{lookPath: lookPath}
 }
 
-// Name returns the display name for this provider.
 func (p *CursorProvider) Name() string {
 	return "Cursor"
 }
 
-// ResolveBinary finds the Cursor Agent CLI binary.
 func (p *CursorProvider) ResolveBinary() (string, bool) {
 	if path, err := p.lookPath("cursor-agent"); err == nil {
 		return path, true
@@ -39,8 +35,6 @@ func (p *CursorProvider) ResolveBinary() (string, bool) {
 	return "", false
 }
 
-// BuildArgs builds argv for a non-interactive Cursor run. The working directory
-// carries the workspace; cursor-agent has no flag for it.
 func (p *CursorProvider) BuildArgs(prompt string, issueContext string, options AgentRunOptions) []string {
 	fullPrompt := buildAgentPrompt(prompt, issueContext)
 	var args []string
@@ -55,14 +49,11 @@ func (p *CursorProvider) BuildArgs(prompt string, issueContext string, options A
 	return args
 }
 
-// cursorAllowsCommands reports whether the run may execute commands without
-// asking. cursor-agent has no sandbox flag, so the setting maps onto --force,
-// the nearest thing it does have. Anything but an explicit "disabled" asks.
+// cursor-agent has no sandbox flag, so only an explicit "disabled" maps to --force.
 func cursorAllowsCommands(sandbox string) bool {
 	return strings.EqualFold(strings.TrimSpace(sandbox), "disabled")
 }
 
-// ParseStreamLine attempts to extract display text from Cursor stream-json.
 func (p *CursorProvider) ParseStreamLine(line []byte) (string, bool) {
 	event, ok := p.ParseEvent(line)
 	if !ok || event == nil {
@@ -72,7 +63,6 @@ func (p *CursorProvider) ParseStreamLine(line []byte) (string, bool) {
 	return formatEventLine(*event), true
 }
 
-// cursorStreamEvent captures common Cursor stream-json fields.
 type cursorStreamEvent struct {
 	Type           string `json:"type"`
 	Subtype        string `json:"subtype"`
@@ -102,7 +92,6 @@ type cursorStreamEvent struct {
 	ToolCall cursorToolCall `json:"tool_call"`
 }
 
-// cursorToolCall captures tool call metadata for progress output.
 type cursorToolCall struct {
 	ReadToolCall *struct {
 		Args struct {
@@ -121,7 +110,6 @@ type cursorToolCall struct {
 	} `json:"function"`
 }
 
-// cursorToolCallResult captures success/error metadata for tool calls.
 type cursorToolCallResult struct {
 	Success *struct {
 		Content       string `json:"content"`
@@ -138,7 +126,6 @@ type cursorToolCallResult struct {
 	} `json:"error"`
 }
 
-// extractMessageText joins text entries from a message content array.
 func extractMessageText(items []struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
@@ -153,8 +140,6 @@ func extractMessageText(items []struct {
 	return builder.String()
 }
 
-// formatSystemEvent returns a summary line for system init events.
-// ParseEvent parses a stream-json line into an AgentEvent.
 func (p *CursorProvider) ParseEvent(line []byte) (*AgentEvent, bool) {
 	trimmed := strings.TrimSpace(string(line))
 	if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
@@ -222,7 +207,6 @@ func (p *CursorProvider) ParseEvent(line []byte) (*AgentEvent, bool) {
 	return nil, false
 }
 
-// buildCursorResumeCommand returns a resume command when a session id is available.
 func buildCursorResumeCommand(sessionID string) string {
 	if strings.TrimSpace(sessionID) == "" {
 		return ""
@@ -230,8 +214,6 @@ func buildCursorResumeCommand(sessionID string) string {
 	return fmt.Sprintf("cursor-agent --resume %s", sessionID)
 }
 
-// formatToolCall returns a short status line for tool call events.
-// buildToolCallEvent converts a tool call stream event into an AgentEvent.
 func buildToolCallEvent(event cursorStreamEvent) *AgentEvent {
 	name, detail := extractToolCallDetails(event.ToolCall)
 	tool := &AgentToolCall{
@@ -253,7 +235,6 @@ func buildToolCallEvent(event cursorStreamEvent) *AgentEvent {
 	}
 }
 
-// extractToolCallError returns the first tool-call error message, if any.
 func extractToolCallError(call cursorToolCall) string {
 	if call.ReadToolCall != nil && call.ReadToolCall.Result.Error != nil {
 		return strings.TrimSpace(call.ReadToolCall.Result.Error.Message)
@@ -264,7 +245,6 @@ func extractToolCallError(call cursorToolCall) string {
 	return ""
 }
 
-// extractToolCallDetails pulls a tool name and optional detail for display.
 func extractToolCallDetails(call cursorToolCall) (string, string) {
 	if call.ReadToolCall != nil {
 		return "read", strings.TrimSpace(call.ReadToolCall.Args.Path)
@@ -278,7 +258,6 @@ func extractToolCallDetails(call cursorToolCall) (string, string) {
 	return "", ""
 }
 
-// formatToolResult renders a concise summary of tool results.
 func formatToolResult(call cursorToolCall) string {
 	if call.ReadToolCall != nil {
 		return summarizeReadResult(call.ReadToolCall.Result)
@@ -338,8 +317,6 @@ func summarizeWriteResult(result cursorToolCallResult) string {
 	return ""
 }
 
-// formatTextEvent builds a prefixed line from the provided text content.
-// formatEventLine formats a parsed AgentEvent into a display line.
 func formatEventLine(event AgentEvent) string {
 	switch event.Type {
 	case AgentEventSystem:
@@ -407,8 +384,6 @@ func formatEventLine(event AgentEvent) string {
 	}
 }
 
-// truncatePreview shortens long lines for event previews.
-// coalesceText returns the first non-empty trimmed text value.
 func coalesceText(primary string, secondary string) string {
 	value := strings.TrimSpace(primary)
 	if value == "" {

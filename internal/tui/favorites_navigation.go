@@ -6,8 +6,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// favoriteLeafNode maps one favorite onto a navigation node, or nil for
-// favorite types the navigation tree cannot display (labels, documents, ...).
 func favoriteLeafNode(favorite linearapi.Favorite) *NavigationNode {
 	switch favorite.Type {
 	case "issue":
@@ -25,8 +23,6 @@ func favoriteLeafNode(favorite linearapi.Favorite) *NavigationNode {
 		if favorite.ProjectID == "" {
 			return nil
 		}
-		// No team: a favorited project is workspace-level, and narrowing it to
-		// one of a multi-team project's teams asks for issues that are not there.
 		return &NavigationNode{
 			ID:        favorite.ProjectID,
 			Text:      favorite.ProjectName,
@@ -86,8 +82,6 @@ func favoriteLeafNode(favorite linearapi.Favorite) *NavigationNode {
 			if label == "" {
 				label = "All Issues"
 			}
-			// A team-scoped favorite of this view must keep its team, or it
-			// renders as a second copy of the workspace-wide All Issues node.
 			return &NavigationNode{ID: "all", Text: label, TeamID: favorite.PredefinedViewTeamID}
 		default:
 			logger.Debug("tui.favorites: skipping unsupported predefined view type=%s id=%s", favorite.PredefinedViewType, favorite.ID)
@@ -99,12 +93,8 @@ func favoriteLeafNode(favorite linearapi.Favorite) *NavigationNode {
 	}
 }
 
-// favoriteTypeFolder is Linear's favorite type for a sidebar folder.
 const favoriteTypeFolder = "folder"
 
-// isRenderableFavorite reports whether a favorite reaches the navigation tree.
-// Unsupported types are dropped, so they must not count as reorder siblings
-// either.
 func isRenderableFavorite(favorite linearapi.Favorite) bool {
 	if favorite.Type == favoriteTypeFolder {
 		return true
@@ -112,9 +102,6 @@ func isRenderableFavorite(favorite linearapi.Favorite) bool {
 	return favoriteLeafNode(favorite) != nil
 }
 
-// favoriteParentIDs maps each favorite to the folder it renders under, empty
-// for the top level. A favorite whose folder is missing renders at the top
-// level, so it is reported that way here too.
 func favoriteParentIDs(favorites []linearapi.Favorite) map[string]string {
 	isFolder := make(map[string]bool)
 	for _, favorite := range favorites {
@@ -131,12 +118,9 @@ func favoriteParentIDs(favorites []linearapi.Favorite) map[string]string {
 	return parents
 }
 
-// favoriteNavigationNodes maps favorites onto navigation nodes, nesting
-// favorites inside their Linear folders.
 func favoriteNavigationNodes(favorites []linearapi.Favorite) []*NavigationNode {
 	parents := favoriteParentIDs(favorites)
 
-	// Folders first, so children find their parent regardless of order.
 	folders := make(map[string]*NavigationNode)
 	for _, favorite := range favorites {
 		if favorite.Type != favoriteTypeFolder {
@@ -176,9 +160,6 @@ func favoriteNavigationNodes(favorites []linearapi.Favorite) []*NavigationNode {
 	return roots
 }
 
-// buildFavoritesGroup renders the Favorites group, or nil when nothing
-// displayable is favorited. Favorites are additive: with none, the section is
-// omitted rather than shown empty.
 func (a *App) buildFavoritesGroup(favorites []linearapi.Favorite) *tview.TreeNode {
 	nodes := favoriteNavigationNodes(favorites)
 	if len(nodes) == 0 {
@@ -193,12 +174,8 @@ func (a *App) buildFavoritesGroup(favorites []linearapi.Favorite) *tview.TreeNod
 	return group
 }
 
-// addFavoriteNodes renders favorite navigation nodes under a tree node,
-// recursing into folders.
 func (a *App) addFavoriteNodes(parent *tview.TreeNode, nodes []*NavigationNode) {
 	for _, navNode := range nodes {
-		// A favorited team holds none of its rows until it is opened, so it
-		// reads closed. A folder holds its own and reads open.
 		expanded := !navNode.IsTeam
 		child := tview.NewTreeNode(navNode.Text).
 			SetReference(navNode).

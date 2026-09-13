@@ -10,9 +10,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// mockClient is a mock implementation for testing cache behavior.
-// We can't easily mock the actual client, so we test the cache structure.
-
 func TestNewTeamCache(t *testing.T) {
 	ttl := 5 * time.Minute
 	cache := NewTeamCache(nil, ttl)
@@ -45,7 +42,6 @@ func TestNewTeamCache(t *testing.T) {
 func TestTeamCache_InvalidateAll(t *testing.T) {
 	cache := NewTeamCache(nil, 5*time.Minute)
 
-	// Manually set some cached data
 	cache.teams = []linearapi.Team{{ID: "test"}}
 	cache.teamsExpiry = time.Now().Add(time.Hour)
 	cache.users["team-1"] = []linearapi.User{{ID: "user-1"}}
@@ -145,7 +141,6 @@ func TestTeamCache_InvalidateWorkflowStates(t *testing.T) {
 func TestTeamCache_GetTeams_CacheHit(t *testing.T) {
 	cache := NewTeamCache(nil, 5*time.Minute)
 
-	// Pre-populate cache
 	expectedTeams := []linearapi.Team{
 		{ID: "team-1", Name: "Team 1"},
 		{ID: "team-2", Name: "Team 2"},
@@ -174,7 +169,6 @@ func TestTeamCache_GetTeams_CacheHit(t *testing.T) {
 func TestTeamCache_GetUsers_CacheHit(t *testing.T) {
 	cache := NewTeamCache(nil, 5*time.Minute)
 
-	// Pre-populate cache
 	teamID := "team-1"
 	expectedUsers := []linearapi.User{
 		{ID: "user-1", Name: "User 1"},
@@ -198,7 +192,6 @@ func TestTeamCache_GetUsers_CacheHit(t *testing.T) {
 func TestTeamCache_GetProjects_CacheHit(t *testing.T) {
 	cache := NewTeamCache(nil, 5*time.Minute)
 
-	// Pre-populate cache
 	teamID := "team-1"
 	expectedProjects := []linearapi.Project{
 		{ID: "proj-1", Name: "Project 1"},
@@ -221,7 +214,6 @@ func TestTeamCache_GetProjects_CacheHit(t *testing.T) {
 func TestTeamCache_GetWorkflowStates_CacheHit(t *testing.T) {
 	cache := NewTeamCache(nil, 5*time.Minute)
 
-	// Pre-populate cache
 	teamID := "team-1"
 	expectedStates := []linearapi.WorkflowState{
 		{ID: "state-1", Name: "Todo", Type: "unstarted"},
@@ -327,12 +319,8 @@ func TestTeamCache_GetProjectMilestones_CacheHit(t *testing.T) {
 func TestTeamCache_CacheExpiry(t *testing.T) {
 	cache := NewTeamCache(nil, 1*time.Millisecond)
 
-	// Pre-populate with expired cache
 	cache.teams = []linearapi.Team{{ID: "old-team"}}
-	cache.teamsExpiry = time.Now().Add(-time.Hour) // Already expired
-
-	// Without a real client, we can't test the full flow,
-	// but we can verify the expiry check logic
+	cache.teamsExpiry = time.Now().Add(-time.Hour)
 
 	cache.mu.RLock()
 	isExpired := time.Now().After(cache.teamsExpiry)
@@ -346,7 +334,6 @@ func TestTeamCache_CacheExpiry(t *testing.T) {
 func TestTeamCache_GetCurrentUser_CacheHit(t *testing.T) {
 	cache := NewTeamCache(nil, 5*time.Minute)
 
-	// Pre-populate cache
 	expectedUser := linearapi.User{
 		ID:   "user-me",
 		Name: "Current User",
@@ -390,7 +377,6 @@ func TestTeamCache_InvalidateIssueLabels(t *testing.T) {
 func TestTeamCache_GetIssueLabels_CacheHit(t *testing.T) {
 	cache := NewTeamCache(nil, 5*time.Minute)
 
-	// Pre-populate cache
 	teamID := "team-1"
 	expectedLabels := []linearapi.IssueLabel{
 		{ID: "lbl-1", Name: "Bug", Color: "#ff0000"},
@@ -475,10 +461,6 @@ func TestGetCachedOrFetch_CollapsesConcurrentMisses(t *testing.T) {
 		}()
 	}
 
-	// Every follower has to reach the cache and park while the leader is still
-	// fetching, or this asserts nothing. There is no way to observe a parked
-	// waiter, so settle instead: a follower that raced the cache would have
-	// incremented calls by the time this returns.
 	waitForCalls(t, &calls, 1)
 	time.Sleep(50 * time.Millisecond)
 	close(release)
@@ -496,10 +478,6 @@ func TestGetCachedOrFetch_CollapsesConcurrentMisses(t *testing.T) {
 	}
 }
 
-// TestGetCachedOrFetch_FollowersShareTheLeadersFailure guards against waiters
-// retrying in turn: with the API unreachable each one would otherwise wait a
-// full timeout before reporting the same error, so the failure takes N
-// timeouts to surface instead of one.
 func TestGetCachedOrFetch_FollowersShareTheLeadersFailure(t *testing.T) {
 	c := NewTeamCache(nil, time.Minute)
 	teamID := "team-1"
@@ -544,8 +522,6 @@ func TestGetCachedOrFetch_FollowersShareTheLeadersFailure(t *testing.T) {
 	}
 }
 
-// TestGetCachedOrFetch_ANewCallAfterAFailureRefetches confirms sharing the
-// error is scoped to one flight, not cached: the next caller tries again.
 func TestGetCachedOrFetch_ANewCallAfterAFailureRefetches(t *testing.T) {
 	c := NewTeamCache(nil, time.Minute)
 	teamID := "team-1"
@@ -570,9 +546,6 @@ func TestGetCachedOrFetch_ANewCallAfterAFailureRefetches(t *testing.T) {
 	}
 }
 
-// TestGetCachedOrFetch_ReturnsACopy guards the callers that sort the result in
-// place. Handing out the cached array means one caller's sort reorders every
-// other caller's slice, and corrupts the cache for the rest of the TTL.
 func TestGetCachedOrFetch_ReturnsACopy(t *testing.T) {
 	c := NewTeamCache(nil, time.Minute)
 	teamID := "team-1"
@@ -645,8 +618,6 @@ func waitForCalls(t *testing.T, calls *atomic.Int32, want int32) {
 	t.Fatalf("fetch calls reached %d, want %d", calls.Load(), want)
 }
 
-// waitForInflight blocks until a second caller is parked on the leader's
-// channel, which is the state these tests are about.
 func waitForInflight(t *testing.T, c *TeamCache, key string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -655,8 +626,6 @@ func waitForInflight(t *testing.T, c *TeamCache, key string) {
 		_, running := c.inflight[key]
 		c.mu.Unlock()
 		if running {
-			// The follower cannot be observed directly; give it a moment to
-			// park after finding the entry.
 			time.Sleep(10 * time.Millisecond)
 			return
 		}

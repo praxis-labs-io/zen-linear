@@ -6,21 +6,17 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// The terminal's own palette slots. Named for the role a palette gives them,
-// since what they actually paint is the user's business.
 const (
-	ansiBlack       = tcell.ColorBlack  // 0
-	ansiRed         = tcell.ColorMaroon // 1
-	ansiGreen       = tcell.ColorGreen  // 2
-	ansiYellow      = tcell.ColorOlive  // 3
-	ansiBlue        = tcell.ColorNavy   // 4
-	ansiMagenta     = tcell.ColorPurple // 5
-	ansiWhite       = tcell.ColorSilver // 7
-	ansiBrightBlack = tcell.ColorGray   // 8
+	ansiBlack       = tcell.ColorBlack
+	ansiRed         = tcell.ColorMaroon
+	ansiGreen       = tcell.ColorGreen
+	ansiYellow      = tcell.ColorOlive
+	ansiBlue        = tcell.ColorNavy
+	ansiMagenta     = tcell.ColorPurple
+	ansiWhite       = tcell.ColorSilver
+	ansiBrightBlack = tcell.ColorGray
 )
 
-// terminalSurface is the terminal's own background and foreground. known is
-// false when nothing answered, which is what the fallback shades are for.
 type terminalSurface struct {
 	background tcell.Color
 	foreground tcell.Color
@@ -31,8 +27,7 @@ var detectedSurface terminalSurface
 
 var detectedKittyGraphics bool
 
-// DetectTerminalCapabilities asks the terminal about itself, once, at launch. A
-// query after tcell owns the tty would read the keyboard out from under it.
+// DetectTerminalCapabilities queries the terminal once. Call it at launch, before tcell owns the tty.
 func DetectTerminalCapabilities() {
 	reply := queryTerminal()
 	detectedSurface = terminalSurface{
@@ -43,13 +38,11 @@ func DetectTerminalCapabilities() {
 	detectedKittyGraphics = reply.kittyGraphics
 }
 
-// False until DetectTerminalCapabilities has run, and off unix always.
+// KittyGraphicsSupported is false until DetectTerminalCapabilities has run, and always off unix.
 func KittyGraphicsSupported() bool {
 	return detectedKittyGraphics
 }
 
-// TerminalTheme is built from the terminal: ANSI slots for the hues, the
-// detected background and foreground blended for the shades between them.
 func TerminalTheme() Theme {
 	return buildTerminalTheme(detectedSurface)
 }
@@ -93,8 +86,6 @@ func buildTerminalTheme(surface terminalSurface) Theme {
 	return theme
 }
 
-// mixColors blends base toward target. Mixing against the real pair is what
-// darkens a light terminal's shades and lightens a dark one's.
 func mixColors(base, target tcell.Color, ratio float64) tcell.Color {
 	baseRed, baseGreen, baseBlue := base.RGB()
 	targetRed, targetGreen, targetBlue := target.RGB()

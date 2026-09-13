@@ -16,7 +16,6 @@ func TestBuildIssueRows_NoChildren(t *testing.T) {
 
 	rows, idToIssue := BuildIssueRows(issues, expanded)
 
-	// Should have 3 rows, all at level 0
 	if len(rows) != 3 {
 		t.Errorf("BuildIssueRows() returned %d rows, want 3", len(rows))
 	}
@@ -33,7 +32,6 @@ func TestBuildIssueRows_NoChildren(t *testing.T) {
 		}
 	}
 
-	// Check idToIssue map
 	if len(idToIssue) != 3 {
 		t.Errorf("idToIssue has %d entries, want 3", len(idToIssue))
 	}
@@ -68,10 +66,8 @@ func TestBuildIssueRows_ParentWithChildren(t *testing.T) {
 	issues := []linearapi.Issue{parent, child1, child2}
 	expanded := make(map[string]bool)
 
-	// Test collapsed state
 	rows, _ := BuildIssueRows(issues, expanded)
 
-	// Should only show parent (collapsed)
 	if len(rows) != 1 {
 		t.Errorf("BuildIssueRows() collapsed returned %d rows, want 1", len(rows))
 	}
@@ -114,12 +110,10 @@ func TestBuildIssueRows_ExpandedParent(t *testing.T) {
 
 	rows, _ := BuildIssueRows(issues, expanded)
 
-	// Should show parent + 2 children when expanded
 	if len(rows) != 3 {
 		t.Errorf("BuildIssueRows() expanded returned %d rows, want 3", len(rows))
 	}
 
-	// First row should be parent
 	if rows[0].IssueID != "parent-1" {
 		t.Errorf("Row 0 IssueID = %q, want parent-1", rows[0].IssueID)
 	}
@@ -130,7 +124,6 @@ func TestBuildIssueRows_ExpandedParent(t *testing.T) {
 		t.Error("Parent row IsExpanded = false, want true")
 	}
 
-	// Children should be at level 1
 	for i := 1; i < len(rows); i++ {
 		if rows[i].Level != 1 {
 			t.Errorf("Row %d Level = %d, want 1", i, rows[i].Level)
@@ -139,7 +132,6 @@ func TestBuildIssueRows_ExpandedParent(t *testing.T) {
 }
 
 func TestBuildIssueRows_OrphanSubIssue(t *testing.T) {
-	// Sub-issue whose parent is not in the fetched list
 	orphan := linearapi.Issue{
 		ID:         "orphan-1",
 		Identifier: "LIN-2",
@@ -152,7 +144,6 @@ func TestBuildIssueRows_OrphanSubIssue(t *testing.T) {
 
 	rows, _ := BuildIssueRows(issues, expanded)
 
-	// Orphan should appear as top-level
 	if len(rows) != 1 {
 		t.Errorf("BuildIssueRows() returned %d rows, want 1", len(rows))
 	}
@@ -162,7 +153,6 @@ func TestBuildIssueRows_OrphanSubIssue(t *testing.T) {
 }
 
 func TestBuildIssueRows_MixedIssues(t *testing.T) {
-	// Mix of parent issues, sub-issues, and standalone issues
 	standalone := linearapi.Issue{
 		ID:         "standalone",
 		Identifier: "LIN-1",
@@ -188,7 +178,6 @@ func TestBuildIssueRows_MixedIssues(t *testing.T) {
 
 	rows, _ := BuildIssueRows(issues, expanded)
 
-	// Should show standalone + parent (collapsed), not child
 	if len(rows) != 2 {
 		t.Errorf("BuildIssueRows() returned %d rows, want 2", len(rows))
 	}
@@ -197,7 +186,6 @@ func TestBuildIssueRows_MixedIssues(t *testing.T) {
 func TestToggleExpanded(t *testing.T) {
 	expanded := make(map[string]bool)
 
-	// First toggle should expand
 	newState := ToggleExpanded(expanded, "issue-1")
 	if !newState {
 		t.Error("First toggle should return true (expanded)")
@@ -206,7 +194,6 @@ func TestToggleExpanded(t *testing.T) {
 		t.Error("issue-1 should be expanded")
 	}
 
-	// Second toggle should collapse
 	newState = ToggleExpanded(expanded, "issue-1")
 	if newState {
 		t.Error("Second toggle should return false (collapsed)")
@@ -252,14 +239,12 @@ func TestExpandAll(t *testing.T) {
 
 	ExpandAll(expanded, issues)
 
-	// Parents with children should be expanded
 	if !expanded["parent-1"] {
 		t.Error("parent-1 should be expanded")
 	}
 	if !expanded["parent-2"] {
 		t.Error("parent-2 should be expanded")
 	}
-	// Standalone (no parent, no children) should also be marked (doesn't affect display)
 	if !expanded["standalone"] {
 		t.Error("standalone should be marked in expanded map")
 	}
@@ -300,7 +285,6 @@ func TestBuildIssueRows_ChildrenSortedByIdentifier(t *testing.T) {
 
 	rows, _ := BuildIssueRows(issues, expanded)
 
-	// Children should be sorted by identifier
 	if len(rows) != 4 {
 		t.Fatalf("Expected 4 rows, got %d", len(rows))
 	}
@@ -313,8 +297,6 @@ func TestBuildIssueRows_ChildrenSortedByIdentifier(t *testing.T) {
 	}
 }
 
-// TestStatusRank verifies lifecycle ordering, including that "Unstarted" does
-// not match the "started" category despite containing it.
 func TestStatusRank(t *testing.T) {
 	ordered := []string{"Triage", "In Review", "In Progress", "Todo", "Backlog", "Done", "Canceled"}
 	for i := 1; i < len(ordered); i++ {
@@ -330,7 +312,6 @@ func TestStatusRank(t *testing.T) {
 	}
 }
 
-// TestBuildGroupedIssueRows verifies headers, group order, and counts.
 func TestBuildGroupedIssueRows(t *testing.T) {
 	issues := []linearapi.Issue{
 		{ID: "1", Identifier: "LIN-1", State: "Done"},
@@ -343,7 +324,6 @@ func TestBuildGroupedIssueRows(t *testing.T) {
 	if len(idToIssue) != 4 {
 		t.Fatalf("idToIssue size = %d, want 4", len(idToIssue))
 	}
-	// Expect: [In Progress header, 4, gap, Todo header, 2, 3, gap, Done header, 1]
 	if len(rows) != 9 {
 		t.Fatalf("rows = %d, want 9: %#v", len(rows), rows)
 	}
@@ -366,8 +346,6 @@ func TestBuildGroupedIssueRows(t *testing.T) {
 	}
 }
 
-// TestBuildGroupedIssueRowsSubgroups verifies second-level grouping emits
-// nested headers in dimension order.
 func TestBuildGroupedIssueRowsSubgroups(t *testing.T) {
 	issues := []linearapi.Issue{
 		{ID: "1", Identifier: "LIN-1", State: "Todo", Priority: 2},
@@ -376,9 +354,6 @@ func TestBuildGroupedIssueRowsSubgroups(t *testing.T) {
 	}
 
 	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByPriority, nil)
-	// Expect: Todo hdr, Urgent hdr, 2, gap, High hdr, 1, gap, Done hdr,
-	// No priority hdr, 3. The first subgroup sits flush under its group
-	// header; later subgroups get a gap.
 	if len(rows) != 10 {
 		t.Fatalf("rows = %d, want 10: %+v", len(rows), rows)
 	}
@@ -409,8 +384,6 @@ func TestBuildGroupedIssueRowsSubgroups(t *testing.T) {
 	}
 }
 
-// TestNextIssueRow verifies header and spacer rows are skipped in both
-// directions.
 func TestNextIssueRow(t *testing.T) {
 	rows := []IssueRow{
 		{IsHeader: true, HeaderText: "Todo"},
@@ -433,8 +406,6 @@ func TestNextIssueRow(t *testing.T) {
 	}
 }
 
-// TestNextSelectableRow verifies movement stops on headers but skips gap
-// spacers.
 func TestNextSelectableRow(t *testing.T) {
 	rows := []IssueRow{
 		{IsHeader: true, HeaderText: "Todo"},
@@ -457,8 +428,6 @@ func TestNextSelectableRow(t *testing.T) {
 	}
 }
 
-// TestBuildGroupedIssueRowsCollapse verifies collapsed groups hide their rows
-// while keeping the header, with subgroups collapsing independently.
 func TestBuildGroupedIssueRowsCollapse(t *testing.T) {
 	issues := []linearapi.Issue{
 		{ID: "1", Identifier: "LIN-1", State: "Todo"},
@@ -467,7 +436,6 @@ func TestBuildGroupedIssueRowsCollapse(t *testing.T) {
 
 	collapsed := map[string]bool{"status\x1fTodo": true}
 	rows, _ := BuildGroupedIssueRows(issues, map[string]bool{}, GroupByStatus, GroupByNone, collapsed)
-	// Expect: Todo header (collapsed, no rows), gap, Done header, LIN-2
 	if len(rows) != 4 {
 		t.Fatalf("rows = %d, want 4: %+v", len(rows), rows)
 	}

@@ -7,16 +7,11 @@ import (
 	"github.com/rivo/tview"
 )
 
-// paneRect returns a pane's left edge and width as of the last draw.
 func paneRect(pane tview.Primitive) (left, width int) {
 	left, _, width, _ = pane.GetRect()
 	return left, width
 }
 
-// paneWidths builds a content flex of bare panes and draws it at the given
-// terminal width, returning the width each pane was laid out at. Every pane
-// starts zeroed, so one the layout left out reads as 0 rather than as the
-// tview default rect.
 func paneWidths(t *testing.T, app *App, width int) (nav, issues, details int) {
 	t.Helper()
 
@@ -47,7 +42,6 @@ func paneWidths(t *testing.T, app *App, width int) (nav, issues, details int) {
 	return nav, issues, details
 }
 
-// TestWidePaneSplit pins the three-pane ratio at 6:15:10.
 func TestWidePaneSplit(t *testing.T) {
 	app := &App{}
 	nav, issues, details := paneWidths(t, app, 180)
@@ -63,9 +57,6 @@ func TestWidePaneSplit(t *testing.T) {
 	}
 }
 
-// TestWidePaneSplitWithDetailsHidden covers toggling details off, where the
-// nav pane keeps the share it had before it got a bump for the three-pane
-// case.
 func TestWidePaneSplitWithDetailsHidden(t *testing.T) {
 	app := &App{detailsHidden: true}
 	nav, issues, details := paneWidths(t, app, 180)
@@ -78,8 +69,6 @@ func TestWidePaneSplitWithDetailsHidden(t *testing.T) {
 	}
 }
 
-// TestMediumPaneSplitLeavesTheDetailsPaneOut covers the two-pane layout, where
-// the details pane appears only when it is the focused one.
 func TestMediumPaneSplitLeavesTheDetailsPaneOut(t *testing.T) {
 	app := &App{focusedPane: FocusNavigation}
 	nav, issues, details := paneWidths(t, app, 90)
@@ -95,9 +84,6 @@ func TestMediumPaneSplitLeavesTheDetailsPaneOut(t *testing.T) {
 	}
 }
 
-// TestTheNavPaneKeepsItsWidthAcrossTheTwoPaneRange covers what a share did to
-// it. Proportional, the pane ran from 18 columns at the top of the range to 11
-// at the bottom, and a tree that narrow is a column of ellipses.
 func TestTheNavPaneKeepsItsWidthAcrossTheTwoPaneRange(t *testing.T) {
 	for _, width := range []int{70, 90, 109} {
 		app := &App{focusedPane: FocusNavigation}
@@ -114,9 +100,6 @@ func TestTheNavPaneKeepsItsWidthAcrossTheTwoPaneRange(t *testing.T) {
 	}
 }
 
-// TestTheNavPaneDoesNotJumpAtTheWideBreakpoint covers the column either side of
-// it. The fixed width is picked to match what the share gives the pane at 110,
-// so dragging the terminal one column narrower must not widen the pane.
 func TestTheNavPaneDoesNotJumpAtTheWideBreakpoint(t *testing.T) {
 	wide := &App{focusedPane: FocusNavigation}
 	navWide, _, _ := paneWidths(t, wide, 110)
@@ -131,7 +114,6 @@ func TestTheNavPaneDoesNotJumpAtTheWideBreakpoint(t *testing.T) {
 	}
 }
 
-// TestNarrowLayoutGivesTheFocusedPaneEverything covers the one-pane layout.
 func TestNarrowLayoutGivesTheFocusedPaneEverything(t *testing.T) {
 	app := &App{focusedPane: FocusNavigation}
 	nav, issues, _ := paneWidths(t, app, 60)
@@ -147,8 +129,6 @@ func TestNarrowLayoutGivesTheFocusedPaneEverything(t *testing.T) {
 	}
 }
 
-// TestZoomedLayoutDropsTheIssuesColumn covers the zoomed reading view: the
-// issues list goes, the nav tree stays as a spine.
 func TestZoomedLayoutDropsTheIssuesColumn(t *testing.T) {
 	app := &App{detailsZoomed: true, focusedPane: FocusDetails}
 	nav, issues, details := paneWidths(t, app, 180)
@@ -161,8 +141,6 @@ func TestZoomedLayoutDropsTheIssuesColumn(t *testing.T) {
 	}
 }
 
-// TestZoomedLayoutDropsTheNavBelowWide covers the narrower terminals, where a
-// nav tree beside the reading measure does not fit.
 func TestZoomedLayoutDropsTheNavBelowWide(t *testing.T) {
 	for _, width := range []int{90, 60} {
 		app := &App{detailsZoomed: true, focusedPane: FocusDetails}
@@ -177,10 +155,6 @@ func TestZoomedLayoutDropsTheNavBelowWide(t *testing.T) {
 	}
 }
 
-// TestHidingTheDetailsPaneIsInertWhileZoomed guards the arrangement that would
-// otherwise mount nothing at all, and it guards it by refusing rather than by
-// unzooming. The key used to end the zoom as a side effect of hiding, which
-// read as a hide key doing something it never claims to do.
 func TestHidingTheDetailsPaneIsInertWhileZoomed(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false

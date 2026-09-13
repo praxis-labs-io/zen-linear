@@ -13,14 +13,10 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// applyBindings resolves a config's keybindings against the given registry and
-// applies them, which is the pair DefaultCommands runs.
 func applyBindings(commands []Command, bindings map[string]string) {
 	applyCommandKeybindings(commands, resolveKeybindings(bindings, commandScopes(commands)))
 }
 
-// TestApplyCommandKeybindings verifies overrides apply and claimed default
-// shortcuts are cleared.
 func TestApplyCommandKeybindings(t *testing.T) {
 	commands := []Command{
 		{ID: "copy_id", ShortcutRune: 'y'},
@@ -42,8 +38,6 @@ func TestApplyCommandKeybindings(t *testing.T) {
 	}
 }
 
-// TestKeybindingStealSparesACommandInAnotherScope verifies the steal reads
-// scope. Two commands that never answer from the same pane can hold one rune.
 func TestKeybindingStealSparesACommandInAnotherScope(t *testing.T) {
 	commands := []Command{
 		{ID: "toggle_favorite", Scope: ScopeNavigation, ShortcutRune: 'f'},
@@ -63,8 +57,6 @@ func TestKeybindingStealSparesACommandInAnotherScope(t *testing.T) {
 	}
 }
 
-// TestKeybindingStealTakesTheRuneFromAnOverlappingScope verifies the other
-// half: a global command reaches every pane, so it does collide.
 func TestKeybindingStealTakesTheRuneFromAnOverlappingScope(t *testing.T) {
 	commands := []Command{
 		{ID: "refresh", ShortcutRune: 'r'},
@@ -77,9 +69,6 @@ func TestKeybindingStealTakesTheRuneFromAnOverlappingScope(t *testing.T) {
 	}
 }
 
-// TestBindingForAnUnknownIDTakesNoRune covers the upgrade case. A config
-// naming a command a release removed used to leave two dead keys: the one it
-// named, and the one it quietly took from a command that still exists.
 func TestBindingForAnUnknownIDTakesNoRune(t *testing.T) {
 	commands := []Command{
 		{ID: "edit_issue", Scope: ScopeIssue, ShortcutRune: 'e'},
@@ -95,9 +84,6 @@ func TestBindingForAnUnknownIDTakesNoRune(t *testing.T) {
 	}
 }
 
-// TestBindingForAUIActionTakesTheRune pins the other half. An action is matched
-// before the pane dispatch, so the command it shadows must stop advertising the
-// key rather than print one that does nothing.
 func TestBindingForAUIActionTakesTheRune(t *testing.T) {
 	commands := []Command{{ID: "edit_issue", Scope: ScopeIssue, ShortcutRune: 'e'}}
 	applyBindings(commands, map[string]string{"quit": "e"})
@@ -107,9 +93,6 @@ func TestBindingForAUIActionTakesTheRune(t *testing.T) {
 	}
 }
 
-// TestActionStealRespectsItsScope covers an action that answers from one pane.
-// The favorite keys reach the navigation tree only, so binding one to an issue
-// command's rune takes nothing: the two can never both answer.
 func TestActionStealRespectsItsScope(t *testing.T) {
 	commands := []Command{{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'}}
 	applyBindings(commands, map[string]string{"favorite_move_up": "x"})
@@ -119,17 +102,11 @@ func TestActionStealRespectsItsScope(t *testing.T) {
 	}
 }
 
-// TestARejectedBindingLeavesItsRuneToBeClaimed covers the half-applied case. A
-// rejected binding used to keep its command's default and skip the claim check,
-// so a second command explicitly bound to that rune collided with it and lost
-// on registry order.
 func TestARejectedBindingLeavesItsRuneToBeClaimed(t *testing.T) {
 	commands := []Command{
 		{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'},
 		{ID: "edit_issue", Scope: ScopeIssue, ShortcutRune: 'e'},
 	}
-	// The first is rejected as a movement rune, the second claims archive's
-	// default.
 	applyBindings(commands, map[string]string{"archive": "j", "edit_issue": "x"})
 
 	if commands[0].ShortcutRune != 0 {
@@ -140,12 +117,7 @@ func TestARejectedBindingLeavesItsRuneToBeClaimed(t *testing.T) {
 	}
 }
 
-// TestARejectedBindingDoesNotOutrankAnAction covers the same half-applied
-// binding reaching the dispatcher: its id was still in the config, so
-// commandBoundTo counted it and the command's untouched default beat the action
-// the user did bind to that rune.
 func TestARejectedBindingDoesNotOutrankAnAction(t *testing.T) {
-	// zoom_details keeps its default v because ctrl+v is not a single rune.
 	app := bindingApp(t, map[string]string{"zoom_details": "ctrl+v", "focus_details": "v"})
 	app.detailsHidden = false
 	app.focusedPane = FocusIssues
@@ -160,11 +132,7 @@ func TestARejectedBindingDoesNotOutrankAnAction(t *testing.T) {
 	}
 }
 
-// TestAnActionBindingBeatsAnotherActionsDefault covers the last silent-dead
-// case: the switch takes the first matching case, so an action holding a rune
-// by default swallowed the one the user moved onto it.
 func TestAnActionBindingBeatsAnotherActionsDefault(t *testing.T) {
-	// search holds / by default; the user asks for focus_details there.
 	app := bindingApp(t, map[string]string{"focus_details": "/"})
 	app.detailsHidden = false
 	app.focusedPane = FocusIssues
@@ -180,9 +148,6 @@ func TestAnActionBindingBeatsAnotherActionsDefault(t *testing.T) {
 	}
 }
 
-// TestUIActionScopesCoverEveryActionKeyCallSite keeps the action list in step
-// with the handlers. An id missing from it is treated as unknown, so a binding
-// on it would be dropped instead of taking the key the action answers to.
 func TestUIActionScopesCoverEveryActionKeyCallSite(t *testing.T) {
 	sources, err := filepath.Glob("*.go")
 	if err != nil {
@@ -208,8 +173,6 @@ func TestUIActionScopesCoverEveryActionKeyCallSite(t *testing.T) {
 	}
 }
 
-// bindingApp returns an app whose commands were built from the given
-// keybindings, so the config path under test is the one NewApp runs.
 func bindingApp(t *testing.T, bindings map[string]string) *App {
 	t.Helper()
 	app := NewApp(linearapi.ClientConfig{}, config.Config{
@@ -219,8 +182,6 @@ func bindingApp(t *testing.T, bindings map[string]string) *App {
 	}, nil)
 	stopBackgroundWorkOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
-	// A rendered page, or the ring these tests read has no stop to move to and
-	// they would agree with each other over an empty pane.
 	app.selectedIssue = detailsFixture()
 	app.selectedIssue.Comments = threadedComments()
 	app.updateDetailsView()
@@ -229,8 +190,6 @@ func bindingApp(t *testing.T, bindings map[string]string) *App {
 	return app
 }
 
-// TestCommandBindingBeatsADefaultActionKey covers ZNL-31: a command bound to a
-// rune an action holds by default never fired, with nothing said about it.
 func TestCommandBindingBeatsADefaultActionKey(t *testing.T) {
 	app := bindingApp(t, map[string]string{"toggle_navigation_pane": "}"})
 	lit := app.focusedCommentID
@@ -245,9 +204,6 @@ func TestCommandBindingBeatsADefaultActionKey(t *testing.T) {
 	}
 }
 
-// TestActionKeyStandsWhenTheBoundCommandIsOutOfScope pins the limit of that
-// precedence. A navigation command holds the rune nowhere else, so the action
-// still answers in the details pane.
 func TestActionKeyStandsWhenTheBoundCommandIsOutOfScope(t *testing.T) {
 	app := bindingApp(t, map[string]string{"toggle_favorite": "}"})
 	lit := app.focusedCommentID
@@ -259,9 +215,6 @@ func TestActionKeyStandsWhenTheBoundCommandIsOutOfScope(t *testing.T) {
 	}
 }
 
-// TestMovementRunesStayWithTheWidgets verifies a binding cannot take one, from
-// either side. A command on j would strand the cursor in the list, and g is the
-// sharper case: nothing else claims it, so only this rule keeps go-to-top.
 func TestMovementRunesStayWithTheWidgets(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
@@ -287,9 +240,6 @@ func TestMovementRunesStayWithTheWidgets(t *testing.T) {
 	}
 }
 
-// TestAMovementBindingLeavesTheDefaultAlone pins what a rejected binding does
-// to the command that asked for it: nothing. Clearing the rune instead would
-// answer one unusable key with a second one.
 func TestAMovementBindingLeavesTheDefaultAlone(t *testing.T) {
 	commands := []Command{{ID: "archive", Scope: ScopeIssue, ShortcutRune: 'x'}}
 	applyBindings(commands, map[string]string{"archive": "j"})
@@ -299,8 +249,6 @@ func TestAMovementBindingLeavesTheDefaultAlone(t *testing.T) {
 	}
 }
 
-// TestToggleFavoriteHonoursKeybindingOverride verifies the favorite command is
-// remappable like any other palette command.
 func TestToggleFavoriteHonoursKeybindingOverride(t *testing.T) {
 	commands := DefaultCommands(nil)
 	applyBindings(commands, map[string]string{"toggle_favorite": "F"})
@@ -317,16 +265,12 @@ func TestToggleFavoriteHonoursKeybindingOverride(t *testing.T) {
 	t.Fatal("toggle_favorite command not registered")
 }
 
-// reorderHarness drives the reorder keys and waits for the refresh to land, so
-// the test never reads the tree while the mutation goroutine is writing it.
 type reorderHarness struct {
 	app     *App
 	settled chan struct{}
 	moved   []string
 }
 
-// newReorderHarness returns an app with two favorites and the cursor on the
-// second, so a move up has somewhere to go.
 func newReorderHarness(t *testing.T) *reorderHarness {
 	t.Helper()
 	h := &reorderHarness{app: newUXTestApp(t), settled: make(chan struct{}, 1)}
@@ -347,7 +291,6 @@ func (h *reorderHarness) press(r rune) *tcell.EventKey {
 	return h.app.handleNavigationKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 }
 
-// waitSettled blocks until the reorder goroutine has finished writing.
 func (h *reorderHarness) waitSettled(t *testing.T) {
 	t.Helper()
 	select {
@@ -357,10 +300,6 @@ func (h *reorderHarness) waitSettled(t *testing.T) {
 	}
 }
 
-// TestFavoriteMoveKeysResolveThroughActionKey verifies the reorder keys follow
-// the keybindings config instead of the hardcoded defaults. The config is read
-// once, when the registry is built, so the change has to go through the rebuild
-// a settings save runs.
 func TestFavoriteMoveKeysResolveThroughActionKey(t *testing.T) {
 	h := newReorderHarness(t)
 	h.app.config.Keybindings = map[string]string{
@@ -374,13 +313,11 @@ func TestFavoriteMoveKeysResolveThroughActionKey(t *testing.T) {
 	}
 	h.waitSettled(t)
 
-	// The default stops applying once remapped, so it falls through.
 	if h.press('K') == nil {
 		t.Error("default K still handled after the remap")
 	}
 }
 
-// TestFavoriteMoveKeysDefaultToShiftJK verifies the unconfigured defaults.
 func TestFavoriteMoveKeysDefaultToShiftJK(t *testing.T) {
 	h := newReorderHarness(t)
 
@@ -394,8 +331,6 @@ func TestFavoriteMoveKeysDefaultToShiftJK(t *testing.T) {
 	}
 }
 
-// TestFavoriteMoveKeysAreSwallowedOnNonFavorites verifies the keys never reach
-// tview, whose jump-to-child and jump-to-parent they would otherwise fire.
 func TestFavoriteMoveKeysAreSwallowedOnNonFavorites(t *testing.T) {
 	app := newUXTestApp(t)
 	app.updateFavoriteSortFunc = func(context.Context, string, float64) error {

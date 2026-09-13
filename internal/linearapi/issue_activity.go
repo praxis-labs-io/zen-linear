@@ -2,17 +2,7 @@ package linearapi
 
 import "strings"
 
-// relationChangePhrases maps Linear's relationChanges type code to the relation
-// as the fetched issue sees it, matching IssueRelation.DisplayType's wording.
-//
-// The codes are undocumented. Observed across a workspace's history they read
-// as a letter per relation kind — r related, x blocking, b blocked by,
-// d duplicate, m duplicate of — prefixed with "a" when the relation was added
-// and suffixed with "r" when it was removed. The five addition codes and "xr",
-// "br" were seen directly; "rr", "dr" and "mr" follow the pattern.
-//
-// An unrecognized code drops the event, so a vocabulary Linear extends costs a
-// line rather than printing a wrong one.
+// Undocumented codes read off a real workspace: a relation letter, "a" prefixed when added, "r" suffixed when removed.
 var relationChangePhrases = map[string]string{
 	"ar": "related",
 	"rr": "related",
@@ -26,21 +16,11 @@ var relationChangePhrases = map[string]string{
 	"mr": "duplicate of",
 }
 
-// relationChange reads a type code. added is false on a removal, and ok is
-// false when the code is one this does not recognize.
 func relationChange(code string) (relation string, added bool, ok bool) {
 	relation, ok = relationChangePhrases[code]
-	// No relation letter is "a", so a leading one can only be the add marker.
 	return relation, strings.HasPrefix(code, "a"), ok
 }
 
-// actorUser flattens the two ways Linear names who made a change. A person
-// acting through an integration is still the person, so the user wins when
-// both are recorded.
-//
-// A bot arrives as a user carrying its own name, which is how it reads in the
-// feed: "Linear moved issue to Cycle 152" wants no marking a name does not
-// already carry.
 func actorUser(user *historyUserNode, bot *actorBotNode) User {
 	if converted := user.toUser(); converted != nil {
 		return *converted
@@ -127,28 +107,13 @@ func toActivityLabels(nodes []historyLabelNode) []IssueLabel {
 	return labels
 }
 
-// withKind copies the entry's shared fields under kind, so the several events
-// one history entry can produce all carry the same actor, time and id.
 func (a IssueActivity) withKind(kind IssueActivityKind) IssueActivity {
 	a.Kind = kind
 	return a
 }
 
-// toActivity converts one history entry into an event per change it records.
-//
-// One entry yields several events because the feed draws one icon and one
-// phrase per line: an entry carrying a state move and an assignee change has no
-// single icon and no one-line phrase. Splitting also makes dropping a change
-// this does not render a per-change decision, so an entry that mixes a
-// supported change with an unsupported one still produces its supported line.
-// Siblings share CreatedAt and the sort is stable, so they stay adjacent.
-//
-// An entry with no time, or recording nothing renderable, returns no events.
 func (n issueHistoryNode) toActivity() []IssueActivity {
 	at := parseTime(string(n.CreatedAt))
-	// The feed sorts on this and reads an age off it. A zero time heads the
-	// feed above the issue's own creation and draws no age at all, so an entry
-	// whose time did not parse is dropped rather than shown out of order.
 	if at.IsZero() {
 		return nil
 	}
@@ -156,8 +121,6 @@ func (n issueHistoryNode) toActivity() []IssueActivity {
 
 	events := make([]IssueActivity, 0, 2)
 
-	// A move needs somewhere it went. Linear records no from side on the first
-	// move out of the initial state, but an issue always lands in a state.
 	if n.ToState != nil {
 		event := base.withKind(IssueActivityStateChanged)
 		event.FromState, event.ToState = n.FromState.toState(), n.ToState.toState()

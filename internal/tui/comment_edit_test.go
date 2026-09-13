@@ -12,8 +12,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// root-1 is Drew's, reply-1 is not. The two are what the authorship gate is
-// checked against.
 const (
 	mineID       = "root-1"
 	mineBody     = "The debounce is the problem."
@@ -22,9 +20,6 @@ const (
 	elseBody     = "Which one?"
 )
 
-// newEditableCommentsApp opens the threaded issue with the cards holding the
-// keyboard, and returns a channel that fires after each queued draw so a test
-// can wait out a write goroutine.
 func newEditableCommentsApp(t *testing.T) (*App, <-chan struct{}) {
 	t.Helper()
 	app := newThreadedTestApp(t)
@@ -39,8 +34,6 @@ func newEditableCommentsApp(t *testing.T) (*App, <-chan struct{}) {
 	return app, drawn
 }
 
-// focusComment steps the ring forward until it lands on id, so a test names the
-// card it means rather than counting braces.
 func stepToComment(t *testing.T, app *App, id string) {
 	t.Helper()
 	for i := 0; i < 8; i++ {
@@ -82,9 +75,6 @@ func TestEditOpensABoxWhereTheCardWas(t *testing.T) {
 	}
 }
 
-// The page counts its own rows and the widgets are placed by the render rather
-// than mounted in a layout, so a box opened mid-page is where a row of drift
-// would show: over the card below it, and over everything after that.
 func TestTheEditBoxIsDrawnOverTheCardItReplaced(t *testing.T) {
 	app, _ := newEditableCommentsApp(t)
 	stepToComment(t, app, mineID)
@@ -116,9 +106,6 @@ func TestTheEditBoxIsDrawnOverTheCardItReplaced(t *testing.T) {
 	}
 }
 
-// A box sized like the compose box would collapse a long comment to four rows
-// the moment the key was pressed, taking the words being rewritten off screen
-// and reflowing every card under them.
 func TestEditingALongCommentKeepsTheCardsHeight(t *testing.T) {
 	app, _ := newEditableCommentsApp(t)
 	long := strings.Repeat("A sentence that runs on, and on, and keeps running. ", 12)
@@ -138,7 +125,6 @@ func TestEditingALongCommentKeepsTheCardsHeight(t *testing.T) {
 	}
 }
 
-// cardHeight is how many rows the card at index runs to, frame included.
 func cardHeight(t *testing.T, lines []string, index int) int {
 	t.Helper()
 	cards := commentCards(lines)
@@ -232,8 +218,6 @@ func TestSavingAnEditRedrawsTheCard(t *testing.T) {
 	}
 }
 
-// A rewrite has nowhere to be held, so a failed save leaves it where it was
-// written rather than dropping it on the floor.
 func TestAFailedSaveKeepsTheWords(t *testing.T) {
 	app, drawn := newEditableCommentsApp(t)
 	app.updateCommentFunc = func(context.Context, linearapi.UpdateCommentInput) (linearapi.Comment, error) {
@@ -273,7 +257,6 @@ func TestEscDiscardsTheEdit(t *testing.T) {
 		t.Error("the card did not come back as the comment stands")
 	}
 
-	// Reopening starts from the comment, not from what was thrown away.
 	pressInComments(t, app, 'e')
 	if got := app.detailsEditArea.GetText(); got != mineBody {
 		t.Errorf("the box reopened holding %q, want the comment's body", got)
@@ -295,8 +278,6 @@ func TestDeleteAsksBeforeItActs(t *testing.T) {
 	}
 }
 
-// Deleting a thread root leaves its replies. Linear keeps them, and the page
-// draws a reply whose parent it does not have as a root of its own.
 func TestConfirmingDeleteTakesTheCardOffThePage(t *testing.T) {
 	app, drawn := newEditableCommentsApp(t)
 	deleted := ""
@@ -329,15 +310,10 @@ func TestConfirmingDeleteTakesTheCardOffThePage(t *testing.T) {
 	}
 }
 
-// The edit box stands mid-page, so scrolling puts it off screen while it still
-// holds the keyboard. A key that scrolls somewhere else leaves the user typing
-// blind into a box they cannot see.
 func TestTypingBringsTheEditBoxBackOnScreen(t *testing.T) {
 	app, _ := newEditableCommentsApp(t)
 	stepToComment(t, app, mineID)
 	pressInComments(t, app, 'e')
-	// Short enough that the box mid-page and the compose card at the end of it
-	// cannot both be on screen.
 	drawPrimitiveAt(t, app.detailsPage, 80, 14)
 	app.detailsPageView.ScrollToEnd()
 	drawPrimitiveAt(t, app.detailsPage, 80, 14)
@@ -359,8 +335,6 @@ func TestTypingBringsTheEditBoxBackOnScreen(t *testing.T) {
 	}
 }
 
-// A save is slow enough to Esc out of and start another. The answer belongs to
-// the edit that sent it, not to whatever box is open when it lands.
 func TestASlowSaveLeavesALaterEditAlone(t *testing.T) {
 	app, drawn := newEditableCommentsApp(t)
 	release := make(chan struct{})
@@ -395,8 +369,6 @@ func TestASlowSaveLeavesALaterEditAlone(t *testing.T) {
 	if got := app.detailsEditArea.GetText(); got != later {
 		t.Errorf("the box holds %q, want the words written after the save went out", got)
 	}
-	// The keyboard is physically in the box, so the state that says where it is
-	// has to agree. Tab, the growth refit and the hints all read this.
 	if app.detailsFocus != detailsFocusEdit {
 		t.Errorf("focus reads %v, want the box the keys are going to", app.detailsFocus)
 	}
@@ -405,9 +377,6 @@ func TestASlowSaveLeavesALaterEditAlone(t *testing.T) {
 	}
 }
 
-// The box stays open until Linear answers, so Ctrl+Enter twice inside one round
-// trip sends two rewrites. The loser closes the box under the winner, and out
-// of order it pins the older body to the card.
 func TestASecondSaveWaitsForTheFirst(t *testing.T) {
 	app, drawn := newEditableCommentsApp(t)
 	release := make(chan struct{})
@@ -434,9 +403,6 @@ func TestASecondSaveWaitsForTheFirst(t *testing.T) {
 	}
 }
 
-// A card being deleted stays actionable for the length of the round trip, so a
-// box can be opened on it. The render then pulls the box's slot away from a
-// widget that still owns the keyboard.
 func TestDeletingACommentClosesTheBoxOpenOnIt(t *testing.T) {
 	app, drawn := newEditableCommentsApp(t)
 	release := make(chan struct{})
@@ -464,9 +430,6 @@ func TestDeletingACommentClosesTheBoxOpenOnIt(t *testing.T) {
 	}
 }
 
-// A comment can be deleted upstream while it is being rewritten here. The box
-// is then drawn nowhere while the compose card keeps composeBoxOnScreen true,
-// so every key goes to an editor nothing paints.
 func TestARefreshWithoutTheEditedCommentClosesTheBox(t *testing.T) {
 	app, _ := newEditableCommentsApp(t)
 	stepToComment(t, app, mineID)
@@ -489,8 +452,6 @@ func TestARefreshWithoutTheEditedCommentClosesTheBox(t *testing.T) {
 	}
 }
 
-// The ring belongs to the reader, not to a mutation answering late. A delete
-// landing after they stepped away must not haul them back to its neighbor.
 func TestADeleteLandingLateLeavesTheRingAlone(t *testing.T) {
 	app, drawn := newEditableCommentsApp(t)
 	release := make(chan struct{})
@@ -511,8 +472,6 @@ func TestADeleteLandingLateLeavesTheRingAlone(t *testing.T) {
 	}
 }
 
-// Linear reads leading whitespace as an indented code block, so trimming the
-// body would rewrite a comment its author only looked at.
 func TestOpeningAndSavingAnIndentedCommentSendsNothing(t *testing.T) {
 	app, _ := newEditableCommentsApp(t)
 	sent := make(chan string, 1)
@@ -540,8 +499,6 @@ func TestOpeningAndSavingAnIndentedCommentSendsNothing(t *testing.T) {
 	}
 }
 
-// The card stays on the page until Linear answers, so it can be confirmed twice
-// inside one round trip. The loser reports a failure for a comment that went.
 func TestASecondDeleteWaitsForTheFirst(t *testing.T) {
 	app, drawn := newEditableCommentsApp(t)
 	release := make(chan struct{})
@@ -569,8 +526,6 @@ func TestASecondDeleteWaitsForTheFirst(t *testing.T) {
 	}
 }
 
-// A write that lands after the user has moved on belongs to nobody. Canceling
-// there would kill the fetch filling in the issue they moved to.
 func TestAWriteForAnIssueLeftBehindLeavesTheLiveFetchAlone(t *testing.T) {
 	app, _ := newEditableCommentsApp(t)
 	before := app.detailFetchGeneration.Load()

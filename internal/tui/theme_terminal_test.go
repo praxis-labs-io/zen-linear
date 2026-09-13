@@ -64,8 +64,6 @@ func TestParseTerminalColorsReadsBothReports(t *testing.T) {
 	}
 }
 
-// The terminal keeps its own background and its own text color: the theme is
-// the shades between them, not a surface painted over them.
 func TestTerminalThemeLeavesTheTerminalsOwnColors(t *testing.T) {
 	theme := buildTerminalTheme(terminalSurface{
 		background: tcell.NewRGBColor(0, 0, 0),
@@ -87,8 +85,6 @@ func TestTerminalThemeLeavesTheTerminalsOwnColors(t *testing.T) {
 	}
 }
 
-// The blend direction is the whole of light-terminal support: the same ratios
-// have to darken a light background and lighten a dark one.
 func TestTerminalThemeShadesFollowTheBackground(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -120,8 +116,6 @@ func TestTerminalThemeShadesFollowTheBackground(t *testing.T) {
 	}
 }
 
-// A terminal that never answered leaves nothing to blend, so every color has to
-// come out of the palette or the terminal's own default.
 func TestTerminalThemeFallsBackToThePalette(t *testing.T) {
 	theme := buildTerminalTheme(terminalSurface{})
 
@@ -143,8 +137,6 @@ func TestTerminalThemeFallsBackToThePalette(t *testing.T) {
 	}
 }
 
-// The device attributes answer closes the reply, so a terminal that ignores the
-// color queries is done with rather than waited out.
 func TestDeviceAttributesEndTheReply(t *testing.T) {
 	if !hasDeviceAttributes("\x1b[?62;1;6c") {
 		t.Error("a device attributes answer went unrecognized")
@@ -154,8 +146,6 @@ func TestDeviceAttributesEndTheReply(t *testing.T) {
 	}
 }
 
-// A palette color has to reach tview and glamour as a slot, not as the hex of
-// a standard palette the terminal has replaced.
 func TestPaletteColorsSurviveTheConversions(t *testing.T) {
 	for slot, color := range []tcell.Color{ansiBlack, ansiRed, ansiGreen, ansiYellow, ansiBlue, ansiMagenta, ansiWhite, ansiBrightBlack} {
 		name := colorName(color)

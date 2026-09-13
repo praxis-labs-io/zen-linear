@@ -10,7 +10,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// skimTestIssues is enough rows to hold j down over.
 func skimTestIssues() []linearapi.Issue {
 	return []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha", State: "Todo"},
@@ -21,11 +20,6 @@ func skimTestIssues() []linearapi.Issue {
 	}
 }
 
-// pressInIssuesTable drives the real table input capture, so the test exercises
-// the path a keypress takes rather than calling the handler directly. It runs
-// through QueueUpdateDraw because tview handles keys on the event loop, and the
-// debounce callback lands there too; driving it from the test goroutine instead
-// would race the timer over state neither side locks in production.
 func pressInIssuesTable(app *App, key tcell.Key, r rune) {
 	app.QueueUpdateDraw(func() {
 		handler := app.tableForSection(IssuesSectionList).InputHandler()
@@ -33,8 +27,6 @@ func pressInIssuesTable(app *App, key tcell.Key, r rune) {
 	})
 }
 
-// recordDetailFetches replaces the detail fetch with one that reports every id
-// it is asked for, so a test can count what a skim actually sent.
 func recordDetailFetches(app *App) <-chan string {
 	fetched := make(chan string, 16)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
@@ -77,13 +69,11 @@ func TestSkimmingIssuesFiresOneDetailFetch(t *testing.T) {
 
 func TestSelectionUpdatesWhileTheDetailsPaneLags(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, skimTestIssues())
-	app.detailDebounce = time.Hour // keep the debounce from firing mid-test
+	app.detailDebounce = time.Hour
 	recordDetailFetches(app)
 
 	pressInIssuesTable(app, tcell.KeyRune, 'j')
 
-	// Commands read selectedIssue the moment a key lands, so the debounce must
-	// not defer the selection itself.
 	selected := app.GetSelectedIssue()
 	if selected == nil || selected.ID != "issue-2" {
 		t.Fatalf("selected issue after one j = %#v, want issue-2", selected)
@@ -135,7 +125,6 @@ func TestLateDetailResultIsDiscarded(t *testing.T) {
 	pressInIssuesTable(app, tcell.KeyRune, 'j')
 	waitForFetch(t, started, "issue-3")
 
-	// The older fetch returns last. Its result describes a row the cursor left.
 	close(release)
 	waitForCondition(t, 2*time.Second, func() bool {
 		selected := app.GetSelectedIssue()
@@ -148,20 +137,14 @@ func TestLateDetailResultIsDiscarded(t *testing.T) {
 	}
 }
 
-// TestCanceledFetchCannotClobberANewerSelection covers the gap between the two
-// generations: moving the cursor cancels the in-flight fetch during the debounce
-// window, before the next load runs. A cancel that did not also invalidate would
-// let the dead request's result land on top of the row the cursor moved to.
 func TestCanceledFetchCannotClobberANewerSelection(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, skimTestIssues())
-	app.detailDebounce = time.Hour // the second load must not mask the first
+	app.detailDebounce = time.Hour
 	release := make(chan struct{})
 	started := make(chan string, 4)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
 		started <- id
 		<-release
-		// Deliberately ignores cancellation: the response can already be on the
-		// wire when the cursor moves.
 		return linearapi.Issue{ID: id, Identifier: "STALE"}, nil
 	}
 
@@ -176,13 +159,9 @@ func TestCanceledFetchCannotClobberANewerSelection(t *testing.T) {
 	}
 }
 
-// TestReselectingAnIssueKeepsItsFetchedDetail covers the tab switch that lands
-// back on the issue already showing. The list model carries no comments,
-// relations, subscribers, or attachments, so taking its copy wholesale empties
-// those rows out of the pane until the refetch returns.
 func TestReselectingAnIssueKeepsItsFetchedDetail(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, skimTestIssues())
-	app.detailDebounce = time.Hour // a refetch must not paper over the strip
+	app.detailDebounce = time.Hour
 	hydrated := make(chan struct{}, 1)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
 		defer func() { hydrated <- struct{}{} }()
@@ -201,7 +180,6 @@ func TestReselectingAnIssueKeepsItsFetchedDetail(t *testing.T) {
 		return selected != nil && len(selected.Subscribers) == 1
 	})
 
-	// A tab switch reselects the same row from the list model.
 	app.QueueUpdateDraw(func() { app.jumpToSection(IssuesSectionList, 1) })
 
 	selected := app.GetSelectedIssue()
@@ -210,10 +188,6 @@ func TestReselectingAnIssueKeepsItsFetchedDetail(t *testing.T) {
 	}
 }
 
-// TestPostMutationRefetchCannotRetargetTheSelection covers the callers that
-// capture an issue id, run a mutation, and only then reload the detail. The
-// cursor can outrun that round trip, and the reload must not drag the pane and
-// GetSelectedIssue back to the issue the user left.
 func TestPostMutationRefetchCannotRetargetTheSelection(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, skimTestIssues())
 	app.detailDebounce = time.Hour
@@ -225,11 +199,8 @@ func TestPostMutationRefetchCannotRetargetTheSelection(t *testing.T) {
 		return linearapi.Issue{ID: id, Identifier: "REFETCHED"}, nil
 	}
 
-	// The cursor moves off issue-1 while a mutation on it is still in flight.
 	pressInIssuesTable(app, tcell.KeyRune, 'j')
 
-	// The mutation lands afterwards and asks for issue-1's detail back. It
-	// takes a fresh generation, so nothing else can invalidate it.
 	app.QueueUpdateDraw(func() { app.loadIssueDetailsByID("issue-1") })
 	waitForFetch(t, started, "issue-1")
 	close(release)
@@ -246,7 +217,6 @@ func TestLandingOnAnEmptySectionDropsThePendingLoad(t *testing.T) {
 	fetched := recordDetailFetches(app)
 
 	pressInIssuesTable(app, tcell.KeyRune, 'j')
-	// Search has no results, so the section is empty and the selection drops.
 	app.QueueUpdateDraw(func() { app.jumpToSection(IssuesSectionSearch, 0) })
 
 	select {
@@ -261,7 +231,7 @@ func TestLandingOnAnEmptySectionDropsThePendingLoad(t *testing.T) {
 
 func TestEnterLoadsDetailsWithoutWaiting(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, skimTestIssues())
-	app.detailDebounce = time.Hour // only an immediate load can fire
+	app.detailDebounce = time.Hour
 	fetched := recordDetailFetches(app)
 
 	pressInIssuesTable(app, tcell.KeyEnter, 0)
@@ -276,11 +246,6 @@ func TestEnterLoadsDetailsWithoutWaiting(t *testing.T) {
 	}
 }
 
-// TestMergeCommentsHoldsOnlyWhatTheFetchCouldNotSee covers both halves of the
-// merge at once: a comment written while the request was out has to survive,
-// and a comment the request could have carried and did not is one somebody
-// deleted. Folding that second one back is what used to leave a deleted comment
-// on screen until a restart.
 func TestMergeCommentsHoldsOnlyWhatTheFetchCouldNotSee(t *testing.T) {
 	since := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
 	comment := func(id string, at time.Time) linearapi.Comment {

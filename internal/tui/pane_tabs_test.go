@@ -9,14 +9,10 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// pressKey sends a rune through the app's real input capture, so a handler that
-// claims the key before the focused pane sees it shows up here.
 func pressKey(app *App, r rune) {
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 }
 
-// runPaletteCommand runs a command by id off the same registry the palette
-// lists, which is the only way to reach one that carries no default key.
 func runPaletteCommand(t *testing.T, app *App, id string) {
 	t.Helper()
 	for _, cmd := range app.paletteCtrl.commands {
@@ -28,8 +24,6 @@ func runPaletteCommand(t *testing.T, app *App, id string) {
 	t.Fatalf("command %q not registered", id)
 }
 
-// holdDetailFetches parks every background detail fetch until the test ends, so
-// its queueUpdateDraw stub cannot repaint the UI alongside the assertions.
 func holdDetailFetches(t *testing.T, app *App) {
 	t.Helper()
 	release := make(chan struct{})
@@ -40,9 +34,6 @@ func holdDetailFetches(t *testing.T, app *App) {
 	}
 }
 
-// ZNL-16: the row index came from one section model and the selection was
-// applied to another table, so the parent jump landed on a row nobody was
-// looking at.
 func TestJumpToParent_SelectsTheParentInTheSectionOnScreen(t *testing.T) {
 	parentRef := &linearapi.IssueRef{ID: "parent-1", Identifier: "LIN-1", Title: "Parent"}
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
@@ -82,8 +73,6 @@ func TestJumpToParent_SelectsTheParentInTheSectionOnScreen(t *testing.T) {
 	}
 }
 
-// A sub-issue whose parent is out of the fetched scope is the common case for a
-// filtered list. Without feedback the key looks broken rather than out of reach.
 func TestViewParent_SaysSoWhenTheParentIsNotLoaded(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{
@@ -101,9 +90,6 @@ func TestViewParent_SaysSoWhenTheParentIsNotLoaded(t *testing.T) {
 	}
 }
 
-// Search results are a flat list, so a parent there is not a tree move. The
-// jump has to fall back to the navigation list, which holds every fetched
-// issue, rather than sit on a row search cannot show.
 func TestViewParentFallsBackToTheListFromSearchResults(t *testing.T) {
 	parentRef := &linearapi.IssueRef{ID: "parent-1", Identifier: "LIN-1", Title: "Parent"}
 	child := linearapi.Issue{ID: "child-1", Identifier: "LIN-2", Title: "Child", Parent: parentRef}
@@ -135,17 +121,11 @@ func TestViewParentFallsBackToTheListFromSearchResults(t *testing.T) {
 	if row, _ := app.listIssuesTable.GetSelection(); row != wantRow {
 		t.Fatalf("list selection = row %d, want the parent at row %d", row, wantRow)
 	}
-	// Leaving the results for the list is leaving the search. A query left in
-	// the box describes a pane showing something else, and the session then
-	// saves a query alongside a list issue.
 	if got := app.navSearchInput.GetText(); got != "" {
 		t.Errorf("the query survived the jump to the list: %q", got)
 	}
 }
 
-// h and l are pane movement in the issues list, as the README documents. The
-// table used to carry its own expand/collapse branches for them, which the
-// global handler swallowed before the table ever ran.
 func TestIssuesListLeavesHAndLToPaneMovement(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
@@ -166,8 +146,6 @@ func TestIssuesListLeavesHAndLToPaneMovement(t *testing.T) {
 	}
 }
 
-// Landing on an empty section has to drop the selection, or status, assign and
-// archive act on the issue the previous one had selected, invisibly.
 func TestJumpToSection_AnEmptySectionDropsTheSelection(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
@@ -192,8 +170,6 @@ func TestJumpToSection_AnEmptySectionDropsTheSelection(t *testing.T) {
 	}
 }
 
-// rebuildIssuesTables resolves through listIDToIssue, whose values point into a
-// snapshot of the list that the next rebuild replaces.
 func TestRebuildIssuesTables_ReturnsACopyNotAnAlias(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
@@ -214,8 +190,6 @@ func TestRebuildIssuesTables_ReturnsACopyNotAnAlias(t *testing.T) {
 	}
 }
 
-// A section owed a deferred render carries the row it should land on. Restoring
-// a remembered index over it drops the cursor on whatever now sits there.
 func TestJumpToSection_KeepsTheDeferredRenderSelection(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
@@ -224,7 +198,6 @@ func TestJumpToSection_KeepsTheDeferredRenderSelection(t *testing.T) {
 	app.rebuildIssueRowModels()
 	holdDetailFetches(t, app)
 
-	// Park the list's cursor on row 1, then defer a render that wants row 2.
 	app.listIssuesTable.Select(1, 0)
 	app.activeIssuesSection = IssuesSectionSearch
 	app.renderIssueSections(map[IssuesSection]string{IssuesSectionList: "issue-2"})

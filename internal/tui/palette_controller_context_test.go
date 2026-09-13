@@ -2,9 +2,6 @@ package tui
 
 import "testing"
 
-// TestPaletteScopeFiltersCommands verifies the palette lists only what applies
-// where it was opened: global commands everywhere, issue commands from an issue
-// pane, navigation commands from the tree.
 func TestPaletteScopeFiltersCommands(t *testing.T) {
 	commands := []Command{
 		{ID: "refresh", Title: "Refresh issues"},
@@ -34,9 +31,6 @@ func TestPaletteScopeFiltersCommands(t *testing.T) {
 	}
 }
 
-// TestPaletteScopeSurvivesAQuery pins the filtered path to the same rule as the
-// empty-query path. A search that reached out-of-scope commands would put the
-// keyboard back where the scope took it away.
 func TestPaletteScopeSurvivesAQuery(t *testing.T) {
 	pc := NewPaletteController([]Command{
 		{ID: "archive", Title: "Archive issue", Scope: ScopeIssue},

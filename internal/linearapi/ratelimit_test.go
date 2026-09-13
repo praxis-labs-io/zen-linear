@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// rateLimitedJSON is what Linear returns when a budget is spent: a 400 whose
-// GraphQL error names the code, and no Retry-After anywhere.
 const rateLimitedJSON = `{"errors":[{"message":"Rate limit exceeded",` +
 	`"extensions":{"code":"RATELIMITED","type":"ratelimited"}}]}`
 
@@ -20,7 +18,6 @@ func epochMillis(at time.Time) string {
 	return strconv.FormatInt(at.UnixMilli(), 10)
 }
 
-// writeRateLimitHeaders stamps the budgets the way every Linear response does.
 func writeRateLimitHeaders(w http.ResponseWriter, remaining int, reset time.Time) {
 	w.Header().Set("X-RateLimit-Requests-Limit", "2500")
 	w.Header().Set("X-RateLimit-Requests-Remaining", strconv.Itoa(remaining))
@@ -67,7 +64,6 @@ func TestParseRateLimitSnapshot(t *testing.T) {
 			want:  RateLimitSnapshot{Endpoint: RateLimit{Limit: 10, Reset: reset, remainingSaid: true}},
 		},
 		{
-			// A cost says what this query spent, never what is left to spend.
 			name:    "the query cost alone is not a budget",
 			header:  http.Header{"X-Complexity": {"1"}},
 			hasCost: true,
@@ -147,9 +143,6 @@ func TestRateLimitSnapshotWait(t *testing.T) {
 			snap: RateLimitSnapshot{Requests: RateLimit{Limit: 2500, Remaining: 2500, Reset: soon, remainingSaid: true}},
 		},
 		{
-			// Limit and Reset without a remaining count is a budget nobody has
-			// said anything about spending. Waiting on it abandons a retry that
-			// could have been made.
 			name: "a budget whose remaining count was never sent",
 			snap: RateLimitSnapshot{Requests: RateLimit{Limit: 2500, Reset: soon}},
 		},
@@ -214,13 +207,9 @@ func TestNamesRateLimit(t *testing.T) {
 	}
 }
 
-// hugeRateLimitedJSON pushes the error code past maxErrorPeekBytes, so the peek
-// reads a prefix that is not parseable JSON and the rest stays on the wire.
 var hugeRateLimitedJSON = `{"errors":[{"message":"` + strings.Repeat("x", maxErrorPeekBytes+8<<10) +
 	`","extensions":{"code":"RATELIMITED"}}]}`
 
-// closeRecorder is a body that reports whether Close reached it. peekedBody
-// wraps the original, and a wrapper that swallows Close leaks the connection.
 type closeRecorder struct {
 	io.Reader
 	closed bool
@@ -231,9 +220,6 @@ func (c *closeRecorder) Close() error {
 	return nil
 }
 
-// TestIsRateLimitedLeavesTheBodyReadable pins the peek putting back what it
-// read. The caller is handed this response when we stop retrying, and a body
-// half consumed here is an error message that arrives truncated.
 func TestIsRateLimitedLeavesTheBodyReadable(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -242,10 +228,6 @@ func TestIsRateLimitedLeavesTheBodyReadable(t *testing.T) {
 	}{
 		{name: "a rate limit fits in the peek", body: rateLimitedJSON, detected: true},
 		{
-			// The code sits past the peek limit, so the prefix will not parse and
-			// the refusal is missed. That costs a retry we could have made; a body
-			// truncated for the caller would cost the error message itself, which
-			// is the worse half. The size is the tradeoff, not an oversight.
 			name: "a body larger than the peek limit",
 			body: hugeRateLimitedJSON,
 		},
@@ -276,10 +258,6 @@ func TestIsRateLimitedLeavesTheBodyReadable(t *testing.T) {
 	}
 }
 
-// TestRetryTransportReusesConnectionThroughARateLimit is the connection-reuse
-// rule on the path that replaces resp.Body. A peek that consumed the body
-// without restitching it leaves the connection unreadable, and the next attempt
-// opens a fresh one.
 func TestRetryTransportReusesConnectionThroughARateLimit(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -303,8 +281,6 @@ func TestRetryTransportReusesConnectionThroughARateLimit(t *testing.T) {
 	}
 }
 
-// TestRetryTransportRetriesQueryOnRateLimited400 is the bug this ticket is for:
-// Linear refuses on a 400, which the status check alone reads as terminal.
 func TestRetryTransportRetriesQueryOnRateLimited400(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -328,8 +304,6 @@ func TestRetryTransportRetriesQueryOnRateLimited400(t *testing.T) {
 	}
 }
 
-// TestRetryTransportDoesNotRetryMutationOnRateLimited400 keeps the
-// duplicate-write guard whole through the new classification.
 func TestRetryTransportDoesNotRetryMutationOnRateLimited400(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -348,8 +322,6 @@ func TestRetryTransportDoesNotRetryMutationOnRateLimited400(t *testing.T) {
 	if got := recorder.count(); got != 1 {
 		t.Fatalf("handler calls = %d, want 1: a mutation must not be resent after a rate limit", got)
 	}
-	// The budget belongs to the user, not to the request, so a refused write
-	// still tells us what is left of it.
 	snap := client.RateLimit()
 	if snap.Requests.Limit != 2500 || snap.Requests.Remaining != 0 {
 		t.Fatalf("requests budget = %+v, want 0/2500 recorded off the refused mutation", snap.Requests)
@@ -359,9 +331,6 @@ func TestRetryTransportDoesNotRetryMutationOnRateLimited400(t *testing.T) {
 	}
 }
 
-// TestRetryTransportWaitsForTheResetWindow proves the wait comes off the
-// headers rather than the backoff, which this client has shrunk to a
-// millisecond.
 func TestRetryTransportWaitsForTheResetWindow(t *testing.T) {
 	const window = 120 * time.Millisecond
 	var recorder callRecorder
@@ -386,9 +355,6 @@ func TestRetryTransportWaitsForTheResetWindow(t *testing.T) {
 	}
 }
 
-// TestRetryTransportAbandonsALongResetWindow hands the error back rather than
-// holding the request for a window nobody will sit through, the same rule a
-// long Retry-After follows.
 func TestRetryTransportAbandonsALongResetWindow(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -443,8 +409,6 @@ func TestClientRateLimitReportsTheLastAnswer(t *testing.T) {
 	}
 }
 
-// TestRateLimitTrackerKeepsTheLastKnownBudget stops a response that mentioned no
-// budget from reading as an empty one.
 func TestRateLimitTrackerKeepsTheLastKnownBudget(t *testing.T) {
 	var tracker rateLimitTracker
 	at := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
@@ -462,9 +426,6 @@ func TestRateLimitTrackerKeepsTheLastKnownBudget(t *testing.T) {
 	}
 }
 
-// TestRateLimitTrackerKeepsABudgetTheResponseWasSilentAbout pins the merge. A
-// response naming one budget must not zero the others, which would read as
-// spent and send a retry into a window that had already been reported.
 func TestRateLimitTrackerKeepsABudgetTheResponseWasSilentAbout(t *testing.T) {
 	var tracker rateLimitTracker
 	at := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
@@ -497,8 +458,6 @@ func TestRateLimitTrackerKeepsABudgetTheResponseWasSilentAbout(t *testing.T) {
 	}
 }
 
-// TestParseHeaderIntRefusesAValuePastThePlatformInt keeps a wrapped count from
-// reading as a spent budget on a 32-bit build.
 func TestParseHeaderIntRefusesAValuePastThePlatformInt(t *testing.T) {
 	header := http.Header{"X-Ratelimit-Requests-Remaining": {"9223372036854775808"}}
 	if got, ok := parseHeaderInt(header, "X-RateLimit-Requests-Remaining"); ok {
@@ -506,22 +465,14 @@ func TestParseHeaderIntRefusesAValuePastThePlatformInt(t *testing.T) {
 	}
 }
 
-// TestARateLimitNamingNoBudgetBacksOffRatherThanAbandoning is the finding-2
-// guard, and it runs through RoundTrip because the call site is what the rule
-// lives in. The tracker is first given a spent budget whose window is an hour
-// out. A later rate limit carrying no headers of its own must not be waited on
-// against that window: doing so exceeds maxRetryAfterWait and gives up, where
-// a response that explained nothing has earned the backoff and another attempt.
 func TestARateLimitNamingNoBudgetBacksOffRatherThanAbandoning(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch recorder.record(r) {
 		case 1:
-			// Seeds the tracker: spent, and not refilling for an hour.
 			writeRateLimitHeaders(w, 0, time.Now().Add(time.Hour))
 			_, _ = w.Write([]byte(teamsOK))
 		case 2:
-			// A refusal that says nothing about the budgets.
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(rateLimitedJSON))
 		default:

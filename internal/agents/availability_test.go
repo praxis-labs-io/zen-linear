@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// stubLookPath returns a lookPath implementation that reports configured binaries.
 func stubLookPath(available map[string]bool) func(string) (string, error) {
 	return func(name string) (string, error) {
 		if available[name] {
@@ -16,7 +15,6 @@ func stubLookPath(available map[string]bool) func(string) (string, error) {
 	}
 }
 
-// TestAvailableProviderKeys verifies availability detection across providers.
 func TestAvailableProviderKeys(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -62,7 +60,6 @@ func TestAvailableProviderKeys(t *testing.T) {
 	}
 }
 
-// TestProviderForKey verifies provider construction by key.
 func TestProviderForKey(t *testing.T) {
 	tests := []struct {
 		name     string

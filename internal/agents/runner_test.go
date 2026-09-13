@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// TestRunner_RunStreamsOutput verifies streaming stdout and stderr.
 func TestRunner_RunStreamsOutput(t *testing.T) {
 	runner := NewRunner()
 	runner.ExecCmd = helperExecCmd("success")
@@ -43,7 +42,6 @@ func TestRunner_RunStreamsOutput(t *testing.T) {
 	}
 }
 
-// TestRunner_RunCancel verifies cancellation stops the process.
 func TestRunner_RunCancel(t *testing.T) {
 	runner := NewRunner()
 	runner.ExecCmd = helperExecCmd("sleep")
@@ -61,11 +59,6 @@ func TestRunner_RunCancel(t *testing.T) {
 	}
 }
 
-// TestRunner_RunUsesWorkspaceAsWorkingDir pins the only thing carrying the
-// workspace to the agent. No provider sends it as a flag, so if this stops
-// working the agent silently runs against the wrong repo. The child reports its
-// own cwd rather than the test reading cmd.Dir, which the runner writes and
-// nothing would notice going unread.
 func TestRunner_RunUsesWorkspaceAsWorkingDir(t *testing.T) {
 	workspace, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -96,7 +89,6 @@ func TestRunner_RunUsesWorkspaceAsWorkingDir(t *testing.T) {
 	}
 }
 
-// TestRunner_RunNonZero verifies non-zero exit propagates error.
 func TestRunner_RunNonZero(t *testing.T) {
 	runner := NewRunner()
 	runner.ExecCmd = helperExecCmd("fail")
@@ -108,7 +100,6 @@ func TestRunner_RunNonZero(t *testing.T) {
 	}
 }
 
-// TestRunnerHelperProcess is a helper process for runner tests.
 func TestRunnerHelperProcess(t *testing.T) {
 	if os.Getenv("AGENT_TEST_HELPER") != "1" {
 		return
@@ -139,7 +130,6 @@ func TestRunnerHelperProcess(t *testing.T) {
 	}
 }
 
-// helperExecCmd returns an ExecCmd replacement for helper process testing.
 func helperExecCmd(mode string) func(ctx context.Context, name string, args ...string) *exec.Cmd {
 	return func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestRunnerHelperProcess")
@@ -151,7 +141,6 @@ func helperExecCmd(mode string) func(ctx context.Context, name string, args ...s
 	}
 }
 
-// containsLine checks if any line contains a substring.
 func containsLine(lines []string, needle string) bool {
 	for _, line := range lines {
 		if strings.Contains(line, needle) {
@@ -161,27 +150,22 @@ func containsLine(lines []string, needle string) bool {
 	return false
 }
 
-// testProvider is a minimal provider for runner tests.
 type testProvider struct {
 	binary string
 }
 
-// Name returns the provider name.
 func (p testProvider) Name() string {
 	return "test"
 }
 
-// ResolveBinary returns a fixed binary for testing.
 func (p testProvider) ResolveBinary() (string, bool) {
 	return p.binary, true
 }
 
-// BuildArgs returns no args for testing.
 func (p testProvider) BuildArgs(string, string, AgentRunOptions) []string {
 	return nil
 }
 
-// ParseStreamLine extracts text from a simple JSON payload.
 func (p testProvider) ParseStreamLine(line []byte) (string, bool) {
 	var payload struct {
 		Text string `json:"text"`

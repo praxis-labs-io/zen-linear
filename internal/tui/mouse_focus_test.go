@@ -10,8 +10,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// newMouseTestApp gives every pane something to draw, so a click has a real
-// widget under it.
 func newMouseTestApp(t *testing.T) *App {
 	t.Helper()
 	app := newUXTestApp(t)
@@ -23,19 +21,13 @@ func newMouseTestApp(t *testing.T) *App {
 	app.rebuildIssuesTables("issue-1")
 	app.selectedIssue = &app.issues[0]
 	app.updateDetailsView()
-	// The details pane ships hidden. Every pane needs to be on screen for a
-	// click to have somewhere to land.
 	app.detailsHidden = false
 	return app
 }
 
-// layOut hands the app a screen and draws once, which is what gives the panes
-// the rects a click is tested against.
 func layOut(t *testing.T, app *App, width, height int, start FocusTarget) tcell.SimulationScreen {
 	t.Helper()
 	screen := tcell.NewSimulationScreen("UTF-8")
-	// SetScreen initializes it, and initializing resets the size, so the order
-	// of these two is not a preference.
 	app.app.SetScreen(screen)
 	screen.SetSize(width, height)
 	app.app.SetRoot(app.pages, true)
@@ -47,11 +39,6 @@ func layOut(t *testing.T, app *App, width, height int, start FocusTarget) tcell.
 	return screen
 }
 
-// clickAt drives a whole left click the way tview's event loop does.
-//
-// The press and the release are separate reports, so a capture that swallowed
-// the press gets the release live all the same. Only within one report does
-// tview reuse the event, which is what carries a swallowed up into its click.
 func clickAt(t *testing.T, app *App, x, y int) {
 	t.Helper()
 	press := tcell.NewEventMouse(x, y, tcell.ButtonPrimary, tcell.ModNone)
@@ -64,7 +51,6 @@ func clickAt(t *testing.T, app *App, x, y int) {
 	deliver(t, app, release, tview.MouseLeftClick)
 }
 
-// deliver runs one action through the capture and hands on whatever survives.
 func deliver(t *testing.T, app *App, event *tcell.EventMouse, action tview.MouseAction) *tcell.EventMouse {
 	t.Helper()
 	event, action = app.handleMouse(event, action)
@@ -75,7 +61,6 @@ func deliver(t *testing.T, app *App, event *tcell.EventMouse, action tview.Mouse
 	return event
 }
 
-// paneCenter is a cell inside a pane's body, clear of its border.
 func paneCenter(t *testing.T, pane tview.Primitive) (int, int) {
 	t.Helper()
 	x, y, width, height := pane.GetRect()
@@ -85,7 +70,6 @@ func paneCenter(t *testing.T, pane tview.Primitive) (int, int) {
 	return x + width/2, y + height/2
 }
 
-// rowCell finds the screen cell a table row was drawn on.
 func rowCell(t *testing.T, table *tview.Table, row int) (int, int) {
 	t.Helper()
 	x, top, _, height := table.GetInnerRect()
@@ -98,7 +82,6 @@ func rowCell(t *testing.T, table *tview.Table, row int) (int, int) {
 	return 0, 0
 }
 
-// borderColorAt reads back the color a cell was painted in.
 func borderColorAt(t *testing.T, screen tcell.SimulationScreen, x, y int) tcell.Color {
 	t.Helper()
 	cells, width, height := screen.GetContents()
@@ -109,7 +92,6 @@ func borderColorAt(t *testing.T, screen tcell.SimulationScreen, x, y int) tcell.
 	return color
 }
 
-// assertPaneBorders checks that one pane wears the focus color and no other does.
 func assertPaneBorders(t *testing.T, app *App, focused FocusTarget) {
 	t.Helper()
 	for _, pane := range []struct {
@@ -131,9 +113,6 @@ func assertPaneBorders(t *testing.T, app *App, focused FocusTarget) {
 	}
 }
 
-// TestClickingAPaneMovesTheKeys is the ticket: a click focused the widget
-// through tview without moving focusedPane, so the pane the keyboard left kept
-// answering and the borders kept naming it.
 func TestClickingAPaneMovesTheKeys(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 180, 40, FocusNavigation)
@@ -155,18 +134,12 @@ func TestClickingAPaneMovesTheKeys(t *testing.T) {
 	}
 	assertPaneBorders(t, app, FocusDetails)
 
-	// h is the details pane's own key. It only reaches that handler if the click
-	// moved focusedPane; the navigation pane leaves h with the tree.
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone))
 	if app.focusedPane != FocusIssues {
 		t.Errorf("h after the click landed on %v, so keys still route to the pane the mouse left", app.focusedPane)
 	}
 }
 
-// TestClickingAPaneBorderRepaintsIt covers the half of the ticket no focus
-// callback can reach. tview redraws after a mouse event only when a primitive
-// consumed it, and a border press consumes nothing, so the recolor needs a draw
-// of its own or the pane keeps the old color until the next key.
 func TestClickingAPaneBorderRepaintsIt(t *testing.T) {
 	app := newMouseTestApp(t)
 	screen := layOut(t, app, 180, 40, FocusIssues)
@@ -183,11 +156,6 @@ func TestClickingAPaneBorderRepaintsIt(t *testing.T) {
 	}
 }
 
-// TestClickingAPaneThatReflowsTheLayoutOnlyReflowsIt covers the two-pane
-// layout, where claiming the issues list brings the navigation pane back. The
-// panes move before the press is delivered but their rects are a frame behind,
-// so forwarding it hands the click to whatever used to be under the pointer:
-// clicking an issue row opened a navigation node instead.
 func TestClickingAPaneThatReflowsTheLayoutOnlyReflowsIt(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 90, 40, FocusDetails)
@@ -196,8 +164,6 @@ func TestClickingAPaneThatReflowsTheLayoutOnlyReflowsIt(t *testing.T) {
 	}
 
 	before := app.navigationTree.GetCurrentNode()
-	// Near the left edge and high up: inside the issues list now, and inside the
-	// navigation tree's first rows once the claim brings that pane back.
 	clickAt(t, app, 5, 5)
 
 	if app.focusedPane != FocusIssues {
@@ -208,8 +174,6 @@ func TestClickingAPaneThatReflowsTheLayoutOnlyReflowsIt(t *testing.T) {
 	}
 }
 
-// TestAClickCannotTakeThePaneFromAnOverlay is the mouse's half of
-// TestAnOverlayKeepsTheKeysWhileItsPageChurns.
 func TestAClickCannotTakeThePaneFromAnOverlay(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 180, 40, FocusIssues)
@@ -232,18 +196,12 @@ func TestAClickCannotTakeThePaneFromAnOverlay(t *testing.T) {
 		t.Errorf("a click behind a modal moved the pane from %v to %v", before, app.focusedPane)
 	}
 
-	// The press misses the modal's panel and falls through Pages to the pane
-	// beneath, where the widget focuses itself. focusedPane is untouched, but
-	// the next key would type into a tree behind the modal.
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 'x', tcell.ModNone))
 	if page := app.pages.GetPage("settings"); page != nil && !page.HasFocus() {
 		t.Errorf("the keyboard is on %T, outside the modal that owns it", app.app.GetFocus())
 	}
 }
 
-// TestOnlyALeftPressMovesThePane pins what the capture ignores. Hover would drag
-// the pane around under the pointer, and a wheel over an unfocused pane scrolls
-// it without taking it.
 func TestOnlyALeftPressMovesThePane(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 180, 40, FocusIssues)
@@ -266,16 +224,11 @@ func TestOnlyALeftPressMovesThePane(t *testing.T) {
 		}
 	}
 
-	// tview hands one event to every action it fires for a single report and
-	// keeps whatever a capture returned, so a swallowed press arrives back here.
 	if forwarded, _ := app.handleMouse(nil, tview.MouseLeftDown); forwarded != nil {
 		t.Error("a nil event came back non-nil")
 	}
 }
 
-// TestClickingTheStatusRowKeepsTheKeysWithThePane covers the row below the
-// panes. It is a text view, and tview would hand it the keyboard on a click,
-// which left j and k scrolling the status line instead of the issue list.
 func TestClickingTheStatusRowKeepsTheKeysWithThePane(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 180, 40, FocusIssues)
@@ -291,10 +244,6 @@ func TestClickingTheStatusRowKeepsTheKeysWithThePane(t *testing.T) {
 	}
 }
 
-// TestClickingIntoAWritingBoxTakesTheBoxAndNotJustThePane covers the capture
-// and the delivery together: the capture claims the pane and parks on the
-// cards, then the press lands and the box's own focus callback moves on from
-// there.
 func TestClickingIntoAWritingBoxTakesTheBoxAndNotJustThePane(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 180, 40, FocusIssues)
@@ -316,8 +265,6 @@ func TestClickingIntoAWritingBoxTakesTheBoxAndNotJustThePane(t *testing.T) {
 		t.Errorf("the keyboard is on %T, not the compose box", focus)
 	}
 
-	// Clicking the pane you are already in must not take the keyboard back off
-	// the box: that is what the same-pane guard is for.
 	writing := app.detailsFocus
 	left, top, _, height := app.detailsView.GetRect()
 	clickAt(t, app, left, top+height/2)
@@ -326,8 +273,6 @@ func TestClickingIntoAWritingBoxTakesTheBoxAndNotJustThePane(t *testing.T) {
 	}
 }
 
-// TestClickingAnIssueRowStillSelectsIt proves the capture forwards the press in
-// the ordinary case rather than eating it on the way to the pane.
 func TestClickingAnIssueRowStillSelectsIt(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 180, 40, FocusNavigation)
@@ -349,10 +294,6 @@ func TestClickingAnIssueRowStillSelectsIt(t *testing.T) {
 	}
 }
 
-// TestPaneAtIgnoresAPaneTheLayoutDropped covers why the hit test walks what the
-// content flex mounts. Flex.Clear leaves an unmounted pane's rect where the last
-// draw put it, and in the responsive layouts that rect sits under a pane the
-// user can see.
 func TestPaneAtIgnoresAPaneTheLayoutDropped(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 60, 40, FocusNavigation)
@@ -367,16 +308,10 @@ func TestPaneAtIgnoresAPaneTheLayoutDropped(t *testing.T) {
 	}
 }
 
-// TestTheMouseCaptureRunsBeforeTheClickIsDelivered pins the ordering the whole
-// design rests on: tview offers the app's capture every mouse action before the
-// primitives see it. A tview upgrade that reversed the two would leave the
-// capture claiming panes off stale coordinates.
 func TestTheMouseCaptureRunsBeforeTheClickIsDelivered(t *testing.T) {
 	app := newMouseTestApp(t)
 	screen := layOut(t, app, 180, 40, FocusNavigation)
 
-	// Every rect this test needs is read before the loop starts drawing on its
-	// own goroutine. Afterwards the panes belong to that goroutine.
 	x, y := paneCenter(t, app.issuesColumn)
 
 	go func() { _ = app.app.Run() }()
@@ -385,9 +320,6 @@ func TestTheMouseCaptureRunsBeforeTheClickIsDelivered(t *testing.T) {
 	screen.InjectMouse(x, y, tcell.ButtonPrimary, tcell.ModNone)
 	screen.InjectMouse(x, y, tcell.ButtonNone, tcell.ModNone)
 
-	// Events and queued updates arrive on separate channels, so the read has to
-	// wait the click out. Reading from the loop's own goroutine is also what
-	// keeps the assertion off the race detector.
 	deadline := time.After(4 * time.Second)
 	for {
 		pane := make(chan FocusTarget, 1)
@@ -403,11 +335,6 @@ func TestTheMouseCaptureRunsBeforeTheClickIsDelivered(t *testing.T) {
 	}
 }
 
-// TestCrossingABreakpointWhileZoomedDoesNotFreezeTheApp covers a hang that took
-// the whole process. Application.draw holds the app lock for the frame, the
-// before-draw hook runs inside it, and SetFocus takes the same lock: zoom the
-// details pane, ask for the navigation pane by number, then narrow the terminal
-// and nothing draws or reads a key again, Ctrl+C included.
 func TestCrossingABreakpointWhileZoomedDoesNotFreezeTheApp(t *testing.T) {
 	app := newMouseTestApp(t)
 	screen := layOut(t, app, 180, 40, FocusIssues)

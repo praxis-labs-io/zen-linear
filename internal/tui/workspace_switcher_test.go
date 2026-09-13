@@ -18,8 +18,6 @@ func switcherTestWorkspaces() []config.Workspace {
 	}
 }
 
-// TestWorkspaceNameForKey verifies the active workspace is identified from the
-// resolved token, and that OAuth/explicit tokens map to no workspace.
 func TestWorkspaceNameForKey(t *testing.T) {
 	t.Setenv("TEST_LINEAR_KEY_ACME", "k-acme")
 	t.Setenv("TEST_LINEAR_KEY_SIDE", "k-side")
@@ -36,8 +34,6 @@ func TestWorkspaceNameForKey(t *testing.T) {
 	}
 }
 
-// TestWorkspacePickerItemsMarksActive verifies picker labels flag the active
-// workspace.
 func TestWorkspacePickerItemsMarksActive(t *testing.T) {
 	items := workspacePickerItems(switcherTestWorkspaces(), "Side")
 	if len(items) != 2 {
@@ -51,11 +47,8 @@ func TestWorkspacePickerItemsMarksActive(t *testing.T) {
 	}
 }
 
-// TestSwitchWorkspaceMissingKeyKeepsCurrent verifies switching to a workspace
-// whose env var is unset fails without touching the active workspace.
 func TestSwitchWorkspaceMissingKeyKeepsCurrent(t *testing.T) {
 	t.Setenv("TEST_LINEAR_KEY_ACME", "k-acme")
-	// TEST_LINEAR_KEY_SIDE deliberately not set.
 
 	cfg := config.Config{Workspaces: switcherTestWorkspaces()}
 	cfg.LinearAPIKey = "k-acme"
@@ -72,8 +65,6 @@ func TestSwitchWorkspaceMissingKeyKeepsCurrent(t *testing.T) {
 	}
 }
 
-// TestSwitchWorkspaceUnknownNameKeepsCurrent verifies an unknown workspace
-// name is rejected.
 func TestSwitchWorkspaceUnknownNameKeepsCurrent(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{Workspaces: switcherTestWorkspaces()})
 	app.activeWorkspaceName = "Acme"
@@ -85,9 +76,6 @@ func TestSwitchWorkspaceUnknownNameKeepsCurrent(t *testing.T) {
 	}
 }
 
-// newSwitcherFlowTestApp builds an app on Acme that can complete a switch to
-// Side. SetRoot is what primes the delegate tview moves focus between pages
-// with, so a harness without it cannot see focus leave a pane.
 func newSwitcherFlowTestApp(t *testing.T) *App {
 	t.Helper()
 	t.Setenv("TEST_LINEAR_KEY_ACME", "k-acme")
@@ -102,8 +90,6 @@ func newSwitcherFlowTestApp(t *testing.T) *App {
 	cfg := config.Config{Workspaces: switcherTestWorkspaces(), APIEndpoint: server.URL}
 	cfg.LinearAPIKey = "k-acme"
 	app := newDefaultNavTestApp(t, cfg)
-	// The reload runs off the event loop, which no test app runs. Dropping its
-	// queued updates keeps them off the state under assertion.
 	app.queueUpdateDraw = func(func()) {}
 	app.app.SetRoot(app.pages, true)
 	app.activeWorkspaceName = "Acme"
@@ -112,10 +98,6 @@ func newSwitcherFlowTestApp(t *testing.T) *App {
 	return app
 }
 
-// TestSwitchWorkspaceKeepsPaneFocus covers focus surviving the reload. The
-// modal rebuilds re-add their pages, and tview hands focus from an added page
-// down to the pane the layout was built focused on, so the pane the user was
-// in went dead until an arrow key put it back.
 func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -123,9 +105,6 @@ func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 		want  func(app *App) tview.Primitive
 	}{
 		{
-			// The switch clears the list, so the placeholder is what the issues
-			// column is showing and what focus has to land on. Focusing the
-			// detached table would leave no pane looking focused at all.
 			name:  "issues",
 			setUp: func(app *App) { app.focusedPane = FocusIssues },
 			want:  func(app *App) tview.Primitive { return app.issuesPlaceholder },
@@ -136,9 +115,6 @@ func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 			want:  func(app *App) tview.Primitive { return app.detailsPageView },
 		},
 		{
-			// The reset empties the query underneath the switch, so leaving
-			// focus in the box would park the keyboard on a search the user no
-			// longer has. The tree beside it is where the pane belongs.
 			name:  "query box",
 			setUp: func(app *App) { app.focusNavSearch() },
 			want:  func(app *App) tview.Primitive { return app.navigationTree },
@@ -148,8 +124,6 @@ func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			app := newSwitcherFlowTestApp(t)
-			// An empty details pane refocuses itself on its way to the empty
-			// state, which would hide the bug in the details case.
 			app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"}
 			app.updateDetailsView()
 			tc.setUp(app)
@@ -167,11 +141,6 @@ func TestSwitchWorkspaceKeepsPaneFocus(t *testing.T) {
 	}
 }
 
-// newSwitcherReloadTestApp builds an app whose switch runs all the way through
-// to the new workspace's issues. The reload has to go over HTTP: applySettings
-// rebuilds the client, which drops any stubbed fetcher with it, so a canned
-// response is the only seam that survives the switch. Every query gets the same
-// body; the ones that are not the issue list read it as empty.
 func newSwitcherReloadTestApp(t *testing.T) *App {
 	t.Helper()
 	t.Setenv("TEST_LINEAR_KEY_ACME", "k-acme")
@@ -193,9 +162,6 @@ func newSwitcherReloadTestApp(t *testing.T) *App {
 	return app
 }
 
-// TestSwitchWorkspaceKeepsIssuesFocusWhenTheNewListLands covers the second half
-// of the switch. The reset empties the pane, so focus lands on the placeholder,
-// and the arriving rows put the table back underneath it.
 func TestSwitchWorkspaceKeepsIssuesFocusWhenTheNewListLands(t *testing.T) {
 	app := newSwitcherReloadTestApp(t)
 	navSettled := installNavSettledHook(app)
@@ -203,8 +169,6 @@ func TestSwitchWorkspaceKeepsIssuesFocusWhenTheNewListLands(t *testing.T) {
 	app.focusedPane = FocusIssues
 	app.updateFocus()
 
-	// The picker callback runs on the event loop, and so does the reload it
-	// starts. Driving the switch bare would put the two on different goroutines.
 	app.QueueUpdateDraw(func() { app.switchWorkspace("Side") })
 	waitForNavSettled(t, navSettled)
 	waitForRefreshCompletion(t, refreshDone)
@@ -217,8 +181,6 @@ func TestSwitchWorkspaceKeepsIssuesFocusWhenTheNewListLands(t *testing.T) {
 	}
 }
 
-// TestSwitchWorkspaceEmptiesTheDetailsPane covers the pane still painting an
-// issue from the workspace being left, which no command could act on.
 func TestSwitchWorkspaceEmptiesTheDetailsPane(t *testing.T) {
 	app := newSwitcherFlowTestApp(t)
 	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"}
@@ -236,7 +198,6 @@ func TestSwitchWorkspaceEmptiesTheDetailsPane(t *testing.T) {
 	}
 }
 
-// The switch reloads because it is a switch, not because the config differs.
 func TestSwitchWorkspaceReloadsOnASharedKey(t *testing.T) {
 	app := newSwitcherFlowTestApp(t)
 	t.Setenv("TEST_LINEAR_KEY_SIDE", "k-acme")

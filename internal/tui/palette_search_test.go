@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// rankedTitles ranks the commands against the query and names what came back.
 func rankedTitles(commands []Command, query string) []string {
 	titles := make([]string, 0, len(commands))
 	for _, cmd := range rankCommands(commands, query) {
@@ -25,12 +24,12 @@ func TestRankCommandsOrdersByWhereTheTokenSits(t *testing.T) {
 	}
 
 	want := []string{
-		"Clear due date",   // title prefix
-		"Clear filters",    // title prefix
-		"Filter by cycle",  // a title word starts with it
-		"Set cycle",        // the title holds it mid-word
-		"Unassign issue",   // a keyword word starts with it
-		"Group issues by…", // a keyword holds it mid-word
+		"Clear due date",
+		"Clear filters",
+		"Filter by cycle",
+		"Set cycle",
+		"Unassign issue",
+		"Group issues by…",
 	}
 	if got := rankedTitles(commands, "cle"); !equalTitles(got, want) {
 		t.Errorf("ranked %v, want %v", got, want)
@@ -64,9 +63,6 @@ func TestRankCommandsNeedsEveryToken(t *testing.T) {
 	}
 }
 
-// TestRankCommandsFallsBackToScatteredCharacters pins the fuzzy pass to being
-// a fallback. It has to stay out of the way of a run of characters that a
-// title actually holds, or it would list half the palette under every query.
 func TestRankCommandsFallsBackToScatteredCharacters(t *testing.T) {
 	commands := []Command{
 		{Title: "Settings"},
@@ -77,8 +73,6 @@ func TestRankCommandsFallsBackToScatteredCharacters(t *testing.T) {
 	if got := rankedTitles(commands, "stng"); !equalTitles(got, []string{"Settings"}) {
 		t.Errorf("ranked %v, want Settings from the scattered characters", got)
 	}
-	// "set" is a run both titles hold, so the fuzzy pass never runs and
-	// Switch workspace stays out even though s-e-t scatters through it.
 	if got := rankedTitles(commands, "set"); !equalTitles(got, []string{"Set cycle", "Settings"}) {
 		t.Errorf("ranked %v, want only the two titles holding \"set\"", got)
 	}

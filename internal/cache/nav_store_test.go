@@ -45,8 +45,6 @@ func TestRecordNavRoundTrips(t *testing.T) {
 	}
 }
 
-// TestRecordNavKeepsOtherWorkspaces covers the switch back: recording one
-// workspace must not drop the tree cached for another.
 func TestRecordNavKeepsOtherWorkspaces(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nav-cache.json")
 
@@ -71,8 +69,6 @@ func TestRecordNavKeepsOtherWorkspaces(t *testing.T) {
 	}
 }
 
-// TestDataForNormalizesWorkspaceName covers a rename of case or padding in the
-// config, which must still find the cached tree.
 func TestDataForNormalizesWorkspaceName(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nav-cache.json")
 	if err := RecordNav(path, "Alpha", navFixture()); err != nil {
@@ -113,8 +109,6 @@ func TestLoadNavMissingFileIsEmpty(t *testing.T) {
 	}
 }
 
-// TestLoadNavDiscardsOtherVersions covers a file written by a build whose
-// shape moved. Reading it as if it matched would paint a broken tree.
 func TestLoadNavDiscardsOtherVersions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nav-cache.json")
 	stale := `{"version":99,"workspaces":{"alpha":{"teams":[{"ID":"team-1","Key":"ENG","Name":"Engineering"}]}}}`

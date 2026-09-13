@@ -11,9 +11,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/update"
 )
 
-// waitForNotice gives the check's goroutine and its queued draw a moment to
-// land. The seam answers immediately, so this is a handoff rather than a wait
-// on anything real.
 func waitForNotice(t *testing.T, app *App, want string) string {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -28,8 +25,6 @@ func waitForNotice(t *testing.T, app *App, want string) string {
 	return got
 }
 
-// settle lets a check that should do nothing prove it, since there is no state
-// change to wait on.
 func settle() { time.Sleep(100 * time.Millisecond) }
 
 func TestAnAvailableReleaseIsOfferedOnTheHintLine(t *testing.T) {
@@ -46,11 +41,9 @@ func TestAnAvailableReleaseIsOfferedOnTheHintLine(t *testing.T) {
 	if !strings.Contains(got, "v0.4.0") {
 		t.Errorf("status bar = %q, want the available version named", got)
 	}
-	// The number alone leaves the reader to work out how to act on it.
 	if !strings.Contains(got, "zen-linear update") {
 		t.Errorf("status bar = %q, want the upgrade command named", got)
 	}
-	// A release being available is not a failure and must not be dressed as one.
 	if strings.Contains(got, "Error:") {
 		t.Errorf("status bar = %q, want no error prefix", got)
 	}
@@ -74,8 +67,6 @@ func TestTheRunningVersionIsOfferedNothing(t *testing.T) {
 	}
 }
 
-// No network, a rate limit, a malformed answer: the log carries it and the user
-// is told nothing.
 func TestAFailedCheckSaysNothing(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.UpdateCheck = true
@@ -114,7 +105,6 @@ func TestTheCheckIsNotRunWhenTurnedOff(t *testing.T) {
 	}
 }
 
-// An unstamped build is a working tree, which is not behind anything.
 func TestAnUnstampedBuildIsNeverChecked(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.UpdateCheck = true
@@ -135,8 +125,6 @@ func TestAnUnstampedBuildIsNeverChecked(t *testing.T) {
 	}
 }
 
-// A log the app could not open is a problem. This is a nudge, and it keeps
-// until the next launch rather than painting over one.
 func TestALaunchWarningKeepsTheLineAheadOfANudge(t *testing.T) {
 	app := newUXTestApp(t)
 	app.WarnAtStartup("could not open the log at /nope/app.log")
@@ -151,7 +139,6 @@ func TestALaunchWarningKeepsTheLineAheadOfANudge(t *testing.T) {
 	}
 }
 
-// Without a warning to defer to, the nudge takes the line.
 func TestANudgeTakesTheLineWhenNothingWentWrong(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -163,8 +150,6 @@ func TestANudgeTakesTheLineWhenNothingWentWrong(t *testing.T) {
 	}
 }
 
-// Reported once. A later refresh that re-reports must not put it back, the way
-// a launch warning is forgotten after it is shown.
 func TestANudgeIsShownOnce(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pendingNotice = updateNoticeText("v0.4.0")
@@ -178,7 +163,6 @@ func TestANudgeIsShownOnce(t *testing.T) {
 	}
 }
 
-// The check only ever ran from loadInitialData, which a save no longer reaches.
 func TestTurningTheCheckOnAsksWithoutWaitingForTheNextLaunch(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.UpdateCheck = false
@@ -193,7 +177,6 @@ func TestTurningTheCheckOnAsksWithoutWaitingForTheNextLaunch(t *testing.T) {
 	cfg.UpdateCheck = true
 	app.applySettings(cfg)
 
-	// The seam, not the status bar: the check answers on its own goroutine.
 	select {
 	case got := <-asked:
 		if got != "0.3.0" {

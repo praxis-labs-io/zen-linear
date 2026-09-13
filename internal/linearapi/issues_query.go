@@ -10,8 +10,6 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
-// FetchIssuesPage fetches a single page of issues with optional filtering and sorting.
-// It returns pagination metadata to allow callers to continue fetching.
 func (c *Client) FetchIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	if params.CustomViewID != "" {
 		return c.customViewIssuesPage(ctx, params, after)
@@ -26,10 +24,6 @@ func (c *Client) FetchIssuesPage(ctx context.Context, params FetchIssuesParams, 
 	return c.fetchIssuesWithFilterPage(ctx, params, after)
 }
 
-// FetchIssues fetches every page of issues for params, sorting by priority
-// client-side when requested (the Linear API paginates only by created/updated
-// time). FetchIssuesPage routes each page to the standard issues query, the
-// searchIssues query, or a custom view, depending on params.
 func (c *Client) FetchIssues(ctx context.Context, params FetchIssuesParams) ([]Issue, error) {
 	sortByPriority := params.OrderBy == "priority"
 
@@ -64,7 +58,6 @@ func (c *Client) FetchIssues(ctx context.Context, params FetchIssuesParams) ([]I
 	return issues, nil
 }
 
-// searchIssuesPage fetches a single page of issues using Linear's searchIssues query.
 func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {
@@ -72,7 +65,6 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 	}
 
 	searchTerm := strings.TrimSpace(params.Search)
-	// Linear's search term does the text matching, so the filter carries the rest.
 	filter := buildStructuredIssueFilter(params)
 
 	var afterCursor *graphql.String
@@ -124,8 +116,6 @@ func (c *Client) searchIssuesPage(ctx context.Context, params FetchIssuesParams,
 	}, nil
 }
 
-// ViewPreferencesValues carries the display settings of a custom view.
-// Values are Linear's raw strings; empty means the setting is unset.
 type ViewPreferencesValues struct {
 	IssueGrouping         string
 	IssueSubGrouping      string
@@ -133,8 +123,6 @@ type ViewPreferencesValues struct {
 	ViewOrderingDirection string
 }
 
-// viewPreferencesSelection is the shared GraphQL selection for one layer of
-// view preferences.
 type viewPreferencesSelection struct {
 	IssueGrouping         graphql.String
 	IssueSubGrouping      graphql.String
@@ -142,11 +130,8 @@ type viewPreferencesSelection struct {
 	ViewOrderingDirection graphql.String
 }
 
-// FetchCustomViewPreferences fetches the effective display settings of a
-// custom view. Linear's computed viewPreferencesValues drops layers (a
-// subgrouping stored on the organization layer comes back "none"), so the
-// user, organization, and computed layers are fetched and merged here, most
-// specific first. Returns nil when the view has no preferences at all.
+// FetchCustomViewPreferences returns a view's display settings merged from its
+// user, organization and computed layers, or nil when it has none.
 func (c *Client) FetchCustomViewPreferences(ctx context.Context, viewID string) (*ViewPreferencesValues, error) {
 	var query struct {
 		CustomView struct {
@@ -199,12 +184,8 @@ func (c *Client) FetchCustomViewPreferences(ctx context.Context, viewID string) 
 	}, nil
 }
 
-// IssueMatchesScope reports whether an issue is inside the scope the params
-// describe, asking the server the same question the list query asks so a
-// custom view's own filter is honored. The params' IDs field is ignored.
-//
-// The caller gets an error rather than a false when the check itself fails, so
-// a failed check never removes a row the user is looking at.
+// IssueMatchesScope asks the server whether issueID is inside the scope params
+// describe, ignoring params.IDs. A failed check is an error, never false.
 func (c *Client) IssueMatchesScope(ctx context.Context, params FetchIssuesParams, issueID string) (bool, error) {
 	if issueID == "" {
 		return false, fmt.Errorf("issue id is required")
@@ -221,10 +202,6 @@ func (c *Client) IssueMatchesScope(ctx context.Context, params FetchIssuesParams
 		return len(page.Issues) > 0, nil
 	}
 
-	// A custom view keeps its filter server-side, so the id filter has to ride
-	// along on the view's own connection. This is a separate selection from
-	// customViewIssuesPage on purpose: if the schema rejects the argument here,
-	// only the check breaks, not the list.
 	var query struct {
 		CustomView struct {
 			Issues struct {
@@ -246,7 +223,6 @@ func (c *Client) IssueMatchesScope(ctx context.Context, params FetchIssuesParams
 	return len(query.CustomView.Issues.Nodes) > 0, nil
 }
 
-// customViewIssuesPage fetches a single page of a Linear custom view's issues.
 func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {
@@ -259,8 +235,6 @@ func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesPar
 		afterCursor = &cursor
 	}
 
-	// Linear API only supports "createdAt" and "updatedAt" for
-	// PaginationOrderBy; other sorts happen client-side.
 	orderBy := PaginationOrderBy(params.OrderBy)
 	if orderBy != OrderByCreatedAt && orderBy != OrderByUpdatedAt {
 		orderBy = OrderByUpdatedAt
@@ -309,7 +283,6 @@ func (c *Client) customViewIssuesPage(ctx context.Context, params FetchIssuesPar
 	}, nil
 }
 
-// cycleRefNode is the cycle selection carried on an issue.
 type cycleRefNode struct {
 	ID         graphql.String
 	Name       *graphql.String
@@ -323,8 +296,6 @@ type cycleRefNode struct {
 	IsPrevious graphql.Boolean
 }
 
-// projectMilestoneRefNode is the milestone selection carried on an issue. It is
-// narrower than the one ListProjectMilestones uses.
 type projectMilestoneRefNode struct {
 	ID         graphql.String
 	Name       graphql.String
@@ -335,11 +306,6 @@ type projectMilestoneRefNode struct {
 	}
 }
 
-// issueQueryNode is the GraphQL selection for a single issue, shared by the
-// filtered, search, and custom-view queries and by the issue mutations. The
-// mutations return it so the TUI can splice the result into the list instead
-// of refetching; a narrower selection there would quietly drop fields the list
-// renders.
 type issueQueryNode struct {
 	ID         graphql.String
 	Identifier graphql.String
@@ -395,20 +361,16 @@ type issueQueryNode struct {
 	}
 }
 
-// fetchIssuesWithFilterPage fetches a single page of issues using the standard issues query.
 func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssuesParams, after *string) (IssuePage, error) {
 	first := params.First
 	if first <= 0 {
 		first = 50
 	}
 
-	// Build filter.
 	filter := buildIssueFilter(params)
 
-	// Linear API only supports "createdAt" and "updatedAt" for PaginationOrderBy.
 	orderBy := PaginationOrderBy(params.OrderBy)
 	if orderBy != OrderByCreatedAt && orderBy != OrderByUpdatedAt {
-		// "priority" and "status" sort client-side; fetch by updatedAt.
 		orderBy = OrderByUpdatedAt
 	}
 
@@ -461,13 +423,9 @@ func (c *Client) fetchIssuesWithFilterPage(ctx context.Context, params FetchIssu
 	}, nil
 }
 
-// sortByPriority sorts issues by priority.
-// Linear priority: 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low.
-// We sort with Urgent (1) first, then High (2), Normal (3), Low (4), and No priority (0) last.
 func (c *Client) sortByPriority(issues []Issue) {
 	sort.SliceStable(issues, func(i, j int) bool {
 		pi, pj := issues[i].Priority, issues[j].Priority
-		// Map 0 (no priority) to a high value so it sorts last
 		if pi == 0 {
 			pi = 5
 		}

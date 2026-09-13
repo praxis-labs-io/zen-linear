@@ -12,9 +12,7 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
-// FormatShortcut returns a human-readable string for a shortcut. The rune is
-// shown verbatim: shortcut dispatch is case-sensitive, so 'w' and 'W' are
-// different binds and must render differently.
+// FormatShortcut renders a shortcut rune verbatim, since dispatch is case-sensitive.
 func FormatShortcut(r rune) string {
 	if r == 0 {
 		return ""
@@ -22,29 +20,17 @@ func FormatShortcut(r rune) string {
 	return string(r)
 }
 
-// CommandScope is where a command applies. A command reaches the keyboard and
-// the palette only from a pane its scope covers, so a key cannot act on
-// something the pane it was pressed in has no bearing on.
+// CommandScope is the pane a command answers from. The zero value, ScopeGlobal, answers everywhere.
 type CommandScope int
 
 const (
-	// ScopeGlobal commands apply everywhere. It is the zero value, so a
-	// command that names no scope keeps working from every pane.
 	ScopeGlobal CommandScope = iota
-	// ScopeIssue commands act on the selected issue: the issues and details
-	// panes.
 	ScopeIssue
-	// ScopeNavigation commands act on the navigation tree.
 	ScopeNavigation
-	// ScopeComment actions act on the comment the ring is on. No palette
-	// command holds it: the scope exists so a comment key and an issue key can
-	// share a rune, which is how r replies on a focused card and refreshes
-	// everywhere else.
+	// ScopeComment lets a comment key share a rune with an issue key, so r replies on a card and refreshes elsewhere.
 	ScopeComment
 )
 
-// CommandGroup is the heading a command files under in the palette's default
-// list. Typing a query drops the headings and lists the matches flat.
 type CommandGroup string
 
 const (
@@ -58,9 +44,6 @@ const (
 	GroupApp       CommandGroup = "App"
 )
 
-// commandGroupOrder is the order the palette stacks the headings in. A command
-// whose group is missing here is listed after them all under no heading, which
-// TestEveryCommandFilesUnderAHeading is what stops happening by accident.
 var commandGroupOrder = []CommandGroup{
 	GroupIssue,
 	GroupFields,
@@ -72,30 +55,25 @@ var commandGroupOrder = []CommandGroup{
 	GroupApp,
 }
 
-// Command represents a command that can be executed from the palette.
 type Command struct {
 	ID              string
 	Title           string
 	Keywords        []string
-	ShortcutRune    rune   // The rune for the keyboard shortcut (e.g., 'r' for refresh)
-	ShortcutDisplay string // Custom display text for shortcut (e.g., "/" or "Esc"), overrides ShortcutRune display
+	ShortcutRune    rune
+	ShortcutDisplay string
 	Scope           CommandScope
 	Group           CommandGroup
 	Run             func(a *App)
 }
 
-// appliesIn reports whether the command is reachable from a pane of the given
-// scope.
 func (c Command) appliesIn(scope CommandScope) bool {
 	return c.Scope == ScopeGlobal || c.Scope == scope
 }
 
-// CommandContext provides context for command execution.
 type CommandContext struct {
 	SelectedIssue *linearapi.Issue
 }
 
-// handleAskAgent handles the ask agent command.
 func handleAskAgent(a *App) {
 	issue := a.GetSelectedIssue()
 	if issue == nil {
@@ -191,9 +169,6 @@ func handleAskAgent(a *App) {
 	})
 }
 
-// runIssueValueAction runs a synchronous copy/open action on a value drawn from
-// the selected issue. When emptyMsg is set and value is empty it flashes that
-// instead of acting; otherwise it runs action and flashes successMsg or the error.
 func (a *App) runIssueValueAction(value, emptyMsg string, action func(string) error, successMsg string) {
 	if emptyMsg != "" && value == "" {
 		a.flashStatus(emptyMsg)
@@ -287,7 +262,6 @@ func handleCopyBranchCommand(a *App) {
 		copyFn, fmt.Sprintf("Copied branch name: %s", issue.BranchName))
 }
 
-// DefaultCommands returns the default set of commands for the palette.
 func DefaultCommands(app *App) []Command {
 	lookPath := exec.LookPath
 	if app != nil && app.agentRunner != nil && app.agentRunner.LookPath != nil {
@@ -322,19 +296,17 @@ func DefaultCommands(app *App) []Command {
 			Group:           GroupList,
 			Title:           "Search issues",
 			Keywords:        []string{"search", "find", "s", "/"},
-			ShortcutDisplay: "/", // Handled globally, not via ShortcutRune
+			ShortcutDisplay: "/",
 			Run: func(a *App) {
 				a.focusNavSearch()
 			},
 		},
 		{
-			ID:       "toggle_favorite",
-			Group:    GroupView,
-			Scope:    ScopeNavigation,
-			Title:    "Favorite / unfavorite navigation item",
-			Keywords: []string{"favorite", "unfavorite", "star", "pin", "bookmark"},
-			// Shifted, because it is destructive from the tree: lowercase f sat
-			// next to the movement keys and unfavorited a view on a mistype.
+			ID:           "toggle_favorite",
+			Group:        GroupView,
+			Scope:        ScopeNavigation,
+			Title:        "Favorite / unfavorite navigation item",
+			Keywords:     []string{"favorite", "unfavorite", "star", "pin", "bookmark"},
 			ShortcutRune: 'F',
 			Run:          handleToggleFavorite,
 		},
@@ -786,8 +758,6 @@ func DefaultCommands(app *App) []Command {
 								logger.Info("tui.commands: archived issue issue=%s", issue.Identifier)
 								a.flashSuccess(fmt.Sprintf("Archived %s", issue.Identifier))
 								if len(issue.Children) > 0 {
-									// Linear may archive sub-issues with the
-									// parent; only a fetch answers for them.
 									a.refreshIssues()
 								} else {
 									a.applyIssueRemoval(issue.ID)
@@ -811,8 +781,6 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				// The picker names this issue, so the write targets it even if
-				// a refresh moves the selection while the picker is open.
 				target := *issue
 				a.ShowFieldPicker(issueFieldState, a.issueOptionScope(target), a.issueContextLine(target), func(item PickerItem) {
 					a.saveIssueField(issueFieldStateSave(target, item.ID, item.name()))
@@ -929,7 +897,7 @@ func DefaultCommands(app *App) []Command {
 			Scope:        ScopeIssue,
 			Title:        "Edit issue labels",
 			Keywords:     []string{"labels", "label", "tag", "tags"},
-			ShortcutRune: 't', // 't' for tags: 'l' is vim navigation and 'L' scrolls columns
+			ShortcutRune: 't',
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
@@ -945,7 +913,6 @@ func DefaultCommands(app *App) []Command {
 			Scope:    ScopeIssue,
 			Title:    "Toggle sub-issues",
 			Keywords: []string{"toggle", "expand", "collapse", "sub", "children"},
-			// No shortcut - ⌘+T conflicts with new tab. Use Space key in table instead.
 			Run: func(a *App) {
 				issue := a.GetSelectedIssue()
 				if issue == nil {
@@ -974,8 +941,6 @@ func DefaultCommands(app *App) []Command {
 				if a.jumpToParent(issue.Parent.ID) {
 					return
 				}
-				// A loaded parent with no row is hidden behind a collapsed
-				// group or ancestor, which is not the same as never fetched.
 				if _, loaded := a.listIDToIssue[issue.Parent.ID]; loaded {
 					a.flashStatus("Parent issue is hidden by a collapsed group")
 					return
@@ -1029,7 +994,6 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				// Create sub-issue with current issue as parent
 				a.ShowCreateSubIssueModal(issue.ID)
 			},
 		},
@@ -1045,7 +1009,6 @@ func DefaultCommands(app *App) []Command {
 					a.flashStatus("No issue selected")
 					return
 				}
-				// Cannot set parent if this issue has children
 				if len(issue.Children) > 0 {
 					logger.Warning("tui.commands: cannot set parent on issue with sub-issues issue=%s", issue.Identifier)
 					a.flashError("Cannot set parent on issue with sub-issues")
@@ -1104,8 +1067,6 @@ func DefaultCommands(app *App) []Command {
 			},
 		},
 	}
-	// Read before the agent filter runs: a binding for a command this session
-	// happens not to offer names a real id, not a typo.
 	scopes := commandScopes(commands)
 
 	if len(availableProviders) == 0 {
@@ -1126,7 +1087,6 @@ func DefaultCommands(app *App) []Command {
 	return commands
 }
 
-// openURL opens a URL in the default browser.
 func openURL(url string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
@@ -1150,7 +1110,6 @@ func openURL(url string) error {
 	return nil
 }
 
-// copyToClipboard copies text to the system clipboard.
 func copyToClipboard(text string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {

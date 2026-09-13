@@ -11,8 +11,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// TestFormatShortcutPreservesCase verifies uppercase and lowercase shortcut
-// runes render distinctly in the palette so case-sensitive binds are legible.
 func TestFormatShortcutPreservesCase(t *testing.T) {
 	if got := FormatShortcut('w'); got != "w" {
 		t.Errorf("FormatShortcut('w') = %q, want %q", got, "w")
@@ -25,8 +23,6 @@ func TestFormatShortcutPreservesCase(t *testing.T) {
 	}
 }
 
-// TestSortByPickerAppliesWholeOrdering drives the sort picker: one row is one
-// complete ordering, and the issues pane's footer names what is in effect.
 func TestSortByPickerAppliesWholeOrdering(t *testing.T) {
 	for _, tc := range []struct {
 		label      string
@@ -53,14 +49,11 @@ func TestSortByPickerAppliesWholeOrdering(t *testing.T) {
 			if !app.sortOverridden {
 				t.Fatal("sortOverridden = false, want the manual choice to outrank the view")
 			}
-			// Without this an in-app settings save rewrites the file from
-			// config and silently reverts the pick.
 			if !reflect.DeepEqual(app.config.SortBy, tc.wantConfig) {
 				t.Fatalf("config.SortBy = %v, want %v", app.config.SortBy, tc.wantConfig)
 			}
 			waitForRefreshCompletion(t, refreshDone)
 
-			// The ordering is named on the issues pane's own footer.
 			app.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
 			if got := stripTags(app.issuesContextText(120)); !strings.Contains(got, tc.wantSort) {
 				t.Fatalf("issues footer = %q, want it to name %q", got, tc.wantSort)
@@ -69,9 +62,6 @@ func TestSortByPickerAppliesWholeOrdering(t *testing.T) {
 	}
 }
 
-// selectPickerItem moves to a row and presses Enter, the way the picker is
-// actually driven. Going through HandleKey keeps the list index, the item
-// slice, and the dismissal in the test's path.
 func selectPickerItem(t *testing.T, app *App, label string) {
 	t.Helper()
 	for index, item := range app.pickerModal.items {
@@ -88,9 +78,6 @@ func selectPickerItem(t *testing.T, app *App, label string) {
 	t.Fatalf("picker has no %q item: %#v", label, app.pickerModal.items)
 }
 
-// TestDefaultShortcutsMatchTheShippedSet pins the keys the app opens with.
-// Every entry here moved at least once, and a rune drifting back onto a command
-// that gave it up is the kind of change nothing else fails on.
 func TestDefaultShortcutsMatchTheShippedSet(t *testing.T) {
 	app := newUXTestApp(t)
 	byID := make(map[string]rune, len(app.paletteCtrl.commands))
@@ -98,8 +85,6 @@ func TestDefaultShortcutsMatchTheShippedSet(t *testing.T) {
 		byID[cmd.ID] = cmd.ShortcutRune
 	}
 
-	// A zero rune is palette-only: the key it used to hold now belongs
-	// elsewhere, and the command answers by name.
 	want := map[string]rune{
 		"switch_workspace":       'w',
 		"toggle_navigation_pane": '<',
@@ -133,8 +118,6 @@ func TestDefaultShortcutsMatchTheShippedSet(t *testing.T) {
 		}
 	}
 
-	// Both were dropped: the toggle for an unpredictable heuristic the explicit
-	// pair covers, the title editor for a field the edit form already has.
 	for _, id := range []string{"toggle_expand_all", "edit_title"} {
 		if _, registered := byID[id]; registered {
 			t.Errorf("command %q is still registered, want it removed", id)
@@ -142,10 +125,6 @@ func TestDefaultShortcutsMatchTheShippedSet(t *testing.T) {
 	}
 }
 
-// TestEditIssueOwnsEAndShortcutsAreUniquePerScope pins the rune assignment. e
-// opens the full form, and no two commands reachable from the same pane share a
-// rune: runCommandShortcut silently takes the first match. Two scopes that
-// never answer together may share one.
 func TestEditIssueOwnsEAndShortcutsAreUniquePerScope(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -173,8 +152,6 @@ func TestEditIssueOwnsEAndShortcutsAreUniquePerScope(t *testing.T) {
 	}
 }
 
-// TestEditIssueCommandEntersFieldEditMode drives the shortcut the way the key
-// dispatcher does, from the pane a reader presses it in.
 func TestEditIssueCommandEntersFieldEditMode(t *testing.T) {
 	app := newUXTestApp(t)
 	app.selectedIssue = &linearapi.Issue{
@@ -185,8 +162,6 @@ func TestEditIssueCommandEntersFieldEditMode(t *testing.T) {
 	}
 	app.updateDetailsView()
 
-	// The shortcut only answers from an issue pane, which is where the key
-	// dispatcher runs it.
 	app.focusedPane = FocusIssues
 
 	if !app.runCommandShortcut('e') {
@@ -204,8 +179,6 @@ func TestEditIssueCommandEntersFieldEditMode(t *testing.T) {
 	}
 }
 
-// TestChangeTeamCommandMovesTheIssue drives the shortcut the way the key
-// dispatcher does, and pins the write to the issue the picker named.
 func TestChangeTeamCommandMovesTheIssue(t *testing.T) {
 	app := newUXTestApp(t)
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
@@ -226,16 +199,12 @@ func TestChangeTeamCommandMovesTheIssue(t *testing.T) {
 		return linearapi.Issue{ID: input.ID}, nil
 	}
 
-	// The shortcut only answers from an issue pane, which is where the key
-	// dispatcher runs it.
 	app.focusedPane = FocusIssues
 
 	if !app.runCommandShortcut('T') {
 		t.Fatal("T did not run a command")
 	}
 
-	// The selection moves out from under an open picker on a background
-	// refresh; the write must still land on the issue the picker named.
 	app.issuesMu.Lock()
 	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Moved on", TeamID: "team-1"}
 	app.issuesMu.Unlock()
@@ -254,8 +223,6 @@ func TestChangeTeamCommandMovesTheIssue(t *testing.T) {
 	}
 }
 
-// TestChangeTeamCommandSkipsTheCurrentTeam keeps the command from spending a
-// mutation, and a renumbering, on the team the issue is already in.
 func TestChangeTeamCommandSkipsTheCurrentTeam(t *testing.T) {
 	app := newUXTestApp(t)
 	app.navTeams = []linearapi.Team{
@@ -272,8 +239,6 @@ func TestChangeTeamCommandSkipsTheCurrentTeam(t *testing.T) {
 		return linearapi.Issue{ID: input.ID}, nil
 	}
 
-	// The shortcut only answers from an issue pane, which is where the key
-	// dispatcher runs it.
 	app.focusedPane = FocusIssues
 
 	if !app.runCommandShortcut('T') {

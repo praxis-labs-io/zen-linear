@@ -11,9 +11,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// TestSearchOpensFromEveryPane covers the one key that has to work from
-// anywhere. The nav pane can be toggled off or dropped by a narrow layout, and
-// a query box nobody can reach is a query box nobody has.
 func TestSearchOpensFromEveryPane(t *testing.T) {
 	for _, pane := range []FocusTarget{FocusNavigation, FocusIssues, FocusDetails} {
 		app := newUXTestApp(t)
@@ -32,10 +29,6 @@ func TestSearchOpensFromEveryPane(t *testing.T) {
 	}
 }
 
-// TestDelegatedFocusReachesTheTree covers the pane going dead on launch.
-// SetRoot hands focus down the primitive tree, and a Flex with no item flagged
-// keeps it on its own Box, which answers no keys: the border says the pane is
-// focused and the arrows do nothing.
 func TestDelegatedFocusReachesTheTree(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -46,14 +39,9 @@ func TestDelegatedFocusReachesTheTree(t *testing.T) {
 	}
 }
 
-// TestClickingEitherControlMovesTheKeyboardWithIt covers the mouse skipping
-// updateFocus entirely. A click that focuses the widget without saying so
-// leaves handleGlobalKey routing to the pane the user clicked out of, and in
-// the query box that means q quits with the caret sitting in it.
 func TestClickingEitherControlMovesTheKeyboardWithIt(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
-	// The pane the click has to take the keyboard away from.
 	app.focusedPane = FocusIssues
 
 	clickNavPane(t, app, app.navSearchInput)
@@ -74,21 +62,12 @@ func TestClickingEitherControlMovesTheKeyboardWithIt(t *testing.T) {
 	}
 }
 
-// clickNavPane focuses a primitive the way a mouse click does: the app's mouse
-// capture claims the pane first, then tview delivers the press to the widget,
-// which focuses itself. Both halves matter. A bare SetFocus is what a page add
-// or remove does too, and the pane cannot be claimed off one of those.
 func clickNavPane(t *testing.T, app *App, target tview.Primitive) {
 	t.Helper()
 	app.claimPaneFocus(FocusNavigation)
 	app.app.SetFocus(target)
 }
 
-// TestAnOverlayKeepsTheKeysWhileItsPageChurns covers what the nav pane's focus
-// claim must not do. tview re-delegates focus down the whole tree on every page
-// add and remove, and that walk reaches this pane. The palette rebuilds its
-// page on each keystroke, so a claim there took the pane back mid-rebuild and
-// the palette's own re-show guard then failed silently: every key closed it.
 func TestAnOverlayKeepsTheKeysWhileItsPageChurns(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
@@ -110,12 +89,6 @@ func TestAnOverlayKeepsTheKeysWhileItsPageChurns(t *testing.T) {
 	}
 }
 
-// TestClosingAnOverlayGoesBackToThePaneItOpenedFrom is the other half of the
-// churn. Both windows the pane claims used to slip through leave the user in
-// whichever pane tview walked to: opening the palette rebuilds its page before
-// it records the pane to go back to, and closing a modal drops its page before
-// the fallback reads one. The nav pane and the details page each had a claim
-// that answered one of those walks.
 func TestClosingAnOverlayGoesBackToThePaneItOpenedFrom(t *testing.T) {
 	overlays := []struct {
 		name  string
@@ -149,8 +122,6 @@ func TestClosingAnOverlayGoesBackToThePaneItOpenedFrom(t *testing.T) {
 	}
 }
 
-// TestTheQueryBoxSwallowsGlobalRunes is why navSearchActive gates above the
-// global rune switch. Without it, typing a word with a q in it quits.
 func TestTheQueryBoxSwallowsGlobalRunes(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusNavSearch()
@@ -166,8 +137,6 @@ func TestTheQueryBoxSwallowsGlobalRunes(t *testing.T) {
 	}
 }
 
-// TestDownAndTabReachTheTree covers the pane's own ring: two controls under one
-// border, and both keys walk between them.
 func TestDownAndTabReachTheTree(t *testing.T) {
 	for _, key := range []tcell.Key{tcell.KeyDown, tcell.KeyTab} {
 		app := newUXTestApp(t)
@@ -183,7 +152,6 @@ func TestDownAndTabReachTheTree(t *testing.T) {
 			t.Errorf("%v did not land on the tree", key)
 		}
 
-		// Tab is a ring, so it comes back.
 		app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 		if !app.navSearchFocused {
 			t.Errorf("after %v, Tab did not return to the query box", key)
@@ -191,10 +159,6 @@ func TestDownAndTabReachTheTree(t *testing.T) {
 	}
 }
 
-// TestSearchResultsPutOutTheTreeSelection covers a lit row claiming to name the
-// list on screen while what is on screen is a workspace-wide search, which
-// takes no list. Stepping into the tree relights it: an unlit cursor is one
-// nobody can steer.
 func TestSearchResultsPutOutTheTreeSelection(t *testing.T) {
 	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me"})
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Name: "Engineering"}}, nil)
@@ -225,9 +189,6 @@ func TestSearchResultsPutOutTheTreeSelection(t *testing.T) {
 	}
 }
 
-// Every path that restyles the tree has to honor the mute. A rebuild, a team
-// expanding, or a favorites refresh landing while results are up would
-// otherwise relight the cursor, which is the whole thing the mute prevents.
 func TestATreeRebuildKeepsTheCursorOutWhileResultsShow(t *testing.T) {
 	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me"})
 	teams := []linearapi.Team{{ID: "team-1", Name: "Engineering"}}
@@ -244,10 +205,6 @@ func TestATreeRebuildKeepsTheCursorOutWhileResultsShow(t *testing.T) {
 	}
 }
 
-// Emptying the box fires its change handler, which arms a debounce. Canceled
-// before the clear rather than after, a stray search for the empty string lands
-// a quarter second later and calls updateFocus, which can put the keyboard on a
-// pane while a modal is still on screen.
 func TestResetCachedStateLeavesNoArmedSearch(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.SearchDebounce = 10 * time.Millisecond
@@ -262,8 +219,6 @@ func TestResetCachedStateLeavesNoArmedSearch(t *testing.T) {
 	app.navSearchInput.SetText("auth")
 
 	app.resetCachedState()
-	// Drain whatever the reset itself queued, then watch the window a timer
-	// armed by the clear would fire in.
 	for len(fired) > 0 {
 		<-fired
 	}
@@ -275,9 +230,6 @@ func TestResetCachedStateLeavesNoArmedSearch(t *testing.T) {
 	}
 }
 
-// TestEscClearsThenLetsGo covers both stops. Esc on a live query is a clear,
-// not an exit: leaving with the words still there strands results nobody asked
-// to keep.
 func TestEscClearsThenLetsGo(t *testing.T) {
 	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me", State: "Todo"})
 	app.focusNavSearch()
@@ -302,8 +254,6 @@ func TestEscClearsThenLetsGo(t *testing.T) {
 	}
 }
 
-// TestPickingANavigationNodeDropsTheSearch covers the collision: the results
-// are holding the pane the picked list wants.
 func TestPickingANavigationNodeDropsTheSearch(t *testing.T) {
 	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me", State: "Todo"})
 	app.focusNavSearch()
@@ -311,8 +261,6 @@ func TestPickingANavigationNodeDropsTheSearch(t *testing.T) {
 	app.performIssueSearch("found")
 	waitForResults()
 
-	// Hold the refresh open: letting the fetch answer here races the Flex the
-	// last assertion reads.
 	release, done := make(chan struct{}), make(chan struct{})
 	var finished sync.Once
 	app.refreshCompleted = func() { finished.Do(func() { close(done) }) }
@@ -332,8 +280,6 @@ func TestPickingANavigationNodeDropsTheSearch(t *testing.T) {
 	if len(app.searchIssueRows) != 0 {
 		t.Errorf("search rows = %d, want the results dropped", len(app.searchIssueRows))
 	}
-	// The swap happens now, not when the fetch answers. Deferred, the results
-	// stay on screen for a whole round trip of showing the wrong list.
 	if got := app.issuesColumn.GetItem(0); got == tview.Primitive(app.searchResultsTable) {
 		t.Error("the results table is still mounted while the picked list loads")
 	}
@@ -346,15 +292,10 @@ func TestPickingANavigationNodeDropsTheSearch(t *testing.T) {
 	}
 }
 
-// TestThemeChangeRebuildsTheQueryBoxWithoutResearching covers two traps at once:
-// tview bakes InputBg at construction so the box has to be rebuilt, and a
-// rebuild that installs the change handler before the text re-fires the search.
 func TestThemeChangeRebuildsTheQueryBoxWithoutResearching(t *testing.T) {
 	app := newUXTestApp(t)
 	app.navSearchInput.SetText("found")
 
-	// A re-fired search shows up as a scheduled debounce, which is what the
-	// change handler does and the only thing it does.
 	scheduled := app.searchDebounceGeneration.Load()
 	previous := app.navSearchInput
 	app.theme = HighContrastTheme

@@ -9,7 +9,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// AgentPromptTemplatesModal manages editing of agent prompt templates.
 type AgentPromptTemplatesModal struct {
 	app           *App
 	modal         *tview.Flex
@@ -29,7 +28,6 @@ const (
 	promptTemplatesModalWidth  = 110
 )
 
-// NewAgentPromptTemplatesModal creates a new prompt templates modal.
 func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	pm := &AgentPromptTemplatesModal{
 		app:           app,
@@ -46,16 +44,13 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 		pm.selectTemplate(index)
 	})
 
-	// The list lives in its own bordered box, lit like a field on focus.
 	listFrame := tview.NewFlex().SetDirection(tview.FlexRow)
-	listFrame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
+	listFrame.Box = tview.NewBox()
 	listFrame.AddItem(pm.list, 0, 1, true)
 	listFrame.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.Border)
 	pm.list.SetFocusFunc(func() {
-		// Focus can leave the form for the list; without this the last
-		// form field keeps its focused border.
 		pm.fm.BlurFrames()
 		listFrame.SetBorderColor(app.theme.BorderFocus)
 	})
@@ -81,8 +76,6 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	pm.helpView.SetBackgroundColor(app.theme.ModalBackground())
 	pm.helpView.SetTextAlign(tview.AlignCenter)
 
-	// Left column: the list with its hints beneath. Right column: the form
-	// with its buttons at the bottom.
 	leftColumn := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(listFrame, 0, 1, true).
@@ -122,7 +115,6 @@ func NewAgentPromptTemplatesModal(app *App) *AgentPromptTemplatesModal {
 	return pm
 }
 
-// Show displays the prompt templates modal with the current templates.
 func (pm *AgentPromptTemplatesModal) Show(templates []config.AgentPromptTemplate, onSave func([]config.AgentPromptTemplate) error) {
 	pm.templates = append([]config.AgentPromptTemplate(nil), templates...)
 	pm.onSave = onSave
@@ -141,22 +133,17 @@ func (pm *AgentPromptTemplatesModal) Show(templates []config.AgentPromptTemplate
 	pm.focus(pm.list)
 }
 
-// Hide hides the prompt templates modal.
 func (pm *AgentPromptTemplatesModal) Hide() {
 	pm.app.pages.RemovePage("prompt_templates")
 	pm.app.restoreModalFocus()
 }
 
-// focus records the target so Focus can put the user back where they were.
-// UI thread only.
 func (pm *AgentPromptTemplatesModal) focus(p tview.Primitive) {
 	pm.focused = p
 	pm.app.app.SetFocus(p)
 }
 
-// Focus returns keyboard focus for when an overlay above this modal closes.
-// It restores the field the user was in: the list arms 'a' and 'd' as add and
-// delete, so landing there mid-edit turns typing into a deletion.
+// Focus restores the field the user was in, never the list, where a and d add and delete.
 func (pm *AgentPromptTemplatesModal) Focus() {
 	if pm.focused == nil {
 		pm.focused = pm.list
@@ -164,7 +151,6 @@ func (pm *AgentPromptTemplatesModal) Focus() {
 	pm.app.app.SetFocus(pm.focused)
 }
 
-// HandleKey handles keyboard input for the prompt templates modal.
 func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	listFocused := pm.app.app.GetFocus() == pm.list
 
@@ -176,7 +162,6 @@ func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.Eve
 		pm.saveTemplates()
 		return nil
 	case tcell.KeyEnter, tcell.KeyRight:
-		// Enter (or right) on a template is edit mode: jump to its fields.
 		if listFocused {
 			pm.focus(pm.nameField)
 			return nil
@@ -193,8 +178,6 @@ func (pm *AgentPromptTemplatesModal) HandleKey(event *tcell.EventKey) *tcell.Eve
 		}
 	}
 
-	// The add/delete shortcuts only fire from the list; in the form they
-	// must stay typeable characters.
 	if listFocused && event.Key() == tcell.KeyRune {
 		switch event.Rune() {
 		case 'a':

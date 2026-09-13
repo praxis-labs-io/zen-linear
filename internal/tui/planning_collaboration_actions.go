@@ -46,8 +46,6 @@ func parseEstimateInput(value string) (float64, error) {
 	return estimate, nil
 }
 
-// runIssueUpdateWithResult updates the issue named in input.ID, reporting the
-// outcome. An empty ID is refused, never resolved against a stale selection.
 func (a *App) runIssueUpdateWithResult(input linearapi.UpdateIssueInput, successMessage string, onDone func(error)) {
 	if input.ID == "" {
 		logger.Error("tui.planning: issue update with no id, dropped")
@@ -81,9 +79,6 @@ func (a *App) runIssueUpdateWithResult(input linearapi.UpdateIssueInput, success
 	}(input.ID)
 }
 
-// runIssueDetailAction runs a background issue mutation whose only UI effect is a
-// success flash and a details-pane refresh — the async twin of runIssueUpdate for
-// calls that return no issue to splice into the list.
 func (a *App) runIssueDetailAction(issueID string, action func(context.Context) error, successMessage string) {
 	go func() {
 		err := action(context.Background())
@@ -108,8 +103,6 @@ func (a *App) showSetDueDateModal() {
 	if issue.DueDate != nil {
 		initial = *issue.DueDate
 	}
-	// The modal names this issue, so the write targets it even if a refresh
-	// moves the selection while the modal is up.
 	target := *issue
 	a.textInputModal.ShowWithContext("Set Due Date", "YYYY-MM-DD: ", initial, a.issueContextLine(target), func(value string) {
 		a.setDueDate(target, value)
@@ -144,8 +137,6 @@ func (a *App) showEditEstimateModal() {
 	if issue.Estimate != nil {
 		initial = formatEstimate(issue.Estimate)
 	}
-	// The modal names this issue, so the write targets it even if a refresh
-	// moves the selection while the modal is up.
 	target := *issue
 	a.textInputModal.ShowWithContext("Edit Estimate", "Points: ", initial, a.issueContextLine(target), func(value string) {
 		a.setEstimate(target, value)
@@ -176,8 +167,6 @@ func (a *App) showSetPriorityPicker() {
 		a.flashStatus("No issue selected")
 		return
 	}
-	// The picker names this issue, so the write targets it even if a refresh
-	// moves the selection while the picker is open.
 	target := *issue
 	a.ShowFieldPicker(issueFieldPriority, a.issueOptionScope(target), a.issueContextLine(target), func(item PickerItem) {
 		priority, err := strconv.Atoi(item.ID)
@@ -195,8 +184,6 @@ func (a *App) showSetProjectPicker() {
 		a.flashStatus("No issue selected")
 		return
 	}
-	// The picker names this issue, so the write targets it even if a refresh
-	// moves the selection while the picker is open.
 	target := *issue
 	a.ShowFieldPicker(issueFieldProject, a.issueOptionScope(target), a.issueContextLine(target), func(item PickerItem) {
 		if item.ID == target.ProjectID {
@@ -213,8 +200,6 @@ func (a *App) showChangeTeamPicker() {
 		a.flashStatus("No issue selected")
 		return
 	}
-	// The picker names this issue, so the write targets it even if a refresh
-	// moves the selection while the picker is open.
 	target := *issue
 	a.ShowTeamPicker(a.issueContextLine(target), func(item PickerItem) {
 		if item.ID == target.TeamID {
@@ -238,9 +223,6 @@ func (a *App) clearProjectForSelectedIssue() {
 	a.saveIssueField(issueFieldProjectClear(*issue))
 }
 
-// clearMilestoneOnProjectChange nulls the milestone alongside a project change.
-// A milestone belongs to one project, so leaving it set would orphan it against
-// the new project.
 func clearMilestoneOnProjectChange(input *linearapi.UpdateIssueInput, issue linearapi.Issue) {
 	if issue.ProjectMilestone == nil {
 		return
@@ -249,8 +231,6 @@ func clearMilestoneOnProjectChange(input *linearapi.UpdateIssueInput, issue line
 	input.ProjectMilestoneID = &empty
 }
 
-// The issue is captured before the fetch, not read again in the callback: the
-// id would otherwise be read a round trip and a navigated picker later.
 func (a *App) showProjectMilestonePicker(onSelect func(linearapi.Issue, PickerItem)) {
 	issue := a.GetSelectedIssue()
 	if issue == nil {

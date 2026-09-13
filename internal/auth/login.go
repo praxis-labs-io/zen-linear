@@ -12,7 +12,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/auth/oauth"
 )
 
-// LoginOptions configures the browser PKCE login flow.
 type LoginOptions struct {
 	ClientID     string
 	StorePath    string
@@ -25,7 +24,7 @@ type LoginOptions struct {
 	OAuthClient  *oauth.Client
 }
 
-// Login runs the OAuth PKCE loopback flow and stores credentials on success.
+// Login runs the browser OAuth PKCE flow and saves credentials on success.
 func Login(ctx context.Context, opts LoginOptions) error {
 	if opts.ClientID == "" {
 		return fmt.Errorf("oauth client id is empty; set LINEAR_CLIENT_ID or embed DefaultClientID")
@@ -165,7 +164,6 @@ func Login(ctx context.Context, opts LoginOptions) error {
 	return SaveCredentials(opts.StorePath, creds)
 }
 
-// buildAuthorizeURL constructs the Linear authorize URL with PKCE parameters.
 func buildAuthorizeURL(base, clientID, redirectURI, scopes, state, challenge string) (string, error) {
 	u, err := url.Parse(base)
 	if err != nil {
@@ -183,7 +181,6 @@ func buildAuthorizeURL(base, clientID, redirectURI, scopes, state, challenge str
 	return u.String(), nil
 }
 
-// PrintAuthUsage writes auth subcommand help to the given builder-like writer.
 func PrintAuthUsage(w interface{ Write([]byte) (int, error) }) {
 	msg := strings.TrimSpace(`
 Usage:

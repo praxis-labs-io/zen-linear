@@ -9,9 +9,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// Glyphs for the activity events that have no icon of their own. A state move
-// and a priority change take theirs from the helpers the list and the header
-// already use, so one issue reads the same in all three.
 const (
 	activityIconCreated  = "◆"
 	activityIconAssignee = "◇"
@@ -20,22 +17,10 @@ const (
 	activityIconEdit     = "≡"
 )
 
-// activityBodyFloor is the narrowest the actor and phrase are worth keeping. A
-// pane tighter than this drops the age instead, since a name clipped to three
-// cells names nobody.
 const activityBodyFloor = 8
 
-// activityLine renders one event as a single fitted row: an icon, who did it,
-// what they did, and how long ago.
-//
-// The phrase is what shrinks. The actor sits ahead of it and the age behind it,
-// because a feed already carries its order in the arrangement of its rows, and
-// what a reader scans for is who and when.
 func (a *App) activityLine(event linearapi.IssueActivity, width int) string {
 	if width <= 1 {
-		// truncateTagged hands the line back untouched at a width of one: it
-		// wraps at width-1, and a wrap to zero returns nothing to cut on. An
-		// unfitted row would overrun the pane.
 		return ""
 	}
 
@@ -45,8 +30,6 @@ func (a *App) activityLine(event linearapi.IssueActivity, width int) string {
 
 	tail := ""
 	if age := formatRelativeTime(event.CreatedAt); age != "" {
-		// The dim tag is re-opened here: a truncated body ends in the reset
-		// truncateTagged appends, which would leave the age undimmed.
 		tail = a.themeTags.SecondaryText + " · " + age + "[-]"
 	}
 
@@ -57,7 +40,6 @@ func (a *App) activityLine(event linearapi.IssueActivity, width int) string {
 	return truncateTagged(head+body, width)
 }
 
-// activityIcon is the glyph and color for an event's kind.
 func (a *App) activityIcon(event linearapi.IssueActivity) (string, tcell.Color) {
 	switch event.Kind {
 	case linearapi.IssueActivityStateChanged:
@@ -82,13 +64,6 @@ func (a *App) activityIcon(event linearapi.IssueActivity) (string, tcell.Color) 
 	}
 }
 
-// activityBody is the actor and the phrase, joined. An event Linear recorded no
-// actor for reads as the change alone rather than opening on a gap.
-//
-// Both are escaped before the theme tags go on. Every name in them comes from
-// the API, the view has dynamic colors on, and a label called "[Bug]" would
-// otherwise be read as a tag: swallowed on screen and four cells short of what
-// the fit measured.
 func (a *App) activityBody(event linearapi.IssueActivity) string {
 	phrase := tview.Escape(activityPhrase(event))
 	actor := formatUserDisplayName(event.Actor)
@@ -101,10 +76,6 @@ func (a *App) activityBody(event linearapi.IssueActivity) string {
 	return a.themeTags.AssigneeText + tview.Escape(actor) + a.themeTags.SecondaryText + " " + phrase
 }
 
-// activityPhrase says what changed, in Linear's own wording.
-//
-// The title and the description carry no value: both are long, both are already
-// on the page above, and both would be the line that always truncates.
 func activityPhrase(event linearapi.IssueActivity) string {
 	switch event.Kind {
 	case linearapi.IssueActivityCreated:
@@ -168,8 +139,7 @@ func activityPhrase(event linearapi.IssueActivity) string {
 	return ""
 }
 
-// priorityPhrase names which way a priority went. Linear's scale is inverted —
-// 1 is Urgent and 4 is Low — so a larger number is the lower priority.
+// Linear's scale is inverted: 1 is Urgent and 4 is Low.
 func priorityPhrase(from, to int) string {
 	switch {
 	case to == 0:

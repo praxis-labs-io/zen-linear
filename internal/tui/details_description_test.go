@@ -12,8 +12,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// descriptionFixture opens the details fixture in edit mode with the cursor on
-// the description. Writes land on the channel and UI updates wait on the queue.
 func descriptionFixture(t *testing.T) (*App, <-chan linearapi.UpdateIssueInput, <-chan func()) {
 	t.Helper()
 
@@ -24,8 +22,6 @@ func descriptionFixture(t *testing.T) (*App, <-chan linearapi.UpdateIssueInput, 
 	drawDetails(t, app, 90)
 	cursorTo(t, app, issueFieldDescription)
 
-	// Room for a write that should not have happened, so an extra one lands
-	// where the test can see it instead of blocking its goroutine.
 	writes := make(chan linearapi.UpdateIssueInput, 4)
 	app.updateIssueFunc = func(_ context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
 		writes <- input
@@ -36,8 +32,6 @@ func descriptionFixture(t *testing.T) (*App, <-chan linearapi.UpdateIssueInput, 
 	return app, writes, pending
 }
 
-// openDescription presses Enter and draws, which is what puts the box on the
-// page and records where it landed.
 func openDescription(t *testing.T, app *App) []string {
 	t.Helper()
 	pressFieldKey(app, tcell.KeyEnter)
@@ -47,13 +41,10 @@ func openDescription(t *testing.T, app *App) []string {
 	return drawDetails(t, app, 90)
 }
 
-// sendDescription is the chord, which is the only key that saves: Enter in
-// prose is a newline.
 func sendDescription(app *App) {
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModCtrl))
 }
 
-// descriptionSlot is the box's place on the page just rendered.
 func descriptionSlot(t *testing.T, app *App) pageSlot {
 	t.Helper()
 	for _, slot := range app.detailsPage.slots {
@@ -99,8 +90,6 @@ func TestEnterOpensABoxHoldingTheRawMarkdown(t *testing.T) {
 	}
 }
 
-// The marker on the label alone says a row is open. The description is a block,
-// so the bar runs its height and the text clears it.
 func TestTheWriteMarkerRunsTheHeightOfTheBox(t *testing.T) {
 	app, _, _ := descriptionFixture(t)
 	openDescription(t, app)
@@ -118,8 +107,6 @@ func TestTheWriteMarkerRunsTheHeightOfTheBox(t *testing.T) {
 	}
 }
 
-// Opening the box must not lift the text a row, so it keeps the blank the read
-// view puts under the label.
 func TestTheBoxKeepsTheBlankUnderTheLabel(t *testing.T) {
 	app, _, _ := descriptionFixture(t)
 
@@ -137,7 +124,6 @@ func TestTheBoxKeepsTheBlankUnderTheLabel(t *testing.T) {
 	}
 }
 
-// The rendered body would otherwise sit behind the box, one line per two rows.
 func TestTheOpenBoxTakesTheRenderedBodysPlace(t *testing.T) {
 	app, _, _ := descriptionFixture(t)
 
@@ -171,7 +157,6 @@ func TestAnIssueWithNoDescriptionOpensAnEmptyBox(t *testing.T) {
 	findLine(t, lines, "Description:")
 }
 
-// The label needs a row to mark, so it draws whether or not there is a body.
 func TestAnIssueWithNoDescriptionStillDrawsTheLabel(t *testing.T) {
 	app := newDetailsTestApp(t)
 	app.selectedIssue.Description = ""
@@ -183,8 +168,6 @@ func TestAnIssueWithNoDescriptionStillDrawsTheLabel(t *testing.T) {
 	findLine(t, lines, "No description available")
 }
 
-// The comment boxes open on their tail. A description is read before it is
-// rewritten, so a long one opening there hides everything it is about.
 func TestALongDescriptionOpensAtItsHead(t *testing.T) {
 	app, _, _ := descriptionFixture(t)
 	app.selectedIssue.Description = "HEADLINE\n\n" + strings.Repeat("filler line\n\n", 60) + "TAILEND"
@@ -247,8 +230,6 @@ func TestSendingAnUnchangedDescriptionWritesNothing(t *testing.T) {
 	}
 }
 
-// Linear reads the empty string as a cleared description, which is what the
-// retired modal did too.
 func TestEmptyingTheBoxClearsTheDescription(t *testing.T) {
 	app, writes, _ := descriptionFixture(t)
 	openDescription(t, app)
@@ -262,8 +243,6 @@ func TestEmptyingTheBoxClearsTheDescription(t *testing.T) {
 	}
 }
 
-// Prose has nowhere else to be held, so the box is what holds it until Linear
-// has taken it.
 func TestTheBoxHoldsTheWordsUntilLinearAnswers(t *testing.T) {
 	app, writes, pending := descriptionFixture(t)
 	openDescription(t, app)
@@ -320,8 +299,6 @@ func TestASecondSendWhileOneIsInFlightWritesNothing(t *testing.T) {
 	runQueuedUpdate(t, pending)
 }
 
-// A close and a reopen on the same issue are alike but for the stamp, so an
-// id-keyed callback closed the second box and wiped what had been typed in.
 func TestAnInFlightSaveLeavesAReopenedBoxAlone(t *testing.T) {
 	app, writes, pending := descriptionFixture(t)
 	openDescription(t, app)
@@ -342,8 +319,6 @@ func TestAnInFlightSaveLeavesAReopenedBoxAlone(t *testing.T) {
 	}
 }
 
-// The guard is against a hammered chord on one box, not against a reader who
-// closed, reopened and meant it.
 func TestReopeningAndSendingAgainWrites(t *testing.T) {
 	app, writes, pending := descriptionFixture(t)
 	openDescription(t, app)
@@ -364,8 +339,6 @@ func TestReopeningAndSendingAgainWrites(t *testing.T) {
 	runQueuedUpdate(t, pending)
 }
 
-// Ctrl+Enter is a chord plenty of terminals fold into a bare Enter, and this
-// box has no button to fall back to.
 func TestCtrlSSavesAndCtrlEnterStillDoes(t *testing.T) {
 	for _, send := range []struct {
 		name  string
@@ -389,8 +362,6 @@ func TestCtrlSSavesAndCtrlEnterStillDoes(t *testing.T) {
 	}
 }
 
-// A box with no width holds the keyboard while drawing nothing, and nothing on
-// screen says where the typing went.
 func TestANarrowPaneStillLeavesDescriptionToTypeIn(t *testing.T) {
 	for _, width := range []int{1, 2, 4, 9, 10, 30, 90} {
 		column, inner := descriptionBoxRect(width)
@@ -398,8 +369,6 @@ func TestANarrowPaneStillLeavesDescriptionToTypeIn(t *testing.T) {
 		if column+inner != width {
 			t.Errorf("width %d puts the box at %d+%d, which is not the pane", width, column, inner)
 		}
-		// The indent is given up before the typing is. Anything less means the
-		// bar took room the words needed.
 		if want := min(width, fieldEditorMinWidth); inner < want {
 			t.Errorf("width %d gives a box %d wide, want at least %d", width, inner, want)
 		}
@@ -409,8 +378,6 @@ func TestANarrowPaneStillLeavesDescriptionToTypeIn(t *testing.T) {
 	}
 }
 
-// The label takes the edit-mode gutter, so the body has to as well or the block
-// disagrees with its own label and jumps when the box opens.
 func TestTheBodyTakesTheSameGutterAsItsLabel(t *testing.T) {
 	app := newDetailsTestApp(t)
 
@@ -432,7 +399,6 @@ func TestTheBodyTakesTheSameGutterAsItsLabel(t *testing.T) {
 	}
 }
 
-// indent is how far a drawn line's text starts from the pane's own left edge.
 func indent(line string) int {
 	return len(line) - len(strings.TrimLeft(line, " "))
 }
@@ -459,7 +425,6 @@ func TestEscapePutsTheRenderedBodyBack(t *testing.T) {
 	}
 }
 
-// Default-allow, the inverse of the mode around it: the box is prose.
 func TestTheBoxTakesLettersAndNewlines(t *testing.T) {
 	app, _, _ := descriptionFixture(t)
 	openDescription(t, app)
@@ -499,8 +464,6 @@ func TestTheStatusLineNamesTheChord(t *testing.T) {
 	if !strings.Contains(hints, "⌃S") || !strings.Contains(hints, "save") {
 		t.Errorf("status line = %q, want the chord that sends it", hints)
 	}
-	// Ctrl+Enter saves too and is deliberately not named: terminals that fold
-	// it into a bare Enter would leave the line advertising a dead key.
 	if strings.Contains(hints, "⌃⏎") {
 		t.Errorf("status line = %q, want Ctrl+Enter left off it", hints)
 	}
@@ -509,8 +472,6 @@ func TestTheStatusLineNamesTheChord(t *testing.T) {
 	}
 }
 
-// The issue the box was about is gone, and the keyboard cannot stay in a widget
-// this page no longer draws.
 func TestChangingIssueDropsTheOpenBox(t *testing.T) {
 	app, _, _ := descriptionFixture(t)
 	openDescription(t, app)
@@ -526,7 +487,6 @@ func TestChangingIssueDropsTheOpenBox(t *testing.T) {
 	}
 }
 
-// The command keeps its id so a binding survives, and now opens the box.
 func TestTheDescriptionCommandOpensTheBox(t *testing.T) {
 	app := newUXTestApp(t)
 	app.selectedIssue = detailsFixture()
@@ -555,8 +515,6 @@ func TestTheDescriptionCommandOpensTheBox(t *testing.T) {
 	}
 }
 
-// TextView.MouseHandler holds that view's own lock while it moves focus, so a
-// teardown reached from a focus callback wedges the process rather than failing.
 func TestARealClickOnThePageBodyClosesTheDescriptionBox(t *testing.T) {
 	app := newMouseTestApp(t)
 	app.selectedIssue = detailsFixture()
@@ -581,7 +539,6 @@ func TestARealClickOnThePageBodyClosesTheDescriptionBox(t *testing.T) {
 	}
 }
 
-// A press in the box is placing the caret, not leaving.
 func TestAClickInsideTheDescriptionBoxKeepsIt(t *testing.T) {
 	app := newMouseTestApp(t)
 	app.selectedIssue = detailsFixture()

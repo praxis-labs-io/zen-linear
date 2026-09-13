@@ -14,53 +14,32 @@ import (
 )
 
 const (
-	// InstallScriptURL is the published installer, the same one the docs tell a
-	// reader to pipe into sh.
 	InstallScriptURL = "https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.sh"
 
-	// InstallScriptWindowsURL is install.sh for Windows. It follows the shell
-	// script's decisions rather than making its own, INSTALL_DIR included.
 	InstallScriptWindowsURL = "https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.ps1"
 
-	// DevVersion is what a build the release workflow never stamped reports.
 	DevVersion = devVersion
 
-	// maxScriptBytes caps what is read off the wire. Both installers are a few
-	// kilobytes.
 	maxScriptBytes = 1 << 20
 
-	// scriptTimeout bounds the fetch. It is longer than the launch check's,
-	// which is sized for a request nobody waits on: here the user has asked to
-	// upgrade and is sitting at a prompt.
 	scriptTimeout = 30 * time.Second
 )
 
-// InstallRunner executes the staged installer. Tests replace it rather than
-// running a shell.
 type InstallRunner func(ctx context.Context, script, dir string, out io.Writer) error
 
 // InstallOptions is what an install needs. Only Dir is required.
 type InstallOptions struct {
-	// Dir is where the binary lands, passed to the script as INSTALL_DIR.
 	Dir string
-	// Out receives the installer's own output. Nil discards it.
+	// Out nil discards the installer's output.
 	Out io.Writer
-	// ScriptURL overrides the installer's address. Zero means the one for this
-	// platform.
+	// ScriptURL empty means this platform's installer.
 	ScriptURL string
-	// Client overrides the HTTP client used to fetch the script.
-	Client *http.Client
-	// Runner overrides how the staged script is executed.
-	Runner InstallRunner
+	Client    *http.Client
+	Runner    InstallRunner
 }
 
-// Install fetches the published installer and runs it with INSTALL_DIR set to
-// Dir. The script owns the platform matrix, the checksum gate and the replace
-// of a running binary; nothing here duplicates any of that.
-//
-// The script is staged to a file rather than piped into a shell because a
-// pipeline reports the shell's status: a download that failed would reach sh
-// as empty input and exit 0, and the upgrade would be called a success.
+// Install fetches the platform's published installer and runs it with
+// INSTALL_DIR set to Dir.
 func Install(ctx context.Context, opts InstallOptions) error {
 	if opts.Dir == "" {
 		return errors.New("install directory is empty")
@@ -85,7 +64,6 @@ func Install(ctx context.Context, opts InstallOptions) error {
 	return run(ctx, path, opts.Dir, opts.Out)
 }
 
-// installScriptURL is the installer for the named platform.
 func installScriptURL(goos string) string {
 	if goos == "windows" {
 		return InstallScriptWindowsURL
@@ -93,13 +71,6 @@ func installScriptURL(goos string) string {
 	return InstallScriptURL
 }
 
-// fetchInstallScript reads the installer. Its own timeout bounds this rather
-// than the caller's context, which has to stay open for however long the
-// download the script itself runs takes.
-//
-// It refuses a body at the cap rather than truncating to it: what comes back
-// is executed, and half an installer would run as far as the cut and report
-// whatever it exited with.
 func fetchInstallScript(ctx context.Context, opts InstallOptions) ([]byte, error) {
 	endpoint := opts.ScriptURL
 	if endpoint == "" {
@@ -142,9 +113,7 @@ func fetchInstallScript(ctx context.Context, opts InstallOptions) ([]byte, error
 	return script, nil
 }
 
-// stageScript writes the installer to a temporary file and returns it with the
-// removal. The extension is not decoration: PowerShell refuses -File on a path
-// that is not .ps1.
+// PowerShell refuses -File on a path that is not .ps1, so the extension matters.
 func stageScript(goos string, script []byte) (string, func(), error) {
 	pattern := "zen-linear-install-*.sh"
 	if goos == "windows" {
@@ -171,9 +140,6 @@ func stageScript(goos string, script []byte) (string, func(), error) {
 	return path, cleanup, nil
 }
 
-// installerArgs is the argv for the staged script. Windows bypasses the
-// execution policy for this one invocation, which is what irm | iex amounts to
-// and what a script arriving from the network otherwise fails on.
 func installerArgs(goos, script string) (string, []string) {
 	if goos == "windows" {
 		return "powershell", []string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script}
@@ -181,15 +147,10 @@ func installerArgs(goos, script string) (string, []string) {
 	return "sh", []string{script}
 }
 
-// runInstallScript executes the staged installer, wiring its output straight
-// through so the script's own messages are what the user reads.
 func runInstallScript(ctx context.Context, script, dir string, out io.Writer) error {
 	name, args := installerArgs(runtime.GOOS, script)
 
 	cmd := exec.CommandContext(ctx, name, args...)
-	// VERSION pins a release in both installers, and one exported in the
-	// user's shell for something else would quietly pin this. Emptied rather
-	// than dropped, since the last value of a name is the one that wins.
 	cmd.Env = append(os.Environ(), "INSTALL_DIR="+dir, "VERSION=")
 	cmd.Stdout = out
 	cmd.Stderr = out
@@ -201,9 +162,7 @@ func runInstallScript(ctx context.Context, script, dir string, out io.Writer) er
 	return nil
 }
 
-// InstallDir is the directory the running binary is in, symlinks resolved, so
-// an upgrade replaces the copy on the user's PATH rather than leaving it stale
-// beside a second one in the installer's default location.
+// InstallDir returns the running binary's directory, symlinks resolved.
 func InstallDir() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {

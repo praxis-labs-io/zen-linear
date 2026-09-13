@@ -12,35 +12,20 @@ const (
 	formModalScreenHMargin   = 4
 	formModalScreenWMargin   = 8
 	formTextAreaMinRows      = 3
-	// formFieldRows is what one single-line field costs: its caps label plus
-	// the framed input.
-	formFieldRows = 4
-	// packedColumnGap is the space between two fields sharing a row.
-	packedColumnGap = 2
-	// packedLabelBudget caps what a packed column is asked to hold before the
-	// row folds. Without it one long label would stack every row.
-	packedLabelBudget = 16
-	// sectionRailSpacerRows is the blank line between two stacked buttons.
-	sectionRailSpacerRows = 1
-	// railTopPad drops the list a line so it does not start hard against the
-	// panel's top border.
-	railTopPad = 1
-	// sectionRailPad widens the sidebar past its longest name, so the cursor
-	// line and the buttons are a column rather than the width of a word.
-	sectionRailPad = 2
-	// formRowsMinWidth is what the fields need before the rail is worth a
-	// column of its own. Under it the rail names the open section on one line
-	// instead, since a rail is a quarter of a narrow terminal.
-	formRowsMinWidth = 34
+	formFieldRows            = 4
+	packedColumnGap          = 2
+	packedLabelBudget        = 16
+	sectionRailSpacerRows    = 1
+	railTopPad               = 1
+	sectionRailPad           = 2
+	formRowsMinWidth         = 34
 )
 
-// FormButton is one action in a FormModal's button row.
 type FormButton struct {
 	Label   string
 	OnPress func()
 }
 
-// formRow is one vertical unit in the form: a caps label plus its widget(s).
 type formRow struct {
 	container  *tview.Flex
 	height     int
@@ -55,25 +40,16 @@ type formRow struct {
 	section    int
 }
 
-// formSection is one page of the form. An exhaustive form reads as a few short
-// pages rather than one scroll, and only the open section is laid out.
 type formSection struct {
 	name string
 }
 
-// packedColumn is one field of a packed row, held as data rather than as a
-// place in a Flex so the row can be rebuilt at however many columns the
-// current width affords.
 type packedColumn struct {
 	labelView *tview.TextView
 	frame     *tview.Flex
 	labelLen  int
 }
 
-// FormModal renders a Linear-style form modal: caps labels above framed
-// fields, content-driven sizing, focus-only accent buttons, a dim hint line.
-// It owns the shell, tab order, and shared keys so individual modals only
-// declare fields and callbacks.
 type FormModal struct {
 	app            *App
 	title          string
@@ -110,18 +86,15 @@ type FormModal struct {
 	railFocused    bool
 	body           *tview.Flex
 	focusIdx       int
-	// initialFocus is the field Show opens on, nil for the first in the tab
-	// order.
-	initialFocus tview.Primitive
-	scrollTop    int
-	scrollAbove  bool
-	scrollBelow  bool
-	onCancel     func()
-	onSubmit     func()
+	initialFocus   tview.Primitive
+	scrollTop      int
+	scrollAbove    bool
+	scrollBelow    bool
+	onCancel       func()
+	onSubmit       func()
 }
 
-// formPage is what the modal adds to Pages: the form, then any open picker
-// menu on top of it. A Flex has no z-order, so the menu cannot be a row.
+// A Flex has no z-order, so an open picker menu cannot be one of the form's rows.
 type formPage struct {
 	*tview.Flex
 	fm *FormModal
@@ -132,12 +105,10 @@ func (p *formPage) Draw(screen tcell.Screen) {
 	p.fm.drawOpenMenu(screen)
 }
 
-// pickerRowState tracks the open shared row consecutive fields pack into.
 type pickerRowState struct {
 	rowIdx int
 }
 
-// NewFormModal creates an empty form modal shell with the given border title.
 func NewFormModal(app *App, title string) *FormModal {
 	fm := &FormModal{
 		app:            app,
@@ -157,9 +128,6 @@ func NewFormModal(app *App, title string) *FormModal {
 	fm.body.SetBackgroundColor(app.theme.ModalBackground())
 
 	fm.hintView = tview.NewTextView()
-	// The hint keeps wrapping, unlike every other one-line view here: it is
-	// centered, and tview centers the untruncated line, so turning wrap off
-	// clips both ends and loses Esc and the save key rather than the tail.
 	fm.hintView.SetTextColor(app.theme.SecondaryText)
 	fm.hintView.SetBackgroundColor(app.theme.ModalBackground())
 	fm.hintView.SetTextAlign(tview.AlignCenter)
@@ -170,24 +138,17 @@ func NewFormModal(app *App, title string) *FormModal {
 	fm.contextView.SetBackgroundColor(app.theme.ModalBackground())
 
 	fm.frame = tview.NewFlex().SetDirection(tview.FlexRow)
-	// tview.NewFlex marks its Box dontClear, leaving the layer beneath
-	// visible through every cell the children don't paint. A fresh Box
-	// restores the background fill so the modal is opaque like the palette.
 	fm.frame.Box = tview.NewBox()
 	fm.frame.SetBackgroundColor(app.theme.ModalBackground()).
 		SetBorder(true).
 		SetBorderColor(app.theme.BorderFocus).
 		SetTitle(" " + title + " ").
 		SetTitleColor(app.theme.Accent)
-	// Vertical space comes from the row layout itself; only the horizontal
-	// padding is kept so fields don't touch the border.
 	padding := app.density.ModalPadding
 	fm.frame.SetBorderPadding(0, 0, padding.Left, padding.Right)
 	fm.frame.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		return fm.HandleKey(event)
 	})
-	// Rows scroll when the form is taller than the screen, so the border
-	// carries the only cue that there is more form off either end.
 	fm.frame.SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		marker := tcell.StyleDefault.
 			Background(app.theme.ModalBackground()).
@@ -202,9 +163,6 @@ func NewFormModal(app *App, title string) *FormModal {
 		return fm.frame.GetInnerRect()
 	})
 
-	// One menu serves every picker: only one can be open at a time. The border
-	// is what sets it apart; the fill matches the panel, and still has to be
-	// painted or the rows it covers show through.
 	fm.menu = tview.NewList().
 		ShowSecondaryText(false).
 		SetMainTextStyle(tcell.StyleDefault.Background(app.theme.ModalBackground()).Foreground(app.theme.Foreground)).
@@ -221,25 +179,20 @@ func NewFormModal(app *App, title string) *FormModal {
 	return fm
 }
 
-// SetMaxWidth overrides the default width clamp (76).
 func (fm *FormModal) SetMaxWidth(w int) { fm.maxWidth = w }
 
-// SetTitle updates the border title (some modals retitle per Show).
 func (fm *FormModal) SetTitle(title string) {
 	fm.title = title
 	fm.frame.SetTitle(" " + title + " ")
 }
 
-// SetHint sets the dim hint line inside the bottom border.
 func (fm *FormModal) SetHint(hint string) {
 	fm.hintText = hint
 	fm.hintView.SetTextColor(fm.app.theme.SecondaryText)
 	fm.hintView.SetText(hint)
 }
 
-// SetStatus replaces the hint line with a message about the form itself, so a
-// refused save is answered where the user is looking rather than behind the
-// modal. An empty message puts the hint back.
+// SetStatus replaces the hint line with a message about the form; an empty message restores the hint.
 func (fm *FormModal) SetStatus(message string, isError bool) {
 	if message == "" {
 		fm.SetHint(fm.hintText)
@@ -253,13 +206,7 @@ func (fm *FormModal) SetStatus(message string, isError bool) {
 	fm.hintView.SetText(message)
 }
 
-// SetLocked makes a field read-only, for a value the form is showing but does
-// not own. It still takes focus and still reads, so the value stays visible and
-// copyable; it just refuses to change. A field that silently discarded what was
-// typed into it would be worse than one that never accepted it.
-//
-// Dimmed to the secondary text color, which is what the rest of the chrome
-// uses for something present but not actionable.
+// SetLocked makes a field read-only while it still takes focus and stays readable.
 func (fm *FormModal) SetLocked(p tview.Primitive, locked bool) {
 	fm.locked[p] = locked
 
@@ -269,9 +216,6 @@ func (fm *FormModal) SetLocked(p tview.Primitive, locked bool) {
 	}
 	switch field := p.(type) {
 	case *tview.InputField:
-		// The acceptance func is the only hook that refuses a rune before the
-		// widget has taken it; a SetChangedFunc that put the old text back
-		// would fight the caret.
 		field.SetAcceptanceFunc(func(string, rune) bool { return !fm.locked[p] })
 		field.SetFieldTextColor(color)
 	case *tview.TextView:
@@ -279,38 +223,29 @@ func (fm *FormModal) SetLocked(p tview.Primitive, locked bool) {
 	}
 }
 
-// isLocked reports whether this field refuses input.
 func (fm *FormModal) isLocked(p tview.Primitive) bool { return fm.locked[p] }
 
-// SetContext sets the issue line pinned above the fields, so the form names
-// the issue it modifies. An empty string hides the line.
+// SetContext sets the line pinned above the fields; an empty string hides it.
 func (fm *FormModal) SetContext(text string) {
 	fm.contextText = text
 	fm.contextView.SetText(text)
 }
 
-// SetRowLabel retitles a field's caps label (some modals relabel per Show).
 func (fm *FormModal) SetRowLabel(rowIdx int, label string) {
 	if rowIdx >= 0 && rowIdx < len(fm.rows) && fm.rows[rowIdx].labelView != nil {
 		fm.rows[rowIdx].labelView.SetText(strings.ToUpper(label))
 	}
 }
 
-// RowCount returns how many rows the form holds, so a modal can record the
-// index of a row it just added.
 func (fm *FormModal) RowCount() int { return len(fm.rows) }
 
-// SetRowHidden drops a row from the layout entirely, for fields that only
-// apply in one of a modal's modes.
 func (fm *FormModal) SetRowHidden(rowIdx int, hidden bool) {
 	if rowIdx >= 0 && rowIdx < len(fm.rows) {
 		fm.rows[rowIdx].hidden = hidden
 	}
 }
 
-// BeginSection starts a page of the form: every row added after it belongs to
-// that section and is laid out only while it is the open one. A form that
-// never calls this behaves as one page, which is every other modal.
+// BeginSection starts a page: rows added after it are laid out only while that section is open.
 func (fm *FormModal) BeginSection(name string) {
 	fm.pickerRow = nil
 	if fm.sectionRail == nil {
@@ -319,9 +254,6 @@ func (fm *FormModal) BeginSection(name string) {
 	fm.sections = append(fm.sections, formSection{name: name})
 }
 
-// buildSectionRail makes the left pane: a list of sections, and the rule that
-// divides it from the fields. There is no box around it — the rule is the
-// divider, and the lit row is what says the list has the keyboard.
 func (fm *FormModal) buildSectionRail() {
 	theme := fm.app.theme
 
@@ -330,9 +262,6 @@ func (fm *FormModal) buildSectionRail() {
 	fm.sectionRail.SetWrap(false)
 	fm.sectionRail.SetBackgroundColor(theme.ModalBackground())
 	fm.railRule = fm.app.modalColumnRule(func() int {
-		// A context row sits between the border and the body, so the rule
-		// stops at the body rather than striking through the one line that
-		// says which fields the environment owns.
 		if fm.contextText != "" {
 			return -1
 		}
@@ -345,25 +274,13 @@ func (fm *FormModal) buildSectionRail() {
 	fm.buttonsColumn = tview.NewFlex().SetDirection(tview.FlexRow)
 	fm.buttonsColumn.SetBackgroundColor(theme.ModalBackground())
 
-	// Registered before any field, so Backtab off the first one reaches the
-	// list rather than wrapping to the buttons.
 	fm.registerFocusable(fm.sectionRail, -1)
-	// Only a flag: the rail is redrawn from the frame's draw func, because
-	// TextView.MouseHandler holds this view's own lock while it moves focus
-	// and SetText from here would wedge the process.
 	fm.sectionRail.SetFocusFunc(func() {
 		fm.railFocused = true
 		fm.onFocused(fm.sectionRail, -1)
 	})
 	fm.sectionRail.SetBlurFunc(func() { fm.railFocused = false })
-	// A list of sections reads as clickable, so a press picks the row under it
-	// rather than only taking focus.
 	fm.sectionRail.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
-		// The capture has to bound the press itself. tview runs it before the
-		// handler's own InRect test and a Flex offers the event to every child
-		// in turn, so without this a click on the first field picked a section.
-		// Collapsed to one line the rail is a label, not a list, so it indexes
-		// nothing.
 		if action != tview.MouseLeftDown || !fm.railIsVertical() {
 			return action, event
 		}
@@ -379,9 +296,7 @@ func (fm *FormModal) buildSectionRail() {
 	})
 }
 
-// formFooterRule is the line over the hint. It is modalRule with one addition:
-// it closes the column rule above it in a tee, which it can do because the
-// body has already drawn by the time this runs.
+// The junction column is computed, not read off the rule: a Flex defers a focused child's draw.
 func (fm *FormModal) formFooterRule() *tview.Box {
 	rule := tview.NewBox()
 	rule.SetBackgroundColor(fm.app.theme.ModalBackground())
@@ -391,8 +306,6 @@ func (fm *FormModal) formFooterRule() *tview.Box {
 			Foreground(fm.app.theme.BorderFocus)
 		padding := fm.app.density.ModalPadding
 		left, right := x-padding.Left-1, x+width+padding.Right
-		// Computed, not read off the rule: a Flex defers a focused child's draw,
-		// so the body has not placed the rule yet when this runs.
 		joint := -1
 		if fm.railIsVertical() {
 			joint = x + fm.railColumn() + fm.railGutter()
@@ -411,21 +324,16 @@ func (fm *FormModal) formFooterRule() *tview.Box {
 	return rule
 }
 
-// buildButtonsColumn stacks the actions down the sidebar, for a form whose
-// buttons belong under the section list rather than across the panel.
 func (fm *FormModal) buildButtonsColumn() {
 	fm.buttonsColumn.Clear()
 	for i, btn := range fm.buttons {
 		if i > 0 {
 			fm.buttonsColumn.AddItem(nil, sectionRailSpacerRows, 0, false)
 		}
-		// The full column, like the cursor line above them. A Button centers
-		// its own label in the width it is given.
 		fm.buttonsColumn.AddItem(btn, 1, 0, false)
 	}
 }
 
-// buttonsColumnRows is what the stacked buttons cost, blank lines included.
 func (fm *FormModal) buttonsColumnRows() int {
 	if len(fm.buttons) == 0 {
 		return 0
@@ -433,9 +341,6 @@ func (fm *FormModal) buttonsColumnRows() int {
 	return len(fm.buttons) + (len(fm.buttons)-1)*sectionRailSpacerRows
 }
 
-// SetActiveSection opens a section. The keyboard stays where it is: stepping
-// with the arrows keeps the reader on the rail, and Tab into a section moves
-// focus itself.
 func (fm *FormModal) SetActiveSection(index int) {
 	if index < 0 || index >= len(fm.sections) || index == fm.activeSection {
 		return
@@ -443,14 +348,11 @@ func (fm *FormModal) SetActiveSection(index int) {
 	fm.activeSection = index
 	fm.scrollTop = 0
 	fm.layout()
-	// A caller can open a section while the keyboard is on a field the new one
-	// does not show. The rail is where stepping came from and is always shown.
 	if p := fm.focusedPrimitive(); p != nil && !fm.focusReachable(p) {
 		fm.focusRail()
 	}
 }
 
-// focusRail puts the keyboard on the section list.
 func (fm *FormModal) focusRail() {
 	if fm.sectionRail == nil {
 		return
@@ -464,15 +366,11 @@ func (fm *FormModal) focusRail() {
 	fm.app.app.SetFocus(fm.sectionRail)
 }
 
-// enterSection moves the keyboard off the rail and onto the open section's
-// first field, which is what Enter on a list of pages should do.
 func (fm *FormModal) enterSection() {
 	for i, candidate := range fm.order {
 		if candidate == fm.sectionRail || !fm.focusReachable(candidate) {
 			continue
 		}
-		// Buttons are registered against no row. A section whose rows are all
-		// hidden has nothing to cross into, and Enter must not reach Save.
 		if rowIdx, ok := fm.rowOf[candidate]; !ok || rowIdx < 0 {
 			continue
 		}
@@ -482,21 +380,14 @@ func (fm *FormModal) enterSection() {
 	}
 }
 
-// railHasFocus reports whether the section list holds the keyboard.
 func (fm *FormModal) railHasFocus() bool {
 	return fm.sectionRail != nil && fm.focusedPrimitive() == fm.sectionRail
 }
 
-// rowVisible reports whether a row is laid out at all: hidden rows and rows
-// belonging to a section that is not open take no height and are not mounted.
-// A row added before the first BeginSection belongs to no section and is shown
-// on every page, since dropping it would lose the field outright.
 func (fm *FormModal) rowVisible(row formRow) bool {
 	return fm.rowVisibleIn(row, fm.activeSection)
 }
 
-// rowVisibleIn is rowVisible against a section other than the open one, for
-// sizing the panel to the tallest of them.
 func (fm *FormModal) rowVisibleIn(row formRow, section int) bool {
 	if row.hidden {
 		return false
@@ -504,26 +395,18 @@ func (fm *FormModal) rowVisibleIn(row formRow, section int) bool {
 	return len(fm.sections) == 0 || row.section < 0 || row.section == section
 }
 
-// railGutter is the space each side of the column rule. It matches the panel's
-// own border padding, so the sidebar sits the same distance from the rule as
-// it does from the border and its cursor line reads as centered.
 func (fm *FormModal) railGutter() int {
 	return fm.app.density.ModalPadding.Left
 }
 
-// railGap is what the rail costs beyond its own column: a gutter either side
-// of the rule, and the rule.
 func (fm *FormModal) railGap() int {
 	return fm.railGutter()*2 + 1
 }
 
-// railColumn is the sidebar's own width.
 func (fm *FormModal) railColumn() int {
 	return fm.railWidth() - fm.railGap()
 }
 
-// railWidth is the rail's column: the widest section name, its frame and the
-// gutter inside it.
 func (fm *FormModal) railWidth() int {
 	widest := 0
 	for _, section := range fm.sections {
@@ -534,7 +417,6 @@ func (fm *FormModal) railWidth() int {
 	return widest + sectionRailPad + fm.railGap()
 }
 
-// railIsVertical reports whether the panel can spare a column for the rail.
 func (fm *FormModal) railIsVertical() bool {
 	if len(fm.sections) < 2 {
 		return false
@@ -542,8 +424,7 @@ func (fm *FormModal) railIsVertical() bool {
 	return fm.innerWidth()-fm.railWidth() >= formRowsMinWidth
 }
 
-// renderSectionRail writes the rail: every section down a column when there is
-// room, and the open one alone on a line when there is not.
+// Called from the frame's draw func, never a focus callback: TextView.MouseHandler holds the view's lock while moving focus.
 func (fm *FormModal) renderSectionRail() {
 	if fm.sectionRail == nil {
 		return
@@ -568,9 +449,6 @@ func (fm *FormModal) renderSectionRail() {
 			lines = append(lines, tags.SecondaryText+section.name+"[-:-:-]")
 			continue
 		}
-		// The cursor line only while the list holds the keyboard. With no box
-		// around the rail it is the only thing saying which pane a key reaches,
-		// so an open section that is not focused reads as a place, not a caret.
 		if !fm.railFocused {
 			lines = append(lines, tags.Accent+section.name+"[-:-:-]")
 			continue
@@ -584,7 +462,6 @@ func (fm *FormModal) renderSectionRail() {
 	fm.sectionRail.SetText(strings.Join(lines, "\n"))
 }
 
-// stepSection moves the open section, wrapping.
 func (fm *FormModal) stepSection(delta int) {
 	if len(fm.sections) == 0 {
 		return
@@ -592,14 +469,10 @@ func (fm *FormModal) stepSection(delta int) {
 	fm.SetActiveSection((fm.activeSection + delta + len(fm.sections)) % len(fm.sections))
 }
 
-// sidebarStops is what the arrows walk while the keyboard is in the sidebar:
-// the sections, then the buttons stacked under them. They read as one column,
-// so they move as one.
 func (fm *FormModal) sidebarStops() int {
 	return len(fm.sections) + len(fm.buttons)
 }
 
-// focusedButton returns the index of the button holding the keyboard, or -1.
 func (fm *FormModal) focusedButton() int {
 	focused := fm.focusedPrimitive()
 	for i, btn := range fm.buttons {
@@ -610,7 +483,6 @@ func (fm *FormModal) focusedButton() int {
 	return -1
 }
 
-// focusButton puts the keyboard on one of the stacked actions.
 func (fm *FormModal) focusButton(index int) {
 	if index < 0 || index >= len(fm.buttons) {
 		return
@@ -625,9 +497,6 @@ func (fm *FormModal) focusButton(index int) {
 	fm.app.app.SetFocus(target)
 }
 
-// stepSidebar moves the cursor down the sidebar, wrapping, and carries the
-// keyboard with it: onto a section it lands on the list, onto a button it
-// lands on the button so Enter presses it.
 func (fm *FormModal) stepSidebar(delta int) {
 	stops := fm.sidebarStops()
 	if stops == 0 {
@@ -646,18 +515,13 @@ func (fm *FormModal) stepSidebar(delta int) {
 	fm.focusButton(next - len(fm.sections))
 }
 
-// EndRow closes the row consecutive AddPicker and AddPackedInput calls are
-// filling, so the next one starts a new row. Every other Add* closes it as a
-// side effect; a form with more packed fields than fit one row needs this.
+// EndRow closes the packed row AddPicker and AddPackedInput are filling, so the next one starts a new row.
 func (fm *FormModal) EndRow() { fm.pickerRow = nil }
 
-// SetOnCancel sets the Esc handler.
 func (fm *FormModal) SetOnCancel(fn func()) { fm.onCancel = fn }
 
-// SetOnSubmit sets the Ctrl+Enter / Cmd+Enter handler.
 func (fm *FormModal) SetOnSubmit(fn func()) { fm.onSubmit = fn }
 
-// newInput builds a themed single-line field.
 func (fm *FormModal) newInput(initial string) *tview.InputField {
 	input := tview.NewInputField().
 		SetFieldBackgroundColor(fm.app.theme.ModalBackground()).
@@ -668,15 +532,12 @@ func (fm *FormModal) newInput(initial string) *tview.InputField {
 	return input
 }
 
-// AddInput appends a single-line text field under a caps label.
 func (fm *FormModal) AddInput(label, initial string) *tview.InputField {
 	input := fm.newInput(initial)
 	fm.addFramedRow(label, input, 1, false)
 	return input
 }
 
-// AddTextArea appends a multi-line text field under a caps label. rows is the
-// preferred height; the row shrinks first when the screen is short.
 func (fm *FormModal) AddTextArea(label, initial string, rows int) *tview.TextArea {
 	area := tview.NewTextArea().
 		SetTextStyle(tcell.StyleDefault.
@@ -688,8 +549,6 @@ func (fm *FormModal) AddTextArea(label, initial string, rows int) *tview.TextAre
 	return area
 }
 
-// AddPackedInput appends a single-line text field to the packed row instead of
-// giving it a row of its own, so two short fields cost four lines, not eight.
 func (fm *FormModal) AddPackedInput(label, initial string) *tview.InputField {
 	input := fm.newInput(initial)
 	rowIdx := fm.packField(label, input)
@@ -697,15 +556,13 @@ func (fm *FormModal) AddPackedInput(label, initial string) *tview.InputField {
 	return input
 }
 
-// packField frames a widget, appends it as another column of the open packed
-// row (opening one when there is none), and returns that row's index.
 func (fm *FormModal) packField(label string, field tview.Primitive) int {
 	theme := fm.app.theme
 
 	labelView := fm.capsLabel(label)
 
 	frame := tview.NewFlex().SetDirection(tview.FlexRow)
-	frame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
+	frame.Box = tview.NewBox()
 	frame.AddItem(field, 0, 1, true)
 	frame.SetBackgroundColor(theme.ModalBackground()).
 		SetBorder(true).
@@ -736,9 +593,6 @@ func (fm *FormModal) packField(label string, field tview.Primitive) int {
 	return rowIdx
 }
 
-// packedLines returns how many stacked lines a packed row needs at the given
-// inner width, and how many columns go on each. A row folds when its widest
-// label no longer fits its share: four columns become two, then one.
 func packedLines(row *formRow, innerWidth int) (perLine int) {
 	count := len(row.packed)
 	if count <= 1 || innerWidth <= 0 {
@@ -750,8 +604,6 @@ func packedLines(row *formRow, innerWidth int) (perLine int) {
 			widest = column.labelLen
 		}
 	}
-	// A label longer than any share would fold every row to one column, so the
-	// requirement is capped: past it the label truncates instead.
 	if widest > packedLabelBudget {
 		widest = packedLabelBudget
 	}
@@ -767,8 +619,6 @@ func packedLines(row *formRow, innerWidth int) (perLine int) {
 	return 1
 }
 
-// relayoutPacked rebuilds a packed row at the columns the width affords and
-// sets its height. Called from the fit closure, so a resize reflows the row.
 func (fm *FormModal) relayoutPacked(row *formRow, innerWidth int) {
 	if len(row.packed) == 0 {
 		return
@@ -806,10 +656,7 @@ func (fm *FormModal) relayoutPacked(row *formRow, innerWidth int) {
 	row.minHeight = row.height
 }
 
-// capsLabel builds the dim caps label a field is titled by. Wrapping is off
-// because the view is mounted one line tall: a label wider than its column
-// would word-wrap and draw only its first word, which is how two fields on a
-// packed row came to read the same.
+// Wrapping is off because the label is mounted one line tall, where a wrapped label draws only its first word.
 func (fm *FormModal) capsLabel(label string) *tview.TextView {
 	view := tview.NewTextView()
 	view.SetWrap(false)
@@ -819,8 +666,6 @@ func (fm *FormModal) capsLabel(label string) *tview.TextView {
 	return view
 }
 
-// AddCheckbox appends an inline toggle: one row with the box beside its caps
-// label. A framed unit would give a one-cell control a field-sized shell.
 func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 	theme := fm.app.theme
 
@@ -828,8 +673,6 @@ func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 	fieldStyle := tcell.StyleDefault.Background(theme.InputBg).Foreground(theme.Foreground)
 	box.SetUncheckedStyle(fieldStyle)
 	box.SetCheckedStyle(fieldStyle)
-	// Like DropDown, the focused checkbox has its own style with a bright
-	// unusable default; the accent marks focus, matching the buttons.
 	box.SetActivatedStyle(tcell.StyleDefault.
 		Background(theme.Accent).
 		Foreground(theme.InverseTextColor()))
@@ -844,8 +687,6 @@ func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 	line.AddItem(box, 3, 0, true)
 	line.AddItem(nil, 0, 1, false)
 
-	// Blank lines either side keep the single-line unit from crowding the
-	// framed fields around it.
 	container := tview.NewFlex().SetDirection(tview.FlexRow)
 	container.SetBackgroundColor(theme.ModalBackground())
 	container.AddItem(nil, 1, 0, false)
@@ -865,7 +706,6 @@ func (fm *FormModal) AddCheckbox(label string, checked bool) *tview.Checkbox {
 	return box
 }
 
-// AddStatic appends a one-row read-only line (e.g. the sub-issue parent).
 func (fm *FormModal) AddStatic(text string) *tview.TextView {
 	view := tview.NewTextView()
 	view.SetText(text)
@@ -876,7 +716,6 @@ func (fm *FormModal) AddStatic(text string) *tview.TextView {
 	return view
 }
 
-// staticRowContainer wraps a static view so rows stay uniform Flex items.
 func staticRowContainer(view *tview.TextView, theme Theme) *tview.Flex {
 	container := tview.NewFlex().SetDirection(tview.FlexRow)
 	container.SetBackgroundColor(theme.ModalBackground())
@@ -884,15 +723,13 @@ func staticRowContainer(view *tview.TextView, theme Theme) *tview.Flex {
 	return container
 }
 
-// fieldUnit builds the caps-label-plus-framed-editor pair every field is made
-// of, and returns the container so a caller can stack or column it.
 func (fm *FormModal) fieldUnit(label string, editor tview.Primitive) (container *tview.Flex, labelView *tview.TextView) {
 	theme := fm.app.theme
 
 	labelView = fm.capsLabel(label)
 
 	frame := tview.NewFlex().SetDirection(tview.FlexRow)
-	frame.Box = tview.NewBox() // restore the background fill (see NewFormModal)
+	frame.Box = tview.NewBox()
 	frame.AddItem(editor, 0, 1, true)
 	frame.SetBackgroundColor(theme.ModalBackground()).
 		SetBorder(true).
@@ -907,8 +744,6 @@ func (fm *FormModal) fieldUnit(label string, editor tview.Primitive) (container 
 	return container, labelView
 }
 
-// addFramedRow gives one field a row of its own and registers it in the tab
-// order.
 func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRows int, flexible bool) {
 	fm.pickerRow = nil
 	container, labelView := fm.fieldUnit(label, editor)
@@ -928,9 +763,6 @@ func (fm *FormModal) addFramedRow(label string, editor tview.Primitive, editorRo
 	fm.registerFocusable(editor, len(fm.rows)-1)
 }
 
-// AddSplitRow puts a multi-select beside a stack of single-line fields, so
-// three fields cost one row instead of three. Tab runs left to right: the
-// list, then the stack top down.
 func (fm *FormModal) AddSplitRow(label string, rows int, sideLabels []string) (*FormMultiSelect, []*tview.InputField) {
 	fm.pickerRow = nil
 	theme := fm.app.theme
@@ -958,8 +790,6 @@ func (fm *FormModal) AddSplitRow(label string, rows int, sideLabels []string) (*
 	container.SetBackgroundColor(theme.ModalBackground())
 	container.AddItem(columns, 0, 1, true)
 
-	// The row is as tall as the taller column, and shrinks only as far as the
-	// stack, which is fixed.
 	height := 1 + rows + 2
 	stack := formFieldRows * len(sideLabels)
 	if stack > height {
@@ -983,8 +813,6 @@ func (fm *FormModal) AddSplitRow(label string, rows int, sideLabels []string) (*
 	return multi, inputs
 }
 
-// SetPlaceholder dims an example inside an empty field, so the format it wants
-// sits where the value goes instead of crowding the label.
 func (fm *FormModal) SetPlaceholder(input *tview.InputField, text string) {
 	input.SetPlaceholder(text)
 	input.SetPlaceholderStyle(tcell.StyleDefault.
@@ -992,14 +820,11 @@ func (fm *FormModal) SetPlaceholder(input *tview.InputField, text string) {
 		Foreground(fm.app.theme.SecondaryText))
 }
 
-// appendRow records a row. Mounting is applyRowWindow's job: a row the window
-// leaves out must not be in the container at all.
 func (fm *FormModal) appendRow(row formRow) {
 	row.section = len(fm.sections) - 1
 	fm.rows = append(fm.rows, row)
 }
 
-// registerFocusable wires a widget into the tab order and focus styling.
 func (fm *FormModal) registerFocusable(p tview.Primitive, rowIdx int) {
 	fm.order = append(fm.order, p)
 	fm.rowOf[p] = rowIdx
@@ -1008,11 +833,7 @@ func (fm *FormModal) registerFocusable(p tview.Primitive, rowIdx int) {
 	}
 }
 
-// onFocused tracks focus for tab cycling, recolors field frames, and keeps
-// the focused row visible when the form scrolls.
 func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
-	// Focus can move without a key: a mouse click lands on the field under the
-	// menu. Leaving the menu open would keep every key routed into it.
 	if picker := fm.openPicker; picker != nil && picker.view != p {
 		picker.closeMenu()
 	}
@@ -1029,7 +850,6 @@ func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
 			frame.SetBorderColor(fm.app.theme.Border)
 		}
 	}
-	// Inline checkboxes have no frame; the whole line lights up instead.
 	for box, label := range fm.checkboxLabels {
 		if box == p {
 			label.SetTextColor(fm.app.theme.Foreground)
@@ -1042,8 +862,6 @@ func (fm *FormModal) onFocused(p tview.Primitive, rowIdx int) {
 	}
 }
 
-// AddButtons appends the action row. With focus-only accent styling there is
-// no persistent primary; order carries the emphasis and Cancel goes last.
 func (fm *FormModal) AddButtons(buttons ...FormButton) {
 	theme := fm.app.theme
 	fm.pickerRow = nil
@@ -1072,7 +890,6 @@ func (fm *FormModal) AddButtons(buttons ...FormButton) {
 	fm.buttonsRow.AddItem(nil, 0, 1, false)
 }
 
-// effectiveMaxWidth returns the configured or default width clamp.
 func (fm *FormModal) effectiveMaxWidth() int {
 	if fm.maxWidth > 0 {
 		return fm.maxWidth
@@ -1080,33 +897,27 @@ func (fm *FormModal) effectiveMaxWidth() int {
 	return formModalDefaultMaxWidth
 }
 
-// chromeHeight counts the non-row lines inside the modal: border, the
-// blank-plus-buttons block when present, and the gap plus hint line.
 func (fm *FormModal) chromeHeight() int {
 	if fm.railIsVertical() {
-		// Border, the rule over the hint, and the hint. The buttons are in the
-		// sidebar and cost the body nothing.
 		chrome := 2 + 1 + 1
 		if fm.contextText != "" {
 			chrome += 2
 		}
 		return chrome
 	}
-	chrome := 2 + 1 + 1 // border + gap + hint
+	chrome := 2 + 1 + 1
 	if fm.buttonsRow != nil {
-		chrome += 2 // blank spacer + button row
+		chrome += 2
 	}
 	if fm.contextText != "" {
-		chrome += 2 // context line + gap
+		chrome += 2
 	}
 	if len(fm.sections) > 1 && !fm.railIsVertical() {
-		chrome += 2 // the section line + gap, where the rail has no column
+		chrome += 2
 	}
 	return chrome
 }
 
-// panelWidth is the modal's width for the current screen: its clamp, given
-// back to a screen too narrow to hold it.
 func (fm *FormModal) panelWidth() int {
 	screenW, _ := fm.screenSize()
 	width := screenW - formModalScreenWMargin
@@ -1116,14 +927,11 @@ func (fm *FormModal) panelWidth() int {
 	return width
 }
 
-// innerWidth is what a row has to lay itself out in: the panel less its border
-// and the gutter each side.
 func (fm *FormModal) innerWidth() int {
 	padding := fm.app.density.ModalPadding
 	return fm.panelWidth() - 2 - padding.Left - padding.Right
 }
 
-// rowsWidth is what a row lays itself out in: the panel less a vertical rail.
 func (fm *FormModal) rowsWidth() int {
 	if fm.railIsVertical() {
 		return fm.innerWidth() - fm.railWidth()
@@ -1131,9 +939,6 @@ func (fm *FormModal) rowsWidth() int {
 	return fm.innerWidth()
 }
 
-// rowHeights returns per-row heights after folding packed rows to the current
-// width and shrinking flexible rows to fit the screen clamp. When even the
-// floor overflows, the window scrolls.
 func (fm *FormModal) rowHeights(screenH int) []int {
 	inner := fm.rowsWidth()
 	for i := range fm.rows {
@@ -1169,8 +974,6 @@ func (fm *FormModal) rowHeights(screenH int) []int {
 	return heights
 }
 
-// contentHeight is the modal's total height for the given screen height:
-// content-fit, clamped to the screen.
 func (fm *FormModal) contentHeight(screenH int) int {
 	total := fm.chromeHeight() + fm.tallestSectionRows(screenH)
 	if maxHeight := screenH - formModalScreenHMargin; total > maxHeight {
@@ -1179,9 +982,6 @@ func (fm *FormModal) contentHeight(screenH int) int {
 	return total
 }
 
-// tallestSectionRows is the content height the panel is sized to. Every
-// section gets the tallest one's height, so stepping between them never
-// resizes the modal under the reader; a short section carries the slack.
 func (fm *FormModal) tallestSectionRows(screenH int) int {
 	heights := fm.rowHeights(screenH)
 	if len(fm.sections) == 0 {
@@ -1192,11 +992,6 @@ func (fm *FormModal) tallestSectionRows(screenH int) int {
 		return total
 	}
 
-	// heights zeroes every row the open section does not show, so the tallest
-	// is measured off the rows themselves. Only the open section's flexible
-	// rows shrink, which is the one place a screen too short still bites.
-	// The sidebar has to fit too, but only where it is drawn: collapsed to a
-	// line its list costs the body nothing and the buttons take their own row.
 	tallest := 0
 	if fm.railIsVertical() {
 		tallest = railTopPad + len(fm.sections) + fm.buttonsColumnRows()
@@ -1220,13 +1015,11 @@ func (fm *FormModal) tallestSectionRows(screenH int) int {
 	return tallest
 }
 
-// screenSize returns the pages' current width and height.
 func (fm *FormModal) screenSize() (int, int) {
 	_, _, w, h := fm.app.pages.GetRect()
 	return w, h
 }
 
-// ensureVisible scrolls the row window so the given row is fully on screen.
 func (fm *FormModal) ensureVisible(rowIdx int) {
 	_, screenH := fm.screenSize()
 	heights := fm.rowHeights(screenH)
@@ -1248,12 +1041,7 @@ func (fm *FormModal) ensureVisible(rowIdx int) {
 	fm.applyRowWindow(heights, avail)
 }
 
-// applyRowWindow mounts the scroll window and returns what each row got. Rows
-// outside it are left out of the container rather than resized to nothing: a
-// Flex hands every fixed-size child its full size whatever the parent's height
-// is, so a row still mounted at zero paints over the buttons and the border.
-// The row that runs off the bottom is clipped rather than dropped, since a
-// field taller than the window would otherwise vanish while it holds focus.
+// A Flex hands every fixed-size child its full size, so a row outside the window is unmounted rather than sized to zero.
 func (fm *FormModal) applyRowWindow(heights []int, avail int) []int {
 	shown := make([]int, len(fm.rows))
 	used := 0
@@ -1284,9 +1072,6 @@ func (fm *FormModal) applyRowWindow(heights []int, avail int) []int {
 	return shown
 }
 
-// layout fills the frame and centers it. The frame's contents do not depend on
-// the screen, but the row window does, so it is computed inside the fit closure
-// centerModal asks again on every resize.
 func (fm *FormModal) layout() {
 	centerModal(fm.root, fm.frame, func() (int, int) {
 		_, screenH := fm.screenSize()
@@ -1298,11 +1083,6 @@ func (fm *FormModal) layout() {
 	})
 }
 
-// layoutFrame fills the panel. Where the buttons sit depends on whether the
-// sidebar has a column, so this is a resize away from changing and belongs in
-// the fit closure with everything else the width decides. Composed once
-// outside it, a resize past the threshold left the buttons mounted in a row
-// the frame no longer held, or in both at once.
 func (fm *FormModal) layoutFrame() {
 	fm.frame.Clear()
 	if fm.contextText != "" {
@@ -1311,8 +1091,6 @@ func (fm *FormModal) layoutFrame() {
 	}
 	fm.frame.AddItem(fm.body, 0, 1, true)
 	if fm.railIsVertical() {
-		// The buttons moved into the sidebar, so the panel's own footer is the
-		// rule and the hint.
 		fm.frame.AddItem(fm.footerRule, 1, 0, false)
 		fm.frame.AddItem(fm.hintView, 1, 0, false)
 		return
@@ -1325,8 +1103,6 @@ func (fm *FormModal) layoutFrame() {
 	fm.frame.AddItem(fm.hintView, 1, 0, false)
 }
 
-// layoutBody puts the rail beside the rows where the panel can spare a column
-// for it, and above them where it cannot.
 func (fm *FormModal) layoutBody() {
 	fm.body.Clear()
 	if len(fm.sections) < 2 {
@@ -1334,11 +1110,6 @@ func (fm *FormModal) layoutBody() {
 		return
 	}
 	if fm.railIsVertical() {
-		// The list carries the Flex's focus flag, not the fields. Pages
-		// re-delegates focus down the tree on every page add and remove, and
-		// that walk takes whichever child is flagged: flagged on the rows, it
-		// landed on the first field and took the keyboard off the list that
-		// Show had just given it.
 		fm.buildButtonsColumn()
 		fm.navColumn.Clear()
 		fm.navColumn.AddItem(fm.sectionRail, 0, 1, true)
@@ -1359,16 +1130,12 @@ func (fm *FormModal) layoutBody() {
 		AddItem(fm.rowsBox, 0, 1, false)
 }
 
-// Show lays the modal out for the current screen, resets focus to the first
-// field (tview primitives remember focus across shows), and raises the page.
 func (fm *FormModal) Show(pageName string) {
 	fm.scrollTop = 0
 	fm.focusIdx = fm.initialFocusIdx()
 	fm.openPicker = nil
 	fm.SetStatus("", false)
 	fm.layout()
-	// An initial focus the open section does not show would put the caret on a
-	// widget that is not mounted. Scan forward for the first that is.
 	if len(fm.order) > 0 && !fm.focusReachable(fm.order[fm.focusIdx]) {
 		for i, candidate := range fm.order {
 			if fm.focusReachable(candidate) {
@@ -1384,8 +1151,6 @@ func (fm *FormModal) Show(pageName string) {
 	}
 }
 
-// initialFocusIdx places the caret where SetInitialFocus asked, and on the
-// first field when it named one the form does not carry.
 func (fm *FormModal) initialFocusIdx() int {
 	for i, candidate := range fm.order {
 		if candidate == fm.initialFocus {
@@ -1395,7 +1160,6 @@ func (fm *FormModal) initialFocusIdx() int {
 	return 0
 }
 
-// Hide removes the page and restores pane focus.
 func (fm *FormModal) Hide(pageName string) {
 	if fm.openPicker != nil {
 		fm.openPicker.closeMenu()
@@ -1404,14 +1168,9 @@ func (fm *FormModal) Hide(pageName string) {
 	fm.app.restoreModalFocus()
 }
 
-// Root returns the fullscreen wrapper for pages.
 func (fm *FormModal) Root() *tview.Flex { return fm.root }
 
-// ContentBody returns the field rows without the modal shell or buttons, for
-// modals that compose the form beside other panes (prompt templates). The
-// embedding modal owns the border, sizing, button row and hint line, and never
-// calls Show, so this is where its rows are mounted: at full height, since
-// there is no window to scroll them in. Called once, after the fields.
+// ContentBody mounts the rows at full height for an embedding modal that owns the shell and never calls Show. Call once, after the fields.
 func (fm *FormModal) ContentBody() *tview.Flex {
 	fm.rowsBox.Clear()
 	for i := range fm.rows {
@@ -1429,38 +1188,25 @@ func (fm *FormModal) ContentBody() *tview.Flex {
 	return body
 }
 
-// ButtonsRow returns the centered button row for composed modals that place
-// it themselves. Nil until AddButtons is called.
+// ButtonsRow returns the centered button row, nil until AddButtons is called.
 func (fm *FormModal) ButtonsRow() *tview.Flex { return fm.buttonsRow }
 
-// SetInitialFocus names the field Show opens on, for a form whose first field
-// is not the one the user came to fill.
 func (fm *FormModal) SetInitialFocus(p tview.Primitive) { fm.initialFocus = p }
 
-// Focus returns keyboard focus to the form's current field — used when an
-// overlay (e.g. a picker) closes over a stacked form modal.
 func (fm *FormModal) Focus() {
 	if p := fm.focusedPrimitive(); p != nil {
 		fm.app.app.SetFocus(p)
 	}
 }
 
-// BlurFrames clears every field's focus highlight — for composed modals
-// where focus can leave the form (e.g. the prompt-templates list).
 func (fm *FormModal) BlurFrames() {
 	for _, frame := range fm.frameOf {
 		frame.SetBorderColor(fm.app.theme.Border)
 	}
 }
 
-// focusReachable reports whether the tab order should stop on a widget. The
-// rail and the buttons belong to no row and are always reachable; a field in a
-// section that is not open is not mounted, so stopping there would put the
-// keyboard on something the reader cannot see.
 func (fm *FormModal) focusReachable(p tview.Primitive) bool {
 	if p == fm.sectionRail {
-		// One section is not a choice, so the rail is not mounted and must not
-		// take the keyboard either.
 		return len(fm.sections) > 1
 	}
 	rowIdx, ok := fm.rowOf[p]
@@ -1470,8 +1216,6 @@ func (fm *FormModal) focusReachable(p tview.Primitive) bool {
 	return fm.rowVisible(fm.rows[rowIdx])
 }
 
-// focusStep moves keyboard focus through the tab order, wrapping and stepping
-// over anything the open section does not show.
 func (fm *FormModal) focusStep(delta int) {
 	if len(fm.order) == 0 {
 		return
@@ -1485,23 +1229,12 @@ func (fm *FormModal) focusStep(delta int) {
 	fm.app.app.SetFocus(fm.order[fm.focusIdx])
 }
 
-// HandleKey implements the shared form keys. It is called from the app-level
-// modal dispatcher (a parent's InputCapture never sees keys sent to a focused
-// child, so routing lives here). Tab and Backtab are the only way to move
-// between fields: arrows stay with the focused widget, which is what a text
-// cursor, an open dropdown, and a list each need them for.
+// HandleKey is called from the modal dispatcher, since a parent's InputCapture never sees keys sent to a focused child.
 func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	if fm.openPicker != nil {
 		return fm.handleMenuKey(event)
 	}
 
-	// The rail is a pane of its own: it owns the movement keys while it holds
-	// the keyboard, which is the same rule that keeps arrows on a focused
-	// widget everywhere else, and Enter crosses into the fields.
-	// The sidebar is one column of stops, the sections and then the buttons
-	// under them, so the arrows walk the whole of it rather than the list
-	// alone. Only where the sidebar is drawn: collapsed, the buttons are back
-	// in their own row across the panel.
 	if fm.railIsVertical() && (fm.railHasFocus() || fm.focusedButton() >= 0) {
 		switch {
 		case event.Key() == tcell.KeyUp, event.Key() == tcell.KeyRune && event.Rune() == 'k':
@@ -1535,9 +1268,6 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 
 	switch event.Key() {
 	case tcell.KeyEscape:
-		// Esc backs out one level, the way it leaves edit mode before it
-		// leaves the pane: out of the fields to the rail, then out of the
-		// modal. Backtab off the first field is the long way round.
 		if len(fm.sections) > 1 && !fm.railHasFocus() {
 			fm.focusRail()
 			return nil
@@ -1553,8 +1283,6 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		fm.focusStep(-1)
 		return nil
 	case tcell.KeyRune:
-		// A list eats no printable keys of its own, so the toggle keys are
-		// only claimed while one holds focus; every other field keeps them.
 		if ms := fm.focusedMultiSelect(); ms != nil && (event.Rune() == ' ' || event.Rune() == 't') {
 			ms.toggle()
 			return nil
@@ -1582,7 +1310,6 @@ func (fm *FormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// focusedMultiSelect returns the multi-select field holding focus, if any.
 func (fm *FormModal) focusedMultiSelect() *FormMultiSelect {
 	list, ok := fm.focusedPrimitive().(*tview.List)
 	if !ok {
@@ -1591,7 +1318,6 @@ func (fm *FormModal) focusedMultiSelect() *FormMultiSelect {
 	return fm.multiSelects[list]
 }
 
-// focusedPrimitive returns the widget the tab order considers focused.
 func (fm *FormModal) focusedPrimitive() tview.Primitive {
 	if fm.focusIdx >= 0 && fm.focusIdx < len(fm.order) {
 		return fm.order[fm.focusIdx]

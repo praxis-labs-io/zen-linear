@@ -6,12 +6,8 @@ import (
 	"path/filepath"
 )
 
-// WriteFileAtomic writes data through a temp file in the target's directory and
-// renames it over the target, creating parent directories as needed. The files
-// under the application directory are each rebuilt whole on every write, so an
-// interrupted in-place write costs the entire record rather than the tail of
-// it. Callers pass their own mode; a rename also narrows a file an earlier
-// build left wide open, which os.WriteFile would not.
+// WriteFileAtomic writes data to a temp file beside path and renames it over
+// path, creating parent directories as needed.
 func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	if path == "" {
 		return fmt.Errorf("write path is empty")
@@ -28,13 +24,10 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	}
 	tempName := temp.Name()
 	defer func() {
-		// Harmless once the rename succeeded; the temp file is gone by then.
 		_ = os.Remove(tempName)
 	}()
 
 	if _, err := temp.Write(data); err != nil {
-		// The write error is the one worth reporting; the temp file is removed
-		// either way by the deferred cleanup.
 		_ = temp.Close()
 		return fmt.Errorf("write %s: %w", path, err)
 	}

@@ -11,9 +11,6 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
-// TestBuildIssueCreateInputEncodesEveryField pins the wire keys. IssueCreateInput
-// is a map scalar, so nothing in the type system checks these names: a typo
-// only shows up as a Linear rejection at runtime.
 func TestBuildIssueCreateInputEncodesEveryField(t *testing.T) {
 	estimate := 5.0
 	got, err := buildIssueCreateInput(CreateIssueInput{
@@ -76,8 +73,6 @@ func TestBuildIssueCreateInputRejectsAnOutOfRangePriority(t *testing.T) {
 	}
 }
 
-// TestBuildIssueCreateInputKeepsAZeroEstimate covers the reason Estimate is a
-// pointer: zero is a real estimate on teams that allow it.
 func TestBuildIssueCreateInputKeepsAZeroEstimate(t *testing.T) {
 	zero := 0.0
 	got, err := buildIssueCreateInput(CreateIssueInput{TeamID: "team-1", Title: "Title", Estimate: &zero})
@@ -89,8 +84,6 @@ func TestBuildIssueCreateInputKeepsAZeroEstimate(t *testing.T) {
 	}
 }
 
-// TestUpdateIssue_SendsTeamID pins the wire key for a team move. The update
-// input is a map scalar, so a typo here only surfaces as a Linear rejection.
 func TestUpdateIssue_SendsTeamID(t *testing.T) {
 	var inputs []map[string]interface{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -139,9 +132,6 @@ func TestUpdateIssue_SendsTeamID(t *testing.T) {
 	if inputs[0]["teamId"] != "team-2" {
 		t.Fatalf("teamId = %#v, want team-2", inputs[0]["teamId"])
 	}
-	// An issue has no "no team", so neither a nil nor an empty TeamID may
-	// reach the wire: a null or an empty id fails the whole update, taking
-	// the other fields in the same input with it.
 	for _, i := range []int{1, 2} {
 		if value, present := inputs[i]["teamId"]; present {
 			t.Fatalf("inputs[%d] teamId = %#v, want it absent", i, value)

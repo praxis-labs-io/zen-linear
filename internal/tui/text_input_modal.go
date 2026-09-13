@@ -7,7 +7,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// TextInputModal manages a single-field modal for small command inputs.
 type TextInputModal struct {
 	app      *App
 	fm       *FormModal
@@ -15,7 +14,6 @@ type TextInputModal struct {
 	onSubmit func(string)
 }
 
-// NewTextInputModal creates a new text input modal.
 func NewTextInputModal(app *App) *TextInputModal {
 	tm := &TextInputModal{app: app}
 	tm.fm = NewFormModal(app, "Input")
@@ -25,12 +23,10 @@ func NewTextInputModal(app *App) *TextInputModal {
 	return tm
 }
 
-// Show displays the text input modal.
 func (tm *TextInputModal) Show(title, label, initial string, onSubmit func(string)) {
 	tm.ShowWithContext(title, label, initial, "", onSubmit)
 }
 
-// ShowWithContext also pins an issue context line above the field.
 func (tm *TextInputModal) ShowWithContext(title, label, initial, contextLine string, onSubmit func(string)) {
 	tm.onSubmit = onSubmit
 	tm.fm.SetTitle(title)
@@ -40,17 +36,13 @@ func (tm *TextInputModal) ShowWithContext(title, label, initial, contextLine str
 	tm.fm.Show("text_input")
 }
 
-// Hide hides the text input modal.
 func (tm *TextInputModal) Hide() {
 	tm.fm.Hide("text_input")
 }
 
-// Focus returns keyboard focus to the form, for when an overlay closes.
 func (tm *TextInputModal) Focus() { tm.fm.Focus() }
 
-// HandleKey handles keyboard input for the text input modal.
 func (tm *TextInputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
-	// Plain Enter submits here; the shared form default would only move focus.
 	if event.Key() == tcell.KeyEnter && event.Modifiers() == tcell.ModNone {
 		value := strings.TrimSpace(tm.input.GetText())
 		tm.Hide()
@@ -62,7 +54,6 @@ func (tm *TextInputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return tm.fm.HandleKey(event)
 }
 
-// GetModal returns the modal flex for adding to pages.
 func (tm *TextInputModal) GetModal() *tview.Flex {
 	return tm.fm.Root()
 }

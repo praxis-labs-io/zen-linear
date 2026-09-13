@@ -14,15 +14,11 @@ import (
 	"github.com/rivo/tview"
 )
 
-// pressDownOnNavigation steps the tree's cursor through its own input handler,
-// so a test sees the rows a user's Down key actually stops on.
 func pressDownOnNavigation(app *App) {
 	handler := app.navigationTree.InputHandler()
 	handler(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
 }
 
-// currentNavText names the row under the cursor, off its own node rather than
-// the rendered label, which carries a fold marker.
 func currentNavText(app *App) string {
 	nav, ok := app.navigationTree.GetCurrentNode().GetReference().(*NavigationNode)
 	if !ok {
@@ -31,15 +27,11 @@ func currentNavText(app *App) string {
 	return nav.Text
 }
 
-// navRowStarts renders the tree the way a draw does and reports whether the row
-// begins with what a reader should see: its indent, then its column.
 func navRowStarts(app *App, node *tview.TreeNode, want string) bool {
 	app.padNavigationTree(30)
 	return strings.HasPrefix(node.GetText(), want)
 }
 
-// navRowLabels reads the tree's top-level rows, blank spacers included, so a
-// test can assert both the sections and the gaps between them.
 func navRowLabels(app *App) []string {
 	labels := []string{}
 	for _, child := range app.navigationTree.GetRoot().GetChildren() {
@@ -84,8 +76,6 @@ func TestTheTreeGroupsTeamsUnderAHeading(t *testing.T) {
 		t.Errorf("teams under the heading = %q, want %q", names, want)
 	}
 
-	// The blank row and the heading are rows nothing can be done on, so the
-	// cursor has to step over both.
 	app.navigationTree.SetCurrentNode(app.allIssuesNode)
 	pressDownOnNavigation(app)
 	if got := currentNavText(app); got != "Alpha" {
@@ -135,8 +125,6 @@ func TestFavoritingLeavesTheTeamsSectionWhereItWas(t *testing.T) {
 
 	group := app.teamsGroup
 	teamNode := group.GetChildren()[0]
-	// The children a team expansion loaded: a rebuild that dropped them would
-	// collapse the team the user had open.
 	teamNode.AddChild(tview.NewTreeNode("Alpha").
 		SetReference(&NavigationNode{ID: "p1", Text: "Alpha", IsProject: true}))
 	teamNode.SetExpanded(true)
@@ -177,7 +165,6 @@ func TestUnfavoritingTheLastFavoriteTakesTheBlankRowWithIt(t *testing.T) {
 	}
 }
 
-// teamGroupLabels reads a team's headings and whether each is open.
 func teamGroupLabels(teamNode *tview.TreeNode) []string {
 	labels := []string{}
 	for _, child := range teamNode.GetChildren() {
@@ -215,12 +202,9 @@ func TestATeamOpensOntoThreeFoldedHeadings(t *testing.T) {
 			t.Errorf("%q does not begin with an indent and a closed folder", group.GetText())
 		}
 	}
-	// A team heads its section, so it takes no indent of its own.
 	if !navRowStarts(app, teamNode, navIconOpen) {
 		t.Errorf("open team = %q, want it to begin with an open folder at the edge", teamNode.GetText())
 	}
-	// All Issues opens nothing, so its column carries the branch that says what
-	// it hangs off, and its title lines up with the rows that do open.
 	if !navRowStarts(app, teamNode.GetChildren()[0], "  "+navIconBranch) {
 		t.Errorf("All Issues = %q, want a branch in its column", teamNode.GetChildren()[0].GetText())
 	}
@@ -259,8 +243,6 @@ func TestAHeadingCannotBeFavorited(t *testing.T) {
 	teamNode := openTestTeam(t, app)
 	app.navigationTree.SetCurrentNode(teamNode.GetChildren()[2])
 
-	// The stubs fail the test if any mutation fires. A heading stands for
-	// nothing Linear can hold a favorite on.
 	handleToggleFavorite(app)
 
 	if len(app.favorites) != 0 {
@@ -338,8 +320,6 @@ func TestATeamThatLoadedNothingGoesBackForIt(t *testing.T) {
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}, nil)
 	teamNode := app.findTeamTreeNode("team-1")
 
-	// A load that answered without answering. Every Linear team has states,
-	// so this is a failure wearing the shape of an empty team.
 	app.populateTeamNodeChildren(teamNode, "team-1", nil, nil, nil)
 	if teamChildrenLoaded(teamNode) {
 		t.Fatal("a team with no states counted as loaded, so nothing will go back for it")
@@ -365,7 +345,6 @@ func TestAnOpenTeamClosesWithoutGoingBackForItsRows(t *testing.T) {
 	app.rebuildNavigationTree([]linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}, nil)
 	teamNode := app.findTeamTreeNode("team-1")
 
-	// The shape a load that answered with nothing leaves behind.
 	app.populateTeamNodeChildren(teamNode, "team-1", nil, nil, nil)
 	setNavFold(teamNode, true)
 
@@ -392,7 +371,6 @@ func TestAFavoritedTeamOnlyFolds(t *testing.T) {
 	if !navRowStarts(app, favorite, navIconClosed) {
 		t.Fatalf("favorited team = %q, want a closed folder at the edge", favorite.GetText())
 	}
-	// The rows its own open would fetch, so the toggle is what this drives.
 	app.populateTeamNodeChildren(favorite, "team-1", nil,
 		[]linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}}, nil)
 
@@ -428,9 +406,6 @@ func TestRebuildingATeamsRowsForgetsTheOnesItDropped(t *testing.T) {
 	}
 }
 
-// A row that opens and closes is the tree's structure and reads muted; the rows
-// a selection can land on are the ones in the foreground. One rule, so a theme
-// change cannot restore the mix this replaced.
 func TestExpandableRowsAreMutedAndSelectableOnesAreNot(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree(
@@ -474,8 +449,6 @@ func TestExpandableRowsAreMutedAndSelectableOnesAreNot(t *testing.T) {
 	}
 }
 
-// A favorited team folds and nothing else, the same as one under Teams, so it
-// reads as structure rather than as a row a selection lands on.
 func TestAFavoritedTeamReadsAsStructure(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree(
@@ -492,9 +465,6 @@ func TestAFavoritedTeamReadsAsStructure(t *testing.T) {
 	}
 }
 
-// The tree measures its own rows rather than taking go-runewidth's default,
-// which counts the icons as two cells under a CJK locale and leaves every row a
-// cell short of the border.
 func TestTheRowMeasureIgnoresTheLocale(t *testing.T) {
 	for _, prefix := range []string{navIconOpen, navIconClosed, navIconBranch, navIconBlank} {
 		if got := navCellWidth.StringWidth(prefix); got != 2 {

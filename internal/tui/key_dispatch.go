@@ -4,75 +4,51 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// bindGlobalKeys sets up global keyboard and mouse handling.
 func (a *App) bindGlobalKeys() {
 	a.app.SetInputCapture(a.handleGlobalKey)
 	a.app.SetMouseCapture(a.handleMouse)
 }
 
-// handleGlobalKey is the app's single input capture: modals first, then the
-// palette and the query box, then global keys, then the focused pane.
 func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	if modal := a.activeModal(); modal != nil {
 		a.repairModalFocus()
 		return modal.HandleKey(event)
 	}
 
-	// A layout change can take the compose card off the page while the box still
-	// holds the keyboard. Recover before routing, or every key from then on
-	// disappears into a box that is not on the screen.
 	a.releaseStrandedCompose()
 	a.repairLayoutFocus()
-	// Edit mode belongs to the pane. A layout change that took the keyboard off
-	// it leaves the mode on with nothing on screen saying so.
 	if a.detailsEdit.on && !a.detailsHaveFocus() {
 		a.leaveDetailsEdit()
 	}
 
-	// Handle palette first if it's open
 	if a.focusedPane == FocusPalette {
 		return a.handlePaletteKey(event)
 	}
 
-	// The nav pane's query box owns keys next, so typed letters reach the field
-	// instead of firing global or pane shortcuts.
 	if a.navSearchActive() {
 		return a.handleNavSearchKey(event)
 	}
 
-	// The compose box owns keys for the same reason: a comment is prose, and q
-	// in the middle of one is a letter, not a quit.
 	if a.composeBoxActive() {
 		return a.handleComposeKey(event)
 	}
 
-	// Field edit mode owns the keys for a related reason: it is not a page, so
-	// a rune it does not answer has to stop here rather than quit or move pane.
 	if a.detailsEdit.on {
 		return a.handleDetailsEditKey(event)
 	}
 
-	// Global shortcuts (only when not in palette)
 	switch event.Key() {
 	case tcell.KeyCtrlC:
 		a.quit()
 		return nil
 	case tcell.KeyTab, tcell.KeyBacktab:
-		// Tab walks a pane's own controls and nothing else. Panes move on h/l
-		// and the pane numbers, so Tab is swallowed rather than handed to
-		// tview, whose focus delegation would land it on an arbitrary
-		// primitive. The palette never reaches here; it returned above.
 		if a.focusedPane == FocusNavigation {
-			// Two controls under one border, so either direction is the other
-			// one. Tab out of the query box is handled with its own keys.
 			a.focusNavSearch()
 			return nil
 		}
 		a.stepWritingBoxFocus()
 		return nil
 	case tcell.KeyRune:
-		// A command bound by id beats the action holding that rune by default.
-		// Out of scope for this pane it does not run, and the action answers.
 		if r := event.Rune(); a.commandBoundTo(r) && a.runCommandShortcut(r) {
 			return nil
 		}
@@ -98,7 +74,6 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 
-	// Pane-specific shortcuts
 	switch a.focusedPane {
 	case FocusNavigation:
 		return a.handleNavigationKey(event)
@@ -111,9 +86,6 @@ func (a *App) handleGlobalKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// paneScope returns the command scope the focused pane answers for. The
-// palette borrows the scope of the pane it was opened from, which is the pane
-// its commands will act on.
 func (a *App) paneScope() CommandScope {
 	pane := a.focusedPane
 	if pane == FocusPalette {
@@ -128,8 +100,6 @@ func (a *App) paneScope() CommandScope {
 	return ScopeGlobal
 }
 
-// runCommandShortcut fires the command bound to the rune, if any. One out of
-// scope never fires: an issue's keys do not answer from the navigation tree.
 func (a *App) runCommandShortcut(r rune) bool {
 	scope := a.paneScope()
 	for _, cmd := range a.paletteCtrl.commands {
@@ -141,7 +111,6 @@ func (a *App) runCommandShortcut(r rune) bool {
 	return false
 }
 
-// handleNavigationKey handles keyboard input when navigation pane is focused.
 func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyRight:
@@ -152,8 +121,6 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 		case 'l':
 			a.stepPane(1)
 			return nil
-		// Swallowed either way, so tview's jump-to-child and jump-to-parent
-		// never surface on a node that is not a favorite.
 		case a.actionKey("favorite_move_up", 'K'):
 			a.moveFavorite(a.currentNavigationNode(), -1)
 			return nil
@@ -161,9 +128,7 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 			a.moveFavorite(a.currentNavigationNode(), 1)
 			return nil
 		case 'j', 'k', 'g', 'G', 'h':
-			// Tree movement keys stay with the tree.
 		default:
-			// Command shortcuts work from the navigation pane too.
 			if a.runCommandShortcut(r) {
 				return nil
 			}
@@ -172,12 +137,9 @@ func (a *App) handleNavigationKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// handleIssuesKey handles keyboard input when issues pane is focused.
 func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEscape:
-		// Esc in the search results returns to the query box that produced
-		// them, over in the navigation pane.
 		if a.activeIssuesSection == IssuesSectionSearch {
 			a.focusNavSearch()
 			return nil
@@ -190,7 +152,6 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case tcell.KeyRune:
 		r := event.Rune()
-		// Handle vim-style navigation first
 		switch r {
 		case 'h':
 			a.stepPane(-1)
@@ -199,8 +160,7 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 			a.stepPane(1)
 			return nil
 		}
-		// Handle command shortcuts (plain letters) - skip navigation keys
-		if r != 'j' && r != 'k' { // j/k are handled by table for up/down
+		if r != 'j' && r != 'k' {
 			if a.runCommandShortcut(r) {
 				return nil
 			}
@@ -209,8 +169,6 @@ func (a *App) handleIssuesKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// leaveDetailsForIssues moves focus back to the issues list, releasing the zoom
-// that was covering it.
 func (a *App) leaveDetailsForIssues() {
 	a.releaseDetailsZoom()
 	a.focusedPane = FocusIssues
@@ -218,23 +176,15 @@ func (a *App) leaveDetailsForIssues() {
 	a.updateFocus()
 }
 
-// handleDetailsKey handles keyboard input when details pane is focused.
 func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
-	// The focused card answers first. That is what lets r reply here and
-	// refresh everywhere else; a command the user bound to r by id still beats
-	// both, one branch up in handleGlobalKey.
 	if a.handleCommentKey(event) {
 		return nil
 	}
 	switch event.Key() {
 	case tcell.KeyEnter, tcell.KeyEscape:
-		// Escape lets go of a card before it does anything larger, the way it
-		// drops a reply's aim before leaving the compose box.
 		if event.Key() == tcell.KeyEscape && a.detailsHaveFocus() && a.clearCommentFocus() {
 			return nil
 		}
-		// Zoomed, the way back is the issues list itself; unzoomed, Enter
-		// closes the pane to get there. Escape only has the first meaning.
 		if a.detailsZoomed {
 			a.leaveDetailsForIssues()
 			return nil
@@ -266,9 +216,7 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 			a.stepDetailsFocus(false)
 			return nil
 		case 'j', 'k', 'g', 'G':
-			// Scrolling keys stay with the text view.
 		default:
-			// Command shortcuts work from the details pane too.
 			if a.runCommandShortcut(r) {
 				return nil
 			}
@@ -277,7 +225,6 @@ func (a *App) handleDetailsKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// handlePaletteKey handles keyboard input when palette is open.
 func (a *App) handlePaletteKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEscape:

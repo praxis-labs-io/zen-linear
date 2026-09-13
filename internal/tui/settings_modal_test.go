@@ -11,8 +11,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
-// A save has to land on the file the app launched from. Re-resolving the path
-// followed an XDG copy that appeared mid-session and wrote to a stranger.
 func TestSavingSettingsWritesBackToTheLaunchFile(t *testing.T) {
 	home := t.TempDir()
 	setHomeDir(t, home)
@@ -20,7 +18,6 @@ func TestSavingSettingsWritesBackToTheLaunchFile(t *testing.T) {
 
 	launch := filepath.Join(home, ".zen-linear", "config.json")
 	app := newUXTestApp(t)
-	// The save validates before it writes, so the form needs values that pass.
 	app.config.LinearAPIKey = "k-acme"
 	app.config.APIEndpoint = "https://api.linear.app/graphql"
 	app.config.Timeout = 30 * time.Second
@@ -51,10 +48,6 @@ func TestSavingSettingsWritesBackToTheLaunchFile(t *testing.T) {
 	}
 }
 
-// TestSettingsFormRoundTripPreservesConfig guards the settings save path:
-// settingsFromForm rebuilds the config file from form controls, so any field
-// without a control must be carried through or an in-app save silently
-// strips it from the user's config.
 func TestSettingsFormRoundTripPreservesConfig(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.GroupBy = "status"
@@ -91,9 +84,6 @@ func TestSettingsFormRoundTripPreservesConfig(t *testing.T) {
 	}
 }
 
-// TestSettingsFormRoundTripsFlags verifies both on/off pickers survive a save
-// in both directions rather than reverting to a default. They read their value
-// off a selected index, so an off-by-one reads as the opposite setting.
 func TestSettingsFormRoundTripsFlags(t *testing.T) {
 	for _, want := range []bool{true, false} {
 		app := newUXTestApp(t)
@@ -119,10 +109,6 @@ func TestSettingsFormRoundTripsFlags(t *testing.T) {
 	}
 }
 
-// TestSettingsPickersSpanMultipleRows guards the row breaks between the
-// settings pickers. Consecutive AddPicker calls pack into one row, so dropping
-// an EndRow silently squeezes every picker into a single row and clips the
-// labels and values rather than failing.
 func TestSettingsSectionsHoldEveryFieldAndKeepOneHeight(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 110, 40)
@@ -138,7 +124,6 @@ func TestSettingsSectionsHoldEveryFieldAndKeepOneHeight(t *testing.T) {
 		}
 	}
 
-	// The panel must not resize under the reader as they step sections.
 	want := fm.contentHeight(40)
 	for i := range fm.sections {
 		fm.activeSection = i
@@ -148,7 +133,6 @@ func TestSettingsSectionsHoldEveryFieldAndKeepOneHeight(t *testing.T) {
 		}
 	}
 
-	// And every section fits that one height without scrolling.
 	for i := range fm.sections {
 		fm.activeSection = i
 		rows := 0
@@ -187,7 +171,6 @@ func TestSettingsFormDropsTheMachineDefaultLogPath(t *testing.T) {
 	}
 }
 
-// A path the user typed is theirs, and an empty field stays "logging off".
 func TestSettingsFormKeepsAnExplicitLogPath(t *testing.T) {
 	app := newUXTestApp(t)
 	custom := filepath.Join(t.TempDir(), "elsewhere.log")
@@ -221,8 +204,6 @@ func TestSettingsFormKeepsAnExplicitLogPath(t *testing.T) {
 	}
 }
 
-// The log level has a form control but no coverage; it rides along here so a
-// picker read off the wrong index cannot silently reset it.
 func TestSettingsFormRoundTripsLogLevel(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.LogLevel = "debug"
@@ -238,9 +219,6 @@ func TestSettingsFormRoundTripsLogLevel(t *testing.T) {
 	}
 }
 
-// The end of the chain: what an in-app save actually leaves on disk. The form
-// shows the resolved path, so only the normalization on the way out keeps this
-// machine's home directory out of a config file shared with another machine.
 func TestSavingSettingsLeavesNoMachineSpecificLogPathOnDisk(t *testing.T) {
 	isolateLogging(t)
 
@@ -250,7 +228,6 @@ func TestSavingSettingsLeavesNoMachineSpecificLogPathOnDisk(t *testing.T) {
 
 	launch := filepath.Join(home, ".zen-linear", "config.json")
 	app := newUXTestApp(t)
-	// The save validates before it writes, so the form needs values that pass.
 	app.config.LinearAPIKey = "k-acme"
 	app.config.APIEndpoint = "https://api.linear.app/graphql"
 	app.config.Timeout = 30 * time.Second
@@ -273,7 +250,6 @@ func TestSavingSettingsLeavesNoMachineSpecificLogPathOnDisk(t *testing.T) {
 		t.Errorf("log_file written as %q, want the key omitted", value)
 	}
 
-	// Omitted still has to come back as a usable path on the next launch.
 	settings, err := config.LoadSettings(launch)
 	if err != nil {
 		t.Fatalf("LoadSettings() error: %v", err)
@@ -283,7 +259,6 @@ func TestSavingSettingsLeavesNoMachineSpecificLogPathOnDisk(t *testing.T) {
 	}
 }
 
-// A path the user typed is theirs and does get written out.
 func TestSavingSettingsKeepsAnExplicitLogPathOnDisk(t *testing.T) {
 	isolateLogging(t)
 
@@ -317,10 +292,6 @@ func TestSavingSettingsKeepsAnExplicitLogPathOnDisk(t *testing.T) {
 	}
 }
 
-// An environment override is where this session's value came from, not where
-// the next one's should. The modal shows it, so without protection a save
-// would write $LINEAR_LOG_LEVEL into config.json permanently — the same shape
-// as the log path ZNL-145 froze into a config shared between machines.
 func TestSavingSettingsDoesNotWriteAnEnvOverrideToDisk(t *testing.T) {
 	isolateLogging(t)
 	t.Setenv("LINEAR_LOG_LEVEL", "debug")
@@ -351,15 +322,12 @@ func TestSavingSettingsDoesNotWriteAnEnvOverrideToDisk(t *testing.T) {
 
 	app.settingsModal.Show()
 
-	// Shown: the field reads what the session is actually running with, and the
-	// line above the fields says where that came from.
 	if _, got := app.settingsModal.logLevelField.GetCurrentOption(); got != "debug" {
 		t.Errorf("log level field = %q, want the effective %q", got, "debug")
 	}
 	if got := app.settingsModal.fm.contextText; !strings.Contains(got, config.FieldLogLevel) {
 		t.Errorf("context line %q does not name the field", got)
 	}
-	// And it refuses the typing rather than taking it and dropping it later.
 	if !app.settingsModal.fm.isLocked(app.settingsModal.logLevelField.View()) {
 		t.Error("an overridden field is still editable")
 	}
@@ -381,14 +349,11 @@ func TestSavingSettingsDoesNotWriteAnEnvOverrideToDisk(t *testing.T) {
 		t.Errorf("log_level written as %v, want the file's %q", written["log_level"], "warning")
 	}
 
-	// And the session keeps the override rather than reverting to the file.
 	if app.config.LogLevel != "debug" {
 		t.Errorf("session log level = %q, want the override to survive the save", app.config.LogLevel)
 	}
 }
 
-// With nothing in the environment the notice line stays empty, so an ordinary
-// settings modal is unchanged.
 func TestTheEnvOverrideNoticeNamesOnlyWhatIsSet(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -420,10 +385,6 @@ func TestTheEnvOverrideNoticeNamesOnlyWhatIsSet(t *testing.T) {
 	}
 }
 
-// The notice line is one fixed row that does not grow, so it has to fit a
-// narrow terminal at every length. Naming the variable beside each field
-// overflowed it at two overrides, which told the reader about one field and
-// hid the rest.
 func TestTheEnvOverrideNoticeStaysOnOneLine(t *testing.T) {
 	all := config.EnvOverrides{
 		config.FieldAPIEndpoint: "LINEAR_API_ENDPOINT",
@@ -435,7 +396,6 @@ func TestTheEnvOverrideNoticeStaysOnOneLine(t *testing.T) {
 	}
 
 	notice := envOverrideNotice(all)
-	// 74 is what an 80-column terminal leaves after the border and padding.
 	if len(notice) > 74 {
 		t.Errorf("notice is %d chars and will be cut: %q", len(notice), notice)
 	}
@@ -444,9 +404,6 @@ func TestTheEnvOverrideNoticeStaysOnOneLine(t *testing.T) {
 	}
 }
 
-// setHomeDir points os.UserHomeDir at dir on every platform. It reads $HOME on
-// unix and %USERPROFILE% on Windows, so a test setting only one of them runs
-// against the real profile on the other.
 func setHomeDir(t *testing.T, dir string) {
 	t.Helper()
 	t.Setenv("HOME", dir)

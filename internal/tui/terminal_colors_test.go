@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// TestParseKittyGraphicsReadsTheAnswer covers what the launch probe can be
-// handed: a terminal that draws graphics, one that understands the protocol but
-// refused this image, one that never answered, and a reply still arriving.
 func TestParseKittyGraphicsReadsTheAnswer(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -50,9 +47,6 @@ func TestParseKittyGraphicsReadsTheAnswer(t *testing.T) {
 	}
 }
 
-// TestTerminalQueryEndsInDeviceAttributes pins the order the read loop depends
-// on: the graphics question has to be asked before the query that closes the
-// reply, or the loop stops before the answer arrives.
 func TestTerminalQueryEndsInDeviceAttributes(t *testing.T) {
 	graphics := strings.Index(terminalQuery, "a=q")
 	if graphics < 0 {

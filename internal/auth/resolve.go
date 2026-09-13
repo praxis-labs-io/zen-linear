@@ -10,7 +10,8 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
-// Resolve selects an API token: LINEAR_API_KEY overrides stored OAuth credentials.
+// Resolve returns apiKey when set, else the stored OAuth token, refreshed and
+// saved when near expiry.
 func Resolve(ctx context.Context, apiKey string, storePath string, oauthClient *oauth.Client) (ResolvedAuth, error) {
 	if apiKey != "" {
 		return ResolvedAuth{Token: apiKey, Source: TokenSourceAPIKey}, nil
@@ -42,9 +43,8 @@ func Resolve(ctx context.Context, apiKey string, storePath string, oauthClient *
 	}, nil
 }
 
-// EnsureAccessToken refreshes credentials when force is set or the access token
-// expires within skew of now. Returns the (possibly updated) credentials and
-// whether a refresh occurred.
+// EnsureAccessToken refreshes creds when force is set or the token expires
+// within skew of now, returning the credentials and whether it refreshed.
 func EnsureAccessToken(
 	ctx context.Context,
 	creds Credentials,
@@ -73,7 +73,6 @@ func EnsureAccessToken(
 	return updated, true, nil
 }
 
-// CredentialsFromTokenResponse maps a token endpoint response to stored credentials.
 func CredentialsFromTokenResponse(token oauth.TokenResponse, now time.Time) Credentials {
 	expiresIn := token.ExpiresIn
 	if expiresIn <= 0 {
@@ -89,8 +88,8 @@ func CredentialsFromTokenResponse(token oauth.TokenResponse, now time.Time) Cred
 	}
 }
 
-// NewRefreshFunc returns a callback that force-refreshes stored OAuth credentials.
-// Suitable for linearapi unauthorized retry wiring.
+// NewRefreshFunc returns a func that force-refreshes the stored credentials and
+// returns the new access token.
 func NewRefreshFunc(storePath string, oauthClient *oauth.Client) func(ctx context.Context) (string, error) {
 	return func(ctx context.Context) (string, error) {
 		creds, err := LoadCredentials(storePath)

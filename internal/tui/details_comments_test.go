@@ -8,9 +8,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// commentedIssueFixture is an issue whose comments exercise the card: a body
-// written a line per thought, one long enough to wrap, an edit, and a comment
-// of the signed-in user's own.
 func commentedIssueFixture() *linearapi.Issue {
 	issue := detailsFixture()
 	now := time.Now()
@@ -42,18 +39,11 @@ func newCommentsTestApp(t *testing.T) *App {
 	return app
 }
 
-// drawComments renders the page at a width and returns its rows. The width is
-// the page's own: the panel around it has already spent the border and the
-// padding. The compose card is the last thing on it, so the rows carry one more
-// card than there are comments.
 func drawComments(t *testing.T, app *App, width int) []string {
 	t.Helper()
 	return drawPrimitiveAt(t, app.detailsPage, width, 160)
 }
 
-// commentCards groups the drawn rows into cards, each running from its top
-// border to its bottom one. Rows are trimmed of the centering gutter so the
-// card's own edges sit at the ends.
 func commentCards(lines []string) [][]string {
 	var cards [][]string
 	var card []string
@@ -73,13 +63,10 @@ func commentCards(lines []string) [][]string {
 	return cards
 }
 
-// TestCommentsRenderAsCards pins the shape: a byline, a rule under it, and the
-// body inside a rounded box that closes.
 func TestCommentsRenderAsCards(t *testing.T) {
 	app := newCommentsTestApp(t)
 	cards := commentCards(drawComments(t, app, 80))
 
-	// One per comment, and the compose card that ends the page.
 	if len(cards) != 3 {
 		t.Fatalf("drew %d cards, want one per comment and the compose card:\n%s", len(cards), strings.Join(drawComments(t, app, 80), "\n"))
 	}
@@ -114,9 +101,6 @@ func TestCommentsRenderAsCards(t *testing.T) {
 	}
 }
 
-// TestCommentCardsFillTheMeasure covers the card taking the stack's measure:
-// the reading cap where there is room for it, the whole width where there is
-// not.
 func TestCommentCardsFillTheMeasure(t *testing.T) {
 	app := newCommentsTestApp(t)
 
@@ -137,8 +121,6 @@ func TestCommentCardsFillTheMeasure(t *testing.T) {
 	}
 }
 
-// TestCommentCardRefitsOnResize covers a widened pane. Cards laid out at the
-// first width would leave a narrow box inside a wide pane.
 func TestCommentCardRefitsOnResize(t *testing.T) {
 	app := newCommentsTestApp(t)
 
@@ -151,8 +133,6 @@ func TestCommentCardRefitsOnResize(t *testing.T) {
 	}
 }
 
-// TestLongCommentBodyStaysInsideTheCard is the one that catches a padding or
-// measure mismatch: a body that wraps must not push a row past the box.
 func TestLongCommentBodyStaysInsideTheCard(t *testing.T) {
 	app := newCommentsTestApp(t)
 	lines := drawComments(t, app, 80)
@@ -165,16 +145,12 @@ func TestLongCommentBodyStaysInsideTheCard(t *testing.T) {
 	if len(wrapping) < 6 {
 		t.Fatalf("the long body did not wrap: %q", wrapping)
 	}
-	// The box sides sit on every row, so they come off before the wrapped
-	// sentence can be read back as one.
 	body := strings.Join(strings.Fields(strings.ReplaceAll(strings.Join(wrapping, " "), "│", " ")), " ")
 	if !strings.Contains(body, "keep wrapping past that.") {
 		t.Errorf("the long body did not render in full:\n%s", strings.Join(wrapping, "\n"))
 	}
 }
 
-// TestCommentBylineIsRelative covers the byline replacing the absolute
-// timestamp the pane used to print.
 func TestCommentBylineIsRelative(t *testing.T) {
 	app := newCommentsTestApp(t)
 	cards := commentCards(drawComments(t, app, 80))
@@ -193,8 +169,6 @@ func TestCommentBylineIsRelative(t *testing.T) {
 	}
 }
 
-// TestSingleNewlinesAreHardBreaks covers Linear's markdown, where one newline
-// breaks the line. CommonMark folds it into the paragraph.
 func TestSingleNewlinesAreHardBreaks(t *testing.T) {
 	app := newCommentsTestApp(t)
 	card := commentCards(drawComments(t, app, 80))[0]
@@ -213,15 +187,10 @@ func TestSingleNewlinesAreHardBreaks(t *testing.T) {
 	}
 }
 
-// TestNarrowCommentsPaneDoesNotPanic covers a pane too small to frame a card.
-// A negative pad inside a draw func takes the app down with it.
 func TestNarrowCommentsPaneDoesNotPanic(t *testing.T) {
 	app := newCommentsTestApp(t)
 
 	for _, width := range []int{0, 1, 3, 5, 11, 12, 16, 20} {
-		// A card wider than the pane is wrapped by the text view, which shows
-		// up as rows of uneven width rather than as an over-long row: the
-		// harness only ever reads back what fits on screen.
 		for i, card := range commentCards(drawComments(t, app, width)) {
 			for row, line := range card {
 				if got, want := len([]rune(line)), len([]rune(card[0])); got != want {
@@ -232,8 +201,6 @@ func TestNarrowCommentsPaneDoesNotPanic(t *testing.T) {
 	}
 }
 
-// TestCommentCardKeepsAnUnbreakableLine covers what glamour cannot wrap: a bare
-// URL, a code block, a table. Clipped to the card, their tails were lost.
 func TestCommentCardKeepsAnUnbreakableLine(t *testing.T) {
 	app := newDetailsTestApp(t)
 	issue := detailsFixture()
@@ -257,10 +224,6 @@ func TestCommentCardKeepsAnUnbreakableLine(t *testing.T) {
 	}
 }
 
-// TestUnwrappedMarkdownIsUntouchedByHardBreaks covers the renderer the agent
-// output modal uses. Glamour joins soft breaks while wrapping, so at width 0,
-// where wrapping is off, hard breaks change nothing: the modal reads the same
-// before and after, and it needs no renderer of its own.
 func TestUnwrappedMarkdownIsUntouchedByHardBreaks(t *testing.T) {
 	initMarkdownRenderer(LinearTheme)
 
@@ -272,15 +235,11 @@ func TestUnwrappedMarkdownIsUntouchedByHardBreaks(t *testing.T) {
 	}
 }
 
-// TestCommentsEmptyState covers the issue nobody has written on. It is the one
-// most likely to be written on, so the section heads itself and the box is
-// right there under it, rather than an empty state taking the page.
 func TestCommentsEmptyState(t *testing.T) {
 	app := newDetailsTestApp(t)
 
 	for _, width := range []int{20, 90} {
 		lines := drawComments(t, app, width)
-		// Normalized because a narrow pane wraps the message across rows.
 		drawn := strings.Join(strings.Fields(strings.Join(lines, " ")), " ")
 		if !strings.Contains(drawn, "Activity") {
 			t.Errorf("width %d drew no empty state:\n%s", width, strings.Join(lines, "\n"))
@@ -290,8 +249,6 @@ func TestCommentsEmptyState(t *testing.T) {
 		}
 	}
 
-	// The card is a real stop with real widgets, not just a frame: without one
-	// the box takes the keyboard while nothing is drawn to take it.
 	if got := app.commentSpanIndex(blockIDCompose); got < 0 {
 		t.Error("the compose card is not in the ring on an issue with no comments")
 	}
@@ -306,9 +263,6 @@ func TestCommentsEmptyState(t *testing.T) {
 	}
 }
 
-// TestIsCommentEdited covers the marker that used to sit on every card. Linear
-// stamps updatedAt before createdAt on a new comment, so comparing them for
-// inequality called a comment edited the moment it was written.
 func TestIsCommentEdited(t *testing.T) {
 	created := time.Date(2026, 8, 10, 19, 5, 4, 762_000_000, time.UTC)
 	tests := []struct {
@@ -332,8 +286,6 @@ func TestIsCommentEdited(t *testing.T) {
 	}
 }
 
-// TestBylineDoesNotCallANewCommentEdited drives the marker through the pane, on
-// the timestamps Linear actually returns.
 func TestBylineDoesNotCallANewCommentEdited(t *testing.T) {
 	app := newDetailsTestApp(t)
 	issue := detailsFixture()

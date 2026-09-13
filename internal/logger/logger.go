@@ -10,21 +10,15 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
-// LogLevel represents the severity level of a log message.
 type LogLevel int
 
 const (
-	// LevelDebug is for detailed debugging information.
 	LevelDebug LogLevel = iota
-	// LevelInfo is for general informational messages.
 	LevelInfo
-	// LevelWarning is for warning messages.
 	LevelWarning
-	// LevelError is for error messages.
 	LevelError
 )
 
-// String returns the string representation of a log level.
 func (l LogLevel) String() string {
 	switch l {
 	case LevelDebug:
@@ -40,7 +34,6 @@ func (l LogLevel) String() string {
 	}
 }
 
-// Logger provides thread-safe logging to a file.
 type Logger struct {
 	mu       sync.Mutex
 	file     *os.File
@@ -52,25 +45,17 @@ type Logger struct {
 }
 
 const (
-	// maxLogSize is where the log is moved aside. One previous generation is
-	// what answers "what happened just before this" for a single-user TUI;
-	// more would be an archive nobody reads.
-	maxLogSize = 5 << 20
-	// rotatedSuffix names that generation: app.log.1 beside app.log.
+	maxLogSize    = 5 << 20
 	rotatedSuffix = ".1"
 )
 
 var (
-	// globalMu guards defaultLogger. A settings save reinitializes the logger
-	// from the UI thread while background fetches are still writing to it.
-	globalMu sync.RWMutex
-	// defaultLogger is the global logger instance.
+	globalMu      sync.RWMutex
 	defaultLogger *Logger
 )
 
-// Init initializes the global logger with the specified log file path.
-// If logPath is empty, logging is disabled. Initializing twice is a no-op.
-// Returns an error if the log file cannot be created.
+// Init opens the global log at logPath. An empty path disables logging, and a
+// second call is a no-op.
 func Init(logPath string, minLevel LogLevel) error {
 	globalMu.Lock()
 	defer globalMu.Unlock()
@@ -84,31 +69,24 @@ func Init(logPath string, minLevel LogLevel) error {
 		return err
 	}
 	defaultLogger = replacement
-	// Write session start marker
 	defaultLogger.log(LevelInfo, "=== Session started ===")
 	return nil
 }
 
-// newLogger opens the log file. An empty path disables logging.
 func newLogger(logPath string, minLevel LogLevel) (*Logger, error) {
 	if logPath == "" {
-		// Logging disabled
 		return &Logger{enabled: false}, nil
 	}
 
-	// Create log directory if it doesn't exist
 	if _, err := config.EnsureDirFor(logPath); err != nil {
 		return nil, fmt.Errorf("create log directory: %w", err)
 	}
 
-	// Open log file for appending
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("open log file: %w", err)
 	}
 
-	// Seeded from what is already there, since the file is opened O_APPEND and
-	// a relaunch would otherwise start counting from nought against a full log.
 	var size int64
 	if info, err := file.Stat(); err == nil {
 		size = info.Size()
@@ -123,10 +101,8 @@ func newLogger(logPath string, minLevel LogLevel) (*Logger, error) {
 	}, nil
 }
 
-// Reinit closes the current logger and reinitializes it with new settings.
-// The new file opens before the old one closes: a path the user cannot write
-// would otherwise leave the session with nowhere to log, including the report
-// of this failure.
+// Reinit swaps the global log for logPath, opening the new file before closing
+// the old one. An error means the new path would not open.
 func Reinit(logPath string, minLevel LogLevel) error {
 	globalMu.Lock()
 	defer globalMu.Unlock()
@@ -138,12 +114,8 @@ func Reinit(logPath string, minLevel LogLevel) error {
 
 	previous := defaultLogger
 	defaultLogger = replacement
-	// Write session start marker
 	defaultLogger.log(LevelInfo, "=== Session started ===")
 
-	// A close failure is about the file being left behind and is not actionable,
-	// so it is reported rather than returned: the error here means the new path
-	// could not be opened, which is what a caller retries on.
 	if previous != nil {
 		if err := previous.close(); err != nil {
 			defaultLogger.log(LevelWarning, fmt.Sprintf("closing previous log: %v", err))
@@ -152,7 +124,6 @@ func Reinit(logPath string, minLevel LogLevel) error {
 	return nil
 }
 
-// Close closes the log file. Should be called when the application exits.
 func Close() error {
 	globalMu.Lock()
 	defer globalMu.Unlock()
@@ -163,15 +134,12 @@ func Close() error {
 	return defaultLogger.close()
 }
 
-// current returns the logger to write to, or nil when there is none.
 func current() *Logger {
 	globalMu.RLock()
 	defer globalMu.RUnlock()
 	return defaultLogger
 }
 
-// close writes the session end marker and closes the file. A writer that took
-// this logger before the swap either finishes its line first or sees closed.
 func (l *Logger) close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -184,7 +152,6 @@ func (l *Logger) close() error {
 	return l.file.Close()
 }
 
-// log writes a log message with the specified level and message.
 func (l *Logger) log(level LogLevel, message string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -192,21 +159,11 @@ func (l *Logger) log(level LogLevel, message string) {
 	l.write(level, message)
 }
 
-// rotateIfFull moves a full log aside and opens an empty one. Callers hold
-// l.mu, which is the only thing guarding l.file: close is the sole other
-// holder, and Reinit builds a separate Logger rather than touching this one's.
-//
-// A failed rotation keeps writing to the log it has. An oversized log is worth
-// less than a session with nowhere to report why it has one.
 func (l *Logger) rotateIfFull() {
 	if !l.enabled || l.closed || l.file == nil || l.size < maxLogSize || l.path == "" {
 		return
 	}
 
-	// Close releases the handle even when it reports an error, so there is no
-	// branch here that can keep writing to l.file. Everything past this point
-	// has to end in a reopen or the session logs nowhere for the rest of its
-	// life, with write discarding the error that would have said so.
 	_ = l.file.Close()
 	if err := os.Rename(l.path, l.path+rotatedSuffix); err != nil {
 		l.reopen()
@@ -215,11 +172,6 @@ func (l *Logger) rotateIfFull() {
 	l.reopen()
 }
 
-// reopen replaces l.file after a rotation. Callers hold l.mu.
-//
-// The size is re-read rather than zeroed: a rotation whose rename failed
-// reopens the same full file, and a counter starting from nought there would
-// let it grow another whole cap before the next attempt, and again after that.
 func (l *Logger) reopen() {
 	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -234,7 +186,6 @@ func (l *Logger) reopen() {
 	}
 }
 
-// write appends one line. Callers hold l.mu.
 func (l *Logger) write(level LogLevel, message string) {
 	if !l.enabled || level < l.minLevel || l.closed || l.file == nil {
 		return
@@ -246,35 +197,30 @@ func (l *Logger) write(level LogLevel, message string) {
 	l.size += int64(n)
 }
 
-// Debug logs a debug-level message.
 func Debug(format string, args ...interface{}) {
 	if l := current(); l != nil {
 		l.log(LevelDebug, fmt.Sprintf(format, args...))
 	}
 }
 
-// Info logs an info-level message.
 func Info(format string, args ...interface{}) {
 	if l := current(); l != nil {
 		l.log(LevelInfo, fmt.Sprintf(format, args...))
 	}
 }
 
-// Warning logs a warning-level message.
 func Warning(format string, args ...interface{}) {
 	if l := current(); l != nil {
 		l.log(LevelWarning, fmt.Sprintf(format, args...))
 	}
 }
 
-// Error logs an error-level message.
 func Error(format string, args ...interface{}) {
 	if l := current(); l != nil {
 		l.log(LevelError, fmt.Sprintf(format, args...))
 	}
 }
 
-// ErrorWithErr logs an error with additional error context.
 func ErrorWithErr(err error, format string, args ...interface{}) {
 	if l := current(); l != nil && err != nil {
 		message := fmt.Sprintf(format, args...)
@@ -282,39 +228,26 @@ func ErrorWithErr(err error, format string, args ...interface{}) {
 	}
 }
 
-// Start opens the log at path, falling back to fallback when path cannot be
-// opened and to no logging when neither can. Logging is diagnostics: a path the
-// app cannot write is worth reporting, never worth refusing to launch over.
-//
-// It returns the path actually opened, empty when logging ended up off, and a
-// warning that is empty on a clean open. Callers should adopt the returned path
-// as the effective one so the settings UI names where logs really go.
+// Start opens path, else fallback, else turns logging off. It returns the path
+// opened, empty when logging is off, and a warning that is empty on a clean open.
 func Start(path, fallback string, minLevel LogLevel) (opened, warning string) {
-	// Init is a no-op once a logger exists, and would report success without
-	// opening anything. Starting means starting.
 	globalMu.Lock()
 	previous := defaultLogger
 	defaultLogger = nil
 	globalMu.Unlock()
 	if previous != nil {
-		// Nowhere to report a close failure to: this is the logger being torn
-		// down, and the one replacing it is not open yet.
 		_ = previous.close()
 	}
 
 	return openWithFallback(Init, path, fallback, minLevel)
 }
 
-// Restart is Start for a logger that is already running. A refused path never
-// closes the log in hand until a replacement is open, so the session is never
-// left with nowhere to report this failure.
+// Restart is Start for a running logger. The current log stays open until a
+// replacement does.
 func Restart(path, fallback string, minLevel LogLevel) (opened, warning string) {
 	return openWithFallback(Reinit, path, fallback, minLevel)
 }
 
-// openWithFallback reads a nil error as "this path is now the log". Init breaks
-// that on a second call, where nil means it left an existing logger alone, so
-// Start clears the logger first rather than reporting a path it never opened.
 func openWithFallback(open func(string, LogLevel) error, path, fallback string, minLevel LogLevel) (opened, warning string) {
 	err := open(path, minLevel)
 	if err == nil {
@@ -327,8 +260,6 @@ func openWithFallback(open func(string, LogLevel) error, path, fallback string, 
 		}
 	}
 
-	// Disabling cannot fail: newLogger returns a disabled logger for an empty
-	// path without touching the filesystem.
 	_ = open("", minLevel)
 	return "", fmt.Sprintf("cannot log to %s (%v); logging is off", path, err)
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
-// ListTeams fetches all teams the user has access to.
 func (c *Client) ListTeams(ctx context.Context) ([]Team, error) {
 	var query struct {
 		Teams struct {

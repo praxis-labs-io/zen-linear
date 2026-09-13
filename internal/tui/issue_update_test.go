@@ -13,14 +13,8 @@ import (
 
 var errNotReachable = errors.New("linear unreachable")
 
-// titleColumn is the index of the title cell in DefaultIssueColumns.
 const titleColumn = 3
 
-// newIssueUpdateTestApp returns an app seeded with issues and a channel that
-// fires after each queued draw completes. A selection move fetches details on
-// a background goroutine; a test that triggers one must waitForDraw before
-// finishing, or that goroutine's table work races the next test's NewApp over
-// tview's package-level styles.
 func newIssueUpdateTestApp(t *testing.T, issues []linearapi.Issue) (*App, <-chan struct{}) {
 	t.Helper()
 	app := newUXTestApp(t)
@@ -47,8 +41,6 @@ func newIssueUpdateTestApp(t *testing.T, issues []linearapi.Issue) (*App, <-chan
 	return app, drawn
 }
 
-// scopedTestApp narrows the list to a team, so the scope check has something
-// to check. On All Issues it is skipped.
 func scopedTestApp(t *testing.T, issues []linearapi.Issue) (*App, <-chan struct{}) {
 	t.Helper()
 	app, drawn := newIssueUpdateTestApp(t, issues)
@@ -75,8 +67,6 @@ func assertIssueCount(t *testing.T, app *App, want int) {
 	}
 }
 
-// assertSelectionNotAliased fails when selectedIssue points into the a.issues
-// backing array, which in-place sorts and splices silently repoint.
 func assertSelectionNotAliased(t *testing.T, app *App) {
 	t.Helper()
 	app.issuesMu.RLock()
@@ -94,8 +84,6 @@ func TestApplyIssueUpdate_RepaintsOneRowWhenNothingMoves(t *testing.T) {
 		{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"},
 	})
 
-	// Park the cursor and the horizontal scroll somewhere a full re-render
-	// would reset.
 	table := app.tableForSection(IssuesSectionList)
 	table.Select(2, 0)
 	table.SetOffset(0, 2)
@@ -123,8 +111,6 @@ func TestApplyIssueUpdate_KeepsDetailsThePaneLoaded(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
-	// The pane's full fetch lives only in selectedIssue; the list entry never
-	// carries comments, subscribers or history.
 	app.issuesMu.Lock()
 	app.selectedIssue = &linearapi.Issue{
 		ID: "issue-1", Identifier: "LIN-1", Title: "Alpha",
@@ -148,8 +134,6 @@ func TestApplyIssueUpdate_KeepsDetailsThePaneLoaded(t *testing.T) {
 	if len(selected.Subscribers) != 1 {
 		t.Fatalf("subscribers = %#v, want the loaded subscriber kept", selected.Subscribers)
 	}
-	// The mutation response carries no history, so an edit that dropped this
-	// would empty the feed until a refetch landed.
 	if len(selected.Activity) != 1 {
 		t.Fatalf("activity = %#v, want the loaded history kept", selected.Activity)
 	}
@@ -167,8 +151,6 @@ func TestApplyIssueUpdate_ConsecutiveEditsFollowTheEditedIssue(t *testing.T) {
 	app.selectedIssue = &linearapi.Issue{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma"}
 	app.issuesMu.Unlock()
 
-	// The first edit re-sorts the slice under the selection; the second must
-	// still land on the same issue.
 	app.applyIssueUpdate(linearapi.Issue{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma", UpdatedAt: base.Add(4 * time.Hour)})
 	app.applyIssueUpdate(linearapi.Issue{ID: "issue-3", Identifier: "LIN-3", Title: "Gamma edited", UpdatedAt: base.Add(5 * time.Hour)})
 
@@ -188,8 +170,6 @@ func TestApplyIssueUpdate_ReflectsEditToAnIssueOutsideTheList(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
 	})
-	// A search result outside the loaded pages: it owns the pane and a search
-	// row, but is absent from a.issues.
 	app.searchIssues = []linearapi.Issue{{ID: "search-1", Identifier: "LIN-9", Title: "Old title"}}
 	app.searchIssueRows, app.searchIDToIssue = BuildIssueRows(app.searchIssues, app.expandedState)
 	app.issuesMu.Lock()
@@ -211,8 +191,6 @@ func TestApplyIssueUpdate_ReflectsEditToAnIssueOutsideTheList(t *testing.T) {
 	if len(selected.Comments) != 1 {
 		t.Fatalf("comments = %#v, want kept", selected.Comments)
 	}
-	// The mutation response carries no history, so an edit that dropped this
-	// would empty the feed until a refetch landed.
 	if len(selected.Activity) != 1 {
 		t.Fatalf("activity = %#v, want kept", selected.Activity)
 	}
@@ -244,8 +222,6 @@ func TestApplyIssueUpdate_AddsAnIssueTheEditBroughtIntoScope(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for the scope check")
 	}
-	// One draw applies the verdict, a second lands the selection's detail
-	// fetch.
 	waitForDraw(t, drawn)
 	waitForDraw(t, drawn)
 	assertIssueCount(t, app, 2)
@@ -278,8 +254,6 @@ func TestConfirmIssueInScope_DiscardsVerdictAfterRefresh(t *testing.T) {
 	}
 
 	app.applyIssueUpdate(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta edited"})
-	// A refresh re-scopes the list while the answer is in flight; the stale
-	// verdict must not touch it.
 	app.refreshGeneration.Add(1)
 	close(release)
 
@@ -300,9 +274,7 @@ func TestApplyIssueInsert_KeepsTheRowWhenTheScopeCheckFails(t *testing.T) {
 	app.applyIssueInsert(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"})
 
 	<-checked
-	// The insert moved the selection, which fetches details in background.
 	waitForDraw(t, drawn)
-	// A failed check must not take away a row the user is looking at.
 	assertIssueCount(t, app, 2)
 }
 
@@ -339,7 +311,6 @@ func TestApplyIssueRemoval_KeepsCursorWhenAnotherRowIsRemoved(t *testing.T) {
 	if len(remaining) != 2 || remaining[0] != "issue-1" || remaining[1] != "issue-3" {
 		t.Fatalf("remaining issues = %v, want [issue-1 issue-3]", remaining)
 	}
-	// The removed row was not the selected one; the cursor stays put.
 	if selected == nil || selected.ID != "issue-1" {
 		t.Fatalf("selected issue = %#v, want issue-1", selected)
 	}
@@ -361,7 +332,6 @@ func TestApplyIssueRemoval_SelectedRowLandsOnSuccessor(t *testing.T) {
 
 	app.applyIssueRemoval("issue-2")
 
-	// The successor selection fetches details in background.
 	waitForDraw(t, drawn)
 	app.issuesMu.RLock()
 	selected := app.selectedIssue
@@ -371,9 +341,6 @@ func TestApplyIssueRemoval_SelectedRowLandsOnSuccessor(t *testing.T) {
 	}
 }
 
-// Removing the last row leaves the list on screen saying it is empty, rather
-// than bouncing the user somewhere else, and drops the selection so status,
-// assign and archive stop acting on a row that is gone.
 func TestApplyIssueRemoval_LeavesTheEmptiedListOnScreen(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Only"},
@@ -474,7 +441,6 @@ func TestApplyIssueInsert_AddsTheCreatedRowAndSelectsIt(t *testing.T) {
 
 	app.applyIssueInsert(linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Beta"})
 
-	// The insert selects the new issue, which fetches details in background.
 	waitForDraw(t, drawn)
 	assertIssueCount(t, app, 2)
 	app.issuesMu.RLock()
@@ -543,9 +509,6 @@ func TestExpandAllKeepsGroupingAndCoversAllTab(t *testing.T) {
 	}
 }
 
-// A refresh while search results are showing rebuilds the list off screen.
-// Painting it there costs a table's worth of cells nobody can see and resets
-// its selection, so the paint waits for the section to come back.
 func TestRenderIssueSections_DefersTheOffScreenListUntilShown(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
@@ -575,17 +538,11 @@ func TestRenderIssueSections_DefersTheOffScreenListUntilShown(t *testing.T) {
 	}
 }
 
-// Pagination sorts a.issues in place between paints, and the id maps used to
-// point into it. Skimming inside that window resolved a row to whichever issue
-// had sorted into the slot, so the details pane and every command reading the
-// selection landed on the wrong issue.
 func TestSkimmingDuringPagination_SelectsTheIssueTheRowNames(t *testing.T) {
 	app := newUXTestApp(t)
 	holdDetailFetches(t, app)
 	app.sortFields = []SortField{SortByPriority}
 
-	// Spare capacity so the merged page cannot reallocate. The sort then
-	// permutes the same array the maps index, which is the failing case.
 	firstPage := make([]linearapi.Issue, 0, 8)
 	firstPage = append(firstPage,
 		linearapi.Issue{ID: "issue-c", Identifier: "ZNL-3", Title: "Gamma", Priority: 3},
@@ -598,8 +555,6 @@ func TestSkimmingDuringPagination_SelectsTheIssueTheRowNames(t *testing.T) {
 	merge.reset(app.issues)
 	app.issuesMu.RUnlock()
 
-	// A page that sorts ahead of everything on screen, inside the repaint
-	// budget: accumulated, not yet painted.
 	app.accumulateIssues([]linearapi.Issue{
 		{ID: "issue-a", Identifier: "ZNL-1", Title: "Alpha", Priority: 1},
 		{ID: "issue-b", Identifier: "ZNL-2", Title: "Beta", Priority: 2},
@@ -615,8 +570,6 @@ func TestSkimmingDuringPagination_SelectsTheIssueTheRowNames(t *testing.T) {
 	}
 }
 
-// The maps hold pointers, so indexing the live list lets a later in-place sort
-// repoint every entry. They index a snapshot instead.
 func TestRebuildIssueRowModels_IndexesASnapshotNotTheLiveList(t *testing.T) {
 	app := newUXTestApp(t)
 	app.issuesMu.Lock()

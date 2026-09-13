@@ -10,9 +10,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// TestFormModalShowResetsFocusToFirstField guards the whole bug class where
-// reopening a modal leaves keyboard focus on whatever was focused last
-// (tview forms remember their last-focused item across shows).
 func TestFormModalShowResetsFocusToFirstField(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -24,7 +21,6 @@ func TestFormModalShowResetsFocusToFirstField(t *testing.T) {
 	if app.app.GetFocus() != first {
 		t.Fatal("first Show did not focus the first field")
 	}
-	// Simulate a prior session ending focused on a button, then reopen.
 	app.app.SetFocus(fm.order[len(fm.order)-1])
 	fm.Hide("form_test")
 	fm.Show("form_test")
@@ -71,9 +67,6 @@ func TestFormModalEscCancelsAndCtrlEnterSubmits(t *testing.T) {
 	}
 }
 
-// TestFormModalConsecutivePickersShareARow verifies dropdowns added back to
-// back pack into one two-row unit (labels above, values below) instead of
-// stacking, and still tab in order.
 func TestFormModalConsecutivePickersShareARow(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -94,8 +87,6 @@ func TestFormModalConsecutivePickersShareARow(t *testing.T) {
 	}
 }
 
-// TestFormModalEscClosesTheOpenMenuBeforeCanceling: Esc with a menu open
-// closes the menu, not the modal.
 func TestFormModalEscClosesTheOpenMenuBeforeCanceling(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -122,8 +113,6 @@ func TestFormModalEscClosesTheOpenMenuBeforeCanceling(t *testing.T) {
 	}
 }
 
-// TestFormModalMenuScrollsWithinItsCap covers the reason the form owns the
-// menu: tview's DropDown grows its menu to the option count.
 func TestFormModalMenuScrollsWithinItsCap(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -152,9 +141,6 @@ func TestFormModalMenuScrollsWithinItsCap(t *testing.T) {
 	}
 }
 
-// TestFormModalArrowsStayWithTheFocusedField keeps navigation on Tab alone.
-// Arrows moving focus is a footgun: it steals the keys a text cursor, an open
-// dropdown, and a list each need.
 func TestFormModalArrowsStayWithTheFocusedField(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -176,8 +162,6 @@ func TestFormModalArrowsStayWithTheFocusedField(t *testing.T) {
 	}
 }
 
-// TestFormModalEndRowBreaksThePack guards the layout of a form with more
-// packed fields than fit one row: without EndRow they all pack into one.
 func TestFormModalEndRowBreaksThePack(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -199,8 +183,6 @@ func TestFormModalEndRowBreaksThePack(t *testing.T) {
 	}
 }
 
-// TestFormModalMultiSelectTogglesAndReadsBackSorted covers the inline
-// multi-select: Space ticks the highlighted row, Tab still leaves the field.
 func TestFormModalMultiSelectTogglesAndReadsBackSorted(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -233,8 +215,6 @@ func TestFormModalMultiSelectTogglesAndReadsBackSorted(t *testing.T) {
 	}
 }
 
-// TestFormModalMultiSelectKeepsSelectionAcrossSetItems covers the async fill:
-// the options arrive after the form has already been told what is ticked.
 func TestFormModalMultiSelectKeepsSelectionAcrossSetItems(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -252,8 +232,6 @@ func TestFormModalMultiSelectKeepsSelectionAcrossSetItems(t *testing.T) {
 	}
 }
 
-// TestFormModalHiddenRowTakesNoHeight covers the parent line the issue form
-// hides outside sub-issue create.
 func TestFormModalHiddenRowTakesNoHeight(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -270,9 +248,6 @@ func TestFormModalHiddenRowTakesNoHeight(t *testing.T) {
 	}
 }
 
-// TestFormModalWindowClipsRatherThanDropsTheFocusedRow guards the scroll
-// behavior on a short screen: a field taller than the window used to get zero
-// height and vanish while it held focus.
 func TestFormModalWindowClipsRatherThanDropsTheFocusedRow(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -280,7 +255,6 @@ func TestFormModalWindowClipsRatherThanDropsTheFocusedRow(t *testing.T) {
 	fm.AddTextArea("Body", "", 10)
 	fm.AddInput("Footer", "")
 
-	// A window smaller than the textarea row it starts on.
 	heights := fm.rowHeights(100)
 	fm.scrollTop = 1
 	shown := fm.applyRowWindow(heights, 4)
@@ -299,17 +273,14 @@ func TestFormModalWindowClipsRatherThanDropsTheFocusedRow(t *testing.T) {
 	}
 }
 
-// TestFormModalHeightFitsContentAndClampsToScreen pins the sizing math: the
-// modal fits its content, and when the screen is short the flexible textarea
-// row shrinks instead of clipping fields off the bottom.
 func TestFormModalHeightFitsContentAndClampsToScreen(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
-	fm.AddInput("Title", "")       // 4 rows
-	fm.AddTextArea("Body", "", 10) // 13 rows, flexible (min 6)
+	fm.AddInput("Title", "")
+	fm.AddTextArea("Body", "", 10)
 	fm.AddButtons(FormButton{Label: "OK"})
 
-	chrome := 1 + 1 + 1 + 1 + 2 // blank + buttons + gap + hint + border
+	chrome := 1 + 1 + 1 + 1 + 2
 	if got, want := fm.contentHeight(100), 4+13+chrome; got != want {
 		t.Fatalf("unclamped height = %d, want %d", got, want)
 	}
@@ -318,10 +289,6 @@ func TestFormModalHeightFitsContentAndClampsToScreen(t *testing.T) {
 	}
 }
 
-// TestPickerMenuRectPlacesTheMenuAgainstItsField pins the geometry the draw
-// path cannot be asserted on: the field's left edge, a width that fits the
-// longest option, a capped height, and the roomier side when the screen is
-// short.
 func TestPickerMenuRectPlacesTheMenuAgainstItsField(t *testing.T) {
 	const fieldX, fieldWidth, fieldHeight = 6, 20, 3
 	cases := []struct {
@@ -358,7 +325,6 @@ func TestPickerMenuRectPlacesTheMenuAgainstItsField(t *testing.T) {
 	}
 }
 
-// TestPickerMenuRectShiftsLeftAtTheScreenEdge keeps a widened menu on screen.
 func TestPickerMenuRectShiftsLeftAtTheScreenEdge(t *testing.T) {
 	x, _, width, _, fits := pickerMenuRect(70, 4, 20, 3, 3, 28, 80, 40)
 	if !fits {
@@ -372,9 +338,6 @@ func TestPickerMenuRectShiftsLeftAtTheScreenEdge(t *testing.T) {
 	}
 }
 
-// TestFormModalSplitRowColumnsTheFields pins the shape the issue form's last
-// row relies on: one row, the list beside the stack, tab running left to
-// right, and a height that clears the taller column.
 func TestFormModalSplitRowColumnsTheFields(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -398,8 +361,6 @@ func TestFormModalSplitRowColumnsTheFields(t *testing.T) {
 	}
 }
 
-// TestFormModalMenuClosesWhenFocusLeavesIt covers a mouse click landing on the
-// field under an open menu: the menu has to let go of the keyboard.
 func TestFormModalMenuClosesWhenFocusLeavesIt(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -424,10 +385,6 @@ func TestFormModalMenuClosesWhenFocusLeavesIt(t *testing.T) {
 	}
 }
 
-// TestScrolledOffRowsDoNotPaintOverTheChrome guards the whole overlap class: a
-// Flex hands every fixed-size child its full size whatever the parent's height
-// is, so rows left mounted at zero used to paint over the buttons, the hint and
-// the panel's bottom border, and consecutive input labels stacked on one line.
 func TestScrolledOffRowsDoNotPaintOverTheChrome(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 80, 24)
@@ -453,8 +410,6 @@ func TestScrolledOffRowsDoNotPaintOverTheChrome(t *testing.T) {
 		t.Fatalf("the hint line is not on screen:\n%s", screen)
 	}
 
-	// Whatever the window holds, it holds a prefix of the rows: a label from
-	// further down than the last one drawn means that row painted outside it.
 	last := -1
 	for i, label := range labels {
 		if strings.Contains(screen, strings.ToUpper(label)) {
@@ -479,9 +434,6 @@ func TestScrolledOffRowsDoNotPaintOverTheChrome(t *testing.T) {
 	}
 }
 
-// TestPackedLabelsTruncateRatherThanWrap guards the duplicate-label bug: a
-// label view is one line tall, so a wrapping label drew only its first word and
-// two fields on a row read the same.
 func TestPackedLabelsTruncateRatherThanWrap(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 50, 30)
@@ -507,9 +459,6 @@ func TestPackedLabelsTruncateRatherThanWrap(t *testing.T) {
 	}
 }
 
-// TestPackedRowFoldsWhenColumnsGetNarrow covers the reflow: a row of four
-// fields is one line while each column holds its label, and stacks rather than
-// truncating everything once they do not.
 func TestPackedRowFoldsWhenColumnsGetNarrow(t *testing.T) {
 	app := newUXTestApp(t)
 	fm := NewFormModal(app, "Test")
@@ -532,8 +481,6 @@ func TestPackedRowFoldsWhenColumnsGetNarrow(t *testing.T) {
 	}
 }
 
-// TestAFoldedRowKeepsEveryFieldOnScreen guards the point of folding: the
-// fields that moved to a second line are drawn, not dropped.
 func TestAFoldedRowKeepsEveryFieldOnScreen(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 50, 40)
@@ -553,8 +500,6 @@ func TestAFoldedRowKeepsEveryFieldOnScreen(t *testing.T) {
 	}
 }
 
-// TestSectionsLayOutOnlyTheOpenPage covers the whole point of sectioning: a
-// row belonging to a section that is not open takes no height and never draws.
 func TestSectionsLayOutOnlyTheOpenPage(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 40)
@@ -584,9 +529,6 @@ func TestSectionsLayOutOnlyTheOpenPage(t *testing.T) {
 	}
 }
 
-// TestTheRailGivesUpItsColumnOnANarrowPanel covers the fold of the rail
-// itself: a column of section names is a quarter of a narrow terminal, so
-// there it names the open one on a line instead.
 func TestTheRailGivesUpItsColumnOnANarrowPanel(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -620,9 +562,6 @@ func TestTheRailGivesUpItsColumnOnANarrowPanel(t *testing.T) {
 	}
 }
 
-// TestAnEmbeddedFormDrawsItsFields covers the one modal that composes a form
-// beside another pane rather than showing it: it never calls Show, so
-// ContentBody is where its rows are mounted.
 func TestAnEmbeddedFormDrawsItsFields(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 40)
@@ -636,9 +575,6 @@ func TestAnEmbeddedFormDrawsItsFields(t *testing.T) {
 	}
 }
 
-// TestTabSkipsFieldsInAClosedSection guards the keyboard against landing on a
-// widget the open section does not mount: the field is not on screen, so the
-// caret goes somewhere the reader cannot see it.
 func TestTabSkipsFieldsInAClosedSection(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 40)
@@ -659,16 +595,12 @@ func TestTabSkipsFieldsInAClosedSection(t *testing.T) {
 		t.Fatalf("Tab reached %T, want the open section's own field", got)
 	}
 
-	// And back the other way, which is the wrap the buttons sit on.
 	fm.focusStep(-1)
 	if got := app.app.GetFocus(); got == alpha {
 		t.Fatal("Backtab reached a field in the closed section")
 	}
 }
 
-// TestTheRailIsAPaneOfItsOwn covers the whole navigation model: the rail holds
-// the movement keys, Enter crosses into the fields, and Esc comes back before
-// it closes anything.
 func TestTheRailIsAPaneOfItsOwn(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 40)
@@ -714,9 +646,6 @@ func TestTheRailIsAPaneOfItsOwn(t *testing.T) {
 	}
 }
 
-// TestSteppingSectionsKeepsThePanelOneSize guards the resize the reader sees:
-// the panel is sized to the tallest section, so a short one carries slack
-// rather than shrinking the modal under them.
 func TestSteppingSectionsKeepsThePanelOneSize(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 40)
@@ -737,8 +666,6 @@ func TestSteppingSectionsKeepsThePanelOneSize(t *testing.T) {
 	}
 }
 
-// TestTheRailMarksWhichPaneHasTheKeyboard guards the only cue there is: with no
-// box around the section list, the cursor line is what says a key reaches it.
 func TestTheRailMarksWhichPaneHasTheKeyboard(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 40)
@@ -770,9 +697,6 @@ func TestTheRailMarksWhichPaneHasTheKeyboard(t *testing.T) {
 	}
 }
 
-// TestAClickOnTheFieldsDoesNotPickASection guards the rail's mouse capture:
-// tview runs a capture before the handler's own bounds test and a Flex offers
-// the press to every child, so a click on the first field used to jump pages.
 func TestAClickOnTheFieldsDoesNotPickASection(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 110, 40)
@@ -788,15 +712,12 @@ func TestAClickOnTheFieldsDoesNotPickASection(t *testing.T) {
 	railX, railY, railWidth, _ := fm.sectionRail.GetRect()
 	handler := fm.Root().MouseHandler()
 
-	// A press well to the right of the rail, on the row the second section
-	// sits on in the list.
 	press := tcell.NewEventMouse(railX+railWidth+20, railY+railTopPad+1, tcell.Button1, tcell.ModNone)
 	handler(tview.MouseLeftDown, press, func(tview.Primitive) {})
 	if fm.activeSection != 0 {
 		t.Fatalf("a click on the fields opened section %d", fm.activeSection)
 	}
 
-	// And a press on the rail itself still picks the row under it.
 	onRail := tcell.NewEventMouse(railX+1, railY+railTopPad+1, tcell.Button1, tcell.ModNone)
 	handler(tview.MouseLeftDown, onRail, func(tview.Primitive) {})
 	if fm.activeSection != 1 {
@@ -804,11 +725,6 @@ func TestAClickOnTheFieldsDoesNotPickASection(t *testing.T) {
 	}
 }
 
-// TestTheNavKeepsFocusWhenAPageIsAddedOrRemoved guards the open focus against
-// tview's own focus walk: Pages re-delegates down the tree on every page add
-// and remove, taking whichever child the body flagged. Flagged on the rows, it
-// landed on the first field and took the keyboard off the list Show had just
-// given it.
 func TestTheNavKeepsFocusWhenAPageIsAddedOrRemoved(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 110, 40)
@@ -824,7 +740,6 @@ func TestTheNavKeepsFocusWhenAPageIsAddedOrRemoved(t *testing.T) {
 		t.Fatal("the form did not open on the section list")
 	}
 
-	// Any page coming or going re-delegates focus through the modal's tree.
 	app.pages.AddPage("decoy", tview.NewBox(), true, false)
 	app.pages.RemovePage("decoy")
 	if got := app.app.GetFocus(); got == alpha {
@@ -835,11 +750,6 @@ func TestTheNavKeepsFocusWhenAPageIsAddedOrRemoved(t *testing.T) {
 	}
 }
 
-// TestTheSidebarHoldsTheButtonsAndTheRulesMeet covers the settings chrome: the
-// actions sit under the section list rather than across the panel, and the
-// column rule closes into the footer rule in a tee. The tee is the part that
-// broke first, because a Flex defers a focused child's draw and the footer had
-// no rect to read.
 func TestTheSidebarHoldsTheButtonsAndTheRulesMeet(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 34)
@@ -887,17 +797,12 @@ func TestTheSidebarHoldsTheButtonsAndTheRulesMeet(t *testing.T) {
 		t.Fatalf("the column rule does not tee into the top border:\n%s", screen)
 	}
 
-	// The buttons belong to the sidebar, so they sit left of the column rule.
 	column := strings.Index(lines[footer], "┴")
 	if got := strings.Index(lines[save], "Save"); got < 0 || got > column {
 		t.Fatalf("Save is at column %d, right of the rule at %d:\n%s", got, column, screen)
 	}
 }
 
-// TestASectionedFormSurvivesCrossingTheRailThreshold guards the frame against
-// the width: where the buttons sit depends on whether the sidebar has a
-// column, so composing the frame once left them mounted in a row the panel no
-// longer held, or in both at once.
 func TestASectionedFormSurvivesCrossingTheRailThreshold(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 40)
@@ -934,9 +839,6 @@ func TestASectionedFormSurvivesCrossingTheRailThreshold(t *testing.T) {
 	}
 }
 
-// TestTheColumnRuleLeavesTheContextRowAlone covers the one line that says which
-// fields the environment owns: the rule runs to the top border, and the context
-// row sits between that border and the body.
 func TestTheColumnRuleLeavesTheContextRowAlone(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 40)
@@ -961,9 +863,6 @@ func TestTheColumnRuleLeavesTheContextRowAlone(t *testing.T) {
 	t.Fatal("the context row did not draw")
 }
 
-// TestTheArrowsWalkTheWholeSidebar covers the sidebar as one column: the
-// sections and the buttons stacked under them move together, so the actions
-// are reachable without tabbing through a section's fields.
 func TestTheArrowsWalkTheWholeSidebar(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pages.SetRect(0, 0, 100, 34)
@@ -983,24 +882,24 @@ func TestTheArrowsWalkTheWholeSidebar(t *testing.T) {
 	down := tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
 	up := tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 
-	fm.HandleKey(down) // Appearance -> Logging
+	fm.HandleKey(down)
 	if fm.activeSection != 1 {
 		t.Fatalf("first Down left the section at %d", fm.activeSection)
 	}
-	fm.HandleKey(down) // Logging -> Save
+	fm.HandleKey(down)
 	if got := fm.focusedButton(); got != 0 {
 		t.Fatalf("Down off the last section reached button %d, want Save", got)
 	}
-	fm.HandleKey(down) // Save -> Cancel
+	fm.HandleKey(down)
 	if got := fm.focusedButton(); got != 1 {
 		t.Fatalf("Down off Save reached button %d, want Cancel", got)
 	}
 
-	fm.HandleKey(up) // Cancel -> Save
+	fm.HandleKey(up)
 	if got := fm.focusedButton(); got != 0 {
 		t.Fatalf("Up off Cancel reached button %d, want Save", got)
 	}
-	fm.HandleKey(up) // Save -> the list, on the last section
+	fm.HandleKey(up)
 	if !fm.railHasFocus() {
 		t.Fatal("Up off the first button did not go back to the section list")
 	}
@@ -1008,13 +907,11 @@ func TestTheArrowsWalkTheWholeSidebar(t *testing.T) {
 		t.Fatalf("coming back off the buttons opened section %d, want the last one", fm.activeSection)
 	}
 
-	// And Enter on a button presses it rather than crossing into the fields.
 	fm.HandleKey(down)
 	if got := fm.focusedButton(); got != 0 {
 		t.Fatalf("Down from the last section reached button %d, want Save", got)
 	}
 	enter := tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
-	// The form leaves Enter to the focused widget, the way the dispatcher does.
 	if left := fm.HandleKey(enter); left != nil {
 		if handler := app.app.GetFocus().InputHandler(); handler != nil {
 			handler(left, func(tview.Primitive) {})

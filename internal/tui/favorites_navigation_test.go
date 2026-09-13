@@ -7,8 +7,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// TestFavoriteNavigationNodesMapsSupportedTypes verifies issue, project,
-// cycle, and team favorites map onto navigation nodes.
 func TestFavoriteNavigationNodesMapsSupportedTypes(t *testing.T) {
 	favorites := []linearapi.Favorite{
 		{
@@ -68,14 +66,12 @@ func TestFavoriteNavigationNodesMapsSupportedTypes(t *testing.T) {
 	}
 }
 
-// TestFavoriteNavigationNodesSkipsUnsupportedTypes verifies favorite types the
-// tree cannot display are dropped rather than rendered or crashing.
 func TestFavoriteNavigationNodesSkipsUnsupportedTypes(t *testing.T) {
 	favorites := []linearapi.Favorite{
 		{Type: "customView", ID: "fav-1"},
 		{Type: "label", ID: "fav-2"},
 		{Type: "document", ID: "fav-3"},
-		{Type: "issue", ID: "fav-5"}, // missing IssueID: skipped defensively
+		{Type: "issue", ID: "fav-5"},
 		{Type: "project", ProjectID: "project-1", ProjectName: "Website"},
 	}
 
@@ -88,8 +84,6 @@ func TestFavoriteNavigationNodesSkipsUnsupportedTypes(t *testing.T) {
 	}
 }
 
-// TestFavoriteNavigationNodesFolders verifies folder favorites nest their
-// children while unfoldered favorites stay at the top level.
 func TestFavoriteNavigationNodesFolders(t *testing.T) {
 	favorites := []linearapi.Favorite{
 		{Type: "project", ProjectID: "project-0", ProjectName: "Loose"},
@@ -121,9 +115,6 @@ func TestFavoriteNavigationNodesFolders(t *testing.T) {
 	}
 }
 
-// TestFavoriteNavigationNodesOrphanRendersAtTopLevel verifies a favorite whose
-// folder is absent reports the top level, so reordering compares it against the
-// siblings it actually sits with.
 func TestFavoriteNavigationNodesOrphanRendersAtTopLevel(t *testing.T) {
 	favorites := []linearapi.Favorite{
 		{Type: "project", ID: "fav-orphan", ProjectID: "project-1", ProjectName: "Orphan", ParentID: "gone"},
@@ -138,8 +129,6 @@ func TestFavoriteNavigationNodesOrphanRendersAtTopLevel(t *testing.T) {
 	}
 }
 
-// TestFavoriteNavigationNodesViews verifies custom view and predefined view
-// favorites map onto navigation nodes.
 func TestFavoriteNavigationNodesViews(t *testing.T) {
 	favorites := []linearapi.Favorite{
 		{Type: "customView", CustomViewID: "view-1", CustomViewName: "Open Bugs", Title: "Open Bugs"},
@@ -171,8 +160,6 @@ func TestFavoriteNavigationNodesViews(t *testing.T) {
 	}
 }
 
-// TestRebuildNavigationTreeOmitsEmptyFavorites verifies the Favorites group
-// only renders when displayable favorites exist.
 func TestRebuildNavigationTreeOmitsEmptyFavorites(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{})
 	teams := []linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}

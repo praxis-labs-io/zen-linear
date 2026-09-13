@@ -7,13 +7,10 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// keysPage is what the reference is showing, one line per row.
 func keysPage(app *App) []string {
 	return strings.Split(app.keysModal.view.GetText(true), "\n")
 }
 
-// openKeys presses the reference's own key through the dispatcher, the way a
-// reader does, and returns what it drew.
 func openKeys(t *testing.T, app *App) []string {
 	t.Helper()
 	pressKey(app, '?')
@@ -23,8 +20,6 @@ func openKeys(t *testing.T, app *App) []string {
 	return keysPage(app)
 }
 
-// A section with no rows is a context the reader gets nothing for, which is
-// worse than one the reference never mentions.
 func TestEveryKeySectionHasRows(t *testing.T) {
 	app := newUXTestApp(t)
 	for _, section := range keySections {
@@ -34,12 +29,10 @@ func TestEveryKeySectionHasRows(t *testing.T) {
 	}
 }
 
-// keysTitle is the context the panel says it is for.
 func keysTitle(app *App) string {
 	return app.keysModal.panel.GetTitle()
 }
 
-// A legend, not a manual: the keys for here, and the ones that work anywhere.
 func TestTheLegendShowsThisContextAndTheGlobalKeys(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
@@ -101,8 +94,6 @@ func TestTheLegendOpensOnEachContext(t *testing.T) {
 	}
 }
 
-// A box is prose, so the key that opens the reference everywhere else has to
-// land in the words instead.
 func TestTheKeyTypesItselfInsideABox(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -112,8 +103,6 @@ func TestTheKeyTypesItselfInsideABox(t *testing.T) {
 			a.focusedPane = FocusDetails
 			a.detailsHidden = false
 			drawDetails(t, a, 90)
-			// What a click into the box does: the widget takes the keyboard,
-			// which is what composeBoxActive reads.
 			a.app.SetFocus(a.detailsComposeArea)
 		}},
 		{"the navigation query box", func(_ *testing.T, a *App) {
@@ -137,8 +126,6 @@ func TestTheKeyTypesItselfInsideABox(t *testing.T) {
 	}
 }
 
-// Every row resolves through the binding layer, so a moved key prints where it
-// moved to rather than the default the code was written with.
 func TestAMovedBindingPrintsItsNewKey(t *testing.T) {
 	app := bindingApp(t, map[string]string{"comment_next": "n"})
 	app.focusedPane = FocusDetails
@@ -150,8 +137,6 @@ func TestAMovedBindingPrintsItsNewKey(t *testing.T) {
 	}
 }
 
-// A key another binding took answers nothing, and a reference that printed it
-// would be advertising a dead key.
 func TestATakenKeyIsLeftOutRatherThanAdvertised(t *testing.T) {
 	app := bindingApp(t, map[string]string{"toggle_favorite": "?"})
 	app.focusedPane = FocusIssues
@@ -164,8 +149,6 @@ func TestATakenKeyIsLeftOutRatherThanAdvertised(t *testing.T) {
 	}
 }
 
-// The palette is the way back to a command whose rune was taken, and the
-// reference is the command most in need of it.
 func TestThePaletteCommandOpensTheReference(t *testing.T) {
 	app := bindingApp(t, map[string]string{"toggle_favorite": "?"})
 

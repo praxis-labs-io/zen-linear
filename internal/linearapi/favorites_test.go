@@ -9,14 +9,10 @@ import (
 	"testing"
 )
 
-// newFavoritesTestClient points a client at a test server. The server ignores
-// auth, so no credential is configured.
 func newFavoritesTestClient(endpoint string) *Client {
 	return NewClient(ClientConfig{Endpoint: endpoint})
 }
 
-// favoriteMutationServer captures the request body and replies with the given
-// JSON data payload.
 func favoriteMutationServer(t *testing.T, response string, captured *map[string]interface{}) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +30,6 @@ func favoriteMutationServer(t *testing.T, response string, captured *map[string]
 	}))
 }
 
-// marshalledInput renders a target the way it reaches Linear.
 func marshalledInput(t *testing.T, target FavoriteTarget) map[string]interface{} {
 	t.Helper()
 	encoded, err := json.Marshal(target.input())
@@ -75,8 +70,6 @@ func TestFavoriteTargetInputPicksOneEntity(t *testing.T) {
 	}
 }
 
-// TestFavoriteTargetInputPrefersCustomView guards the branch order: a custom
-// view node also carries a team id, and the view has to win.
 func TestFavoriteTargetInputPrefersCustomView(t *testing.T) {
 	input := marshalledInput(t, FavoriteTarget{CustomViewID: "view-1", TeamID: "team-1"})
 
@@ -265,8 +258,6 @@ func TestMoveFavoriteIntoFolder(t *testing.T) {
 	}
 }
 
-// TestMoveFavoriteToTopLevelSendsNullParent guards the detail that clears the
-// folder: a blank string would be an invalid id, so the field has to be null.
 func TestMoveFavoriteToTopLevelSendsNullParent(t *testing.T) {
 	var request map[string]interface{}
 	server := favoriteMutationServer(t, `{"data":{"favoriteUpdate":{"success":true}}}`, &request)

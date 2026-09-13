@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// TestEnsurePromptTemplatesFileCreatesDefaults verifies missing prompts are created with defaults.
 func TestEnsurePromptTemplatesFileCreatesDefaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	promptsPath := filepath.Join(tmpDir, "nested", "prompts.json")
@@ -28,7 +27,6 @@ func TestEnsurePromptTemplatesFileCreatesDefaults(t *testing.T) {
 	assertPromptTemplatesEqual(t, templates, DefaultAgentPromptTemplates())
 }
 
-// TestLoadPromptTemplatesFiltersInvalid verifies invalid entries are dropped.
 func TestLoadPromptTemplatesFiltersInvalid(t *testing.T) {
 	tmpDir := t.TempDir()
 	promptsPath := filepath.Join(tmpDir, "prompts.json")
@@ -50,7 +48,6 @@ func TestLoadPromptTemplatesFiltersInvalid(t *testing.T) {
 	assertPromptTemplatesEqual(t, templates, expected)
 }
 
-// TestLoadPromptTemplatesEmptyFallback verifies empty templates fall back to defaults.
 func TestLoadPromptTemplatesEmptyFallback(t *testing.T) {
 	tmpDir := t.TempDir()
 	promptsPath := filepath.Join(tmpDir, "prompts.json")
@@ -67,7 +64,6 @@ func TestLoadPromptTemplatesEmptyFallback(t *testing.T) {
 	assertPromptTemplatesEqual(t, templates, DefaultAgentPromptTemplates())
 }
 
-// assertPromptTemplatesEqual compares prompt template values in tests.
 func assertPromptTemplatesEqual(t *testing.T, got []AgentPromptTemplate, want []AgentPromptTemplate) {
 	t.Helper()
 	if !reflect.DeepEqual(got, want) {

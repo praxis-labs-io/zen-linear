@@ -4,7 +4,6 @@ import (
 	"strings"
 )
 
-// buildBaseIssueFilter builds the base issue filter without search terms.
 func buildBaseIssueFilter(params FetchIssuesParams) IssueFilter {
 	filter := make(IssueFilter)
 	if len(params.IDs) > 0 {
@@ -27,8 +26,6 @@ func buildBaseIssueFilter(params FetchIssuesParams) IssueFilter {
 	return filter
 }
 
-// buildStructuredIssueFilter builds issue filters that can be passed alongside
-// Linear's full-text search term.
 func buildStructuredIssueFilter(params FetchIssuesParams) IssueFilter {
 	filter := buildBaseIssueFilter(params)
 	if params.AssigneeID != "" {
@@ -118,7 +115,6 @@ func appendIssueAndFilters(filter IssueFilter, filters ...map[string]interface{}
 	filter["and"] = existing
 }
 
-// buildIssueFilter builds the GraphQL issue filter for the given params.
 func buildIssueFilter(params FetchIssuesParams) IssueFilter {
 	filter := buildStructuredIssueFilter(params)
 
@@ -133,7 +129,6 @@ func buildIssueFilter(params FetchIssuesParams) IssueFilter {
 		return filter
 	}
 
-	// Require every term to match at least one field for free-text search.
 	andFilters := make([]map[string]interface{}, 0, len(terms))
 	for _, term := range terms {
 		andFilters = append(andFilters, map[string]interface{}{
@@ -144,9 +139,7 @@ func buildIssueFilter(params FetchIssuesParams) IssueFilter {
 	return filter
 }
 
-// buildSearchOrFilters returns per-term OR filters for issue search.
-// Note: identifier is not a filterable field in Linear's IssueFilter type,
-// so we only filter by title and description.
+// Linear's IssueFilter cannot filter on identifier, so only title and description match.
 func buildSearchOrFilters(term string) []map[string]interface{} {
 	return []map[string]interface{}{
 		{"title": map[string]interface{}{"containsIgnoreCase": term}},

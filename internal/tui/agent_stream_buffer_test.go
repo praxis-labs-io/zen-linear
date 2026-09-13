@@ -7,7 +7,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/agents"
 )
 
-// TestAgentStreamBuffer_ThinkingStreams verifies thinking lines stream in chunks.
 func TestAgentStreamBuffer_ThinkingStreams(t *testing.T) {
 	buffer := NewAgentStreamBuffer()
 
@@ -31,7 +30,6 @@ func TestAgentStreamBuffer_ThinkingStreams(t *testing.T) {
 	}
 }
 
-// TestAgentStreamBuffer_ThinkingCoalesces verifies thinking flushes before other events.
 func TestAgentStreamBuffer_ThinkingCoalesces(t *testing.T) {
 	buffer := NewAgentStreamBuffer()
 
@@ -66,7 +64,6 @@ func TestAgentStreamBuffer_ThinkingCoalesces(t *testing.T) {
 	}
 }
 
-// TestAgentStreamBuffer_AssistantAndResult verifies assistant accumulation and final text emission.
 func TestAgentStreamBuffer_AssistantAndResult(t *testing.T) {
 	buffer := NewAgentStreamBuffer()
 

@@ -7,43 +7,25 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// detailsCursorGutter is the two cells edit mode reserves at the head of every
-// header row for the cursor's marker.
 const detailsCursorGutter = 2
 
-// detailsWriteMarker says a row is being written in rather than pointed at. It
-// heads the row a box is on, and runs the height of the description's.
 const detailsWriteMarker = "▌"
 
-// detailsEditState is the pane's edit mode: whether it is on, the field the
-// cursor points at, and the chooser open under it.
 type detailsEditState struct {
-	on bool
-	// An id, never a row index: the header is rebuilt under the cursor by every
-	// background refresh.
-	cursor issueField
-	// open is the field whose options are on the page, "" when none. issue is
-	// what they were loaded for, captured so a refresh cannot move the write.
+	on      bool
+	cursor  issueField
 	open    issueField
 	issue   linearapi.Issue
 	options []PickerItem
 	choice  int
 	offset  int
 	loading bool
-	// picked is the ids toggled on, for the one field whose chooser is a
-	// multi-select. Nil for the others.
-	picked map[string]bool
-	// editing is the field whose text box is on the page, "" when none, and
-	// never set together with open. err is what the last commit refused.
+	picked  map[string]bool
 	editing issueField
 	err     string
-	// gen stamps the open a load belongs to. The counter itself is on App: this
-	// struct is zeroed on every exit and would restart at nought.
-	gen uint64
+	gen     uint64
 }
 
-// enterDetailsEdit puts the pane in edit mode with the cursor on the first
-// field, revealing and focusing the pane the way openComposeBox does.
 func (a *App) enterDetailsEdit() {
 	issue := a.GetSelectedIssue()
 	if a.detailsPage == nil || issue == nil {
@@ -51,12 +33,8 @@ func (a *App) enterDetailsEdit() {
 		return
 	}
 	if a.detailsEdit.on {
-		// Already in it, and re-entering would throw the cursor back to the
-		// first field.
 		return
 	}
-	// The selection moves at once but the render rides the detail debounce, so
-	// inside that window the page is still the issue before this one.
 	if a.detailsIssueID != issue.ID {
 		a.updateDetailsView()
 	}
@@ -67,28 +45,20 @@ func (a *App) enterDetailsEdit() {
 	}
 	a.detailsHidden = false
 	a.focusedPane = FocusDetails
-	// The cards let go of the keyboard: two rings on one page would both answer
-	// j and k.
 	a.detailsFocus, a.focusedCommentID = detailsFocusCards, ""
 	a.detailsEdit = detailsEditState{on: true, cursor: cursor}
 	a.rebuildContentLayout()
 	a.updateFocus()
-	// Never leave the mode on over a pane that is not showing it, the way the
-	// compose box backs out of a layout that did not put it on screen.
 	if !a.detailsHaveFocus() {
 		a.detailsEdit = detailsEditState{}
 		a.updateFocus()
 		return
 	}
-	// The marker is in the page text, so the mode shows nothing until the page
-	// is written again.
 	a.renderDetailsPage()
 	a.scrollFieldIntoView()
 	a.updateStatusBar()
 }
 
-// leaveDetailsEdit takes the pane out of edit mode. It moves no focus, so a
-// focus callback can reach it.
 func (a *App) leaveDetailsEdit() {
 	if !a.detailsEdit.on {
 		return
@@ -99,8 +69,6 @@ func (a *App) leaveDetailsEdit() {
 	a.updateStatusBar()
 }
 
-// firstEditableField is the field the cursor starts on, empty when the page
-// draws none.
 func (a *App) firstEditableField() issueField {
 	if len(a.detailsFieldSpans) == 0 {
 		return ""
@@ -108,8 +76,6 @@ func (a *App) firstEditableField() issueField {
 	return a.detailsFieldSpans[0].field
 }
 
-// fieldSpanIndex finds a field on the page just rendered, -1 when it is not on
-// it.
 func (a *App) fieldSpanIndex(field issueField) int {
 	if field == "" {
 		return -1
@@ -122,8 +88,6 @@ func (a *App) fieldSpanIndex(field issueField) int {
 	return -1
 }
 
-// stepFieldCursor moves the cursor one field down (+1) or up (-1). Off either
-// end it stays where it is, the way the comment ring stops.
 func (a *App) stepFieldCursor(step int) {
 	if !a.detailsEdit.on || len(a.detailsFieldSpans) == 0 {
 		return
@@ -135,27 +99,18 @@ func (a *App) stepFieldCursor(step int) {
 			return
 		}
 	} else if step < 0 {
-		// The cursor named a field this page does not draw, so it lands on the
-		// end it was stepping toward rather than refusing the key.
 		next = len(a.detailsFieldSpans) - 1
 	}
 	a.detailsEdit.cursor = a.detailsFieldSpans[next].field
-	// Re-rendered rather than repainted, and the same call rebuilds the spans
-	// the scroll below reads.
 	a.renderDetailsPage()
 	a.scrollFieldIntoView()
 	a.updateStatusBar()
 }
 
-// resolveFieldCursor puts the cursor back on the page a rebuild just drew,
-// looked up by id. A page with nothing to edit drops the mode.
 func (a *App) resolveFieldCursor() {
-	// A chooser whose field the rebuild no longer draws holds the keys with
-	// nothing on the page to show for it.
 	if a.detailsEdit.on && a.detailsEdit.open != "" && a.fieldSpanIndex(a.detailsEdit.open) < 0 {
 		a.closeFieldChooser()
 	}
-	// Worse for a box, which holds the keyboard as well as the keys.
 	if a.detailsEdit.on && a.detailsEdit.editing != "" && a.fieldSpanIndex(a.detailsEdit.editing) < 0 {
 		a.closeOpenEditor()
 	}
@@ -166,13 +121,9 @@ func (a *App) resolveFieldCursor() {
 	if a.detailsEdit.cursor == "" {
 		a.detailsEdit = detailsEditState{}
 	}
-	// The page was written with a cursor it does not carry, so no row holds the
-	// marker until it is written again.
 	a.renderDetailsPage()
 }
 
-// scrollFieldIntoView brings the cursor's row onto the page, and does nothing
-// when it is already there.
 func (a *App) scrollFieldIntoView() {
 	if index := a.fieldSpanIndex(a.detailsEdit.cursor); index >= 0 {
 		row := a.detailsFieldSpans[index].row
@@ -180,8 +131,6 @@ func (a *App) scrollFieldIntoView() {
 	}
 }
 
-// fieldCursorMarker heads one header row in edit mode: the cursor on its own
-// field, the gutter it reserves elsewhere. A blank row takes neither.
 func (a *App) fieldCursorMarker(row detailsRow) string {
 	if !a.detailsEdit.on || row.text == "" {
 		return ""
@@ -190,12 +139,8 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 		tag, glyph := a.themeTags.Accent, "❯"
 		switch {
 		case a.detailsEdit.open != "":
-			// Dimmed under an open chooser: the cursor line inside it is where
-			// the keyboard is.
 			tag = a.themeTags.SecondaryText
 		case a.detailsEdit.editing != "":
-			// The row is being written in rather than pointed at, and the
-			// caret in it is the only other thing saying so.
 			glyph = detailsWriteMarker
 		}
 		return tag + glyph + "[-] "
@@ -203,8 +148,6 @@ func (a *App) fieldCursorMarker(row detailsRow) string {
 	return strings.Repeat(" ", detailsCursorGutter)
 }
 
-// handleDetailsEditKey answers for the whole app while edit mode is on. It is
-// default-deny, so q cannot quit and a pane number cannot leave.
 func (a *App) handleDetailsEditKey(event *tcell.EventKey) *tcell.EventKey {
 	if a.detailsEdit.editing == issueFieldDescription {
 		return a.handleDescriptionKey(event)
@@ -223,8 +166,6 @@ func (a *App) handleDetailsEditKey(event *tcell.EventKey) *tcell.EventKey {
 			a.openFieldChooser()
 		}
 	case tcell.KeyCtrlC:
-		// The one key the mode does not own. Handed back, tview stops the app
-		// on it itself.
 		return event
 	case tcell.KeyEscape:
 		a.leaveDetailsEdit()
@@ -239,8 +180,6 @@ func (a *App) handleDetailsEditKey(event *tcell.EventKey) *tcell.EventKey {
 		case 'k':
 			a.stepFieldCursor(-1)
 		default:
-			// The pickers keep their shortcuts. A modal takes the keys ahead of
-			// this handler, so the mode waits under one rather than ending.
 			a.runCommandShortcut(r)
 		}
 	}

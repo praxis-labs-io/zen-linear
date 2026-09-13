@@ -7,8 +7,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// contextTestApp puts a project of a known team on screen, so the title has a
-// team key to prefix and a scope to name.
 func contextTestApp(t *testing.T) *App {
 	t.Helper()
 	app := newUXTestApp(t)
@@ -31,8 +29,6 @@ func TestIssuesTitleNamesTheListAndItsCount(t *testing.T) {
 	}
 }
 
-// The team's own row already says the team, so the key would be the same fact
-// twice.
 func TestIssuesTitleLeavesATeamRowUnprefixed(t *testing.T) {
 	app := contextTestApp(t)
 	app.selectedNavigation = &NavigationNode{ID: "team-1", Text: "Zen Linear", TeamID: "team-1", IsTeam: true}
@@ -69,8 +65,6 @@ func TestIssuesContextNamesSortAndFilters(t *testing.T) {
 	}
 }
 
-// A narrow pane gives up the sort first: the rows themselves show the order,
-// and the filters cannot be read anywhere else.
 func TestIssuesContextDropsSortBeforeFilters(t *testing.T) {
 	app := contextTestApp(t)
 	app.richFilters = IssueFilters{AssigneeID: "user-1", AssigneeName: "drew"}
@@ -85,8 +79,6 @@ func TestIssuesContextDropsSortBeforeFilters(t *testing.T) {
 	}
 }
 
-// A search takes neither the tree's scope, the filters, nor the sort chain, so
-// the context line would be false about its results.
 func TestSearchResultsCarryNoContextLine(t *testing.T) {
 	app := contextTestApp(t)
 	app.richFilters = IssueFilters{AssigneeID: "user-1", AssigneeName: "drew"}
@@ -97,9 +89,6 @@ func TestSearchResultsCarryNoContextLine(t *testing.T) {
 	}
 }
 
-// TestIssuesContextDrawsOnTheTopBorder covers the line landing in the border
-// itself rather than costing the list a row, and staying clear of the title
-// sharing that row.
 func TestIssuesContextDrawsOnTheTopBorder(t *testing.T) {
 	app := contextTestApp(t)
 	app.updateAllPaneTitles()
@@ -123,8 +112,6 @@ func TestIssuesContextDrawsOnTheTopBorder(t *testing.T) {
 	}
 }
 
-// A long title takes the row it needs; the context yields rather than
-// overwriting the name of the list.
 func TestALongTitleCrowdsOutTheContextLine(t *testing.T) {
 	app := contextTestApp(t)
 	app.selectedNavigation = &NavigationNode{
@@ -142,8 +129,6 @@ func TestALongTitleCrowdsOutTheContextLine(t *testing.T) {
 	}
 }
 
-// Project names are Linear's and the title is built from color tags, so a
-// bracketed name would be read as one instead of printed.
 func TestTheIssuesTitleKeepsABracketedName(t *testing.T) {
 	app := contextTestApp(t)
 	app.selectedNavigation = &NavigationNode{ID: "p", Text: "[red] sprint", TeamID: "team-1", IsProject: true}

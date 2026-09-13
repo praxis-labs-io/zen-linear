@@ -10,10 +10,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// benchIssues builds a workspace-shaped list: several statuses so grouping has
-// real work to do, titles long enough to exercise rune-width truncation, and a
-// share assigned to the current user so the My tab is populated rather than
-// empty, which is what the split and the second row build actually cost.
 func benchIssues(count int) []linearapi.Issue {
 	states := []string{"Todo", "In Progress", "In Review", "Backlog", "Done"}
 	assignees := []string{benchUserID, "user-2", "user-3", "user-4"}
@@ -38,20 +34,12 @@ func newPaginationBenchApp(b *testing.B) *App {
 	app := NewApp(linearapi.ClientConfig{}, config.Config{PageSize: 50, CacheTTL: time.Minute}, nil)
 	app.queueUpdateDraw = func(f func()) { f() }
 	app.currentUser = &linearapi.User{ID: benchUserID, Name: "Bench User"}
-	// Selecting a row kicks off a detail fetch; this benchmark measures the
-	// table, not the network.
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
 		return linearapi.Issue{ID: id}, nil
 	}
 	return app
 }
 
-// benchmarkPagination replays count issues in 50-issue pages, repainting every
-// repaintEvery pages. 1 is the pre-ZNL-13 behavior, where every page regrouped
-// and repainted the whole table. 0 paints only at the end. The Budgeted arms
-// stand in for the issuesRepaintInterval the refresh loop actually uses: on a
-// load that streams 50 pages in a couple of seconds the 250ms budget fires
-// roughly every twelfth page.
 func benchmarkPagination(b *testing.B, count, repaintEvery int) {
 	const pageSize = 50
 	issues := benchIssues(count)

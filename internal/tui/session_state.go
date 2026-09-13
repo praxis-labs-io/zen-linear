@@ -6,10 +6,7 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/session"
 )
 
-// UseSession installs the saved session: the path the quit flush writes to,
-// and the restore point for the workspace this App opened with. The path is
-// kept even when restore is off, so turning the toggle on mid-session still
-// records a place to come back to.
+// UseSession sets where the session is saved on quit and the place to restore for the opening workspace.
 func (a *App) UseSession(path string, file session.File) {
 	a.sessionPath = path
 	if !a.config.SessionRestore {
@@ -20,17 +17,12 @@ func (a *App) UseSession(path string, file session.File) {
 	}
 }
 
-// consumePendingSession returns the restore point and clears it. A settings
-// save and a workspace switch both re-run loadInitialData, and re-applying a
-// stale session there would lay it over where the user actually is.
 func (a *App) consumePendingSession() *session.State {
 	state := a.pendingSession
 	a.pendingSession = nil
 	return state
 }
 
-// sessionSnapshot reads the current place. Call it on the UI thread, or after
-// the event loop has stopped.
 func (a *App) sessionSnapshot() session.State {
 	return session.State{
 		Nav:     navSelectionFor(a.selectedNavigation),
@@ -40,15 +32,10 @@ func (a *App) sessionSnapshot() session.State {
 	}
 }
 
-// persistSession records the current place for the active workspace. A write
-// failure is logged and swallowed: a lost restore point must not change how
-// the process exits.
 func (a *App) persistSession() {
 	if a.sessionPath == "" || !a.config.SessionRestore {
 		return
 	}
-	// A startup that failed before the navigation tree built has no place to
-	// record, and writing an empty one would erase the last good place.
 	if a.selectedNavigation == nil {
 		return
 	}
@@ -57,8 +44,6 @@ func (a *App) persistSession() {
 	}
 }
 
-// markSessionWorkspace records the workspace now open, for the window between
-// a switch and the next quit.
 func (a *App) markSessionWorkspace() {
 	if a.sessionPath == "" || !a.config.SessionRestore {
 		return
@@ -68,9 +53,6 @@ func (a *App) markSessionWorkspace() {
 	}
 }
 
-// navSelectionFor maps the live navigation node onto a saved locator. The
-// branch order mirrors currentFetchParams, so a restored selection scopes the
-// issue list exactly as the live one did.
 func navSelectionFor(node *NavigationNode) session.NavSelection {
 	if node == nil {
 		return session.NavSelection{Kind: session.NavAll}
@@ -96,15 +78,11 @@ func navSelectionFor(node *NavigationNode) session.NavSelection {
 		selection.Kind = session.NavProject
 		selection.ProjectID = node.ID
 	default:
-		// A team-scoped All Issues favorite lands here carrying a team and none
-		// of the flags above, same as the last case in currentFetchParams.
 		selection.Kind = session.NavAll
 	}
 	return selection
 }
 
-// sessionFiltersFor converts the live filters for storage. Only Eq is carried
-// on the date and estimate filters because only Eq is ever set.
 func sessionFiltersFor(filters IssueFilters) session.Filters {
 	return session.Filters{
 		AssigneeID:   filters.AssigneeID,
@@ -122,7 +100,6 @@ func sessionFiltersFor(filters IssueFilters) session.Filters {
 	}
 }
 
-// filtersFromSession converts stored filters back into the live form.
 func filtersFromSession(filters session.Filters) IssueFilters {
 	live := IssueFilters{
 		AssigneeID:   filters.AssigneeID,

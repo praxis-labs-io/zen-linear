@@ -13,8 +13,6 @@ import (
 	zenimages "github.com/praxis-labs-io/zen-linear/internal/images"
 )
 
-// seedImage writes a real picture and hands the app a ready entry for it, so a
-// test drives the reservation without a fetch in flight.
 func seedImage(t *testing.T, app *App, url string, width, height int) {
 	t.Helper()
 
@@ -41,8 +39,6 @@ func seedImage(t *testing.T, app *App, url string, width, height int) {
 	}
 }
 
-// withImages turns pictures on for a test app. The store is what imagesEnabled
-// reads, and it needs somewhere to write that is not a real home directory.
 func withImages(t *testing.T, app *App) {
 	t.Helper()
 
@@ -51,8 +47,6 @@ func withImages(t *testing.T, app *App) {
 		t.Fatalf("NewStore: %v", err)
 	}
 	app.imageStore = store
-	// The cell shape a terminal would have answered with, so the row count is
-	// arithmetic rather than whatever the machine running the test reports.
 	app.graphics.cellWidth, app.graphics.cellHeight = 10, 20
 }
 
@@ -90,8 +84,6 @@ func TestADescriptionsPicturesReserveTheRowsTheyDrawIn(t *testing.T) {
 		if placed.rows > maxImageRows {
 			t.Errorf("picture %d takes %d rows, past the cap of %d", i, placed.rows, maxImageRows)
 		}
-		// The reserved rows have to be blank, or the picture is drawn over text
-		// that tcell has been told not to repaint.
 		for row := placed.row; row < placed.row+placed.rows; row++ {
 			if row >= len(app.detailsBodyLines) {
 				t.Fatalf("picture %d reserves row %d past the %d lines rendered", i, row, len(app.detailsBodyLines))
@@ -112,8 +104,6 @@ func TestADescriptionsPicturesReserveTheRowsTheyDrawIn(t *testing.T) {
 			t.Errorf("the rendered body does not carry %q", want)
 		}
 	}
-	// The link is what the picture replaced. Leaving it would say the same
-	// thing twice.
 	if strings.Contains(body, "uploads.linear.app") {
 		t.Error("the rendered body still carries the upload link")
 	}
@@ -122,9 +112,6 @@ func TestADescriptionsPicturesReserveTheRowsTheyDrawIn(t *testing.T) {
 	}
 }
 
-// Everything below a picture moves down by the rows it took. The page counts
-// every span and slot against len(lines) where it is emitted, so this is what
-// says that still holds once rows appear that no text produced.
 func TestReservedRowsPushTheRestOfThePageDown(t *testing.T) {
 	app := newUXTestApp(t)
 	withImages(t, app)
@@ -148,8 +135,6 @@ func TestReservedRowsPushTheRestOfThePageDown(t *testing.T) {
 	}
 }
 
-// A picture still loading says so and reserves nothing: its size is not known
-// yet, and rows reserved against a guess would jump when the real one landed.
 func TestAPictureStillLoadingSaysSoAndReservesNothing(t *testing.T) {
 	app := newUXTestApp(t)
 	withImages(t, app)
@@ -169,9 +154,6 @@ func TestAPictureStillLoadingSaysSoAndReservesNothing(t *testing.T) {
 	}
 }
 
-// Anything the app will not draw keeps the name and link glamour already
-// renders. That is the fallback for a failed fetch, a URL off the upload host,
-// a terminal that cannot draw, and an image inside a sentence alike.
 func TestWhatCannotBeDrawnKeepsItsLink(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -222,9 +204,6 @@ func TestWhatCannotBeDrawnKeepsItsLink(t *testing.T) {
 	}
 }
 
-// The same upload twice shares its bytes and not its drawing. One placement id
-// across both would leave the first a locked blank hole and delete and re-place
-// the second on every frame.
 func TestTheSamePictureTwiceGetsAPlacementEach(t *testing.T) {
 	app := newUXTestApp(t)
 	withImages(t, app)
@@ -247,8 +226,6 @@ func TestTheSamePictureTwiceGetsAPlacementEach(t *testing.T) {
 	}
 }
 
-// A picture inside a fence is part of the sample. Swapping it for blank rows
-// breaks the thing the fence exists to show verbatim.
 func TestAPictureInsideAFenceIsLeftAlone(t *testing.T) {
 	app := newUXTestApp(t)
 	withImages(t, app)
@@ -276,9 +253,6 @@ func TestAPictureInsideAFenceIsLeftAlone(t *testing.T) {
 	}
 }
 
-// A pane too short to show a picture whole keeps the link instead. Reserving
-// rows for one that never places leaves a hole where the link used to be, which
-// is worse than the link.
 func TestAPaneTooShortToDrawKeepsTheLink(t *testing.T) {
 	app := newUXTestApp(t)
 	withImages(t, app)
@@ -287,9 +261,6 @@ func TestAPaneTooShortToDrawKeepsTheLink(t *testing.T) {
 	seedImage(t, app, url, 800, 400)
 	app.detailsDescriptionMarkdown = "![shot.png](" + url + ")"
 
-	// Through refitDetailsPage, not renderDetailsBody: the height reaching the
-	// body at all is the thing under test, and calling the body directly would
-	// pass whether or not the refit noticed.
 	app.refitDetailsPage(80, minImageRows+1)
 
 	if len(app.detailsBodyImages) != 0 {
@@ -300,8 +271,6 @@ func TestAPaneTooShortToDrawKeepsTheLink(t *testing.T) {
 		t.Errorf("the link was dropped rather than kept: %q", body)
 	}
 
-	// A height-only resize, so nothing but the budget crossing the floor can
-	// bring the picture back.
 	app.refitDetailsPage(80, 40)
 	if len(app.detailsBodyImages) != 1 {
 		t.Errorf("%d pictures reserved once the pane grew, want 1", len(app.detailsBodyImages))

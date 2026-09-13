@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// printUsage writes the top-level command list.
 func printUsage(w io.Writer) {
 	msg := strings.TrimSpace(`
 zen-linear is a terminal client for Linear.

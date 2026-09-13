@@ -8,11 +8,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// linearDeps bundles the Linear API client, its metadata cache, and every
-// function the UI calls through them. NewApp and applySettings both build it
-// with newLinearDeps, so the two wiring lists cannot drift apart — that drift
-// is what once let a settings save rebuild the client without the OAuth bearer
-// scheme and 401 refresh, silently downgrading an OAuth session.
 type linearDeps struct {
 	api   *linearapi.Client
 	cache *cache.TeamCache
@@ -44,8 +39,6 @@ type linearDeps struct {
 	moveFavoriteFunc        func(context.Context, string, string, float64) error
 }
 
-// newLinearDeps builds the API client for cfg and wires every dependency
-// derived from it and its cache.
 func newLinearDeps(cfg linearapi.ClientConfig, cacheTTL time.Duration) linearDeps {
 	api := linearapi.NewClient(cfg)
 	teamCache := cache.NewTeamCache(api, cacheTTL)

@@ -1,8 +1,4 @@
-// Package images fetches the pictures an issue's description points at and
-// keeps them on disk, so the details pane has bytes to draw and dimensions to
-// reserve rows for.
-//
-// Separate from internal/linearapi, whose transport is wrapped for GraphQL.
+// Package images fetches and caches the pictures an issue description links to.
 package images
 
 import (
@@ -20,8 +16,7 @@ import (
 	"path/filepath"
 	"time"
 
-	// Registration is process-wide, so the format is checked by name below
-	// rather than by whatever happens to be registered.
+	// Registers the one format keptFormat allows.
 	_ "image/png"
 
 	"github.com/praxis-labs-io/zen-linear/internal/config"
@@ -29,40 +24,29 @@ import (
 
 const (
 	requestTimeout = 20 * time.Second
-	// So a wrong URL cannot fill a disk. Linear caps an upload well below it.
-	maxBytes = 10 << 20
-	// A cache, so an old entry is discarded rather than revalidated.
-	defaultMaxAge = 30 * 24 * time.Hour
-	dirName       = "images"
+	maxBytes       = 10 << 20
+	defaultMaxAge  = 30 * 24 * time.Hour
+	dirName        = "images"
 )
 
-// The only host the Linear token is ever sent to. A description can point at
-// any URL on the internet, and a live credential on a request for one would
-// hand it over.
+// The only host the token is sent to; a description can link anywhere.
 const uploadHost = "uploads.linear.app"
 
-// The caller leaves an image it names as the link it already renders.
+// ErrUnsupportedHost is returned for a URL outside Linear's upload host.
 var ErrUnsupportedHost = errors.New("images: not a Linear upload")
 
-// The one encoded format Kitty accepts (f=100; its others are raw pixels). A
-// picture the terminal cannot be handed must not be measured: rows would be
-// reserved for it, its link is already gone, and q=2 means the terminal's
-// refusal never comes back to say so.
+// Kitty's only encoded format (f=100). Anything else would reserve rows for a
+// picture the terminal refuses silently.
 const keptFormat = "png"
 
-// A picture on disk and the pixels it draws at.
 type Image struct {
 	Path   string
 	Width  int
 	Height int
 }
 
-// Only Token is required. Host, CacheDir, Client, MaxAge and Now exist so tests
-// never reach Linear or a real home directory.
 type Options struct {
-	// An upload URL answers 401 without it.
-	Token string
-	// OAuth prefixes the token with "Bearer "; a personal API key does not.
+	Token     string
 	UseBearer bool
 	Host      string
 	CacheDir  string
@@ -79,8 +63,7 @@ type Store struct {
 	client    *http.Client
 }
 
-// A directory it cannot create is an error: there is nowhere to put the bytes
-// the terminal is handed.
+// NewStore creates the cache directory and returns a Store. Only Token is required.
 func NewStore(opts Options) (*Store, error) {
 	dir := opts.CacheDir
 	if dir == "" {
@@ -91,9 +74,6 @@ func NewStore(opts Options) (*Store, error) {
 		dir = filepath.Join(base, dirName)
 	}
 
-	// EnsureDirFor tightens only the application directory itself, and this one
-	// under it holds a workspace's private pictures. A chmod refusal is not
-	// fatal: not every filesystem a home directory sits on implements it.
 	if err := os.MkdirAll(dir, config.DirMode); err != nil {
 		return nil, fmt.Errorf("create image cache directory: %w", err)
 	}
@@ -160,7 +140,6 @@ func (s *Store) Fetch(ctx context.Context, raw string) (Image, error) {
 	return Image{Path: path, Width: header.Width, Height: header.Height}, nil
 }
 
-// Whether the store will attach the token to this URL.
 func (s *Store) allowed(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil {
@@ -198,8 +177,6 @@ func (s *Store) download(ctx context.Context, raw string) ([]byte, error) {
 		return nil, fmt.Errorf("images: fetch %s: %s", raw, resp.Status)
 	}
 
-	// One past the cap, so a file at the limit reads whole and anything larger
-	// is refused rather than truncated.
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("images: read %s: %w", raw, err)
@@ -211,9 +188,6 @@ func (s *Store) download(ctx context.Context, raw string) ([]byte, error) {
 	return data, nil
 }
 
-// Dimensions are re-read from the file's header rather than an index beside it:
-// DecodeConfig stops at the header, and an index is a second file to keep in
-// step with the first.
 func (s *Store) cached(path string) (Image, bool) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -228,7 +202,6 @@ func (s *Store) cached(path string) (Image, bool) {
 	return Image{Path: path, Width: header.Width, Height: header.Height}, true
 }
 
-// Failures are ignored: a cache that could not be tidied still answers.
 func (s *Store) prune(now time.Time, maxAge time.Duration) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {

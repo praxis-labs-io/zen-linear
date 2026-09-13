@@ -11,14 +11,10 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// newNavCacheTestApp builds an App whose navigation fetch is held open, so a
-// test can watch what paints before the network answers. Releasing the returned
-// channel lets the fetch return teams and favorites.
 func newNavCacheTestApp(t *testing.T, cfg config.Config, teams []linearapi.Team, favorites []linearapi.Favorite) (*App, chan struct{}, string) {
 	t.Helper()
 
 	app := newDefaultNavTestApp(t, cfg)
-	// The cache only files entries under a configured workspace name.
 	app.activeWorkspaceName = navCacheTestWorkspace
 	stopBackgroundWorkOnCleanup(t, app)
 	release := make(chan struct{})
@@ -38,10 +34,8 @@ func newNavCacheTestApp(t *testing.T, cfg config.Config, teams []linearapi.Team,
 	return app, release, path
 }
 
-// navCacheTestWorkspace is the configured workspace the test apps run as.
 const navCacheTestWorkspace = "Praxis"
 
-// installNavCache seeds the disk copy the app paints its first tree from.
 func installNavCache(t *testing.T, app *App, path, workspace string, data cache.NavData) {
 	t.Helper()
 	if err := cache.RecordNav(path, workspace, data); err != nil {
@@ -54,8 +48,6 @@ func installNavCache(t *testing.T, app *App, path, workspace string, data cache.
 	app.UseNavCache(path, file)
 }
 
-// installNavSettledHook reports when a launch has finished applying its fetch,
-// including the launches that trigger no refresh of their own.
 func installNavSettledHook(app *App) <-chan struct{} {
 	done := make(chan struct{}, 4)
 	app.navigationSettled = func() {
@@ -76,7 +68,6 @@ func waitForNavSettled(t *testing.T, done <-chan struct{}) {
 	}
 }
 
-// treeTeamNames lists the team nodes on screen, in order.
 func treeTeamNames(app *App) []string {
 	if app.teamsGroup == nil {
 		return nil
@@ -90,8 +81,6 @@ func treeTeamNames(app *App) []string {
 	return names
 }
 
-// TestLoadInitialDataPaintsCachedTreeBeforeTheFetch is the point of the cache:
-// the sidebar and the issue list are up while the network request is still out.
 func TestLoadInitialDataPaintsCachedTreeBeforeTheFetch(t *testing.T) {
 	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), nil)
 	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: defaultNavTeams()})
@@ -99,8 +88,6 @@ func TestLoadInitialDataPaintsCachedTreeBeforeTheFetch(t *testing.T) {
 	settled := installNavSettledHook(app)
 
 	app.loadInitialData()
-	// The cached tree drives the startup refresh, so this returns while the
-	// teams fetch above is still blocked.
 	waitForRefreshCompletion(t, refreshDone)
 
 	if names := treeTeamNames(app); len(names) != 2 || names[0] != "Engineering" {
@@ -111,9 +98,6 @@ func TestLoadInitialDataPaintsCachedTreeBeforeTheFetch(t *testing.T) {
 	waitForNavSettled(t, settled)
 }
 
-// TestLoadInitialDataLeavesTheCursorOnAnUnchangedRefetch is the other half of
-// the promise: a user who has started navigating must not be moved when the
-// fetch confirms what the cache already painted.
 func TestLoadInitialDataLeavesTheCursorOnAnUnchangedRefetch(t *testing.T) {
 	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), nil)
 	installNavCache(t, app, path, navCacheTestWorkspace, cache.NavData{Teams: defaultNavTeams()})
@@ -123,7 +107,6 @@ func TestLoadInitialDataLeavesTheCursorOnAnUnchangedRefetch(t *testing.T) {
 	app.loadInitialData()
 	waitForRefreshCompletion(t, refreshDone)
 
-	// The user moves to a team while the fetch is still out.
 	teamNode := app.findTeamTreeNode("team-2")
 	if teamNode == nil {
 		t.Fatal("cached tree has no node for team-2")
@@ -139,9 +122,6 @@ func TestLoadInitialDataLeavesTheCursorOnAnUnchangedRefetch(t *testing.T) {
 	}
 }
 
-// TestLoadInitialDataRebuildsWhenTheFetchDisagrees covers the launch after a
-// team was added: the tree has to pick the new team up, and the user has to end
-// up back on the list they were reading.
 func TestLoadInitialDataRebuildsWhenTheFetchDisagrees(t *testing.T) {
 	cached := []linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}
 	app, release, path := newNavCacheTestApp(t, config.Config{DefaultTeam: "ENG"}, defaultNavTeams(), nil)
@@ -155,7 +135,6 @@ func TestLoadInitialDataRebuildsWhenTheFetchDisagrees(t *testing.T) {
 	}
 
 	close(release)
-	// The rebuild re-resolves the place, which runs a second refresh.
 	waitForRefreshCompletion(t, refreshDone)
 
 	if names := treeTeamNames(app); len(names) != 2 || names[1] != "Nexa" {
@@ -167,8 +146,6 @@ func TestLoadInitialDataRebuildsWhenTheFetchDisagrees(t *testing.T) {
 	}
 }
 
-// TestLoadInitialDataRecordsTheFetchedTree verifies the next launch has
-// something to paint from.
 func TestLoadInitialDataRecordsTheFetchedTree(t *testing.T) {
 	favorites := []linearapi.Favorite{{ID: "fav-1", Type: "project", ProjectID: "proj-1", ProjectName: "Website"}}
 	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), favorites)
@@ -192,8 +169,6 @@ func TestLoadInitialDataRecordsTheFetchedTree(t *testing.T) {
 	}
 }
 
-// TestLoadInitialDataKeepsTheCachedTreeWhenTheFetchFails covers an offline
-// launch: the tree stays up rather than emptying itself.
 func TestLoadInitialDataKeepsTheCachedTreeWhenTheFetchFails(t *testing.T) {
 	app, release, path := newNavCacheTestApp(t, config.Config{}, nil, nil)
 	app.fetchTeamsFunc = func(context.Context) ([]linearapi.Team, error) {
@@ -240,9 +215,6 @@ func TestNavDataUnchanged(t *testing.T) {
 	}
 }
 
-// TestLoadInitialDataKeepsTheCacheWhenFavoritesFail covers the half-failure the
-// tree tolerates: favorites are not fatal to rendering, but a copy missing them
-// must not reach disk or the next launch paints a Favorites-less sidebar.
 func TestLoadInitialDataKeepsTheCacheWhenFavoritesFail(t *testing.T) {
 	favorites := []linearapi.Favorite{{ID: "fav-1", Type: "project", ProjectID: "proj-1", ProjectName: "Website"}}
 	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), nil)
@@ -272,8 +244,6 @@ func TestLoadInitialDataKeepsTheCacheWhenFavoritesFail(t *testing.T) {
 	}
 }
 
-// TestLoadInitialDataUpdatesTheCacheItHolds covers the second launch inside one
-// session: a settings save must not repaint the tree as it was at startup.
 func TestLoadInitialDataUpdatesTheCacheItHolds(t *testing.T) {
 	cached := []linearapi.Team{{ID: "team-1", Key: "ENG", Name: "Engineering"}}
 	app, release, path := newNavCacheTestApp(t, config.Config{}, defaultNavTeams(), nil)
@@ -291,8 +261,6 @@ func TestLoadInitialDataUpdatesTheCacheItHolds(t *testing.T) {
 	}
 }
 
-// TestRebuildKeepsTheUserPutWhenTheirListIsGone covers the place that vanished
-// server-side: the rebuild must not also throw the user at the default team.
 func TestRebuildKeepsTheUserPutWhenTheirListIsGone(t *testing.T) {
 	cached := []linearapi.Team{{ID: "team-9", Key: "OLD", Name: "Retired"}}
 	app, release, path := newNavCacheTestApp(t, config.Config{DefaultTeam: "NEX"}, defaultNavTeams(), nil)
@@ -315,9 +283,6 @@ func TestRebuildKeepsTheUserPutWhenTheirListIsGone(t *testing.T) {
 	}
 }
 
-// TestUnnamedSessionsAreNotCached covers a bare API key or an OAuth session:
-// nothing on disk tells two Linear workspaces reached that way apart, so they
-// get no entry rather than one they would share.
 func TestUnnamedSessionsAreNotCached(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{LinearAPIKey: "lin_api_anything"})
 	path := filepath.Join(t.TempDir(), "nav-cache.json")
@@ -345,9 +310,6 @@ func TestUnnamedSessionsAreNotCached(t *testing.T) {
 	}
 }
 
-// TestRecordNavCacheAsyncSkipsATeamlessTree covers the workspace-switch window
-// where the tree on screen has outlived its teams: a favorites action there
-// would file the old favorites under the new workspace with no teams.
 func TestRecordNavCacheAsyncSkipsATeamlessTree(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{})
 	path := filepath.Join(t.TempDir(), "nav-cache.json")
@@ -367,8 +329,6 @@ func TestRecordNavCacheAsyncSkipsATeamlessTree(t *testing.T) {
 	}
 }
 
-// TestResetNavigationTreeStopsShowingTheOldWorkspace covers the switch window:
-// the sidebar must not keep offering teams the new key cannot resolve.
 func TestResetNavigationTreeStopsShowingTheOldWorkspace(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{})
 	app.rebuildNavigationTree(defaultNavTeams(), nil)

@@ -76,8 +76,6 @@ func TestResolveViewPrefs(t *testing.T) {
 		t.Fatalf("sort prefs = %+v, want priority", prefs)
 	}
 
-	// A subgrouping equal to the grouping collapses to none, and an
-	// unmappable subgrouping does not inherit the config fallback.
 	prefs = resolveViewPrefs(&linearapi.ViewPreferencesValues{IssueGrouping: "priority", IssueSubGrouping: "priority"})
 	if prefs == nil || prefs.subgroupBy != GroupByNone {
 		t.Fatalf("same-dimension subgroup prefs = %+v, want subgroup none", prefs)
@@ -147,16 +145,12 @@ func TestRefreshAppliesCustomViewPreferences(t *testing.T) {
 		t.Fatalf("listIssueRows[0] = %+v, want a group header from the view's grouping", app.listIssueRows)
 	}
 
-	// A manual grouping override outranks the view for the session.
 	app.groupingOverridden = true
 	if app.effectiveGroupBy() != cfg.GroupBy {
 		t.Fatalf("overridden grouping = %q, want config value %q", app.effectiveGroupBy(), cfg.GroupBy)
 	}
 	app.groupingOverridden = false
 
-	// Leaving the view clears its settings with the next list. The pane title
-	// reads the selection, and a detail fetch from the last refresh can still
-	// be painting one, so take the UI lock the way the app's own writes do.
 	app.QueueUpdateDraw(func() {
 		app.selectedNavigation = &NavigationNode{ID: "team-1", TeamID: "team-1", IsTeam: true}
 	})

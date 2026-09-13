@@ -16,13 +16,11 @@ const (
 	maxStreamLineBytes = 1024 * 1024
 )
 
-// Runner executes provider CLIs and streams output.
 type Runner struct {
 	LookPath func(string) (string, error)
 	ExecCmd  func(ctx context.Context, name string, args ...string) *exec.Cmd
 }
 
-// NewRunner constructs a Runner with default exec behavior.
 func NewRunner() *Runner {
 	return &Runner{
 		LookPath: exec.LookPath,
@@ -30,7 +28,8 @@ func NewRunner() *Runner {
 	}
 }
 
-// Run starts the provider process and streams output lines to callbacks.
+// Run starts p's CLI and streams parsed events, lines and errors to the
+// callbacks. It returns when the process exits, with an error on a failed exit.
 func (r *Runner) Run(ctx context.Context, p Provider, prompt string, issueContext string, options AgentRunOptions, onEvent func(AgentEvent), onLine func(string), onErr func(error)) error {
 	if p == nil {
 		return fmt.Errorf("provider is nil")
@@ -100,7 +99,6 @@ func (r *Runner) Run(ctx context.Context, p Provider, prompt string, issueContex
 	return nil
 }
 
-// streamLines scans a stream line-by-line and forwards parsed output.
 func streamLines(reader io.Reader, p Provider, prefix string, onEvent func(AgentEvent), onLine func(string), onErr func(error)) {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxStreamLineBytes)

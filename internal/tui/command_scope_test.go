@@ -8,9 +8,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// TestIssueShortcutIsDeadInTheNavigationPane drives the key the dispatcher
-// drives. x on a tree node used to archive whatever issue happened to be
-// selected in a pane the user was not looking at.
 func TestIssueShortcutIsDeadInTheNavigationPane(t *testing.T) {
 	app := newUXTestApp(t)
 	app.selectedIssue = &linearapi.Issue{ID: "issue-1", Identifier: "LIN-1", Title: "Not yours to archive"}
@@ -33,8 +30,6 @@ func TestIssueShortcutIsDeadInTheNavigationPane(t *testing.T) {
 	}
 }
 
-// TestNavigationShortcutIsDeadInTheIssuesPane is the mirror: F belongs to the
-// tree.
 func TestNavigationShortcutIsDeadInTheIssuesPane(t *testing.T) {
 	app := newUXTestApp(t)
 	favorite := tcell.NewEventKey(tcell.KeyRune, 'F', tcell.ModNone)
@@ -50,8 +45,6 @@ func TestNavigationShortcutIsDeadInTheIssuesPane(t *testing.T) {
 	}
 }
 
-// TestPaletteOpensInTheScopeOfThePaneBehindIt pins the reading openPalette
-// takes: the palette acts on the pane it was opened from, not on itself.
 func TestPaletteOpensInTheScopeOfThePaneBehindIt(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -79,9 +72,6 @@ func TestPaletteOpensInTheScopeOfThePaneBehindIt(t *testing.T) {
 	}
 }
 
-// TestCommandScopes pins the registry. A command added without a scope is
-// global, which is the permissive reading, so the ones that act on something
-// have to say so here.
 func TestCommandScopes(t *testing.T) {
 	tests := []struct {
 		id   string
@@ -93,8 +83,6 @@ func TestCommandScopes(t *testing.T) {
 		{"create_issue", ScopeGlobal},
 		{"zoom_details", ScopeGlobal},
 		{"toggle_navigation_pane", ScopeGlobal},
-		// List controls stay global so grouping and filtering work from the
-		// navigation pane.
 		{"group_by", ScopeGlobal},
 		{"sort_by", ScopeGlobal},
 		{"filter_status", ScopeGlobal},
@@ -109,9 +97,6 @@ func TestCommandScopes(t *testing.T) {
 		{"toggle_favorite", ScopeNavigation},
 	}
 
-	// ask_agent is gated out when no agent CLI is on PATH, so the registry
-	// would be short one row on a machine without one. Stub the lookup rather
-	// than let the host decide which commands this table can see.
 	app := newUXTestApp(t)
 	app.agentRunner = &agents.Runner{
 		LookPath: func(string) (string, error) { return "agent", nil },

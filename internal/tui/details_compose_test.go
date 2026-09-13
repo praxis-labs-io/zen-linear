@@ -12,16 +12,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// typeInCompose sends a key the way the running app does: the global capture
-// first, then whatever it hands back goes to the root, which walks down the
-// focus chain to deliver it.
-//
-// The walk is not an implementation detail to shortcut. tview hands a key to
-// the root primitive, never to the focused one, so a container that answers for
-// the wrong child swallows every key while the focus, the border and the status
-// bar all say the box has the keyboard. Handing the event straight to
-// app.GetFocus() here proved only that the box was focused, and passed for a
-// whole branch against a box nothing could be typed into.
 func typeInCompose(t *testing.T, app *App, event *tcell.EventKey) {
 	t.Helper()
 	remaining := app.handleGlobalKey(event)
@@ -44,9 +34,6 @@ func typeRunes(t *testing.T, app *App, text string) {
 	}
 }
 
-// newComposeTestApp opens an issue with comments, puts the keyboard in the
-// compose box the way t does, and returns a channel that fires after each
-// queued draw so a test can wait out the post goroutine.
 func newComposeTestApp(t *testing.T) (*App, <-chan struct{}) {
 	t.Helper()
 	app := newCommentsTestApp(t)
@@ -62,16 +49,12 @@ func newComposeTestApp(t *testing.T) (*App, <-chan struct{}) {
 	return app, drawn
 }
 
-// postAndWait sends the chord and waits for the answer to land.
 func postAndWait(t *testing.T, app *App, drawn <-chan struct{}) {
 	t.Helper()
 	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModCtrl))
 	waitForDraw(t, drawn)
 }
 
-// TestCommentShortcutOpensTheBoxFromAnIssuePane covers c reaching the box from
-// the list as well as the details pane. It writes on the selected issue, so it
-// answers where an issue is selected and nowhere else.
 func TestCommentShortcutOpensTheBoxFromAnIssuePane(t *testing.T) {
 	for _, pane := range []struct {
 		name string
@@ -100,9 +83,6 @@ func TestCommentShortcutOpensTheBoxFromAnIssuePane(t *testing.T) {
 	}
 }
 
-// TestCommentShortcutIsDeadInTheNavigationPane pins the other half. A comment
-// goes on the selected issue, and the navigation tree is not where that is
-// chosen.
 func TestCommentShortcutIsDeadInTheNavigationPane(t *testing.T) {
 	app := newCommentsTestApp(t)
 	app.focusedPane = FocusNavigation
@@ -118,9 +98,6 @@ func TestCommentShortcutIsDeadInTheNavigationPane(t *testing.T) {
 	}
 }
 
-// TestComposeBoxTakesLettersTheAppWouldOtherwiseClaim is the one that matters
-// for a prose field: q quits, braces step the comments, and angles toggle panes
-// everywhere else.
 func TestComposeBoxTakesLettersTheAppWouldOtherwiseClaim(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	lit := app.focusedCommentID
@@ -138,8 +115,6 @@ func TestComposeBoxTakesLettersTheAppWouldOtherwiseClaim(t *testing.T) {
 	}
 }
 
-// TestEnterIsANewlineAndTheChordPosts pins the split: a bare Enter cannot send
-// a half-written comment.
 func TestEnterIsANewlineAndTheChordPosts(t *testing.T) {
 	posted := make(chan string, 1)
 	app, drawn := newComposeTestApp(t)
@@ -169,8 +144,6 @@ func TestEnterIsANewlineAndTheChordPosts(t *testing.T) {
 	waitForDraw(t, drawn)
 }
 
-// TestEscapeLeavesTheBoxAndKeepsTheWords covers handing the keys back without
-// losing a draft.
 func TestEscapeLeavesTheBoxAndKeepsTheWords(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	typeRunes(t, app, "half a thought")
@@ -193,9 +166,6 @@ func TestEscapeLeavesTheBoxAndKeepsTheWords(t *testing.T) {
 	}
 }
 
-// TestPostedCommentLandsWithoutARefetch covers the card appearing off the
-// mutation's own answer. A refetch here would blank the pane and cost a full
-// issue query for one comment.
 func TestPostedCommentLandsWithoutARefetch(t *testing.T) {
 	app, drawn := newComposeTestApp(t)
 	app.fetchIssueByID = func(context.Context, string) (linearapi.Issue, error) {
@@ -231,8 +201,6 @@ func TestPostedCommentLandsWithoutARefetch(t *testing.T) {
 	}
 }
 
-// TestPostTrimsTheBody covers a box holding nothing but newlines: there is no
-// comment in it to send.
 func TestPostTrimsTheBody(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	app.createCommentFunc = func(context.Context, linearapi.CreateCommentInput) (linearapi.Comment, error) {
@@ -245,9 +213,6 @@ func TestPostTrimsTheBody(t *testing.T) {
 	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModCtrl))
 }
 
-// TestFailedPostPutsTheWordsBack covers the network eating a comment. The
-// words are the writer's, and a request that failed is not a reason to lose
-// them.
 func TestFailedPostPutsTheWordsBack(t *testing.T) {
 	app, drawn := newComposeTestApp(t)
 	app.createCommentFunc = func(context.Context, linearapi.CreateCommentInput) (linearapi.Comment, error) {
@@ -268,9 +233,6 @@ func TestFailedPostPutsTheWordsBack(t *testing.T) {
 	}
 }
 
-// TestFailedPostKeepsACommentStartedInTheMeantime covers the answer arriving
-// after the writer moved on. Overwriting would destroy the new comment to
-// rescue the old one, which is the same loss the other way round.
 func TestFailedPostKeepsACommentStartedInTheMeantime(t *testing.T) {
 	release := make(chan struct{})
 	app, drawn := newComposeTestApp(t)
@@ -281,8 +243,6 @@ func TestFailedPostKeepsACommentStartedInTheMeantime(t *testing.T) {
 
 	typeRunes(t, app, "first")
 	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyEnter, '\r', tcell.ModCtrl))
-	// Posting hands the keyboard back, so writing the next comment means
-	// opening the box again, which is what a writer would do here.
 	app.openComposeBox()
 	typeRunes(t, app, "second")
 
@@ -294,9 +254,6 @@ func TestFailedPostKeepsACommentStartedInTheMeantime(t *testing.T) {
 	}
 }
 
-// TestComposeBoxAlignsWithTheCards covers the frame the box is drawn in. It is
-// the last card in the stack, so it starts in the same column and runs to the
-// same width as the ones above it.
 func TestComposeBoxAlignsWithTheCards(t *testing.T) {
 	for _, width := range []int{60, 100, 180} {
 		app, _ := newComposeTestApp(t)
@@ -328,12 +285,8 @@ func TestComposeBoxAlignsWithTheCards(t *testing.T) {
 	}
 }
 
-// TestTheComposeBoxGrowsWithWhatIsTyped covers a box sized to its own text. In
-// a fixed frame the top of a long draft goes behind a scroll inside the card,
-// on a page that already scrolls.
 func TestTheComposeBoxGrowsWithWhatIsTyped(t *testing.T) {
 	app, _ := newComposeTestApp(t)
-	// The box is the last thing on the page, so the bottom-most frame is its.
 	frameRows := func() int {
 		t.Helper()
 		top, bottom := -1, -1
@@ -351,8 +304,6 @@ func TestTheComposeBoxGrowsWithWhatIsTyped(t *testing.T) {
 		return bottom - top + 1
 	}
 
-	// The button row under the writing, and the card's own frame and byline
-	// around both.
 	const chrome = 5
 	if empty := frameRows(); empty != composeRows+chrome {
 		t.Errorf("an empty box draws %d rows, want %d", empty, composeRows+chrome)
@@ -374,9 +325,6 @@ func TestTheComposeBoxGrowsWithWhatIsTyped(t *testing.T) {
 	}
 }
 
-// The page scrolls to the box before the key that grows it lands, so the row
-// just gained is below the fold unless the growth scrolls again. Waiting for
-// the next key means Enter drops the line you are about to write off screen.
 func TestANewLineStaysOnThePage(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	const height = 16
@@ -397,8 +345,6 @@ func TestANewLineStaysOnThePage(t *testing.T) {
 		showComments(t, app, 80, height)
 		span, fold := bottom()
 		if span.end-span.start+1 > viewHeight(app.detailsPageView) {
-			// Past this the box is taller than the pane, where it scrolls
-			// inside its own frame rather than growing onto the page.
 			return
 		}
 		if span.end >= fold {
@@ -407,9 +353,6 @@ func TestANewLineStaysOnThePage(t *testing.T) {
 	}
 }
 
-// A growing box must not carry the scroll it took while it was short. The
-// TextArea moves its own offset to keep the cursor on a box that has not grown
-// yet, which leaves the first lines written behind the frame for good.
 func TestAGrownBoxShowsWhatWasWrittenFirst(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	typeRunes(t, app, "first")
@@ -427,9 +370,6 @@ func TestAGrownBoxShowsWhatWasWrittenFirst(t *testing.T) {
 	}
 }
 
-// The box is measured with the page's wrap and drawn by a TextArea, which
-// prints what it holds. A body carrying anything bracket-shaped measures short
-// on the wrap side and the box comes up too small for what is in it.
 func TestABracketedBodyIsMeasuredAsItIsDrawn(t *testing.T) {
 	area := tview.NewTextArea()
 	area.SetText("See the [docs](https://example.com/a/very/long/path/that/keeps/going) for the rest of it.", false)
@@ -437,8 +377,6 @@ func TestABracketedBodyIsMeasuredAsItIsDrawn(t *testing.T) {
 	const measure = 20
 	drawn := len(drawPrimitiveAt(t, area, measure, 40))
 	rows := writingBoxRows(area, measure)
-	// The primitive is drawn taller than it needs, so its blank tail is not a
-	// row of text. Count what it actually put on screen.
 	written := 0
 	for _, line := range drawPrimitiveAt(t, area, measure, drawn) {
 		if strings.TrimSpace(line) != "" {
@@ -450,8 +388,6 @@ func TestABracketedBodyIsMeasuredAsItIsDrawn(t *testing.T) {
 	}
 }
 
-// A cursor at the end of a line that exactly fills the measure sits on the row
-// after it, and a TextArea scrolls itself to keep it: the top of the box goes.
 func TestAFullLastLineLeavesTheCursorARow(t *testing.T) {
 	area := tview.NewTextArea()
 	const measure = 20
@@ -463,9 +399,6 @@ func TestAFullLastLineLeavesTheCursorARow(t *testing.T) {
 	}
 }
 
-// TestDraftFollowsItsIssue covers the box being one widget over a changing
-// selection. A comment written for one issue must not be posted to whichever
-// one happens to be on screen when the chord lands.
 func TestDraftFollowsItsIssue(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	first := app.selectedIssue
@@ -490,9 +423,6 @@ func TestDraftFollowsItsIssue(t *testing.T) {
 	}
 }
 
-// TestFailedPostGoesBackToItsOwnIssue covers the answer arriving after the
-// reader moved on: the words wait on the issue they were written for, not in a
-// box about a different one.
 func TestFailedPostGoesBackToItsOwnIssue(t *testing.T) {
 	release := make(chan struct{})
 	app, drawn := newComposeTestApp(t)
@@ -525,17 +455,12 @@ func TestFailedPostGoesBackToItsOwnIssue(t *testing.T) {
 	}
 }
 
-// TestClickingTheBoxTakesTheKeyboard covers the mouse path. A click lands focus
-// on the text area without going through updateFocus, and a sub-focus field is
-// the only thing that would know: tested on the field alone, every letter typed
-// after a click fired a command shortcut instead.
 func TestClickingTheBoxTakesTheKeyboard(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	app.leaveComposeBox()
 	app.focusedPane = FocusIssues
 	app.updateFocus()
 
-	// What tview's TextArea does on a left click.
 	app.app.SetFocus(app.detailsComposeArea)
 	typeRunes(t, app, "clicked in")
 
@@ -544,27 +469,19 @@ func TestClickingTheBoxTakesTheKeyboard(t *testing.T) {
 	}
 }
 
-// TestBracesWalkThePageAndStopAtTheEnd covers the focus ring: each card in
-// turn, then the box, then the button. The ring is not pane navigation, so the
-// end of it is the end of the walk.
 func TestBracesWalkThePageAndStopAtTheEnd(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	app.leaveComposeBox()
-	// Opening the box scrolled the page to it, at the end. The ring picks up
-	// from what is on screen, so the walk starts where the reader is looking.
 	app.detailsPageView.ScrollToBeginning()
 
 	next := func() { stepComments(t, app, false) }
 
-	// One step per comment before the ring reaches the box.
 	for range app.detailsCommentsSource {
 		next()
 		if got := app.app.GetFocus(); got != app.detailsPageView {
 			t.Fatalf("} through the cards focused %T, want the card stack", got)
 		}
 	}
-	// The compose card is the last stop and it is shut, so the keyboard stays
-	// on the stack until the key that opens it is pressed.
 	next()
 	if got := app.focusedCommentID; got != blockIDCompose {
 		t.Fatalf("} past the last card picked %q, want the compose card", got)
@@ -581,16 +498,11 @@ func TestBracesWalkThePageAndStopAtTheEnd(t *testing.T) {
 	}
 }
 
-// TestBracesWalkThePageBackwards covers the ring in reverse, stopping on the
-// first card rather than wrapping or leaving the pane.
 func TestBracesWalkThePageBackwards(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	app.leaveComposeBox()
-	// Landing on the last card first, which is where a reader coming out of the
-	// box is: the braces are prose inside it.
 	app.focusComment(app.detailsCommentsSource[len(app.detailsCommentsSource)-1].ID)
 
-	// One per card, and then the ring is out of cards to give.
 	for range app.detailsCommentsSource {
 		stepComments(t, app, true)
 	}
@@ -605,9 +517,6 @@ func TestBracesWalkThePageBackwards(t *testing.T) {
 	}
 }
 
-// TestTabWalksABoxToItsPostButton covers what Tab does in this pane now: it
-// moves between the box holding the keyboard and the button that sends it, and
-// nothing else.
 func TestTabWalksABoxToItsPostButton(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	tab := func() { app.handleGlobalKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)) }
@@ -629,8 +538,6 @@ func TestTabWalksABoxToItsPostButton(t *testing.T) {
 	}
 }
 
-// TestEnterOnThePostButtonSends covers the control a terminal that cannot send
-// Ctrl+Enter has to post with.
 func TestEnterOnThePostButtonSends(t *testing.T) {
 	posted := make(chan string, 1)
 	app, drawn := newComposeTestApp(t)
@@ -653,8 +560,6 @@ func TestEnterOnThePostButtonSends(t *testing.T) {
 	waitForDraw(t, drawn)
 }
 
-// TestClickingThePostButtonSends covers the same control with the mouse, which
-// never reaches the key path at all.
 func TestClickingThePostButtonSends(t *testing.T) {
 	posted := make(chan string, 1)
 	app, drawn := newComposeTestApp(t)
@@ -678,10 +583,6 @@ func TestClickingThePostButtonSends(t *testing.T) {
 	waitForDraw(t, drawn)
 }
 
-// TestPostGoesToTheDraftsOwnIssue covers the window a selection move opens: it
-// writes selectedIssue at once but defers the draft sync behind the detail
-// debounce, so reading the selection at post time sends one issue's words to
-// another.
 func TestPostGoesToTheDraftsOwnIssue(t *testing.T) {
 	posted := make(chan string, 1)
 	app, drawn := newComposeTestApp(t)
@@ -693,7 +594,6 @@ func TestPostGoesToTheDraftsOwnIssue(t *testing.T) {
 
 	typeRunes(t, app, "written for the first issue")
 
-	// The selection moves; the draft sync has not run yet.
 	second := commentedIssueFixture()
 	second.ID = "issue-2"
 	app.issuesMu.Lock()
@@ -708,10 +608,6 @@ func TestPostGoesToTheDraftsOwnIssue(t *testing.T) {
 	waitForDraw(t, drawn)
 }
 
-// TestSavingSettingsKeepsTheDraft covers a settings save running through
-// resetCachedState. It empties the pane, so the draft is held against its issue
-// rather than shown, and it comes back when the issue does. Saving settings is
-// no reason to lose what someone wrote.
 func TestSavingSettingsKeepsTheDraft(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	issue := app.selectedIssue
@@ -733,8 +629,6 @@ func TestSavingSettingsKeepsTheDraft(t *testing.T) {
 	}
 }
 
-// TestSwitchingWorkspaceDropsDrafts covers the case that does clear them: the
-// issues they belong to are not in the new workspace.
 func TestSwitchingWorkspaceDropsDrafts(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	typeRunes(t, app, "for the old workspace")
@@ -749,9 +643,6 @@ func TestSwitchingWorkspaceDropsDrafts(t *testing.T) {
 	}
 }
 
-// TestCommentsPanelDelegatesFocusToTheCards covers tview handing the panel
-// focus on its own. With no item flagged, Flex.Focus falls through to the
-// panel's own Box, whose InputHandler is nil, and the tab goes dead.
 func TestCommentsPanelDelegatesFocusToTheCards(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 
@@ -762,16 +653,11 @@ func TestCommentsPanelDelegatesFocusToTheCards(t *testing.T) {
 	}
 }
 
-// TestOpeningTheBoxSyncsToTheSelection covers opening inside the detail
-// debounce window. The selection moves at once but the draft sync rides the
-// debounce, so the box would open on the previous issue's words and swap them
-// out mid-sentence when the debounce fired.
 func TestOpeningTheBoxSyncsToTheSelection(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	typeRunes(t, app, "for the first issue")
 	app.leaveComposeBox()
 
-	// A selection move writes selectedIssue and defers updateDetailsView.
 	second := commentedIssueFixture()
 	second.ID = "issue-2"
 	app.issuesMu.Lock()
@@ -788,9 +674,6 @@ func TestOpeningTheBoxSyncsToTheSelection(t *testing.T) {
 	}
 }
 
-// TestPostedCommentSurvivesAnInFlightRefetch covers a detail fetch started
-// before the post and answering after it. The id guard cannot catch this:
-// posting does not move the selection.
 func TestPostedCommentSurvivesAnInFlightRefetch(t *testing.T) {
 	app, drawn := newComposeTestApp(t)
 	issue := app.selectedIssue
@@ -800,10 +683,6 @@ func TestPostedCommentSurvivesAnInFlightRefetch(t *testing.T) {
 	app.createCommentFunc = func(_ context.Context, input linearapi.CreateCommentInput) (linearapi.Comment, error) {
 		return linearapi.Comment{ID: "comment-3", Body: input.Body, CreatedAt: time.Now()}, nil
 	}
-	// The fetch goes out first and is held there, so the comment is posted
-	// while it is still waiting. The merge keeps a comment by its age against
-	// when the request went out, so a fetch started after the post would be
-	// entitled to drop it and this would test nothing.
 	started, release := make(chan struct{}, 1), make(chan struct{})
 	app.fetchIssueByID = func(context.Context, string) (linearapi.Issue, error) {
 		select {
@@ -834,9 +713,6 @@ func TestPostedCommentSurvivesAnInFlightRefetch(t *testing.T) {
 	}
 }
 
-// TestCommentsLandInTimestampOrder covers two posts in flight answering out of
-// order. The card stack reads oldest first, so arrival order is not the order
-// to render in.
 func TestCommentsLandInTimestampOrder(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	issue := app.selectedIssue
@@ -857,9 +733,6 @@ func TestCommentsLandInTimestampOrder(t *testing.T) {
 	}
 }
 
-// TestFailedPostLeavesTheErrorOnScreen covers the restore rebuilding the status
-// bar on its way through updateFocus, which would repaint the posting flash
-// over the error the writer needs to see.
 func TestFailedPostLeavesTheErrorOnScreen(t *testing.T) {
 	app, drawn := newComposeTestApp(t)
 	app.createCommentFunc = func(context.Context, linearapi.CreateCommentInput) (linearapi.Comment, error) {
@@ -878,11 +751,6 @@ func TestFailedPostLeavesTheErrorOnScreen(t *testing.T) {
 	}
 }
 
-// TestTypingWorksOnAnIssueWithNoComments is the one this branch shipped
-// without. The box took the focus, lit its border and said so in the status
-// bar, and every keystroke went into the page under it and was dropped: the
-// page answered for the wrong child, and a key is delivered from the root down
-// the focus chain rather than to the focused widget.
 func TestTypingWorksOnAnIssueWithNoComments(t *testing.T) {
 	posted := make(chan linearapi.CreateCommentInput, 1)
 	app := newDetailsTestApp(t)
@@ -916,9 +784,6 @@ func TestTypingWorksOnAnIssueWithNoComments(t *testing.T) {
 	}
 }
 
-// TestTypingBringsTheBoxBack covers a box scrolled off the page while it still
-// holds the keyboard. Words going into something off screen are words the
-// writer cannot read back, so the first key returns it to view.
 func TestTypingBringsTheBoxBack(t *testing.T) {
 	app, _ := newComposeTestApp(t)
 	showComments(t, app, 80, 12)
@@ -940,18 +805,12 @@ func TestTypingBringsTheBoxBack(t *testing.T) {
 	}
 }
 
-// TestCtrlCCopiesRatherThanQuitting covers the reflex that used to end the
-// session: Ctrl+C in a box with a selection is a copy, and the words and the
-// app both survive it.
 func TestCtrlCCopiesRatherThanQuitting(t *testing.T) {
 	copied := make(chan string, 1)
 	app, _ := newComposeTestApp(t)
 	app.copyToClipboardFunc = func(text string) error { copied <- text; return nil }
 	typeRunes(t, app, "worth keeping")
-	// Select it all, the way the box's own key does.
 	typeInCompose(t, app, tcell.NewEventKey(tcell.KeyCtrlL, 0, tcell.ModCtrl))
-	// Straight through the capture, because what matters is what it hands back:
-	// tview stops the app on a Ctrl+C it gets to see.
 	left := app.handleGlobalKey(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModCtrl))
 	if left != nil {
 		t.Error("Ctrl+C was handed back to tview, which stops the app on it")

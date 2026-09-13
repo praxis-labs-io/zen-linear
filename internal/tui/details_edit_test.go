@@ -8,8 +8,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// newFieldEditApp opens the details fixture in edit mode the way e does, drawn
-// so the spans and the scroll are the ones a reader would be looking at.
 func newFieldEditApp(t *testing.T) *App {
 	t.Helper()
 
@@ -22,19 +20,14 @@ func newFieldEditApp(t *testing.T) *App {
 	return app
 }
 
-// pressField sends a rune the way the dispatcher does and reports what was
-// left over, which is what tview would go on to act on.
 func pressField(app *App, r rune) *tcell.EventKey {
 	return app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 }
 
-// pressFieldKey is pressField for a key that is not a rune.
 func pressFieldKey(app *App, key tcell.Key) *tcell.EventKey {
 	return app.handleGlobalKey(tcell.NewEventKey(key, 0, tcell.ModNone))
 }
 
-// TestTheFieldCursorMarksTheRowItIsOn covers the marker and the gutter it sits
-// in: the whole header shifts, and the spans say by how much.
 func TestTheFieldCursorMarksTheRowItIsOn(t *testing.T) {
 	app := newFieldEditApp(t)
 
@@ -61,8 +54,6 @@ func TestTheFieldCursorMarksTheRowItIsOn(t *testing.T) {
 	if want := detailsLabelGutter + detailsCursorGutter; span.valueColumn != want {
 		t.Fatalf("state value column = %d, want %d", span.valueColumn, want)
 	}
-	// Off the pane's own left padding. The marker is what the trim stops on, so
-	// column 0 is the cursor and the value column is a column of this row.
 	row := []rune(strings.TrimLeft(state, " "))
 	if len(row) <= span.valueColumn {
 		t.Fatalf("state row = %q, want a value at column %d", state, span.valueColumn)
@@ -72,8 +63,6 @@ func TestTheFieldCursorMarksTheRowItIsOn(t *testing.T) {
 	}
 }
 
-// TestReadModeDrawsNoCursorGutter is the other half: leaving the mode puts the
-// header back where it was.
 func TestReadModeDrawsNoCursorGutter(t *testing.T) {
 	app := newFieldEditApp(t)
 	sendKey(app, tcell.KeyEscape)
@@ -94,8 +83,6 @@ func TestReadModeDrawsNoCursorGutter(t *testing.T) {
 	}
 }
 
-// TestTheFieldCursorDoesNotWrapPastTheEnds covers both ends of the walk. A
-// cursor that wrapped would leave the reader at the far end of the header.
 func TestTheFieldCursorDoesNotWrapPastTheEnds(t *testing.T) {
 	app := newFieldEditApp(t)
 	if app.detailsEdit.cursor != issueFieldTitle {
@@ -116,8 +103,6 @@ func TestTheFieldCursorDoesNotWrapPastTheEnds(t *testing.T) {
 	}
 }
 
-// TestTheFieldCursorSurvivesARefreshOfTheSameIssue covers the rebuild every
-// fetch and every save runs: the cursor is held by id, so it stays put.
 func TestTheFieldCursorSurvivesARefreshOfTheSameIssue(t *testing.T) {
 	app := newFieldEditApp(t)
 	pressField(app, 'j')
@@ -137,8 +122,6 @@ func TestTheFieldCursorSurvivesARefreshOfTheSameIssue(t *testing.T) {
 	}
 }
 
-// TestTheFieldCursorDropsOnAnotherIssue is the other half: the cursor is aimed
-// at one issue's fields and cannot follow the selection to another's.
 func TestTheFieldCursorDropsOnAnotherIssue(t *testing.T) {
 	app := newFieldEditApp(t)
 
@@ -149,8 +132,6 @@ func TestTheFieldCursorDropsOnAnotherIssue(t *testing.T) {
 	}
 }
 
-// TestOnlyANewIssueScrollsThePageToTheTop covers the reset that used to run on
-// every rebuild, which throws a reader eight rows down back to line zero.
 func TestOnlyANewIssueScrollsThePageToTheTop(t *testing.T) {
 	app := newDetailsTestApp(t)
 	drawDetails(t, app, 90)
@@ -169,14 +150,10 @@ func TestOnlyANewIssueScrollsThePageToTheTop(t *testing.T) {
 	}
 }
 
-// TestEditModeSwallowsTheKeysThatWouldLeaveIt covers the default deny. Every
-// key that leaves has to be named in the mode, or q quits from under a field.
 func TestEditModeSwallowsTheKeysThatWouldLeaveIt(t *testing.T) {
 	app := newFieldEditApp(t)
 
 	for _, r := range []rune{':', '1', 'q', '/'} {
-		// Swallowed, not handed back: tview quits on the Ctrl+C it is given and
-		// hands every other key to the primitive under the focus.
 		if left := pressField(app, r); left != nil {
 			t.Errorf("%q was handed on rather than swallowed", string(r))
 		}
@@ -194,8 +171,6 @@ func TestEditModeSwallowsTheKeysThatWouldLeaveIt(t *testing.T) {
 	}
 }
 
-// TestLeavingThePaneLeavesEditMode covers the ways out that are not the mode's
-// own key. A cursor left drawn reads as a live mode on a pane nobody is in.
 func TestLeavingThePaneLeavesEditMode(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -220,8 +195,6 @@ func TestLeavingThePaneLeavesEditMode(t *testing.T) {
 	}
 }
 
-// TestACommandRunsWithoutEndingTheMode covers the shortcuts that keep working
-// from inside it. A modal takes the keys ahead of the mode, so it waits.
 func TestACommandRunsWithoutEndingTheMode(t *testing.T) {
 	app := newFieldEditApp(t)
 	app.selectedIssue.URL = "https://linear.app/praxis-labs/issue/ZNO-5"
@@ -245,8 +218,6 @@ func TestACommandRunsWithoutEndingTheMode(t *testing.T) {
 	}
 }
 
-// TestEnteringTwiceKeepsTheCursor covers e pressed by habit from inside the
-// mode: re-entering would throw the cursor back to the first field.
 func TestEnteringTwiceKeepsTheCursor(t *testing.T) {
 	app := newFieldEditApp(t)
 	pressField(app, 'j')
@@ -262,12 +233,8 @@ func TestEnteringTwiceKeepsTheCursor(t *testing.T) {
 	}
 }
 
-// TestEnteringInsideTheDebounceWindowHoldsTheMode covers e pressed while the
-// pane still shows the issue before this one, which the debounce would drop.
 func TestEnteringInsideTheDebounceWindowHoldsTheMode(t *testing.T) {
 	app := newDetailsTestApp(t)
-	// The selection moves at once and the render is deferred, so this is the
-	// state a key landing inside the debounce window finds.
 	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "ZNO-6", Title: "Another", State: "Todo"}
 
 	app.enterDetailsEdit()
@@ -275,7 +242,6 @@ func TestEnteringInsideTheDebounceWindowHoldsTheMode(t *testing.T) {
 		t.Fatal("e did not enter edit mode")
 	}
 
-	// The debounce firing.
 	app.updateDetailsView()
 	if !app.detailsEdit.on {
 		t.Error("the deferred render dropped the mode it was entered in")

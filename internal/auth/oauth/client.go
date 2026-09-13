@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// TokenResponse is the successful JSON body from Linear's token endpoint.
 type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	TokenType    string `json:"token_type"`
@@ -20,7 +19,6 @@ type TokenResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// Client exchanges, refreshes, and revokes Linear OAuth tokens.
 type Client struct {
 	httpClient *http.Client
 	clientID   string
@@ -28,7 +26,6 @@ type Client struct {
 	revokeURL  string
 }
 
-// ClientConfig configures an OAuth HTTP client.
 type ClientConfig struct {
 	ClientID   string
 	HTTPClient *http.Client
@@ -36,7 +33,6 @@ type ClientConfig struct {
 	RevokeURL  string
 }
 
-// NewClient creates an OAuth client for Linear token endpoints.
 func NewClient(cfg ClientConfig) *Client {
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
@@ -58,7 +54,6 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 }
 
-// ExchangeCode trades an authorization code for access and refresh tokens (PKCE).
 func (c *Client) ExchangeCode(ctx context.Context, code, redirectURI, codeVerifier string) (TokenResponse, error) {
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
@@ -69,7 +64,6 @@ func (c *Client) ExchangeCode(ctx context.Context, code, redirectURI, codeVerifi
 	return c.postToken(ctx, form)
 }
 
-// Refresh exchanges a refresh token for a new access (and refresh) token.
 func (c *Client) Refresh(ctx context.Context, refreshToken string) (TokenResponse, error) {
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
@@ -78,7 +72,7 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (TokenRespons
 	return c.postToken(ctx, form)
 }
 
-// Revoke revokes an access or refresh token. hint may be "access_token" or "refresh_token".
+// Revoke revokes token. hint is "access_token" or "refresh_token".
 func (c *Client) Revoke(ctx context.Context, token, hint string) error {
 	form := url.Values{}
 	form.Set("token", token)
@@ -105,7 +99,6 @@ func (c *Client) Revoke(ctx context.Context, token, hint string) error {
 	return nil
 }
 
-// postToken performs a form-encoded token request and decodes the JSON response.
 func (c *Client) postToken(ctx context.Context, form url.Values) (TokenResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {

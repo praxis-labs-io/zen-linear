@@ -11,9 +11,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// newLoadingPaneTestApp builds an App whose issue fetch is held open, so a test
-// can read what the panes say while a fetch is out. The panes paint their
-// message when the load starts, so nothing here waits on a frame.
 func newLoadingPaneTestApp(t *testing.T, page linearapi.IssuePage, fetchErr error) (*App, chan struct{}) {
 	t.Helper()
 
@@ -28,7 +25,6 @@ func newLoadingPaneTestApp(t *testing.T, page linearapi.IssuePage, fetchErr erro
 	return app, release
 }
 
-// mountedIssuesPane is the primitive the issues column is showing.
 func mountedIssuesPane(t *testing.T, app *App) tview.Primitive {
 	t.Helper()
 	if app.issuesColumn.GetItemCount() == 0 {
@@ -37,14 +33,10 @@ func mountedIssuesPane(t *testing.T, app *App) tview.Primitive {
 	return app.issuesColumn.GetItem(0)
 }
 
-// placeholderText is the message in the pane, without its color tags.
 func placeholderText(app *App) string {
 	return app.issuesPlaceholderText.GetText(true)
 }
 
-// TestIssuesPaneNamesWhatItIsWaitingOn covers the launch complaint: an empty
-// table reads as a broken app, so the pane says it is loading and then shows
-// the rows.
 func TestIssuesPaneNamesWhatItIsWaitingOn(t *testing.T) {
 	page := linearapi.IssuePage{Issues: []linearapi.Issue{
 		{ID: "issue-1", Identifier: "ENG-1", Title: "First"},
@@ -72,9 +64,6 @@ func TestIssuesPaneNamesWhatItIsWaitingOn(t *testing.T) {
 	}
 }
 
-// TestIssuesPaneFocusFollowsTheSwap covers the pane going dead when the
-// placeholder and the table trade places under it: focus rides on the
-// primitive, so the one that leaves the layout takes the keys with it.
 func TestIssuesPaneFocusFollowsTheSwap(t *testing.T) {
 	withIssues := linearapi.IssuePage{Issues: []linearapi.Issue{
 		{ID: "issue-1", Identifier: "ENG-1", Title: "First"},
@@ -105,8 +94,6 @@ func TestIssuesPaneFocusFollowsTheSwap(t *testing.T) {
 			app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
 				return page, nil
 			}
-			// SetRoot primes the delegate tview moves focus with, so a harness
-			// without it cannot see focus leave a pane.
 			app.app.SetRoot(app.pages, true)
 			close(release)
 			refreshDone := installRefreshCompletionHook(app)
@@ -117,8 +104,6 @@ func TestIssuesPaneFocusFollowsTheSwap(t *testing.T) {
 			app.updateFocus()
 
 			page = tc.then
-			// A workspace switch, a session restore, and a navigation change all
-			// refresh without a focus change of their own.
 			app.refreshIssuesWithFocusChange(false)
 			waitForRefreshCompletion(t, refreshDone)
 
@@ -132,9 +117,6 @@ func TestIssuesPaneFocusFollowsTheSwap(t *testing.T) {
 	}
 }
 
-// TestIssuesPaneStartsAsLoading covers the window between the layout being
-// built and the first fetch starting, which flashed "No issues" at every
-// launch.
 func TestIssuesPaneStartsAsLoading(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{})
 
@@ -143,8 +125,6 @@ func TestIssuesPaneStartsAsLoading(t *testing.T) {
 	}
 }
 
-// TestIssuesPaneShowsTheFetchFailure covers the pane a failed launch leaves
-// behind, which otherwise says "No issues" and blames the workspace.
 func TestIssuesPaneShowsTheFetchFailure(t *testing.T) {
 	app, release := newLoadingPaneTestApp(t, linearapi.IssuePage{}, errors.New("no route to host"))
 	refreshDone := installRefreshCompletionHook(app)
@@ -162,7 +142,6 @@ func TestIssuesPaneShowsTheFetchFailure(t *testing.T) {
 	}
 }
 
-// TestIssuesPaneSaysEmptyWhenNothingIsInFlight covers the honestly empty list.
 func TestIssuesPaneSaysEmptyWhenNothingIsInFlight(t *testing.T) {
 	app, release := newLoadingPaneTestApp(t, linearapi.IssuePage{}, nil)
 	refreshDone := installRefreshCompletionHook(app)
@@ -176,8 +155,6 @@ func TestIssuesPaneSaysEmptyWhenNothingIsInFlight(t *testing.T) {
 	}
 }
 
-// TestDetailsPaneSaysLoadingWhileTheListLoads covers the second empty pane at
-// launch: nothing is selected yet because nothing has arrived.
 func TestDetailsPaneSaysLoadingWhileTheListLoads(t *testing.T) {
 	page := linearapi.IssuePage{Issues: []linearapi.Issue{
 		{ID: "issue-1", Identifier: "ENG-1", Title: "First"},
@@ -199,8 +176,6 @@ func TestDetailsPaneSaysLoadingWhileTheListLoads(t *testing.T) {
 	}
 }
 
-// TestLoadingIndicatorStopsWithTheLastFetch verifies the frame loop is not left
-// spinning over panes that already have their answer.
 func TestLoadingIndicatorStopsWithTheLastFetch(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{})
 
@@ -221,9 +196,6 @@ func TestLoadingIndicatorStopsWithTheLastFetch(t *testing.T) {
 	}
 }
 
-// TestSupersededRefreshLeavesTheLoadingFlagAlone covers the refresh that lands
-// after a newer one took over: clearing the flag there stops the spinner and
-// drops the pane to "No issues" while a page is still on its way.
 func TestSupersededRefreshLeavesTheLoadingFlagAlone(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{})
 
@@ -245,8 +217,6 @@ func TestSupersededRefreshLeavesTheLoadingFlagAlone(t *testing.T) {
 	}
 }
 
-// TestFocusLandsOnThePlaceholderWhenMounted covers Tab into an empty issues
-// pane: focusing the detached table leaves no pane looking focused.
 func TestFocusLandsOnThePlaceholderWhenMounted(t *testing.T) {
 	app, release := newLoadingPaneTestApp(t, linearapi.IssuePage{Issues: []linearapi.Issue{
 		{ID: "issue-1", Identifier: "ENG-1", Title: "First"},
@@ -271,8 +241,6 @@ func TestFocusLandsOnThePlaceholderWhenMounted(t *testing.T) {
 	}
 }
 
-// TestNavigationFailureAnswersTheWaitingNode covers an offline cold launch: a
-// spinner frozen over "Loading teams" reads as still working.
 func TestNavigationFailureAnswersTheWaitingNode(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{})
 

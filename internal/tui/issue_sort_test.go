@@ -83,9 +83,6 @@ func TestSortIssuesByFieldsOrdersTimestampsNewestFirst(t *testing.T) {
 	}
 }
 
-// TestSortOrderingPickerItemsOffersConfiguredChain guards the way back: a
-// configured ordering the menu does not already list leads the rows, so a
-// session detour does not strand it until restart.
 func TestSortOrderingPickerItemsOffersConfiguredChain(t *testing.T) {
 	items := sortOrderingPickerItems([]SortField{SortByStatus, SortByUpdatedAt})
 	if len(items) != len(sortOrderings)+1 {

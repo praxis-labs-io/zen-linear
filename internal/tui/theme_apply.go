@@ -33,13 +33,11 @@ func (a *App) applyThemeStyles() {
 	tview.Styles.InverseTextColor = a.theme.InverseTextColor()
 	tview.Styles.ContrastSecondaryTextColor = a.theme.SecondaryText
 
-	// Square by default; the setting swaps in rounded corner runes. Both
-	// branches assign so toggling the setting at runtime restores either look.
 	if a.config.RoundedBorders {
-		tview.Borders.TopLeft = '\u256d'     // ╭
-		tview.Borders.TopRight = '\u256e'    // ╮
-		tview.Borders.BottomLeft = '\u2570'  // ╰
-		tview.Borders.BottomRight = '\u256f' // ╯
+		tview.Borders.TopLeft = '\u256d'
+		tview.Borders.TopRight = '\u256e'
+		tview.Borders.BottomLeft = '\u2570'
+		tview.Borders.BottomRight = '\u256f'
 	} else {
 		tview.Borders.TopLeft = tview.BoxDrawingsLightDownAndRight
 		tview.Borders.TopRight = tview.BoxDrawingsLightDownAndLeft
@@ -47,8 +45,6 @@ func (a *App) applyThemeStyles() {
 		tview.Borders.BottomRight = tview.BoxDrawingsLightUpAndLeft
 	}
 
-	// Focused panes are already highlighted via BorderFocus; keep single-line
-	// borders instead of tview's default double-line focus runes.
 	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
 	tview.Borders.VerticalFocus = tview.Borders.Vertical
 	tview.Borders.TopLeftFocus = tview.Borders.TopLeft
@@ -63,9 +59,6 @@ func (a *App) applyThemeToComponents() {
 		a.recolorNavigationTree()
 	}
 	if a.navigationPanel != nil {
-		// Rebuild the shell so the query box picks up the new InputBg (tview
-		// bakes it at construction), then remount it: contentFlex and the focus
-		// are both still holding the old pointer.
 		a.buildNavigationPanel()
 		a.rebuildContentLayout()
 	}
@@ -79,16 +72,10 @@ func (a *App) applyThemeToComponents() {
 		renderIssuesTableModel(a.searchResultsTable, a.searchIssueRows, a.searchIDToIssue, a.selectedIssueID(IssuesSectionSearch), a.theme, a.issueColumns())
 	}
 	if a.issuesPlaceholder != nil {
-		// Rebuilt rather than restyled: the colors are baked into the flex and
-		// its text view at construction.
 		a.buildIssuesPlaceholder()
 		a.updateIssuesColumnLayout()
 	}
 
-	// The background goes through TextView's own setter rather than the Box
-	// one the chain would reach, so the text style tracks it. Left behind, the
-	// two disagree and tview fills the inner rect, which the centered reading
-	// measure shows as a block narrower than the pane.
 	if a.detailsPageView != nil {
 		a.detailsPageView.SetBackgroundColor(a.theme.Background)
 	}
@@ -164,7 +151,6 @@ func (a *App) recolorNavigationTree() {
 	a.applyNavigationNodeColors(root)
 }
 
-// SetTextStyle, not SetColor: tview bakes the background in at construction.
 func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
 	if node == nil {
 		return
@@ -184,11 +170,7 @@ func (a *App) applyNavigationNodeColors(node *tview.TreeNode) {
 	}
 }
 
-// selectionStyle is the selected-row style shared by the tree and every issue
-// table. tview's default inverse-video selection paints text in the primitive
-// background color, which is unreadable for themes with a transparent
-// background. Every list that marks a live selection composes with this, so
-// changing how a selected row paints is one edit.
+// tview's inverse-video selection paints text in the background color, unreadable on a transparent theme.
 func selectionStyle(theme Theme) tcell.Style {
 	return tcell.StyleDefault.
 		Foreground(theme.SelectionText).
@@ -196,11 +178,6 @@ func selectionStyle(theme Theme) tcell.Style {
 		Bold(true)
 }
 
-// listSelectionStyle is the stronger accent selection, for a list that shares a
-// modal with other controls: the form's inline multi-select and the prompt
-// templates list, where the bar has to read as "the keyboard is in here" rather
-// than "this row is current". A list that is the whole of its modal takes
-// selectionStyle instead, the same bar the panes use.
 func (a *App) listSelectionStyle() tcell.Style {
 	return tcell.StyleDefault.
 		Foreground(a.theme.InverseTextColor()).

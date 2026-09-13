@@ -17,17 +17,11 @@ func activityAt(minutes int, kind linearapi.IssueActivityKind) linearapi.IssueAc
 	}
 }
 
-// pageLines draws the page and returns its rows. Drawn rather than read off the
-// text, because glamour breaks a rendered body with color tags mid-sentence and
-// only the screen has the words back in one piece. One page line is one row, so
-// the indices are the page's own.
 func pageLines(t *testing.T, app *App) []string {
 	t.Helper()
 	return drawComments(t, app, 90)
 }
 
-// lineIndex finds the one page line containing want, failing if it is missing
-// or drawn more than once.
 func lineIndex(t *testing.T, lines []string, want string) int {
 	t.Helper()
 	found := -1
@@ -58,8 +52,6 @@ func newActivityTestApp(t *testing.T, events []linearapi.IssueActivity) *App {
 	return app
 }
 
-// The threaded fixture's roots sit at -60, -40 and -20 minutes, with root-1's
-// replies at -50 and -30.
 func TestActivityInterleavesWithTheComments(t *testing.T) {
 	events := []linearapi.IssueActivity{
 		activityAt(-70, linearapi.IssueActivityCreated),
@@ -87,9 +79,6 @@ func TestActivityInterleavesWithTheComments(t *testing.T) {
 	}
 }
 
-// A thread is placed as a whole. An event stamped inside one lands after its
-// last reply, because a card split off from its rail would leave the rail
-// trailing into a line that is not a card.
 func TestAnEventInsideAThreadLandsAfterIt(t *testing.T) {
 	app := newActivityTestApp(t, []linearapi.IssueActivity{
 		activityAt(-55, linearapi.IssueActivityTitleChanged),
@@ -107,7 +96,6 @@ func TestAnEventInsideAThreadLandsAfterIt(t *testing.T) {
 	}
 }
 
-// Each event is one row, and a run of them carries no blank row between.
 func TestAnActivityRunIsOneRowPerEventWithNoGaps(t *testing.T) {
 	app := newActivityTestApp(t, []linearapi.IssueActivity{
 		activityAt(-12, linearapi.IssueActivityTitleChanged),
@@ -239,8 +227,6 @@ func TestActivityPhrase(t *testing.T) {
 			want: "removed blocked by issue ZNL-77",
 		},
 		{
-			// Linear's scale is inverted, so the larger number is the lower
-			// priority.
 			name:  "priority lowered",
 			event: linearapi.IssueActivity{Kind: linearapi.IssueActivityPriorityChanged, FromPriority: 2, ToPriority: 4},
 			want:  "lowered priority from High to Low",
@@ -281,8 +267,6 @@ func TestActivityPhrase(t *testing.T) {
 	}
 }
 
-// The state and priority glyphs come from the helpers the list and the header
-// already use, so one issue reads the same everywhere it appears.
 func TestActivityIconsComeFromTheSharedHelpers(t *testing.T) {
 	app := newDetailsTestApp(t)
 
@@ -304,8 +288,6 @@ func TestActivityIconsComeFromTheSharedHelpers(t *testing.T) {
 	}
 }
 
-// Linear records no actor on an automated transition. The line opens on the
-// change rather than on a gap where a name would go.
 func TestAnEventWithNoActorOpensOnThePhrase(t *testing.T) {
 	app := newDetailsTestApp(t)
 	line := app.activityLine(linearapi.IssueActivity{
@@ -321,8 +303,6 @@ func TestAnEventWithNoActorOpensOnThePhrase(t *testing.T) {
 	}
 }
 
-// The phrase is what shrinks: the actor sits ahead of it and the age behind it,
-// because those are what a feed is scanned for.
 func TestANarrowLineKeepsTheActorAndTheAge(t *testing.T) {
 	app := newDetailsTestApp(t)
 	event := linearapi.IssueActivity{
@@ -344,12 +324,9 @@ func TestANarrowLineKeepsTheActorAndTheAge(t *testing.T) {
 		t.Errorf("the line is %d cells in a 30 pane: %q", got, line)
 	}
 
-	// Below the floor the age goes rather than the name.
 	if got := tview.TaggedStringWidth(app.activityLine(event, 12)); got > 12 {
 		t.Errorf("the line is %d cells in a 12 pane", got)
 	}
-	// truncateTagged wraps at width-1, so a measure of one leaves nothing to
-	// cut on and hands the line back whole.
 	for _, width := range []int{0, 1} {
 		if got := app.activityLine(event, width); got != "" {
 			t.Errorf("width %d drew %q", width, got)
@@ -357,9 +334,6 @@ func TestANarrowLineKeepsTheActorAndTheAge(t *testing.T) {
 	}
 }
 
-// Every name on the line comes from the API and the view has dynamic colors on,
-// so a bracket in one would be read as a tag: swallowed on screen, and short of
-// what the fit measured.
 func TestActivityNamesCannotBeReadAsColorTags(t *testing.T) {
 	app := newDetailsTestApp(t)
 	line := app.activityLine(linearapi.IssueActivity{
@@ -376,7 +350,6 @@ func TestActivityNamesCannotBeReadAsColorTags(t *testing.T) {
 	}
 }
 
-// The ring walks cards. An activity line records no span, so it is not a stop.
 func TestActivityLinesAreNotRingStops(t *testing.T) {
 	app := newDetailsTestApp(t)
 	issue := detailsFixture()

@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// TestClaudeProvider_BuildArgs verifies CLI args include print + stream-json.
 func TestClaudeProvider_BuildArgs(t *testing.T) {
 	provider := NewClaudeProvider(nil)
 	options := AgentRunOptions{
@@ -46,7 +45,6 @@ func TestClaudeProvider_BuildArgs(t *testing.T) {
 	}
 }
 
-// TestClaudeProvider_ParseEvent_System verifies system init parsing.
 func TestClaudeProvider_ParseEvent_System(t *testing.T) {
 	provider := NewClaudeProvider(nil)
 	line := []byte(`{"type":"system","subtype":"init","session_id":"abc","model":"claude-sonnet"}`)
@@ -66,7 +64,6 @@ func TestClaudeProvider_ParseEvent_System(t *testing.T) {
 	}
 }
 
-// TestClaudeProvider_ParseEvent_Assistant verifies assistant text parsing.
 func TestClaudeProvider_ParseEvent_Assistant(t *testing.T) {
 	provider := NewClaudeProvider(nil)
 	line := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"assistant reply"}]}}`)
@@ -83,7 +80,6 @@ func TestClaudeProvider_ParseEvent_Assistant(t *testing.T) {
 	}
 }
 
-// TestClaudeProvider_ParseEvent_ToolUseAndResult verifies tool call parsing and correlation.
 func TestClaudeProvider_ParseEvent_ToolUseAndResult(t *testing.T) {
 	provider := NewClaudeProvider(nil)
 	toolUseLine := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Glob","input":{"pattern":"README*"}}]}}`)
@@ -121,7 +117,6 @@ func TestClaudeProvider_ParseEvent_ToolUseAndResult(t *testing.T) {
 	}
 }
 
-// TestClaudeProvider_ParseEvent_ToolResultString verifies string tool_use_result parsing.
 func TestClaudeProvider_ParseEvent_ToolResultString(t *testing.T) {
 	provider := NewClaudeProvider(nil)
 	toolUseLine := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_2","name":"Read","input":{"path":"README.md"}}]}}`)
@@ -144,7 +139,6 @@ func TestClaudeProvider_ParseEvent_ToolResultString(t *testing.T) {
 	}
 }
 
-// TestClaudeProvider_ParseEvent_Result verifies result parsing.
 func TestClaudeProvider_ParseEvent_Result(t *testing.T) {
 	provider := NewClaudeProvider(nil)
 	line := []byte(`{"type":"result","subtype":"success","duration_ms":1234,"is_error":false}`)
@@ -164,7 +158,6 @@ func TestClaudeProvider_ParseEvent_Result(t *testing.T) {
 	}
 }
 
-// TestClaudeProvider_ParseEvent_Delta verifies delta parsing.
 func TestClaudeProvider_ParseEvent_Delta(t *testing.T) {
 	provider := NewClaudeProvider(nil)
 	line := []byte(`{"delta":{"text":"partial"}}`)
@@ -181,7 +174,6 @@ func TestClaudeProvider_ParseEvent_Delta(t *testing.T) {
 	}
 }
 
-// TestClaudeProvider_ParseStreamLine verifies text extraction.
 func TestClaudeProvider_ParseStreamLine(t *testing.T) {
 	provider := NewClaudeProvider(nil)
 

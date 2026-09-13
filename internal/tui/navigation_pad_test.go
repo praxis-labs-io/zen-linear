@@ -15,8 +15,6 @@ func runeCellWidth(text string) int {
 	return runewidth.StringWidth(text)
 }
 
-// navTestTeams builds labels longer than any pane width under test, so a fit
-// always truncates and a skipped node is distinguishable from a fitted one.
 func navTestTeams(count int) []linearapi.Team {
 	teams := make([]linearapi.Team, count)
 	for i := range teams {
@@ -37,16 +35,12 @@ func navTreeLabels(app *App) []string {
 			walk(child)
 		}
 	}
-	// The root is hidden and never fitted, so it is not one of the labels.
 	for _, child := range app.navigationTree.GetRoot().GetChildren() {
 		walk(child)
 	}
 	return labels
 }
 
-// navTreeLabelsByLevel walks the tree returning each label with its depth, so
-// assertions can pin the width a node was fitted to against its own level
-// rather than accepting any level's width.
 func navTreeLabelsByLevel(app *App) []struct {
 	label string
 	level int
@@ -71,9 +65,6 @@ func navTreeLabelsByLevel(app *App) []struct {
 	return out
 }
 
-// Every row is fitted to the whole pane, whatever its depth, so the cursor line
-// spans the width rather than starting where the text does. The depth is inside
-// the label.
 func TestPadNavigationTree_FitsEveryNodeToTheFullWidth(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(3), nil)
@@ -95,11 +86,6 @@ func TestPadNavigationTree_FitsEveryNodeToTheFullWidth(t *testing.T) {
 	}
 }
 
-// TestPadNavigationTree_IsIdempotentAtAnUnchangedWidth covers the skip path
-// from the outside: redrawing at the same width must leave every label exactly
-// as it was. The saving itself is measured by BenchmarkPadNavigationTree, not
-// asserted here, because a unit test cannot see that the work was skipped
-// without pinning an invariant the code should not have.
 func TestPadNavigationTree_IsIdempotentAtAnUnchangedWidth(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(3), nil)
@@ -114,10 +100,6 @@ func TestPadNavigationTree_IsIdempotentAtAnUnchangedWidth(t *testing.T) {
 	}
 }
 
-// TestPadNavigationTree_PicksUpALabelChangedElsewhere guards the trap the cache
-// could set: if a fitted width alone counted as proof the rendered text is
-// current, anything that relabels a node outside padNavigationNode would be
-// silently discarded and the pane would show stale text until a resize.
 func TestPadNavigationTree_PicksUpALabelChangedElsewhere(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(3), nil)
@@ -157,8 +139,6 @@ func TestPadNavigationTree_RefitsOnWidthChange(t *testing.T) {
 	}
 }
 
-// TestPadNavigationTree_FitsNodesAddedAfterTheFirstDraw covers lazily added
-// children: expanding a team inserts nodes the cache has never seen.
 func TestPadNavigationTree_FitsNodesAddedAfterTheFirstDraw(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree(navTestTeams(1), nil)
@@ -202,8 +182,6 @@ func TestForgetNavNodeLabels_DropsTheSubtree(t *testing.T) {
 	}
 }
 
-// benchNavTree builds a tree the size of a busy workspace: teams each expanded
-// into cycles, statuses, and projects.
 func benchNavTree(app *App, teams, childrenPerTeam int) {
 	app.rebuildNavigationTree(navTestTeams(teams), nil)
 	for _, teamNode := range app.navigationTree.GetRoot().GetChildren() {
@@ -235,9 +213,6 @@ func BenchmarkPadNavigationTree_AfterResize(b *testing.B) {
 	}
 }
 
-// Every row begins with a column, a folder where it opens and the same width
-// blank where it does not, so siblings line up. The indent is a column a level,
-// which is what puts a row under the title of the one it hangs off.
 func TestEveryRowBeginsWithItsColumnAndStepsAColumnALevel(t *testing.T) {
 	app := newUXTestApp(t)
 	app.rebuildNavigationTree(

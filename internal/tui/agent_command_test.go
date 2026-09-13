@@ -17,7 +17,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// TestAskAgentCommand_ShowsModalsAndStreams verifies the command flow.
 func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 	cfg := config.Config{
 		PageSize:      1,
@@ -29,7 +28,6 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopBackgroundWorkOnCleanup(t, app)
 
-	// Use a mutex to synchronize access to pages and other shared state
 	var pagesMu sync.Mutex
 	app.queueUpdateDraw = func(f func()) {
 		pagesMu.Lock()
@@ -120,9 +118,6 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 	gotArgs := append([]string(nil), capturedArgs...)
 	captureMu.Unlock()
 
-	// Every flag the app sends, pinned. The default sandbox is enabled, so
-	// --force stays off. The workspace reaches the agent as the working
-	// directory, covered by TestRunner_RunUsesWorkspaceAsWorkingDir.
 	wantFlags := []string{"--print", "--output-format", "stream-json", "--model", "gpt-5.2", "-p"}
 	if len(gotArgs) != len(wantFlags)+1 {
 		t.Fatalf("agent args = %q, want %q plus one prompt", gotArgs, wantFlags)
@@ -135,7 +130,6 @@ func TestAskAgentCommand_ShowsModalsAndStreams(t *testing.T) {
 	}
 }
 
-// TestDefaultCommands_GatesAskAgent verifies command gating by availability.
 func TestDefaultCommands_GatesAskAgent(t *testing.T) {
 	cfg := config.Config{
 		PageSize:      1,
@@ -169,7 +163,6 @@ func TestDefaultCommands_GatesAskAgent(t *testing.T) {
 	}
 }
 
-// findCommandByID locates a command by ID.
 func findCommandByID(commands []Command, id string) *Command {
 	for _, cmd := range commands {
 		if cmd.ID == id {
@@ -180,7 +173,6 @@ func findCommandByID(commands []Command, id string) *Command {
 	return nil
 }
 
-// TestAgentCommandHelperProcess is a helper process for command tests.
 func TestAgentCommandHelperProcess(t *testing.T) {
 	if os.Getenv("AGENT_TUI_HELPER") != "1" {
 		return

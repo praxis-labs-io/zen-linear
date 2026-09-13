@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// Linear OAuth endpoints and public-client defaults for zen-linear.
 const (
 	AuthorizeURL    = "https://linear.app/oauth/authorize"
 	TokenURL        = "https://api.linear.app/oauth/token"
@@ -19,12 +18,10 @@ const (
 	RefreshSkew     = 5 * time.Minute
 )
 
-// RedirectURI returns the fixed loopback callback URL registered with Linear.
 func RedirectURI() string {
 	return fmt.Sprintf("http://%s:%d%s", RedirectHost, RedirectPort, RedirectPath)
 }
 
-// ListenAddr returns the TCP address for the login callback server.
 func ListenAddr() string {
 	return fmt.Sprintf("%s:%d", RedirectHost, RedirectPort)
 }

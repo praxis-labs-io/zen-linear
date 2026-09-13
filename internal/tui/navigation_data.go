@@ -13,15 +13,12 @@ import (
 	"github.com/rivo/tview"
 )
 
-// navFetchers is the pair the navigation tree is built from, taken off the App
-// so the background goroutines never read fields applySettings reassigns on the
-// UI thread.
+// Taken off the App so fetch goroutines never read fields applySettings reassigns.
 type navFetchers struct {
 	teams     func(context.Context) ([]linearapi.Team, error)
 	favorites func(context.Context) ([]linearapi.Favorite, error)
 }
 
-// navFetchers snapshots the fetch seams. UI thread only.
 func (a *App) navFetchers() navFetchers {
 	return navFetchers{
 		teams:     a.fetchTeamsFunc,
@@ -29,10 +26,6 @@ func (a *App) navFetchers() navFetchers {
 	}
 }
 
-// fetchedNav is one navigation fetch's result. favoritesOK rides along because
-// a favorites failure is not fatal to rendering but does mean the tree is
-// incomplete, which is the difference between a copy worth caching and one that
-// would drop the user's Favorites section on the next launch.
 type fetchedNav struct {
 	teams       []linearapi.Team
 	favorites   []linearapi.Favorite
@@ -40,8 +33,6 @@ type fetchedNav struct {
 	err         error
 }
 
-// fetchNavigationData fetches the teams and favorites the navigation tree is
-// built from. A favorites failure is not fatal: the tree renders without them.
 func fetchNavigationData(ctx context.Context, fetchers navFetchers) fetchedNav {
 	var result fetchedNav
 	var wg sync.WaitGroup
@@ -70,9 +61,6 @@ func fetchNavigationData(ctx context.Context, fetchers navFetchers) fetchedNav {
 	return result
 }
 
-// navigationPaneLabel names the navigation pane for the workspace on screen.
-// The pane border carries the workspace, so the tree needs no root row of its
-// own; the tree hides the root (`SetTopLevel(1)`) and it stays unlabelled.
 func (a *App) navigationPaneLabel() string {
 	if a.activeWorkspaceName == "" {
 		return "Navigation"
@@ -80,8 +68,6 @@ func (a *App) navigationPaneLabel() string {
 	return a.activeWorkspaceName
 }
 
-// buildWaitingNavigationRoot returns a root holding nothing but the waiting
-// node, for a tree that has no data to show yet.
 func (a *App) buildWaitingNavigationRoot() *tview.TreeNode {
 	root := tview.NewTreeNode("").
 		SetSelectable(false)
@@ -96,10 +82,6 @@ func (a *App) buildWaitingNavigationRoot() *tview.TreeNode {
 	return root
 }
 
-// resetNavigationTree puts the sidebar back to waiting. A workspace switch
-// otherwise keeps painting the teams and favorites of the workspace it left,
-// and selecting one of those scopes a fetch to an id the new key cannot
-// resolve.
 func (a *App) resetNavigationTree() {
 	if a.navigationTree == nil {
 		return
@@ -115,18 +97,14 @@ func (a *App) resetNavigationTree() {
 	a.navigationTree.SetCurrentNode(root)
 }
 
-// rebuildNavigationTree rebuilds the navigation tree with real data.
 func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearapi.Favorite) {
 	a.navNodeLabels = make(map[*tview.TreeNode]navNodeLabel)
 	a.navLoadingNode = nil
 	a.favorites = favorites
-	// Held for the disk cache, which a favorites change rewrites without a
-	// teams fetch of its own.
 	a.navTeams = teams
 	root := tview.NewTreeNode("").
 		SetSelectable(false)
 
-	// Add "All Issues" at the top
 	allIssues := tview.NewTreeNode("All Issues").
 		SetReference(&NavigationNode{ID: "all", Text: "All Issues"}).
 		SetExpanded(true)
@@ -142,8 +120,6 @@ func (a *App) rebuildNavigationTree(teams []linearapi.Team, favorites []linearap
 	a.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
 }
 
-// buildTeamsGroup renders the Teams heading and the teams under it, or nil
-// when the workspace has none.
 func (a *App) buildTeamsGroup(teams []linearapi.Team) *tview.TreeNode {
 	if len(teams) == 0 {
 		return nil
@@ -155,8 +131,6 @@ func (a *App) buildTeamsGroup(teams []linearapi.Team) *tview.TreeNode {
 		SetExpanded(true)
 
 	for _, team := range teams {
-		// Selection is the tree's own SetSelectedFunc. A callback here would
-		// fire alongside it.
 		group.AddChild(tview.NewTreeNode(team.Name).
 			SetReference(&NavigationNode{
 				ID:     team.ID,
@@ -169,10 +143,6 @@ func (a *App) buildTeamsGroup(teams []linearapi.Team) *tview.TreeNode {
 	return group
 }
 
-// navRootChildren orders the tree's rows: All Issues, then each section that has
-// anything in it, each under a blank row that sets it apart. It is the one place
-// that order is written down, because a favorites change rebuilds the root
-// rather than splicing into it and the two have to agree on where a section is.
 func (a *App) navRootChildren() []*tview.TreeNode {
 	children := make([]*tview.TreeNode, 0, 5)
 	for _, section := range []*tview.TreeNode{a.allIssuesNode, a.favoritesGroup, a.teamsGroup} {
@@ -187,32 +157,20 @@ func (a *App) navRootChildren() []*tview.TreeNode {
 	return children
 }
 
-// navSectionSpacer is the blank row above a section. It carries no reference and
-// takes no cursor, so every walk that reads one steps over it.
 func navSectionSpacer() *tview.TreeNode {
 	return tview.NewTreeNode("").SetSelectable(false)
 }
 
-// onTeamExpanded loads projects for a team when it's expanded.
 func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
-	// An open team closes on its own. Only a closed one whose rows were never
-	// built goes back for them, or a team that answered with nothing would
-	// refetch on the way shut and spring open again.
 	if teamChildrenLoaded(teamNode) || teamNode.IsExpanded() {
 		setNavFold(teamNode, !teamNode.IsExpanded())
 		return
 	}
 
-	// Load projects, workflow states, and cycles asynchronously.
 	go func() {
 		logger.Debug("tui.app: loading navigation children team_id=%s", teamID)
 		ctx := context.Background()
 
-		// Warm all five team caches rather than the three this needs.
-		// Selecting a team preloads the same set, and duplicating a subset here
-		// meant every first click issued each request twice. A preload error is
-		// not fatal: it reports the first of five failures, and users and labels
-		// are for the pickers, not the tree.
 		if err := a.cache.PreloadTeamMetadata(ctx, teamID); err != nil {
 			logger.ErrorWithErr(err, "tui.app: team metadata preload incomplete team_id=%s", teamID)
 		}
@@ -229,7 +187,6 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 		logger.Debug("tui.app: loaded navigation children team_id=%s projects=%d states=%d cycles=%d", teamID, len(projects), len(states), len(cycles))
 
 		a.app.QueueUpdateDraw(func() {
-			// Double-check another goroutine has not built them already.
 			if teamChildrenLoaded(teamNode) {
 				setNavFold(teamNode, true)
 				return
@@ -240,24 +197,16 @@ func (a *App) onTeamExpanded(teamID string, teamNode *tview.TreeNode) {
 	}()
 }
 
-// populateTeamNodeChildren renders cycle, status, and project child nodes under a team node.
 func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, projects []linearapi.Project, states []linearapi.WorkflowState, cycles []linearapi.Cycle) {
 	logger.Debug("tui.app: building team rows team_id=%s projects=%d states=%d cycles=%d", teamID, len(projects), len(states), len(cycles))
-	// A retry rebuilds rather than appends, since the rows a failed load left
-	// behind are the reason it is being retried.
 	for _, child := range teamNode.GetChildren() {
 		a.forgetNavNodeLabels(child)
 	}
 	teamNode.SetChildren(nil)
 	if nav, ok := teamNode.GetReference().(*NavigationNode); ok {
-		// Every Linear team has workflow states. None is a load that answered
-		// without answering, and the next open has to go back for them.
 		nav.ChildrenLoaded = len(states) > 0
 	}
 
-	// The team's own row folds and nothing else, so this is what scopes the
-	// list to the whole team. It carries a team and none of the other flags,
-	// which is the shape currentFetchParams reads as exactly that.
 	teamNode.AddChild(tview.NewTreeNode("All Issues").
 		SetReference(&NavigationNode{
 			ID:     fmt.Sprintf("%s-all", teamID),
@@ -327,15 +276,11 @@ func (a *App) populateTeamNodeChildren(teamNode *tview.TreeNode, teamID string, 
 	a.applyNavSelectionStyle(teamNode)
 }
 
-// teamChildrenLoaded reports whether a fetch has built a team's rows.
 func teamChildrenLoaded(teamNode *tview.TreeNode) bool {
 	nav, ok := teamNode.GetReference().(*NavigationNode)
 	return ok && nav.ChildrenLoaded
 }
 
-// newTeamGroupNode is one of a team's three headings. They open folded: a team
-// otherwise expands onto every cycle and every status at once, which is more
-// rows than the pane has. Selecting one toggles it and scopes nothing.
 func (a *App) newTeamGroupNode(teamID, name string) *tview.TreeNode {
 	return tview.NewTreeNode(name).
 		SetExpanded(false).

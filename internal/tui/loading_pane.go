@@ -9,20 +9,9 @@ import (
 	"github.com/rivo/tview"
 )
 
-// defaultLoadingFrameInterval is how often the spinner advances. Fast enough to
-// read as motion, slow enough that a whole slow launch costs a few dozen
-// redraws.
-//
-// A var rather than a const so the test suite can park the frame loop; nothing
-// in the app assigns it. Tests stub queueUpdateDraw to run inline, which puts
-// every tick on the ticker's own goroutine writing App state, and a tick landing
-// mid-assertion is a race in a test that has nothing to do with spinners.
+// A var so the test suite can park the frame loop; nothing in the app assigns it.
 var defaultLoadingFrameInterval = 100 * time.Millisecond
 
-// loadingIndicator drives the spinner frames the waiting panes paint. tview has
-// no frame loop of its own, so this owns a ticker that queues a redraw, and
-// stops the goroutine rather than leaving it ticking over a pane that already
-// has its answer.
 type loadingIndicator struct {
 	spinner *spinner
 
@@ -32,8 +21,6 @@ type loadingIndicator struct {
 	frame  string
 }
 
-// newLoadingIndicator returns a stopped indicator already holding a frame, so a
-// pane that mounts before the first tick still shows a glyph.
 func newLoadingIndicator() *loadingIndicator {
 	return &loadingIndicator{
 		spinner: newSpinner(spinnerFramesDots),
@@ -41,9 +28,6 @@ func newLoadingIndicator() *loadingIndicator {
 	}
 }
 
-// start begins the frame loop, calling tick from its own goroutine. Starting an
-// already running indicator does nothing, so the second of two overlapping
-// fetches cannot double the frame rate.
 func (l *loadingIndicator) start(interval time.Duration, tick func()) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -66,7 +50,6 @@ func (l *loadingIndicator) start(interval time.Duration, tick func()) {
 	}()
 }
 
-// stop ends the frame loop and leaves the last frame in place.
 func (l *loadingIndicator) stop() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -80,7 +63,6 @@ func (l *loadingIndicator) stop() {
 	l.spinner.Stop()
 }
 
-// advance moves to the next frame.
 func (l *loadingIndicator) advance() {
 	frame := l.spinner.NextFrame()
 	if frame == "" {
@@ -91,46 +73,37 @@ func (l *loadingIndicator) advance() {
 	l.frame = frame
 }
 
-// Frame returns the glyph the panes should paint.
 func (l *loadingIndicator) Frame() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.frame
 }
 
-// running reports whether the frame loop is live.
 func (l *loadingIndicator) running() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.ticker != nil
 }
 
-// setNavLoading records whether the navigation fetch is out. UI thread only.
 func (a *App) setNavLoading(loading bool) {
 	a.navLoading = loading
 	a.syncLoadingIndicator()
 }
 
-// setIssuesLoading records whether an issue fetch is out. UI thread only.
 func (a *App) setIssuesLoading(loading bool) {
 	a.isLoading = loading
 	if !loading {
-		// Nothing is in flight, so the progress the bar was carrying is over.
 		a.setLoadingMessage("")
 	}
 	a.syncLoadingIndicator()
 }
 
-// setSearchLoading records whether a search request is out. UI thread only.
 func (a *App) setSearchLoading(loading bool) {
 	a.searchLoading = loading
 	a.syncLoadingIndicator()
 }
 
-// finishIssuesLoad settles the pane when this refresh is the one that claimed
-// it. A superseded refresh reaching a completion path must not clear the flag:
-// the refresh that replaced it is still fetching, and the pane would drop to
-// "No issues" with the spinner stopped while a page is on its way.
+// A superseded refresh must not clear the flag while the refresh that replaced it is still fetching.
 func (a *App) finishIssuesLoad(generation int64, err error) {
 	if a.loadingGeneration != generation {
 		return
@@ -140,9 +113,6 @@ func (a *App) finishIssuesLoad(generation int64, err error) {
 	a.setIssuesLoading(false)
 }
 
-// syncLoadingIndicator runs the frame loop while something is in flight and
-// stops it the moment nothing is, then repaints so the panes drop the spinner
-// with it. UI thread only.
 func (a *App) syncLoadingIndicator() {
 	if a.loading == nil {
 		a.loading = newLoadingIndicator()
@@ -157,13 +127,9 @@ func (a *App) syncLoadingIndicator() {
 	} else {
 		a.loading.stop()
 	}
-	// Paint on the way in as well as the way out: the panes carry the last
-	// message until something rewrites them, and waiting for the first tick
-	// leaves "No issues" up while a fetch is already out.
 	a.paintLoadingSurfaces()
 }
 
-// loadingFrameInterval is how often the spinner advances.
 func (a *App) loadingFrameInterval() time.Duration {
 	if a.loadingFrameDelay > 0 {
 		return a.loadingFrameDelay
@@ -171,8 +137,6 @@ func (a *App) loadingFrameInterval() time.Duration {
 	return defaultLoadingFrameInterval
 }
 
-// paintLoadingSurfaces writes the current message into every pane that has
-// nothing of its own to show. UI thread only.
 func (a *App) paintLoadingSurfaces() {
 	a.updateIssuesPlaceholder()
 	if a.detailsPageView != nil && a.GetSelectedIssue() == nil {
@@ -183,19 +147,15 @@ func (a *App) paintLoadingSurfaces() {
 	}
 }
 
-// navLoadingText is the tree's waiting node. It carries no color tags: the
-// node's own color styles it, and tags would throw off the label padding
-// padNavigationTree measures.
+// No color tags: they would throw off the label padding padNavigationTree measures.
 func (a *App) navLoadingText() string {
 	return a.loadingFrame() + " Loading teams"
 }
 
-// spinnerLabel renders the glyph and what it is waiting on.
 func (a *App) spinnerLabel(label string) string {
 	return fmt.Sprintf("%s%s[-] %s%s[-]", a.themeTags.Accent, a.loadingFrame(), a.themeTags.SecondaryText, label)
 }
 
-// loadingFrame is the glyph to paint, whether or not the loop has started.
 func (a *App) loadingFrame() string {
 	if a.loading == nil {
 		return spinnerFramesDots[0]
@@ -203,9 +163,6 @@ func (a *App) loadingFrame() string {
 	return a.loading.Frame()
 }
 
-// issuesPlaceholderMessage is what the issues pane says while it has no rows:
-// what it is waiting on, why it failed, or that there is nothing to list. The
-// line count rides along because the centering flex sizes the text row.
 func (a *App) issuesPlaceholderMessage() (string, int) {
 	if a.activeIssuesSection == IssuesSectionSearch {
 		switch {
@@ -227,8 +184,6 @@ func (a *App) issuesPlaceholderMessage() (string, int) {
 	}
 }
 
-// updateIssuesPlaceholder re-centers the message in the placeholder panel,
-// UI thread only.
 func (a *App) updateIssuesPlaceholder() {
 	if a.issuesPlaceholder == nil || a.issuesPlaceholderText == nil {
 		return
@@ -242,7 +197,6 @@ func (a *App) updateIssuesPlaceholder() {
 		AddItem(nil, 0, 1, false)
 }
 
-// emptyDetailsMessage is what the details pane says with no issue selected.
 func (a *App) emptyDetailsMessage() string {
 	if a.isLoading || !a.issuesSettled {
 		return a.spinnerLabel("Loading issue")
@@ -250,10 +204,6 @@ func (a *App) emptyDetailsMessage() string {
 	return fmt.Sprintf("%sNo issue selected. Select an issue from the list to view details.[-]", a.themeTags.SecondaryText)
 }
 
-// buildIssuesPlaceholder builds the panel the issues pane mounts when what it
-// is showing has no rows. It carries its own border and title because it stands
-// in for the table, which carries both. Rebuilt rather than restyled on a theme
-// change, since the colors are baked in here.
 func (a *App) buildIssuesPlaceholder() {
 	a.issuesPlaceholderText = tview.NewTextView()
 	a.issuesPlaceholderText.
@@ -263,8 +213,6 @@ func (a *App) buildIssuesPlaceholder() {
 		SetBackgroundColor(a.theme.Background)
 
 	a.issuesPlaceholder = tview.NewFlex().SetDirection(tview.FlexRow)
-	// Flex sets dontClear and never paints its own background; restore the fill
-	// so the layer beneath cannot bleed through.
 	a.issuesPlaceholder.Box = tview.NewBox().SetBackgroundColor(a.theme.Background)
 	a.issuesPlaceholder.
 		SetBorder(true).
@@ -277,8 +225,6 @@ func (a *App) buildIssuesPlaceholder() {
 	a.updateIssuesPlaceholder()
 }
 
-// setIssuesPlaceholderBorder recolors the placeholder, which wears the pane's
-// focus border whenever it is the thing mounted.
 func (a *App) setIssuesPlaceholderBorder(color tcell.Color) {
 	if a.issuesPlaceholder == nil {
 		return
@@ -286,8 +232,6 @@ func (a *App) setIssuesPlaceholderBorder(color tcell.Color) {
 	a.issuesPlaceholder.SetBorderColor(color)
 }
 
-// issuesPaneIsEmpty reports whether what is on screen has nothing to render, so
-// the placeholder takes the table's place.
 func (a *App) issuesPaneIsEmpty() bool {
 	return len(a.rowsForSection(a.activeIssuesSection)) == 0
 }

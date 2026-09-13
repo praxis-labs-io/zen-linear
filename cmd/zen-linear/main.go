@@ -19,7 +19,6 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
-// run executes the CLI entrypoint and returns a process exit code.
 func run(args []string) int {
 	if len(args) == 0 {
 		return runTUI()
@@ -43,7 +42,6 @@ func run(args []string) int {
 	}
 }
 
-// runAuth handles `zen-linear auth ...` subcommands.
 func runAuth(args []string) int {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
 		auth.PrintAuthUsage(os.Stdout)
@@ -94,7 +92,6 @@ func runAuth(args []string) int {
 	}
 }
 
-// runTUI boots the interactive application with resolved credentials.
 func runTUI() int {
 	settingsPath, err := config.ConfigFilePath()
 	if err != nil {
@@ -118,9 +115,6 @@ func runTUI() int {
 	oauthClient := oauth.NewClient(oauth.ClientConfig{ClientID: clientID})
 	ctx := context.Background()
 
-	// The logger is not up yet, so these failures go to stderr like the other
-	// pre-logger errors here. None is fatal: without a session file the app
-	// opens on its configured defaults.
 	sessionPath, err := session.Path()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not resolve session path: %v\n", err)
@@ -130,16 +124,12 @@ func runTUI() int {
 		fmt.Fprintf(os.Stderr, "Warning: ignoring unreadable session file: %v\n", err)
 	}
 
-	// The cached navigation tree is what the sidebar paints before the first
-	// fetch answers. Without it the app just waits, as it always did.
 	navCachePath, err := cache.NavPath()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not resolve navigation cache path: %v\n", err)
 	}
 	var navCacheFile cache.NavFile
 	if navCachePath != "" {
-		// Skipped on an unresolved path, which LoadNav would only reject with a
-		// second warning about the same failure.
 		navCacheFile, err = cache.LoadNav(navCachePath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: ignoring unreadable navigation cache: %v\n", err)
@@ -148,9 +138,6 @@ func runTUI() int {
 
 	apiKey := os.Getenv(config.LinearAPIKeyEnv)
 	if apiKey == "" {
-		// With no explicit key, reopen the last session's workspace, else the
-		// configured default (or the first whose key env var is set); OAuth
-		// credentials remain the fallback.
 		names := config.StartupWorkspaceNames(settings, sessionFile.LastWorkspace)
 		if workspace, ok := config.StartupWorkspace(settings.Workspaces, names...); ok {
 			apiKey = workspace.APIKey()
@@ -162,9 +149,6 @@ func runTUI() int {
 		return 1
 	}
 
-	// The environment wins over the file, and it has to be applied here rather
-	// than to the Config below: a settings save rebuilds the Config from the
-	// form, which would drop an override layered on afterwards.
 	effective, envOverrides, err := config.ApplyEnvOverrides(settings)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading environment: %v\n", err)
@@ -179,15 +163,9 @@ func runTUI() int {
 
 	logLevel := parseLogLevel(cfg.LogLevel)
 	opened, warning := logger.Start(cfg.LogFile, config.DefaultLogFile(), logLevel)
-	// Only a path that actually opened is adopted, so the settings modal names
-	// where logs really go and saving from it does not write the refused path
-	// back. Logging off is what the app fell back to rather than what the user
-	// asked for: adopting it would write "log_file": "" on the next save and
-	// turn one launch's permission problem into a permanent setting.
 	if opened != "" {
 		cfg.LogFile = opened
 	}
-	// Also on stderr, which is all there is when the TUI never starts.
 	if warning != "" {
 		fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 	}
@@ -224,17 +202,12 @@ func runTUI() int {
 		}
 	}
 
-	// Before NewApp resolves the theme, and before tcell owns the tty.
 	tui.DetectTerminalCapabilities()
 
 	app := tui.NewApp(clientCfg, cfg, promptTemplates)
-	// tcell clears the screen the moment it takes the tty, so the stderr line
-	// above is gone before it can be read. The app says it again once it is up.
 	app.WarnAtStartup(warning)
 	app.UseSettingsFile(settingsPath)
 	app.UseVersion(Version)
-	// What is on disk, kept apart from what the environment made of it: a save
-	// must write the file's value back, not the variable's.
 	app.UseFileSettings(settings, envOverrides)
 	app.UseSession(sessionPath, sessionFile)
 	app.UseNavCache(navCachePath, navCacheFile)
@@ -252,7 +225,6 @@ func runTUI() int {
 	return 0
 }
 
-// parseLogLevel converts a string log level to a logger.LogLevel.
 func parseLogLevel(level string) logger.LogLevel {
 	switch level {
 	case "debug":

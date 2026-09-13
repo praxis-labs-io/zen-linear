@@ -9,9 +9,6 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
-// favoriteNode is the favorite selection shared by the list query and the
-// create mutation. Linear rejects an entire query over one misplaced field, so
-// the selection lives in exactly one place.
 type favoriteNode struct {
 	ID         graphql.String
 	Type       graphql.String
@@ -37,8 +34,6 @@ type favoriteNode struct {
 			ID graphql.String
 		}
 	}
-	// A favorited project carries no team: it is workspace-level, and Linear
-	// answers a multi-team project's teams in no order the issues follow.
 	Project *struct {
 		ID   graphql.String
 		Name graphql.String
@@ -57,7 +52,6 @@ type favoriteNode struct {
 	}
 }
 
-// parseFavoriteNode flattens a favorite selection into the Favorite struct.
 func parseFavoriteNode(node favoriteNode) Favorite {
 	favorite := Favorite{
 		ID:        string(node.ID),
@@ -106,7 +100,6 @@ func parseFavoriteNode(node favoriteNode) Favorite {
 	return favorite
 }
 
-// ListFavorites fetches the viewer's favorites, ordered as in Linear's sidebar.
 func (c *Client) ListFavorites(ctx context.Context) ([]Favorite, error) {
 	var after *graphql.String
 	favorites := make([]Favorite, 0)
@@ -148,15 +141,13 @@ func (c *Client) ListFavorites(ctx context.Context) ([]Favorite, error) {
 	return favorites, nil
 }
 
-// SortFavorites orders favorites the way Linear's sidebar does.
 func SortFavorites(favorites []Favorite) {
 	sort.SliceStable(favorites, func(i, j int) bool {
 		return favorites[i].SortOrder < favorites[j].SortOrder
 	})
 }
 
-// CreateFavorite adds a favorite for the target entity. Linear upserts, so
-// favoriting something twice returns the existing favorite.
+// CreateFavorite adds a favorite for target. Favoriting twice returns the existing one.
 func (c *Client) CreateFavorite(ctx context.Context, target FavoriteTarget) (Favorite, error) {
 	input := target.input()
 	if len(input) == 0 {
@@ -181,8 +172,7 @@ func (c *Client) CreateFavorite(ctx context.Context, target FavoriteTarget) (Fav
 	return parseFavoriteNode(mutation.FavoriteCreate.Favorite), nil
 }
 
-// DeleteFavorite removes a favorite from the viewer's sidebar. Linear treats a
-// missing favorite as success.
+// DeleteFavorite removes a favorite. A missing one is not an error.
 func (c *Client) DeleteFavorite(ctx context.Context, favoriteID string) error {
 	var mutation struct {
 		FavoriteDelete struct {
@@ -201,16 +191,13 @@ func (c *Client) DeleteFavorite(ctx context.Context, favoriteID string) error {
 	return nil
 }
 
-// UpdateFavoriteSortOrder repositions a favorite in Linear's sidebar.
 func (c *Client) UpdateFavoriteSortOrder(ctx context.Context, favoriteID string, sortOrder float64) error {
 	return c.updateFavorite(ctx, favoriteID, FavoriteUpdateInput{
 		"sortOrder": graphql.Float(sortOrder),
 	})
 }
 
-// MoveFavorite reparents a favorite and positions it. An empty parentID moves
-// it back to the top level, which needs an explicit null rather than a blank
-// id.
+// MoveFavorite reparents and positions a favorite. An empty parentID moves it to the top level.
 func (c *Client) MoveFavorite(ctx context.Context, favoriteID, parentID string, sortOrder float64) error {
 	input := FavoriteUpdateInput{"sortOrder": graphql.Float(sortOrder)}
 	if parentID == "" {

@@ -11,17 +11,13 @@ import (
 	"golang.org/x/term"
 )
 
-// queryTerminal asks the terminal about itself: its own background and
-// foreground, and whether it draws Kitty graphics. It goes raw, so it must run
-// before tcell's own.
+// Must run before tcell takes the tty: it reads the terminal raw.
 func queryTerminal() terminalReply {
 	termName := os.Getenv("TERM")
 	if termName == "" || strings.HasPrefix(termName, "dumb") {
 		return terminalReply{}
 	}
 
-	// /dev/tty rather than stdin, so a piped or redirected stream still reaches
-	// the terminal the user is sitting at.
 	fd, err := unix.Open("/dev/tty", unix.O_RDWR|unix.O_NOCTTY, 0)
 	if err != nil {
 		return terminalReply{}
@@ -44,8 +40,6 @@ func queryTerminal() terminalReply {
 	deadline := time.Now().Add(terminalQueryTimeout)
 	chunk := make([]byte, 256)
 	var reply strings.Builder
-	// The reply is read to its end even once the colors are in. Whatever is
-	// left in the buffer is echoed and read as keys the moment raw mode goes.
 	for waitForTTYData(fd, deadline) {
 		read, err := unix.Read(fd, chunk)
 		if read > 0 {
@@ -68,9 +62,7 @@ func queryTerminal() terminalReply {
 	}
 }
 
-// waitForTTYData reports whether the terminal answered before the deadline. The
-// set and the timeval are rebuilt per call: select leaves both undefined when
-// it returns an error, EINTR included.
+// The fd set and timeval are rebuilt per call because select leaves both undefined on error, EINTR included.
 func waitForTTYData(fd int, deadline time.Time) bool {
 	for {
 		remaining := time.Until(deadline)

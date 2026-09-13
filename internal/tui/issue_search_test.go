@@ -11,10 +11,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// TestPerformIssueSearch_CancelsTheSupersededFetch guards the reason the search
-// path threads a context at all: the generation counter already throws away a
-// stale result, but without cancellation the request keeps running against the
-// API, so a fast typist leaves one live query per debounce window.
 func TestPerformIssueSearch_CancelsTheSupersededFetch(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -30,7 +26,6 @@ func TestPerformIssueSearch_CancelsTheSupersededFetch(t *testing.T) {
 	app.performIssueSearch("first")
 	waitForDraw(t, started)
 
-	// A newer query supersedes the first.
 	app.performIssueSearch("second")
 	waitForDraw(t, started)
 
@@ -43,7 +38,6 @@ func TestPerformIssueSearch_CancelsTheSupersededFetch(t *testing.T) {
 		t.Fatal("the superseded fetch was never canceled")
 	}
 
-	// Clearing the query has to cancel the survivor too.
 	app.performIssueSearch("")
 	select {
 	case err := <-observed:
@@ -55,13 +49,8 @@ func TestPerformIssueSearch_CancelsTheSupersededFetch(t *testing.T) {
 	}
 }
 
-// A canceled request answers with context.Canceled, and every keystroke cancels
-// one. Delivered as a result, that reads "Search failed" between every two
-// letters typed.
 func TestPerformIssueSearch_ASupersededFetchIsNotAFailure(t *testing.T) {
 	app := newUXTestApp(t)
-	// The cancel this covers is synchronous; the search behind it is not, and
-	// left armed it paints from its own goroutine after the test returns.
 	app.config.SearchDebounce = time.Hour
 	drawn := make(chan struct{}, 8)
 	app.queueUpdateDraw = func(f func()) {
@@ -83,8 +72,6 @@ func TestPerformIssueSearch_ASupersededFetchIsNotAFailure(t *testing.T) {
 
 	app.performIssueSearch("a")
 	<-started
-	// Typing the next letter cancels the first request, the way the debounce
-	// does on every keystroke.
 	app.scheduleSearchDebounce("ab")
 	waitForDraw(t, drawn)
 
@@ -96,16 +83,10 @@ func TestPerformIssueSearch_ASupersededFetchIsNotAFailure(t *testing.T) {
 	}
 }
 
-// The spinner is a ticker, not a glyph: nothing in tview has a frame loop, so a
-// waiting state that does not run the loop paints one frozen frame and reads as
-// a hang.
 func TestSearchRunsTheSpinner(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.SearchDebounce = time.Hour
 	started := make(chan struct{}, 1)
-	// Canceling is what frees the parked fetch, and it bumps the generation
-	// too, so what the fetch delivers on its way out is discarded rather than
-	// painted into the next test's app.
 	t.Cleanup(func() { app.cancelSearchFetch() })
 	app.fetchIssuesPage = func(ctx context.Context, _ linearapi.FetchIssuesParams, _ *string) (linearapi.IssuePage, error) {
 		started <- struct{}{}
@@ -120,8 +101,6 @@ func TestSearchRunsTheSpinner(t *testing.T) {
 		t.Fatal("the frame loop is stopped while a search is out, so the spinner cannot advance")
 	}
 	first, _ := app.issuesPlaceholderMessage()
-	// The indicator is seeded with frame zero and the first advance returns it
-	// again, so the glyph only moves on the second.
 	app.loading.advance()
 	app.loading.advance()
 	if second, _ := app.issuesPlaceholderMessage(); second == first {
@@ -136,8 +115,6 @@ func TestSearchRunsTheSpinner(t *testing.T) {
 
 func TestPerformIssueSearch_RendersResults(t *testing.T) {
 	app := newUXTestApp(t)
-	// Search state is UI-thread-only, so the test reads it after the queued
-	// draw rather than polling it from here.
 	drawn := make(chan struct{}, 8)
 	app.queueUpdateDraw = func(f func()) {
 		f()
@@ -165,9 +142,6 @@ func TestPerformIssueSearch_RendersResults(t *testing.T) {
 	}
 }
 
-// TestPerformIssueSearch_OwnsWhatTheIssuesPaneShows pins the one place the
-// section moves. Anywhere else deciding it is how the pane and the query box
-// come to disagree.
 func TestPerformIssueSearch_OwnsWhatTheIssuesPaneShows(t *testing.T) {
 	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me", State: "Todo"})
 
@@ -183,9 +157,6 @@ func TestPerformIssueSearch_OwnsWhatTheIssuesPaneShows(t *testing.T) {
 	}
 }
 
-// A failed query used to leave the last one's rows up, so the pane silently
-// showed results for a query nobody typed and the failure never surfaced: the
-// placeholder that says so only mounts when there is nothing to show.
 func TestAFailedSearchDropsTheRowsItReplaces(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.SearchDebounce = time.Hour
@@ -223,9 +194,6 @@ func TestAFailedSearchDropsTheRowsItReplaces(t *testing.T) {
 	}
 }
 
-// The row the render lights is a claim about what the pane has selected. Left
-// unsaid, the details pane keeps describing the list issue underneath and every
-// issue command acts on that one instead of the row on screen.
 func TestResultsLandAsTheSelection(t *testing.T) {
 	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-9", Identifier: "ZNL-9", Title: "Found me"})
 	holdDetailFetches(t, app)
@@ -241,8 +209,6 @@ func TestResultsLandAsTheSelection(t *testing.T) {
 	}
 }
 
-// The restored issue belongs to the query being dropped. Left set, it outlives
-// that query and the next unrelated search lands on it.
 func TestClearingResultsDropsTheRestoredIssue(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pendingSearchIssueID = "issue-1"
@@ -254,9 +220,6 @@ func TestClearingResultsDropsTheRestoredIssue(t *testing.T) {
 	}
 }
 
-// TestSearchStatesReachThePlaceholder covers the messages that used to live in
-// the Search tab's own panel. They belong to the shared placeholder now, so a
-// failed or empty search still says what happened.
 func TestSearchStatesReachThePlaceholder(t *testing.T) {
 	app := newUXTestApp(t)
 	app.activeIssuesSection = IssuesSectionSearch
@@ -277,15 +240,8 @@ func TestSearchStatesReachThePlaceholder(t *testing.T) {
 	}
 }
 
-// TestEnterLeavesTheQueryBoxForTheResults covers the box's only exit that keeps
-// the query. Letters type, Down goes to the tree, and Esc empties the query
-// before it lets go, so without Enter there is no way to the results with the
-// words still there.
 func TestEnterLeavesTheQueryBoxForTheResults(t *testing.T) {
 	app, waitForResults := newSearchTestApp(t, linearapi.Issue{ID: "issue-1", Identifier: "ZNL-1", Title: "Found me", State: "Todo"})
-	// Enter selects the first result, and the detail fetch that follows
-	// repaints the pane titles from its own goroutine. Park it, or it races
-	// updateFocus on the way out of the box.
 	holdDetailFetches(t, app)
 
 	app.focusNavSearch()
@@ -305,16 +261,12 @@ func TestEnterLeavesTheQueryBoxForTheResults(t *testing.T) {
 		t.Errorf("search rows = %d, want the results kept on the way out", got)
 	}
 
-	// Esc is the way back, matching the Enter that left.
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 	if !app.navSearchFocused || app.focusedPane != FocusNavigation {
 		t.Error("Esc did not return the keyboard to the query box")
 	}
 }
 
-// TestEnterWithNoResultsKeepsTheKeyboard covers the pane going dead: with
-// nothing mounted to receive it, moving focus anyway leaves the keys on a
-// primitive that is not on screen.
 func TestEnterWithNoResultsKeepsTheKeyboard(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusNavSearch()
@@ -327,10 +279,6 @@ func TestEnterWithNoResultsKeepsTheKeyboard(t *testing.T) {
 	}
 }
 
-// newSearchTestApp returns an app whose search fetch answers with the given
-// issues, and a wait for the queued draw that lands them. The fetch runs on its
-// own goroutine, so the results are not readable when performIssueSearch
-// returns.
 func newSearchTestApp(t *testing.T, issues ...linearapi.Issue) (*App, func()) {
 	t.Helper()
 	app := newUXTestApp(t)

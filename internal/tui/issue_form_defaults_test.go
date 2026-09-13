@@ -9,7 +9,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// captureCreates routes the form's writes to a channel instead of the network.
 func captureCreates(app *App) chan linearapi.CreateIssueInput {
 	created := make(chan linearapi.CreateIssueInput, 2)
 	app.createIssueFunc = func(_ context.Context, input linearapi.CreateIssueInput) (linearapi.Issue, error) {
@@ -19,7 +18,6 @@ func captureCreates(app *App) chan linearapi.CreateIssueInput {
 	return created
 }
 
-// submitCreate titles the form, sends it, and returns what it sent.
 func submitCreate(t *testing.T, form *IssueFormModal, created chan linearapi.CreateIssueInput) linearapi.CreateIssueInput {
 	t.Helper()
 	form.titleField.SetText("Fresh issue")
@@ -33,8 +31,6 @@ func submitCreate(t *testing.T, form *IssueFormModal, created chan linearapi.Cre
 	return linearapi.CreateIssueInput{}
 }
 
-// The form used to say "Team default" and send nothing, so the state a new
-// issue landed in was only visible once it had landed.
 func TestTheCreateFormOpensOnTheTeamsDefaultState(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	app.workflowStates = []linearapi.WorkflowState{
@@ -59,8 +55,6 @@ func TestTheCreateFormOpensOnTheTeamsDefaultState(t *testing.T) {
 	}
 }
 
-// A team can have no default set, and then nothing can name the state Linear
-// will pick.
 func TestTheSentinelStaysWhereTheTeamHasNoDefault(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	created := captureCreates(app)
@@ -95,8 +89,6 @@ func TestTheCreateFormOpensAssignedToMe(t *testing.T) {
 	}
 }
 
-// Linear refuses an assignee off the team, so a create in one the user is not
-// a member of would fail on a default nobody typed.
 func TestACreateInATeamWithoutMeFallsBackToUnassigned(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	app.teamUsers = []linearapi.User{{ID: "user-2", Name: "Someone Else"}}
@@ -113,15 +105,11 @@ func TestACreateInATeamWithoutMeFallsBackToUnassigned(t *testing.T) {
 	}
 }
 
-// coldMemberList leaves the member list as the form's only background load, so
-// one queued callback is the whole of the fetch answering.
 func coldMemberList(app *App) {
 	app.teamUsers = nil
 	app.currentUser = &linearapi.User{ID: "user-1", Name: "Test User", IsMe: true}
 }
 
-// Nothing confirmed the user is on the team, so opening on them would send an
-// assignee Linear refuses and fail a create that used to work unassigned.
 func TestAFailedMemberFetchOpensUnassigned(t *testing.T) {
 	app, pending := newIssueFormTestApp(t)
 	coldMemberList(app)
@@ -142,8 +130,6 @@ func TestAFailedMemberFetchOpensUnassigned(t *testing.T) {
 	}
 }
 
-// The window between opening the form and the member list landing. A create
-// sent in it must not carry an assignee nothing has checked.
 func TestASubmitBeforeTheMemberListLandsSendsNoAssignee(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	coldMemberList(app)

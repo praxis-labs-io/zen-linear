@@ -30,9 +30,6 @@ func TestRenderIssueRow_IncludesPlanningFields(t *testing.T) {
 		},
 	}
 
-	// Planning fields (due date, estimate, milestone) intentionally stay out
-	// of the list row — the layout matches Linear's list view and planning
-	// data lives in the details pane (covered below).
 	row := renderIssueRow(issue)
 	if len(row) != 7 {
 		t.Fatalf("renderIssueRow() length = %d, want 7: %#v", len(row), row)
@@ -228,8 +225,6 @@ func TestSetPriorityPickerDispatchesSelectedPriority(t *testing.T) {
 		if len(app.pickerModal.items) != len(priorityLabels) {
 			t.Fatalf("picker item count = %d, want %d", len(app.pickerModal.items), len(priorityLabels))
 		}
-		// The selection moves out from under an open picker on a background
-		// refresh; the write must still land on the issue the picker named.
 		app.issuesMu.Lock()
 		app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Moved on"}
 		app.issuesMu.Unlock()
@@ -279,8 +274,6 @@ func TestSetProjectPickerDispatchesProjectAndClearsMilestone(t *testing.T) {
 
 	app.showSetProjectPicker()
 
-	// The selection moves out from under an open picker on a background
-	// refresh; the write must still land on the issue the picker named.
 	app.issuesMu.Lock()
 	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Moved on"}
 	app.issuesMu.Unlock()
@@ -353,8 +346,6 @@ func TestIssueRelationActionDispatchesExpectedAPIInput(t *testing.T) {
 	app := NewApp(linearapi.ClientConfig{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
 	stopBackgroundWorkOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
-	// A relation changes nothing the list renders, so it must refetch the one
-	// issue for the details pane instead of the whole list.
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
 		t.Error("relation change refetched the issue list")
 		return linearapi.IssuePage{}, nil
@@ -445,8 +436,6 @@ func TestAttachmentActionsUseInjectedOpenAndCopyFunctions(t *testing.T) {
 	}
 }
 
-// fieldWriteApp queues UI updates instead of running them where they were
-// raised, so a fetch filling a modal cannot race the test reading it.
 func fieldWriteApp(t *testing.T, selected linearapi.Issue) (app *App, written <-chan linearapi.UpdateIssueInput, queued <-chan func()) {
 	t.Helper()
 	app = newUXTestApp(t)
@@ -473,14 +462,11 @@ func fieldWriteApp(t *testing.T, selected linearapi.Issue) (app *App, written <-
 	return app, writes, pending
 }
 
-// runQueuedUpdate runs the next queued UI update here, on the test's goroutine.
 func runQueuedUpdate(t *testing.T, queued <-chan func()) {
 	t.Helper()
 	awaitQueuedUpdate(t, queued)()
 }
 
-// awaitQueuedUpdate takes the next queued update without running it, for a test
-// that has to hold one back while it changes the state the update lands on.
 func awaitQueuedUpdate(t *testing.T, queued <-chan func()) func() {
 	t.Helper()
 	select {
@@ -492,7 +478,6 @@ func awaitQueuedUpdate(t *testing.T, queued <-chan func()) func() {
 	}
 }
 
-// moveSelection is the background refresh that lands while an editor is open.
 func moveSelection(app *App) {
 	app.issuesMu.Lock()
 	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "LIN-2", Title: "Moved on"}
@@ -516,14 +501,10 @@ func awaitWrite(t *testing.T, written <-chan linearapi.UpdateIssueInput) lineara
 	return linearapi.UpdateIssueInput{}
 }
 
-// TestFieldEditsTargetTheIssueTheEditorNamed covers the six writes that used to
-// leave the id empty and let the write path read the selection at send time.
 func TestFieldEditsTargetTheIssueTheEditorNamed(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		open func(*App)
-		// fetchesOnOpen is set where opening the editor loads its options on a
-		// goroutine, which the test has to run before it can drive the modal.
+		name          string
+		open          func(*App)
 		fetchesOnOpen bool
 		close         func(*testing.T, *App)
 		check         func(*testing.T, linearapi.UpdateIssueInput)
@@ -584,8 +565,6 @@ func TestFieldEditsTargetTheIssueTheEditorNamed(t *testing.T) {
 	}
 }
 
-// runCommand runs a palette command by id, the way the palette and the
-// keyboard shortcut both reach it.
 func runCommand(t *testing.T, app *App, id string) {
 	t.Helper()
 	for _, cmd := range app.paletteCtrl.commands {
@@ -597,8 +576,6 @@ func runCommand(t *testing.T, app *App, id string) {
 	t.Fatalf("no command with id %q", id)
 }
 
-// seedFieldOptions fills the caches a field picker reads, so a picker opens
-// with rows rather than fetching.
 func seedFieldOptions(app *App) {
 	app.currentUser = &linearapi.User{ID: "user-1", Name: "Ada Lovelace", DisplayName: "Ada Lovelace"}
 	app.teamUsers = []linearapi.User{{ID: "user-1", Name: "Ada Lovelace", DisplayName: "Ada Lovelace"}}
@@ -607,8 +584,6 @@ func seedFieldOptions(app *App) {
 	app.teamProjects = []linearapi.Project{{ID: "project-2", Name: "Beta"}}
 }
 
-// TestFieldSaveMessagesNameTheFieldAndItsValue reads the corner the way a user
-// does. The three phrasings are the whole of what a save reports.
 func TestFieldSaveMessagesNameTheFieldAndItsValue(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -717,7 +692,6 @@ func TestFieldSaveMessagesNameTheFieldAndItsValue(t *testing.T) {
 			tc.act(t, app, queued)
 
 			awaitWrite(t, written)
-			// The flash is raised where the write lands, which is queued.
 			runQueuedUpdate(t, queued)
 			if got := app.statusToast.GetText(true); got != tc.want {
 				t.Errorf("toast = %q, want %q", got, tc.want)

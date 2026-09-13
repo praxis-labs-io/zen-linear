@@ -5,33 +5,27 @@ import (
 	"sort"
 )
 
-// PaletteRow is one line of the palette: a group heading, or a command. The
-// cursor never rests on a heading, so Selected always answers with a command.
+// PaletteRow is a group heading or a command; the cursor never rests on a heading.
 type PaletteRow struct {
 	Heading  CommandGroup
 	Command  Command
 	IsHeader bool
 }
 
-// PaletteController manages the command palette filtering and selection logic.
 type PaletteController struct {
 	commands []Command
 	query    string
 	cursor   int
 	filtered []Command
 	rows     []PaletteRow
-	// scope is the pane the palette was opened from. Commands outside it are
-	// left out of the list rather than ranked down.
-	scope CommandScope
+	scope    CommandScope
 }
 
-// SetScope records the scope the palette was opened in and re-filters.
 func (p *PaletteController) SetScope(scope CommandScope) {
 	p.scope = scope
 	p.filterCommands()
 }
 
-// inScope drops commands that do not apply where the palette was opened.
 func (p *PaletteController) inScope(commands []Command) []Command {
 	kept := make([]Command, 0, len(commands))
 	for _, cmd := range commands {
@@ -42,16 +36,13 @@ func (p *PaletteController) inScope(commands []Command) []Command {
 	return kept
 }
 
-// NewPaletteController creates a new palette controller with the given commands.
 func NewPaletteController(commands []Command) *PaletteController {
 	pc := &PaletteController{commands: commands}
 	pc.filterCommands()
 	return pc
 }
 
-// SetCommands swaps in a rebuilt registry, which is how a settings save moves
-// shortcuts without a restart. The query and cursor reset with it: the rows
-// they pointed at came from the old list.
+// SetCommands swaps in a rebuilt registry and resets the query and cursor.
 func (p *PaletteController) SetCommands(commands []Command) {
 	p.commands = commands
 	p.query = ""
@@ -59,29 +50,23 @@ func (p *PaletteController) SetCommands(commands []Command) {
 	p.filterCommands()
 }
 
-// SetQuery sets the search query and filters commands.
 func (p *PaletteController) SetQuery(q string) {
 	p.query = q
 	p.filterCommands()
 }
 
-// Query returns the current query.
 func (p *PaletteController) Query() string {
 	return p.query
 }
 
-// Filtered returns the filtered list of commands, in the order they are drawn.
 func (p *PaletteController) Filtered() []Command {
 	return p.filtered
 }
 
-// Rows returns the lines the palette draws: the commands, and the headings
-// above them while no query narrows the list.
 func (p *PaletteController) Rows() []PaletteRow {
 	return p.rows
 }
 
-// Selected returns the currently selected command and whether one is selected.
 func (p *PaletteController) Selected() (Command, bool) {
 	if p.cursor < 0 || p.cursor >= len(p.rows) || p.rows[p.cursor].IsHeader {
 		return Command{}, false
@@ -89,13 +74,11 @@ func (p *PaletteController) Selected() (Command, bool) {
 	return p.rows[p.cursor].Command, true
 }
 
-// Cursor returns the current cursor position.
 func (p *PaletteController) Cursor() int {
 	return p.cursor
 }
 
-// SetCursor sets the cursor position, clamping to valid range and stepping off
-// a heading onto the command below it.
+// SetCursor clamps pos to the rows and steps off a heading onto the command below it.
 func (p *PaletteController) SetCursor(pos int) {
 	if pos < 0 {
 		pos = 0
@@ -113,14 +96,10 @@ func (p *PaletteController) SetCursor(pos int) {
 	}
 }
 
-// MoveCursorUp moves the cursor up by one command.
 func (p *PaletteController) MoveCursorUp() { p.step(-1) }
 
-// MoveCursorDown moves the cursor down by one command.
 func (p *PaletteController) MoveCursorDown() { p.step(1) }
 
-// step walks the cursor to the next command in the given direction, passing
-// over headings. It stays put when there is none, so the ends of the list hold.
 func (p *PaletteController) step(delta int) {
 	for i := p.cursor + delta; i >= 0 && i < len(p.rows); i += delta {
 		if !p.rows[i].IsHeader {
@@ -130,14 +109,11 @@ func (p *PaletteController) step(delta int) {
 	}
 }
 
-// Reset resets the query and cursor to initial state.
 func (p *PaletteController) Reset() {
 	p.query = ""
 	p.filterCommands()
 }
 
-// filterCommands rebuilds the rows for the current query and scope, and puts
-// the cursor on the first command of the new list.
 func (p *PaletteController) filterCommands() {
 	matched := rankCommands(p.inScope(p.commands), p.query)
 	if p.query == "" {
@@ -159,7 +135,6 @@ func (p *PaletteController) filterCommands() {
 	}
 }
 
-// flatPaletteRows lists commands in the order given, under no heading.
 func flatPaletteRows(commands []Command) []PaletteRow {
 	rows := make([]PaletteRow, 0, len(commands))
 	for _, cmd := range commands {
@@ -168,9 +143,6 @@ func flatPaletteRows(commands []Command) []PaletteRow {
 	return rows
 }
 
-// groupedPaletteRows stacks the commands under their headings, alphabetically
-// within each. Commands whose group is not in commandGroupOrder keep registry
-// order and follow the headed groups with no heading of their own.
 func groupedPaletteRows(commands []Command) []PaletteRow {
 	buckets := make(map[CommandGroup][]Command, len(commandGroupOrder))
 	loose := make([]Command, 0)

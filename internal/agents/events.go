@@ -1,6 +1,5 @@
 package agents
 
-// AgentEventType represents a high-level streaming event type.
 type AgentEventType string
 
 const (
@@ -14,10 +13,8 @@ const (
 	AgentEventUnknown        AgentEventType = "unknown"
 )
 
-// SubtypeCompleted marks a terminal result event in both provider streams.
 const SubtypeCompleted = "completed"
 
-// AgentEvent captures a parsed stream event for UI rendering.
 type AgentEvent struct {
 	Type          AgentEventType
 	Subtype       string
@@ -30,7 +27,6 @@ type AgentEvent struct {
 	Tool          *AgentToolCall
 }
 
-// AgentToolCall captures tool call details for display.
 type AgentToolCall struct {
 	Name    string
 	Path    string
@@ -38,8 +34,6 @@ type AgentToolCall struct {
 	Summary string
 }
 
-// EventParser allows providers to emit structured events.
 type EventParser interface {
-	// ParseEvent attempts to decode a raw stream line into an AgentEvent.
 	ParseEvent(line []byte) (*AgentEvent, bool)
 }

@@ -81,36 +81,30 @@ func TestPaletteController_Cursor(t *testing.T) {
 
 	pc := NewPaletteController(commands)
 
-	// Test initial cursor position
 	if pc.Cursor() != 0 {
 		t.Errorf("Initial cursor = %d, want 0", pc.Cursor())
 	}
 
-	// Test MoveCursorDown
 	pc.MoveCursorDown()
 	if pc.Cursor() != 1 {
 		t.Errorf("After MoveCursorDown, cursor = %d, want 1", pc.Cursor())
 	}
 
-	// Test MoveCursorUp
 	pc.MoveCursorUp()
 	if pc.Cursor() != 0 {
 		t.Errorf("After MoveCursorUp, cursor = %d, want 0", pc.Cursor())
 	}
 
-	// Test SetCursor
 	pc.SetCursor(2)
 	if pc.Cursor() != 2 {
 		t.Errorf("After SetCursor(2), cursor = %d, want 2", pc.Cursor())
 	}
 
-	// Test SetCursor beyond bounds
 	pc.SetCursor(10)
 	if pc.Cursor() != 2 {
 		t.Errorf("After SetCursor(10), cursor = %d, want 2 (clamped)", pc.Cursor())
 	}
 
-	// Test SetCursor negative
 	pc.SetCursor(-1)
 	if pc.Cursor() != 0 {
 		t.Errorf("After SetCursor(-1), cursor = %d, want 0 (clamped)", pc.Cursor())
@@ -125,7 +119,6 @@ func TestPaletteController_Selected(t *testing.T) {
 
 	pc := NewPaletteController(commands)
 
-	// Test selected with valid cursor
 	cmd, ok := pc.Selected()
 	if !ok {
 		t.Error("Selected() = false, want true")
@@ -134,7 +127,6 @@ func TestPaletteController_Selected(t *testing.T) {
 		t.Errorf("Selected().ID = %q, want %q", cmd.ID, "1")
 	}
 
-	// Test with empty filtered list
 	pc.SetQuery("xyz")
 	_, ok = pc.Selected()
 	if ok {
@@ -173,19 +165,16 @@ func TestPaletteController_CaseInsensitiveFilter(t *testing.T) {
 
 	pc := NewPaletteController(commands)
 
-	// Search with lowercase should find uppercase
 	pc.SetQuery("uppercase")
 	if len(pc.Filtered()) != 1 {
 		t.Errorf("Searching 'uppercase' returned %d results, want 1", len(pc.Filtered()))
 	}
 
-	// Search with uppercase should find lowercase
 	pc.SetQuery("LOWERCASE")
 	if len(pc.Filtered()) != 1 {
 		t.Errorf("Searching 'LOWERCASE' returned %d results, want 1", len(pc.Filtered()))
 	}
 
-	// Keyword search should also be case insensitive
 	pc.SetQuery("upper")
 	if len(pc.Filtered()) != 1 {
 		t.Errorf("Searching keyword 'upper' returned %d results, want 1", len(pc.Filtered()))

@@ -27,28 +27,17 @@ func newUXTestApp(t testing.TB) *App {
 	return app
 }
 
-// stopBackgroundWorkOnCleanup keeps a debounce timer armed by a selection from
-// outliving the test and repainting into the next one's app. Taking uiUpdateMu
-// waits out a callback already inside QueueUpdateDraw; the generation bump stops
-// every later one. Tests that build an App directly need this too.
 func stopBackgroundWorkOnCleanup(t testing.TB, app *App) {
 	t.Helper()
 	t.Cleanup(func() {
 		app.cancelDetailDebounce()
 		app.cancelSearchDebounce()
 		app.cancelStatusFlash()
-		// A test App never reaches Run, so the frame loop has no other way to
-		// stop. Left running with queueUpdateDraw stubbed inline, it keeps
-		// writing App fields while the next test reads them.
 		if app.loading != nil {
 			app.loading.stop()
 		}
 		app.uiUpdateMu.Lock()
 		app.detailFetchGeneration.Add(1)
-		// An issues refresh in flight guards on refreshGeneration, not the
-		// detail one. Left current, it paints tables from its own goroutine
-		// after the test returns, racing the next test's NewApp over tview's
-		// package-level Styles.
 		app.refreshGeneration.Add(1)
 		app.searchFetchGeneration.Add(1)
 		app.uiUpdateMu.Unlock()
@@ -90,15 +79,11 @@ func TestFocusNavSearchFocusesTheQueryBox(t *testing.T) {
 	if got := app.navSearchInput.GetLabel(); got != "/ " {
 		t.Fatalf("query box label = %q, want %q", got, "/ ")
 	}
-	// The pane is still showing the list: a box with nothing typed in it has
-	// no results to put there.
 	if app.activeIssuesSection != IssuesSectionList {
 		t.Fatalf("activeIssuesSection = %v, want the list still on screen", app.activeIssuesSection)
 	}
 }
 
-// TestClearingTheSelectionEmptiesTheDetailsPage covers the page going back to
-// its empty state: no cards, no compose card, and no ring left aimed at one.
 func TestClearingTheSelectionEmptiesTheDetailsPage(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
@@ -139,7 +124,6 @@ func TestIssueContextLineShownInModals(t *testing.T) {
 		t.Fatalf("issueContextLine did not truncate a long title: %q", truncated)
 	}
 
-	// Issue-scoped shows carry the line; generic shows clear it.
 	app.textInputModal.ShowWithContext("Set Due Date", "YYYY-MM-DD: ", "", line, func(string) {})
 	if got := app.textInputModal.fm.contextText; got != line {
 		t.Fatalf("text input context = %q, want %q", got, line)
@@ -210,8 +194,6 @@ func TestSettingsModalShowsAndBuildsDefaultNavigationSettings(t *testing.T) {
 	}
 }
 
-// TestEditLabelsTogglesWithSpaceAndT covers editing an issue's labels, which is
-// the multi-select with a context line rather than a modal of its own.
 func TestEditLabelsTogglesWithSpaceAndT(t *testing.T) {
 	app := newUXTestApp(t)
 	modal := app.multiSelectModal
@@ -236,7 +218,6 @@ func TestEditLabelsTogglesWithSpaceAndT(t *testing.T) {
 		t.Fatalf("after space first row = %q, want a checked row", first)
 	}
 
-	// Moving the cursor is the list's own selection, so no row text changes.
 	modal.HandleKey(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone))
 	first, _ := modal.list.GetItemText(0)
 	second, _ := modal.list.GetItemText(1)

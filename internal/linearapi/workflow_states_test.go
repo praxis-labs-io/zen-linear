@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// statesResponse serves one team's states beside whatever defaultIssueState
-// the case is about.
 func statesResponse(t *testing.T, body string) *Client {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -19,8 +17,6 @@ func statesResponse(t *testing.T, body string) *Client {
 	return NewClient(ClientConfig{Token: "t", Endpoint: server.URL})
 }
 
-// The create form names this state in place of its "Team default" row, so
-// marking the wrong one files every new issue where nobody chose.
 func TestWorkflowStatesMarkTheTeamsDefault(t *testing.T) {
 	client := statesResponse(t, `{"data":{"team":{
 		"defaultIssueState":{"id":"state-backlog"},
@@ -46,8 +42,6 @@ func TestWorkflowStatesMarkTheTeamsDefault(t *testing.T) {
 	}
 }
 
-// The field is nullable. Falling back to the first state would name one the
-// team never picked.
 func TestATeamWithNoDefaultStateMarksNone(t *testing.T) {
 	client := statesResponse(t, `{"data":{"team":{
 		"defaultIssueState":null,

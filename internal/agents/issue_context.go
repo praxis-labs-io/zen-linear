@@ -8,7 +8,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// BuildIssueContext renders title, description, and comments into plain text.
 func BuildIssueContext(issue linearapi.Issue) string {
 	var builder strings.Builder
 
@@ -46,7 +45,6 @@ func BuildIssueContext(issue linearapi.Issue) string {
 	return strings.TrimSpace(builder.String())
 }
 
-// formatAuthor returns a consistent display name for a comment author.
 func formatAuthor(author linearapi.User) string {
 	if author.DisplayName != "" {
 		return author.DisplayName
@@ -57,7 +55,6 @@ func formatAuthor(author linearapi.User) string {
 	return "Unknown"
 }
 
-// formatTimestamp returns an RFC3339 timestamp string or a placeholder.
 func formatTimestamp(timestamp time.Time) string {
 	if timestamp.IsZero() {
 		return "unknown time"

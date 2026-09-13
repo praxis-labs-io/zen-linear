@@ -5,20 +5,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// The details pane is one page: the issue's metadata, its description, the
-// comment cards, the box a reply is being written in under the thread it
-// answers, and the compose card at the end of everything said. All of it
-// scrolls together. Reading an issue and reading what people said about it are
-// one act, and a box pinned to the foot of the pane is a box that covers the
-// conversation it is about.
-//
-// The page is text with holes in it. The cards and the boxes' frames are
-// rendered into the text view underneath; the text areas are real widgets drawn
-// over the rows their frame left empty. That is what keeps one scroll, one
-// measure, and one set of card borders across the lot.
-
-// pageSlot is a live widget's place on the page, in the page's own rows and in
-// columns from the left of the measure.
 type pageSlot struct {
 	primitive tview.Primitive
 	row       int
@@ -27,11 +13,6 @@ type pageSlot struct {
 	width     int
 }
 
-// A picture's place on the page, in the rows and columns a slot uses. Not a
-// widget: a graphic goes to the terminal as an escape sequence, not to cells.
-//
-// id names the bytes the terminal holds and placement this drawing of them: one
-// description can carry the same upload twice.
 type pageImage struct {
 	id        uint32
 	placement uint32
@@ -42,8 +23,6 @@ type pageImage struct {
 	cols      int
 }
 
-// A pageImage after the scroll offset, in screen cells. Compared frame to frame
-// to decide whether anything has to move.
 type screenImage struct {
 	id        uint32
 	placement uint32
@@ -53,23 +32,16 @@ type screenImage struct {
 	rows      int
 }
 
-// detailsPage draws the issue and the widgets that sit inside it.
 type detailsPage struct {
 	*tview.Box
 
-	// view holds the page's text and owns the scrolling, so a card's rows and
-	// the scroll offset are measured in the same lines.
 	view   *tview.TextView
 	slots  []pageSlot
 	images []pageImage
 
-	// refit re-renders the page at a new measure. The draw is the only place
-	// the live width is known; refit itself skips a width it already laid out
-	// at, so this can be called on every frame.
 	refit func(width, height int)
 
-	// Drawing them here is not possible: they go to the tty rather than to
-	// cells, and this runs inside tcell's own draw.
+	// Pictures go to the tty as escape sequences, which cannot happen inside tcell's own draw.
 	place func([]screenImage)
 }
 
@@ -79,12 +51,10 @@ func newDetailsPage(view *tview.TextView, refit func(int, int), place func([]scr
 	return page
 }
 
-// setSlots records where the live widgets landed in the page just rendered.
 func (p *detailsPage) setSlots(slots []pageSlot) { p.slots = slots }
 
 func (p *detailsPage) setImages(images []pageImage) { p.images = images }
 
-// Draw paints the text and then the widgets over the holes it left for them.
 func (p *detailsPage) Draw(screen tcell.Screen) {
 	p.DrawForSubclass(screen, p)
 	x, y, width, height := p.GetInnerRect()
@@ -103,28 +73,13 @@ func (p *detailsPage) Draw(screen tcell.Screen) {
 	for _, slot := range p.slots {
 		start, rows := slot.row-top, slot.height
 		if start+rows > height {
-			// Cut off at the bottom: a widget draws from its own first row, so
-			// the rows that fit are the right ones.
 			rows = height - start
 		}
-		// Not drawn once its first row is above the pane. A widget has no way to
-		// start part way down its own content, so a shortened rect would redraw
-		// it from the top and the words would jump as the page scrolled. The
-		// card's frame keeps scrolling either way; only the writing waits.
-		//
-		// A rect is cleared rather than left where it was: the mouse is offered
-		// to every slot, and one holding its last position takes clicks over
-		// whatever is now drawn there.
 		if start < 0 || rows <= 0 {
 			slot.primitive.SetRect(0, 0, 0, 0)
 			continue
 		}
 		slot.primitive.SetRect(x+gutter+slot.column, y+start, slot.width, rows)
-		// A box drawn in full has no business scrolling: it grows with its text
-		// instead. It scrolls itself anyway, moving the offset to keep the
-		// cursor while it is still the height it was before it grew, and
-		// nothing puts that back. Type eleven lines and the first seven sit
-		// behind the frame.
 		if area, ok := slot.primitive.(*tview.TextArea); ok && rows == slot.height {
 			area.SetOffset(0, 0)
 		}
@@ -132,9 +87,6 @@ func (p *detailsPage) Draw(screen tcell.Screen) {
 		shown = shown || slot.primitive.HasFocus()
 	}
 
-	// A widget shows the terminal's caret where it draws it, and a widget that
-	// does not draw leaves the caret wherever it was last put. Scrolled away
-	// from, the box left a block sitting over whatever took its place.
 	if !shown && p.focusedSlot() != nil {
 		screen.HideCursor()
 	}
@@ -142,9 +94,7 @@ func (p *detailsPage) Draw(screen tcell.Screen) {
 	p.place(p.visibleImages(x+gutter, y, height, top))
 }
 
-// A picture is dropped rather than clipped when it does not fit whole: the
-// terminal scales into the box it is given, so a shortened box would squash it
-// a little more on every row scrolled.
+// A picture that does not fit whole is dropped, since the terminal scales it into whatever box it is given.
 func (p *detailsPage) visibleImages(x, y, height, top int) []screenImage {
 	if len(p.images) == 0 {
 		return nil
@@ -168,12 +118,8 @@ func (p *detailsPage) visibleImages(x, y, height, top int) []screenImage {
 	return visible
 }
 
-// Focus hands the keyboard to the text view, which is the page's own content.
-// A box is focused by the app directly, so this is only the fallback for a
-// focus tview delegates on its own.
 func (p *detailsPage) Focus(delegate func(tview.Primitive)) { delegate(p.view) }
 
-// HasFocus reports focus on the page or on anything drawn in it.
 func (p *detailsPage) HasFocus() bool {
 	if p.view.HasFocus() {
 		return true
@@ -186,14 +132,7 @@ func (p *detailsPage) HasFocus() bool {
 	return false
 }
 
-// InputHandler hands a key to whichever widget on the page holds the keyboard,
-// and to the text underneath when none does, where it scrolls.
-//
-// The walk is the whole point. tview routes a key from the root down the focus
-// chain rather than to the focused primitive itself, so a container that
-// answers with one child's handler is a container the other children can never
-// be typed in: the box takes the focus, the border lights, and every keystroke
-// lands in the text view and is dropped.
+// tview routes a key down the focus chain rather than to the focused primitive, so the page forwards to the widget holding focus.
 func (p *detailsPage) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
 	return p.WrapInputHandler(func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
 		if focused := p.focusedSlot(); focused != nil {
@@ -208,8 +147,6 @@ func (p *detailsPage) InputHandler() func(*tcell.EventKey, func(tview.Primitive)
 	})
 }
 
-// PasteHandler follows the same chain: a paste belongs to the box being written
-// in, not to the page under it.
 func (p *detailsPage) PasteHandler() func(string, func(tview.Primitive)) {
 	return p.WrapPasteHandler(func(text string, setFocus func(tview.Primitive)) {
 		if focused := p.focusedSlot(); focused != nil {
@@ -220,7 +157,6 @@ func (p *detailsPage) PasteHandler() func(string, func(tview.Primitive)) {
 	})
 }
 
-// focusedSlot is the widget on the page holding the keyboard, or nil.
 func (p *detailsPage) focusedSlot() tview.Primitive {
 	for _, slot := range p.slots {
 		if slot.primitive.HasFocus() {
@@ -230,8 +166,6 @@ func (p *detailsPage) focusedSlot() tview.Primitive {
 	return nil
 }
 
-// MouseHandler offers the mouse to the widgets on the page before the text
-// under them, so a click lands on the box it looks like it landed on.
 func (p *detailsPage) MouseHandler() func(tview.MouseAction, *tcell.EventMouse, func(tview.Primitive)) (bool, tview.Primitive) {
 	return func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(tview.Primitive)) (bool, tview.Primitive) {
 		if !p.InRect(event.Position()) {

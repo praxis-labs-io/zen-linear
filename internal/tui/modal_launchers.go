@@ -10,18 +10,14 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
-// ShowCreateIssueModal shows the issue form for a new issue.
 func (a *App) ShowCreateIssueModal() {
 	a.showCreateIssueModalWithParent("", nil)
 }
 
-// ShowCreateSubIssueModal shows the issue form with a parent issue pre-set.
 func (a *App) ShowCreateSubIssueModal(parentID string) {
 	a.showCreateIssueModalWithParent(parentID, a.issueRefForID(parentID))
 }
 
-// showCreateIssueModalWithParent shows the issue form seeded from whatever the
-// navigation tree has selected, optionally with a parent.
 func (a *App) showCreateIssueModalWithParent(parentID string, parentRef *linearapi.IssueRef) {
 	projectID := ""
 	if a.selectedNavigation != nil && a.selectedNavigation.IsProject {
@@ -41,9 +37,6 @@ func (a *App) showCreateIssueModalWithParent(parentID string, parentRef *lineara
 	})
 }
 
-// createIssueFromForm runs the create the issue form assembled and splices the
-// new issue into the list. onDone reports the outcome to the form, which stays
-// up until the write lands so a refusal keeps what was typed.
 func (a *App) createIssueFromForm(input linearapi.CreateIssueInput, onDone func(error)) {
 	createIssue := a.createIssueFunc
 	if createIssue == nil {
@@ -91,14 +84,11 @@ func (a *App) issueRefForID(issueID string) *linearapi.IssueRef {
 	return nil
 }
 
-// ShowEditLabelsModal shows the edit labels modal for the selected issue.
 func (a *App) ShowEditLabelsModal() {
 	issue := a.GetSelectedIssue()
 	if issue == nil {
 		return
 	}
-	// The modal names this issue, so the write targets it even if a refresh
-	// moves the selection while the labels are still loading.
 	target := *issue
 
 	a.issueFieldOptions(issueFieldLabels, a.issueOptionScope(target), func(loaded []PickerItem) {
@@ -115,7 +105,6 @@ func (a *App) ShowEditLabelsModal() {
 	})
 }
 
-// issueLabelIDs is what an issue carries now, sorted so two sets compare.
 func issueLabelIDs(issue linearapi.Issue) []string {
 	ids := make([]string, len(issue.Labels))
 	for i, label := range issue.Labels {
@@ -125,8 +114,6 @@ func issueLabelIDs(issue linearapi.Issue) []string {
 	return ids
 }
 
-// ShowKeysModal shows the keys reference, opened on the context the keyboard
-// is in. It reads that before the page is added, since adding one moves focus.
 func (a *App) ShowKeysModal() {
 	if a.keysModal == nil {
 		return
@@ -134,7 +121,6 @@ func (a *App) ShowKeysModal() {
 	a.keysModal.Show()
 }
 
-// ShowSettingsModal shows the settings modal.
 func (a *App) ShowSettingsModal() {
 	if a.settingsModal == nil {
 		return
@@ -143,7 +129,6 @@ func (a *App) ShowSettingsModal() {
 	a.settingsModal.Show()
 }
 
-// ShowPromptTemplatesModal shows the prompt templates modal.
 func (a *App) ShowPromptTemplatesModal() {
 	if a.promptTemplatesModal == nil {
 		return

@@ -2,7 +2,6 @@ package tui
 
 import "testing"
 
-// TestSpinnerLifecycle verifies start/stop and frame cycling.
 func TestSpinnerLifecycle(t *testing.T) {
 	spinner := newSpinner(spinnerFramesASCII)
 	if spinner.Running() {
@@ -30,8 +29,6 @@ func TestSpinnerLifecycle(t *testing.T) {
 	}
 }
 
-// TestSpinnerCyclesEveryFrame verifies the frame set wraps rather than
-// stopping at the end, so a slow fetch keeps spinning.
 func TestSpinnerCyclesEveryFrame(t *testing.T) {
 	spinner := newSpinner(spinnerFramesDots)
 	spinner.Start()

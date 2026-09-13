@@ -13,8 +13,6 @@ import (
 
 const chooserTeamID = "team-1"
 
-// seedChooserOptions gives the details fixture a team, the values a chooser
-// opens on, and the warm caches that let one open without a fetch.
 func seedChooserOptions(app *App) {
 	issue := app.selectedIssue
 	issue.TeamID = chooserTeamID
@@ -44,16 +42,12 @@ func seedChooserOptions(app *App) {
 		{ID: "project-2", Name: "Beta"},
 	}
 	app.teamCycles = []linearapi.Cycle{{ID: "cycle-1", Name: "Launch", Number: 12, IsActive: true}}
-	// The team row lists the workspace, not the issue's own team, so the tree's
-	// teams are what it reads.
 	app.navTeams = []linearapi.Team{
 		{ID: chooserTeamID, Key: "ENG", Name: "Engineering"},
 		{ID: "team-2", Key: "DES", Name: "Design"},
 	}
 }
 
-// chooserFixture opens the details fixture in edit mode with the cursor on one
-// field. Writes land on the channel and UI updates wait on the queue.
 func chooserFixture(t *testing.T, field issueField) (*App, <-chan linearapi.UpdateIssueInput, <-chan func()) {
 	t.Helper()
 
@@ -72,14 +66,11 @@ func chooserFixture(t *testing.T, field issueField) (*App, <-chan linearapi.Upda
 		writes <- input
 		return linearapi.Issue{ID: input.ID}, nil
 	}
-	// Queued rather than run where they are raised, so the write goroutine
-	// cannot re-render the page the test is reading.
 	pending := make(chan func(), 64)
 	app.queueUpdateDraw = func(f func()) { pending <- f }
 	return app, writes, pending
 }
 
-// cursorTo walks the field cursor onto a field with the key a reader would use.
 func cursorTo(t *testing.T, app *App, field issueField) {
 	t.Helper()
 	for range len(app.detailsFieldSpans) {
@@ -93,8 +84,6 @@ func cursorTo(t *testing.T, app *App, field issueField) {
 	}
 }
 
-// openChooser presses Enter and draws, which is what puts the options on the
-// page and records where they landed.
 func openChooser(t *testing.T, app *App) []string {
 	t.Helper()
 	pressFieldKey(app, tcell.KeyEnter)
@@ -104,8 +93,6 @@ func openChooser(t *testing.T, app *App) []string {
 	return drawDetails(t, app, 90)
 }
 
-// litOption is the option wearing the cursor line. The drawn screen has lost
-// its colors, so this reads the page text the chooser was written into.
 func litOption(t *testing.T, app *App) string {
 	t.Helper()
 	page := app.detailsPageView.GetText(false)
@@ -128,8 +115,6 @@ func TestEnterDrawsTheOptionsUnderTheField(t *testing.T) {
 	if review <= state {
 		t.Fatalf("In Review is at row %d and Status: at %d, want the options under the field", review, state)
 	}
-	// A span's column is a column of the row, and the drawn line carries the
-	// pane's own padding in front of it.
 	span := app.detailsFieldSpans[app.fieldSpanIndex(issueFieldState)]
 	padding := runeColumn(lines[state], "Status:") - detailsCursorGutter
 	if got, want := runeColumn(lines[state+1], "╭"), padding+span.valueColumn; got != want {
@@ -140,8 +125,6 @@ func TestEnterDrawsTheOptionsUnderTheField(t *testing.T) {
 	}
 }
 
-// runeColumn is where a substring starts in cells. Bytes would count the cursor
-// glyph as three.
 func runeColumn(line, substring string) int {
 	at := strings.Index(line, substring)
 	if at < 0 {
@@ -155,16 +138,12 @@ func TestTheChooserIsAsWideAsWhatIsInIt(t *testing.T) {
 
 	top := findLine(t, openChooser(t, app), "╭")
 
-	// The longest option plus the frame's own cells. Drawn to the measure, a
-	// three-line list would span the pane.
 	want := len("In Progress") + commentCardChrome
 	if got := runeColumn(top, "╮") - runeColumn(top, "╭") + 1; got != want {
 		t.Fatalf("the frame is %d cells wide, want %d, the width of what is in it", got, want)
 	}
 }
 
-// The screen a draw returns has lost its colors, so this reads the page text
-// the chooser was written into, tags and all.
 func TestTheOpenChooserWearsTheAccentBorder(t *testing.T) {
 	app, _, _ := chooserFixture(t, issueFieldState)
 	openChooser(t, app)
@@ -235,8 +214,6 @@ func TestChoosingTheValueAlreadySetSendsNothing(t *testing.T) {
 	if app.detailsEdit.open != "" {
 		t.Fatal("the chooser stayed open")
 	}
-	// Then pick one that did change. Reading the first write is the assertion:
-	// a channel checked on the spot only races the goroutine that fills it.
 	openChooser(t, app)
 	pressField(app, 'j')
 	pressFieldKey(app, tcell.KeyEnter)
@@ -253,7 +230,6 @@ func TestTheClearRowClearsTheField(t *testing.T) {
 	if !strings.Contains(strings.Join(lines, "\n"), "Unassigned") {
 		t.Fatalf("no clear row in:\n%s", strings.Join(lines, "\n"))
 	}
-	// The clear row heads the list and the highlight opened on the assignee.
 	pressField(app, 'k')
 	pressFieldKey(app, tcell.KeyEnter)
 
@@ -268,7 +244,6 @@ func TestAFieldAlreadyEmptyOffersNoClearRow(t *testing.T) {
 
 	lines := openChooser(t, app)
 
-	// Once for the field's own row, which is read mode saying it holds none.
 	if count := strings.Count(strings.Join(lines, "\n"), "No cycle"); count != 1 {
 		t.Fatalf("No cycle appears %d times, want only the field's own row", count)
 	}
@@ -298,8 +273,6 @@ func TestEscapeClosesTheChooserAndKeepsTheMode(t *testing.T) {
 func TestClosingTheChooserBringsTheFieldBack(t *testing.T) {
 	app, _, _ := chooserFixture(t, issueFieldState)
 	openChooser(t, app)
-	// The wheel goes straight through the pane, so the page can be scrolled off
-	// the chooser while it is open.
 	app.detailsPageView.ScrollTo(40, 0)
 
 	sendKey(app, tcell.KeyEscape)
@@ -378,7 +351,6 @@ func TestTheWindowFollowsTheHighlightPastTheCap(t *testing.T) {
 
 func TestOptionsLoadAgainstTheIssuesOwnTeam(t *testing.T) {
 	app, _, pending := chooserFixture(t, issueFieldState)
-	// The tree is on another team, which is what a search result looks like.
 	app.metadataTeamID = "team-elsewhere"
 	asked := make(chan string, 1)
 	app.fetchWorkflowStatesFunc = func(_ context.Context, teamID string) ([]linearapi.WorkflowState, error) {
@@ -434,8 +406,6 @@ func TestALateLoadForAClosedChooserIsDropped(t *testing.T) {
 	}
 
 	pressFieldKey(app, tcell.KeyEnter)
-	// Held before the second chooser exists, so it is the first one's load and
-	// not whichever of the two goroutines queued first.
 	stale := awaitQueuedUpdate(t, pending)
 	sendKey(app, tcell.KeyEscape)
 	pressFieldKey(app, tcell.KeyEnter)
@@ -471,7 +441,6 @@ func TestTheCommitNamesTheValueWithoutItsDecoration(t *testing.T) {
 
 	pressFieldKey(app, tcell.KeyEnter)
 	awaitWrite(t, writes)
-	// The corner is written where the answer lands, which is a queued update.
 	runQueuedUpdate(t, pending)
 
 	if text := statusText(app); !strings.Contains(text, "Set cycle: Launch") || strings.Contains(text, "(active)") {
@@ -484,8 +453,6 @@ func TestTheCountRowNamesWhatIsBelowIt(t *testing.T) {
 	app.workflowStates = manyStates(16)
 	openChooser(t, app)
 
-	// Stepped to the last option, nothing is below the window, so a count at
-	// the foot of the list would be pointing at the rows above it.
 	for range 20 {
 		pressField(app, 'j')
 	}
@@ -496,7 +463,6 @@ func TestTheCountRowNamesWhatIsBelowIt(t *testing.T) {
 
 func TestAValueTheListDoesNotCarryLightsNothing(t *testing.T) {
 	app, writes, _ := chooserFixture(t, issueFieldState)
-	// A state Linear has since retired, or a priority it has since added.
 	app.issuesMu.Lock()
 	app.selectedIssue.StateID = "state-gone"
 	app.issuesMu.Unlock()
@@ -513,7 +479,6 @@ func TestAValueTheListDoesNotCarryLightsNothing(t *testing.T) {
 		t.Fatalf("Enter wrote %+v, want nothing while no option is lit", input)
 	default:
 	}
-	// j lands on the first option rather than refusing the key.
 	pressField(app, 'j')
 	if lit := litOption(t, app); lit != "In Progress" {
 		t.Fatalf("lit option = %q, want the first one", lit)
@@ -524,7 +489,6 @@ func TestAnIssueThatMovedTeamDoesNotCommitTheOldTeamsOption(t *testing.T) {
 	app, writes, _ := chooserFixture(t, issueFieldState)
 	openChooser(t, app)
 	pressField(app, 'j')
-	// The background refresh that lands while the list is open.
 	app.issuesMu.Lock()
 	app.selectedIssue.TeamID = "team-elsewhere"
 	app.issuesMu.Unlock()
@@ -541,13 +505,10 @@ func TestAnIssueThatMovedTeamDoesNotCommitTheOldTeamsOption(t *testing.T) {
 	}
 }
 
-// A chooser outlives the refresh that moves the selection, so the write has to
-// land on the issue the reader picked rather than on whatever is selected now.
 func TestACommitTargetsTheIssueTheChooserOpenedOn(t *testing.T) {
 	app, writes, _ := chooserFixture(t, issueFieldState)
 	openChooser(t, app)
 	pressField(app, 'j')
-	// The background refresh that lands while the list is open.
 	app.issuesMu.Lock()
 	app.selectedIssue = &linearapi.Issue{ID: "issue-2", Identifier: "ZNO-8", TeamID: chooserTeamID}
 	app.issuesMu.Unlock()
@@ -563,8 +524,6 @@ func TestANarrowPaneKeepsTheChooserOnScreen(t *testing.T) {
 	app, _, _ := chooserFixture(t, issueFieldState)
 	pressFieldKey(app, tcell.KeyEnter)
 
-	// Narrower than the metadata gutter the chooser hangs off. Drawn twice: the
-	// refit runs inside a draw, so it lands a frame behind the resize.
 	drawTextView(t, app.detailsView, 22)
 	lines := drawTextView(t, app.detailsView, 22)
 
@@ -584,7 +543,6 @@ func TestAShorterPaneRecapsAnOpenChooser(t *testing.T) {
 	drawPrimitiveAt(t, app.detailsView, 90, 40)
 	tall := app.chooserVisibleRows()
 
-	// A height-only resize, which the width guard alone would not refit.
 	drawPrimitiveAt(t, app.detailsView, 90, 12)
 
 	if short := app.chooserVisibleRows(); short >= tall {
@@ -634,8 +592,6 @@ func TestTheAssigneeSaveNamesTheDisplayName(t *testing.T) {
 	}
 	openChooser(t, app)
 
-	// One down from the current assignee, onto the user whose only name is a
-	// display name.
 	pressField(app, 'j')
 	pressFieldKey(app, tcell.KeyEnter)
 	awaitWrite(t, writes)
@@ -649,7 +605,6 @@ func TestTheAssigneeSaveNamesTheDisplayName(t *testing.T) {
 func TestTheChooserKeepsItsFootOnScreen(t *testing.T) {
 	app, _, _ := chooserFixture(t, issueFieldState)
 	app.workflowStates = manyStates(16)
-	// Short enough that reaching the last option has to scroll the page.
 	drawPrimitiveAt(t, app.detailsView, 90, 10)
 	pressFieldKey(app, tcell.KeyEnter)
 	drawPrimitiveAt(t, app.detailsView, 90, 10)
@@ -666,9 +621,6 @@ func TestTheChooserKeepsItsFootOnScreen(t *testing.T) {
 	}
 }
 
-// TestTheTeamRowListsTheWorkspaceAndMovesTheIssue verifies the row opens on
-// the team the issue is in and writes the one picked. It is the only chooser
-// whose options are not the issue's own team's.
 func TestTheTeamRowListsTheWorkspaceAndMovesTheIssue(t *testing.T) {
 	app, writes, _ := chooserFixture(t, issueFieldTeam)
 
@@ -692,9 +644,6 @@ func TestTheTeamRowListsTheWorkspaceAndMovesTheIssue(t *testing.T) {
 	}
 }
 
-// TestTheTeamRowNamesTheTeamTheIssueIsIn verifies read mode says which team
-// the issue belongs to, which the tree no longer implies for a favorited
-// project.
 func TestTheTeamRowNamesTheTeamTheIssueIsIn(t *testing.T) {
 	app := newDetailsTestApp(t)
 	seedChooserOptions(app)

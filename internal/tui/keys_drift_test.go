@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// keyHandlers is the context each handler answers for. handleGlobalKey routes
-// to exactly one of them, and keyContext mirrors that routing.
 var keyHandlers = map[string]keyContext{
 	"handleGlobalKey":       keyContextGlobal,
 	"handleNavigationKey":   keyContextNavigation,
@@ -27,7 +25,6 @@ var keyHandlers = map[string]keyContext{
 	"handlePaletteKey":      keyContextPalette,
 }
 
-// keyTokens is how a tcell key name reads in the reference.
 var keyTokens = map[string]string{
 	"KeyEnter":  "⏎",
 	"KeyEscape": "Esc",
@@ -37,8 +34,6 @@ var keyTokens = map[string]string{
 	"KeyCtrlS":  "⌃S",
 }
 
-// keysNotListed are the cases the reference leaves out on purpose, each with
-// the reason it is not something a reader needs told.
 var keysNotListed = map[string]string{
 	"KeyRune":       "the branch every rune case sits under, not a key",
 	"KeyLeft":       "the arrows mirror the vim keys the rows already name",
@@ -51,8 +46,6 @@ var keysNotListed = map[string]string{
 	"KeyBackspace2": "typing, which a reference does not name",
 }
 
-// A context that gains a key the reference does not name fails here rather
-// than shipping as a key nobody can find.
 func TestEveryHandlerKeyIsListed(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -71,8 +64,6 @@ func TestEveryHandlerKeyIsListed(t *testing.T) {
 		}
 		for _, key := range handlerKeys(t, app, body) {
 			found++
-			// The legend shows the reader's own section and the global one, so a
-			// key in either is a key they can find.
 			if listed[context][key] || everywhere[key] {
 				continue
 			}
@@ -84,16 +75,12 @@ func TestEveryHandlerKeyIsListed(t *testing.T) {
 	}
 }
 
-// sectionKeys is the keys a section names, one token per key. Matched exactly:
-// against the rendered line, a bare "o" hits the "o" in "collapse a group".
 func sectionKeys(app *App, section keySection) map[string]bool {
 	keys := make(map[string]bool)
 	for _, row := range section.rows(app) {
 		if row.key == "" {
 			continue
 		}
-		// A row can name a pair, as "j / k" or "{/}" does. Splitting leaves the
-		// search key nothing, / being the whole of it.
 		tokens := strings.FieldsFunc(row.key, func(r rune) bool { return r == '/' || r == ' ' })
 		if len(tokens) == 0 {
 			tokens = []string{row.key}
@@ -105,7 +92,6 @@ func sectionKeys(app *App, section keySection) map[string]bool {
 	return keys
 }
 
-// handlerBody finds one handler in the package sources.
 func handlerBody(t *testing.T, name string) (*ast.BlockStmt, bool) {
 	t.Helper()
 	files, err := parser.ParseDir(token.NewFileSet(), ".", nil, 0)
@@ -125,8 +111,6 @@ func handlerBody(t *testing.T, name string) (*ast.BlockStmt, bool) {
 	return nil, false
 }
 
-// handlerKeys is every key a handler switches on, as the reference would print
-// it. A case the reference is not asked to cover is dropped.
 func handlerKeys(t *testing.T, app *App, body *ast.BlockStmt) []string {
 	t.Helper()
 	keys := make([]string, 0, 16)
@@ -151,8 +135,6 @@ func handlerKeys(t *testing.T, app *App, body *ast.BlockStmt) []string {
 	return keys
 }
 
-// switchesOnAKey reports whether a switch is over the event's key or rune,
-// including the `switch r := event.Rune(); r` form the pane handlers use.
 func switchesOnAKey(stmt *ast.SwitchStmt) bool {
 	if stmt.Tag != nil && callsEventMethod(stmt.Tag) {
 		return true
@@ -182,8 +164,6 @@ func callsEventMethod(expr ast.Expr) bool {
 	return ok && receiver.Name == "event" && (selector.Sel.Name == "Key" || selector.Sel.Name == "Rune")
 }
 
-// caseKey turns one case expression into the key the reference would print,
-// and reports false for a case it is not asked to cover.
 func caseKey(t *testing.T, app *App, expr ast.Expr) (string, bool) {
 	t.Helper()
 	switch node := expr.(type) {
@@ -206,7 +186,6 @@ func caseKey(t *testing.T, app *App, expr ast.Expr) (string, bool) {
 	return "", false
 }
 
-// runeLiteral is the key a `case 'j':` names.
 func runeLiteral(t *testing.T, lit *ast.BasicLit) (string, bool) {
 	t.Helper()
 	if lit.Kind != token.CHAR {
@@ -223,8 +202,6 @@ func runeLiteral(t *testing.T, lit *ast.BasicLit) (string, bool) {
 	return value, true
 }
 
-// resolvedKey is the key a case reads back from the bindings. One the config
-// moved reports where it moved to, and one it took reports nothing.
 func resolvedKey(t *testing.T, app *App, call *ast.CallExpr) (string, bool) {
 	t.Helper()
 	selector, ok := call.Fun.(*ast.SelectorExpr)
@@ -260,8 +237,6 @@ func resolvedKey(t *testing.T, app *App, call *ast.CallExpr) (string, bool) {
 	return "", false
 }
 
-// keyString drops a key the bindings answered 0 for, which is a key nothing
-// answers and so nothing should list.
 func keyString(key rune) (string, bool) {
 	if key == 0 {
 		return "", false

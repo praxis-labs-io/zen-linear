@@ -10,8 +10,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// newFavoritesTestApp returns an app whose favorites mutations are stubbed and
-// whose UI updates run inline.
 func newFavoritesTestApp(t *testing.T) *App {
 	t.Helper()
 	app := newUXTestApp(t)
@@ -30,7 +28,6 @@ func newFavoritesTestApp(t *testing.T) *App {
 	return app
 }
 
-// waitForFavorites blocks until a favorites mutation settles.
 func waitForFavorites(t *testing.T, settled <-chan struct{}) {
 	t.Helper()
 	select {
@@ -125,8 +122,6 @@ func TestFavoriteForNodeMatchesEntityWithoutFavoriteID(t *testing.T) {
 		{ID: "fav-triage", Type: "predefinedView", PredefinedViewType: "triage", PredefinedViewTeamID: "team-2"},
 	}
 
-	// A project node under a team carries no FavoriteID, so the match has to
-	// come from the entity id.
 	project := &NavigationNode{ID: "project-1", IsProject: true, TeamID: "team-1"}
 	got, ok := favoriteForNode(favorites, project)
 	if !ok || got.ID != "fav-project" {
@@ -139,8 +134,6 @@ func TestFavoriteForNodeMatchesEntityWithoutFavoriteID(t *testing.T) {
 		t.Fatalf("favoriteForNode(team) = %+v, %v; want fav-team", got, ok)
 	}
 
-	// The project favorite records team-1 as its team, but that must not make
-	// it match a team node.
 	otherTeam := &NavigationNode{ID: "team-9", IsTeam: true, TeamID: "team-9"}
 	if got, ok = favoriteForNode(favorites, otherTeam); ok {
 		t.Fatalf("favoriteForNode(unfavorited team) = %+v, want no match", got)
@@ -151,7 +144,6 @@ func TestFavoriteForNodeMatchesEntityWithoutFavoriteID(t *testing.T) {
 		t.Fatalf("favoriteForNode(triage) = %+v, %v; want fav-triage", got, ok)
 	}
 
-	// Same predefined view, different team, is a different favorite.
 	if got, ok = favoriteForNode(favorites, &NavigationNode{StateType: "triage", TeamID: "team-3"}); ok {
 		t.Fatalf("favoriteForNode(other team triage) = %+v, want no match", got)
 	}
@@ -172,8 +164,6 @@ func TestFavoriteSiblingsSkipsUnrenderableAndOtherFolders(t *testing.T) {
 	for _, favorite := range roots {
 		rootIDs = append(rootIDs, favorite.ID)
 	}
-	// The document is unrenderable and drops out. The orphan's folder is
-	// missing, so it renders at the top level and counts as a sibling there.
 	want := []string{"folder-1", "root-a", "root-b", "orphan"}
 	if len(rootIDs) != len(want) {
 		t.Fatalf("favoriteSiblings(root) = %v, want %v", rootIDs, want)
@@ -241,7 +231,6 @@ func TestPlanFavoriteReorderStaysWithinFolder(t *testing.T) {
 		{ID: "child-b", Type: "project", ProjectID: "p3", ParentID: "folder", SortOrder: 40},
 	}
 
-	// The first child of a folder cannot move up out of it.
 	if _, ok := planFavoriteReorder(favorites, "child-a", "folder", -1); ok {
 		t.Error("planFavoriteReorder(first child, up) ok = true, want false")
 	}
@@ -386,8 +375,6 @@ func TestToggleFavoriteRejectsWorkflowStatus(t *testing.T) {
 	})
 	app.navigationTree.SetCurrentNode(statusNode)
 
-	// The stubs fail the test if any mutation fires. Linear has no favorite
-	// type for a workflow state, so none should.
 	handleToggleFavorite(app)
 
 	if len(app.favorites) != 0 {
@@ -441,7 +428,6 @@ func TestMoveFavoriteAtTopDoesNotCallTheAPI(t *testing.T) {
 
 	app.navigationTree.SetCurrentNode(app.favoritesGroup.GetChildren()[0])
 
-	// The stub fails the test if it is called.
 	if app.moveFavorite(app.currentNavigationNode(), -1) {
 		t.Error("moveFavorite consumed the key at the top of the list")
 	}
@@ -453,7 +439,6 @@ func TestMoveFavoriteRejectsNonFavoriteNode(t *testing.T) {
 
 	app.navigationTree.SetCurrentNode(app.findTeamTreeNode("team-1"))
 
-	// The stub fails the test if it is called.
 	if app.moveFavorite(app.currentNavigationNode(), 1) {
 		t.Error("moveFavorite consumed the key on a team node")
 	}
@@ -481,7 +466,6 @@ func TestFavoritesMutationErrorLeavesStateAlone(t *testing.T) {
 	}
 }
 
-// indexOfChild returns the position of a child under a tree node, or -1.
 func indexOfChild(parent, target *tview.TreeNode) int {
 	for i, child := range parent.GetChildren() {
 		if child == target {
@@ -491,13 +475,9 @@ func indexOfChild(parent, target *tview.TreeNode) int {
 	return -1
 }
 
-// allExpanded is the folder state a plan test uses when collapse is not what it
-// is pinning.
 func allExpanded(string) bool { return true }
 
 func TestPlanFavoriteEnterFolderLandsOnTheEndItArrivesAt(t *testing.T) {
-	// down: loose steps onto the folder below it and lands above child-a.
-	// up: loose steps onto the folder above it and lands below child-b.
 	favorites := []linearapi.Favorite{
 		{ID: "above", Type: "folder", FolderName: "Above", SortOrder: 10},
 		{ID: "child-b", Type: "project", ProjectID: "p1", ParentID: "above", SortOrder: 11},
@@ -543,7 +523,6 @@ func TestPlanFavoriteEnterFolderRefusesAFolderAndTheEdges(t *testing.T) {
 		{ID: "folder-2", Type: "folder", FolderName: "Home", SortOrder: 30},
 	}
 
-	// Linear's sidebar has no nested folders.
 	if _, ok := planFavoriteEnterFolder(favorites, "folder-2", "", -1, allExpanded); ok {
 		t.Error("a folder entered another folder, want false")
 	}
@@ -590,8 +569,6 @@ func TestPlanFavoriteLeaveFolderStepsPastIt(t *testing.T) {
 }
 
 func TestPlanFavoriteLeaveFolderClearsATiedNeighbor(t *testing.T) {
-	// A half-failed reorder leaves a pair sharing a sort order. A midpoint of
-	// two equal values is that value, which lands the favorite tied with both.
 	favorites := []linearapi.Favorite{
 		{ID: "folder", Type: "folder", FolderName: "Work", SortOrder: 20},
 		{ID: "only", Type: "project", ProjectID: "p1", ParentID: "folder", SortOrder: 21},
@@ -650,7 +627,6 @@ func TestMoveFavoriteWalksIntoAndOutOfAFolder(t *testing.T) {
 		{ID: "loose", Type: "project", ProjectID: "p1", ProjectName: "Alpha", SortOrder: 20},
 	})
 
-	// Second child of the group is the loose project; the folder is first.
 	app.navigationTree.SetCurrentNode(app.favoritesGroup.GetChildren()[1])
 	if !app.moveFavorite(app.currentNavigationNode(), -1) {
 		t.Fatal("stepping up into the folder did not land")
@@ -669,7 +645,6 @@ func TestMoveFavoriteWalksIntoAndOutOfAFolder(t *testing.T) {
 		t.Fatalf("folder has %d children, want the nested project", len(folderNode.GetChildren()))
 	}
 
-	// And back out again.
 	app.navigationTree.SetCurrentNode(folderNode.GetChildren()[0])
 	if !app.moveFavorite(app.currentNavigationNode(), 1) {
 		t.Fatal("stepping down out of the folder did not land")

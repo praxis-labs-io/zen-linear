@@ -8,11 +8,8 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
-// maxPriority is Linear's highest priority value (0=None, 1=Urgent, 2=High, 3=Medium, 4=Low).
 const maxPriority = 4
 
-// priorityValue bounds-checks a priority before narrowing it to graphql.Int (an int32),
-// so the API boundary rejects out-of-range values instead of trusting the caller.
 func priorityValue(p int) (graphql.Int, error) {
 	if p < 0 || p > maxPriority {
 		return 0, fmt.Errorf("priority %d out of range [0,%d]", p, maxPriority)
@@ -20,8 +17,6 @@ func priorityValue(p int) (graphql.Int, error) {
 	return graphql.Int(p), nil
 }
 
-// buildIssueCreateInput encodes a create into Linear's input map. The map is a
-// scalar, so nothing type-checks these key names: they are the contract.
 func buildIssueCreateInput(input CreateIssueInput) (IssueCreateInput, error) {
 	issueInput := make(IssueCreateInput)
 	issueInput["teamId"] = graphql.ID(input.TeamID)
@@ -44,7 +39,6 @@ func buildIssueCreateInput(input CreateIssueInput) (IssueCreateInput, error) {
 	if input.AssigneeID != "" {
 		issueInput["assigneeId"] = graphql.ID(input.AssigneeID)
 	}
-	// Priority 0 means "unset" on create, so skip it; any other value is validated.
 	if input.Priority != 0 {
 		priority, err := priorityValue(input.Priority)
 		if err != nil {
@@ -71,7 +65,6 @@ func buildIssueCreateInput(input CreateIssueInput) (IssueCreateInput, error) {
 	return issueInput, nil
 }
 
-// CreateIssue creates a new issue.
 func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue, error) {
 	var mutation struct {
 		IssueCreate struct {
@@ -102,7 +95,6 @@ func (c *Client) CreateIssue(ctx context.Context, input CreateIssueInput) (Issue
 	return mutation.IssueCreate.Issue.toIssue(), nil
 }
 
-// UpdateIssue updates an existing issue.
 func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue, error) {
 	var mutation struct {
 		IssueUpdate struct {
@@ -111,7 +103,6 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 		} `graphql:"issueUpdate(id: $id, input: $input)"`
 	}
 
-	// Build input object with only provided fields
 	issueInput := make(IssueUpdateInput)
 	if input.Title != nil {
 		issueInput["title"] = graphql.String(*input.Title)
@@ -131,7 +122,6 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 	}
 	if input.AssigneeID != nil {
 		if *input.AssigneeID == "" {
-			// Unassign by passing null
 			issueInput["assigneeId"] = (*graphql.ID)(nil)
 		} else {
 			issueInput["assigneeId"] = graphql.ID(*input.AssigneeID)
@@ -145,7 +135,6 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 		issueInput["priority"] = priority
 	}
 	if input.LabelIDs != nil {
-		// Convert string slice to []graphql.ID for the GraphQL mutation
 		labelIDs := make([]graphql.ID, len(*input.LabelIDs))
 		for i, id := range *input.LabelIDs {
 			labelIDs[i] = graphql.ID(id)
@@ -154,7 +143,6 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 	}
 	if input.ParentID != nil {
 		if *input.ParentID == "" {
-			// Remove parent by passing null
 			issueInput["parentId"] = (*graphql.ID)(nil)
 		} else {
 			issueInput["parentId"] = graphql.ID(*input.ParentID)
@@ -186,8 +174,6 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 			issueInput["projectMilestoneId"] = graphql.ID(*input.ProjectMilestoneID)
 		}
 	}
-	// An empty team is no team, which Linear rejects, taking every other field
-	// in the same input down with it. Skip the key rather than send it.
 	if input.TeamID != nil && *input.TeamID != "" {
 		issueInput["teamId"] = graphql.ID(*input.TeamID)
 	}
@@ -211,7 +197,6 @@ func (c *Client) UpdateIssue(ctx context.Context, input UpdateIssueInput) (Issue
 	return mutation.IssueUpdate.Issue.toIssue(), nil
 }
 
-// CreateIssueRelation creates a relation between two issues.
 func (c *Client) CreateIssueRelation(ctx context.Context, input CreateIssueRelationInput) (IssueRelation, error) {
 	var mutation struct {
 		IssueRelationCreate struct {
@@ -267,7 +252,6 @@ func (c *Client) CreateIssueRelation(ctx context.Context, input CreateIssueRelat
 	}, nil
 }
 
-// DeleteIssueRelation deletes an issue relation.
 func (c *Client) DeleteIssueRelation(ctx context.Context, relationID string) error {
 	var mutation struct {
 		IssueRelationDelete struct {
@@ -288,12 +272,10 @@ func (c *Client) DeleteIssueRelation(ctx context.Context, relationID string) err
 	return nil
 }
 
-// SubscribeToIssue subscribes the current user to an issue.
 func (c *Client) SubscribeToIssue(ctx context.Context, issueID string) (Issue, error) {
 	return c.setIssueSubscription(ctx, issueID, true)
 }
 
-// UnsubscribeFromIssue unsubscribes the current user from an issue.
 func (c *Client) UnsubscribeFromIssue(ctx context.Context, issueID string) (Issue, error) {
 	return c.setIssueSubscription(ctx, issueID, false)
 }
@@ -332,7 +314,6 @@ func (c *Client) setIssueSubscription(ctx context.Context, issueID string, subsc
 	return mutation.IssueUnsubscribe.Issue.toIssue(), nil
 }
 
-// ArchiveIssue archives an issue.
 func (c *Client) ArchiveIssue(ctx context.Context, issueID string) error {
 	var mutation struct {
 		IssueArchive struct {
@@ -358,7 +339,6 @@ func (c *Client) ArchiveIssue(ctx context.Context, issueID string) error {
 	return nil
 }
 
-// UnarchiveIssue unarchives an issue.
 func (c *Client) UnarchiveIssue(ctx context.Context, issueID string) error {
 	var mutation struct {
 		IssueUnarchive struct {

@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// TestEnsureSettingsFileCreatesDefaults verifies missing settings are created with defaults.
 func TestEnsureSettingsFileCreatesDefaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "nested", "config.json")
@@ -30,7 +29,6 @@ func TestEnsureSettingsFileCreatesDefaults(t *testing.T) {
 	assertSettingsEqual(t, settings, DefaultSettings())
 }
 
-// TestLoadSettingsAppliesDefaults verifies missing fields use default values.
 func TestLoadSettingsAppliesDefaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "config.json")
@@ -83,7 +81,6 @@ func TestConfigFromSettingsParsesSearchDebounce(t *testing.T) {
 	}
 }
 
-// TestLoadSettingsPreservesEmptyLogFile ensures an empty log file disables logging.
 func TestLoadSettingsPreservesEmptyLogFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "config.json")
@@ -103,13 +100,11 @@ func TestLoadSettingsPreservesEmptyLogFile(t *testing.T) {
 	expected.LogFile = &off
 	assertSettingsEqual(t, settings, expected)
 
-	// An empty path is off, not unset: resolving must not reach for the default.
 	if resolved := settings.ResolvedLogFile(); resolved != "" {
 		t.Errorf("ResolvedLogFile() = %q, want %q", resolved, "")
 	}
 }
 
-// TestConfigFromSettingsAcceptsAllThemes checks every registered theme name validates.
 func TestConfigFromSettingsAcceptsAllThemes(t *testing.T) {
 	for _, theme := range []string{ThemeLinear, ThemeHighContrast, ThemeColorBlind, ThemeRosePineMoon} {
 		t.Run(theme, func(t *testing.T) {
@@ -122,8 +117,6 @@ func TestConfigFromSettingsAcceptsAllThemes(t *testing.T) {
 	}
 }
 
-// TestLoadSettingsParsesRoundedBorders verifies the flag loads from JSON and
-// defaults to false.
 func TestLoadSettingsParsesRoundedBorders(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "config.json")
@@ -153,8 +146,6 @@ func TestLoadSettingsParsesRoundedBorders(t *testing.T) {
 	}
 }
 
-// TestLoadSettingsParsesImages verifies the setting defaults to auto and that
-// an explicit off in the file survives.
 func TestLoadSettingsParsesImages(t *testing.T) {
 	tests := []struct {
 		name string
@@ -188,9 +179,6 @@ func TestLoadSettingsParsesImages(t *testing.T) {
 	}
 }
 
-// TestLoadSettingsParsesSessionRestore verifies the flag defaults to on and
-// that an explicit false in the file survives, which is what the pointer field
-// on SettingsFile buys.
 func TestLoadSettingsParsesSessionRestore(t *testing.T) {
 	tests := []struct {
 		name string
@@ -235,8 +223,6 @@ func TestLoadSettingsParsesSessionRestore(t *testing.T) {
 	}
 }
 
-// The update check travels the same triple, and an explicit false has to
-// survive it: the whole point of the setting is turning the request off.
 func TestLoadSettingsParsesUpdateCheck(t *testing.T) {
 	tests := []struct {
 		name string
@@ -281,7 +267,6 @@ func TestLoadSettingsParsesUpdateCheck(t *testing.T) {
 	}
 }
 
-// TestConfigFromSettingsValidation checks invalid settings are rejected.
 func TestConfigFromSettingsValidation(t *testing.T) {
 	base := DefaultSettings()
 
@@ -445,8 +430,6 @@ func TestConfigFromSettingsValidation(t *testing.T) {
 	}
 }
 
-// TestConfigFromSettingsAcceptsWorkspaces verifies a valid workspace list
-// passes validation and reaches the config.
 func TestConfigFromSettingsAcceptsWorkspaces(t *testing.T) {
 	settings := DefaultSettings()
 	settings.Workspaces = []Workspace{
@@ -463,7 +446,6 @@ func TestConfigFromSettingsAcceptsWorkspaces(t *testing.T) {
 	}
 }
 
-// TestLoadSettingsParsesWorkspaces verifies workspaces load from JSON.
 func TestLoadSettingsParsesWorkspaces(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "config.json")
@@ -483,8 +465,6 @@ func TestLoadSettingsParsesWorkspaces(t *testing.T) {
 	assertSettingsEqual(t, settings, expected)
 }
 
-// TestStartupWorkspace verifies the configured default wins when its key is
-// available and falls back to the first available workspace otherwise.
 func TestStartupWorkspace(t *testing.T) {
 	t.Setenv("LINEAR_KEY_A", "k-a")
 	t.Setenv("LINEAR_KEY_B", "k-b")
@@ -505,9 +485,6 @@ func TestStartupWorkspace(t *testing.T) {
 	}
 }
 
-// TestStartupWorkspaceNames verifies the last session's workspace is tried
-// first and only while restore is on, with the configured default kept behind
-// it as the fallback.
 func TestStartupWorkspaceNames(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -537,9 +514,6 @@ func TestStartupWorkspaceNames(t *testing.T) {
 	}
 }
 
-// TestStartupWorkspaceFallsBackToDefault verifies a saved workspace whose key
-// env var is gone costs the user their configured default, not an unrelated
-// workspace that happens to come first.
 func TestStartupWorkspaceFallsBackToDefault(t *testing.T) {
 	t.Setenv("LINEAR_KEY_FIRST", "k-first")
 	t.Setenv("LINEAR_KEY_DEFAULT", "k-default")
@@ -560,8 +534,6 @@ func TestStartupWorkspaceFallsBackToDefault(t *testing.T) {
 	}
 }
 
-// TestFirstAvailableWorkspace verifies startup default selection skips
-// workspaces whose env var is unset.
 func TestFirstAvailableWorkspace(t *testing.T) {
 	t.Setenv("LINEAR_KEY_B", "k-side")
 	workspaces := []Workspace{
@@ -580,7 +552,6 @@ func TestFirstAvailableWorkspace(t *testing.T) {
 	}
 }
 
-// TestConfigFromSettingsRequiresAPIKey verifies API key is mandatory.
 func TestConfigFromSettingsRequiresAPIKey(t *testing.T) {
 	_, err := ConfigFromSettings("", DefaultSettings())
 	if err == nil {
@@ -588,7 +559,6 @@ func TestConfigFromSettingsRequiresAPIKey(t *testing.T) {
 	}
 }
 
-// TestDefaultSettingsAgentDefaults verifies agent defaults are set.
 func TestDefaultSettingsAgentDefaults(t *testing.T) {
 	settings := DefaultSettings()
 	if settings.AgentProvider != DefaultAgentProvider {
@@ -611,7 +581,6 @@ func TestDefaultSettingsAgentDefaults(t *testing.T) {
 	}
 }
 
-// TestLoadSettingsParsesDefaultNavigation verifies default team/project keys load from JSON.
 func TestLoadSettingsParsesDefaultNavigation(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "config.json")
@@ -632,7 +601,6 @@ func TestLoadSettingsParsesDefaultNavigation(t *testing.T) {
 	assertSettingsEqual(t, settings, expected)
 }
 
-// TestConfigFromSettingsPassesDefaultNavigation verifies default team/project reach the config.
 func TestConfigFromSettingsPassesDefaultNavigation(t *testing.T) {
 	settings := DefaultSettings()
 	settings.DefaultTeam = "NEX"
@@ -651,7 +619,6 @@ func TestConfigFromSettingsPassesDefaultNavigation(t *testing.T) {
 	}
 }
 
-// TestSettingsFromConfigCarriesDefaultNavigation verifies round-tripping config to settings.
 func TestSettingsFromConfigCarriesDefaultNavigation(t *testing.T) {
 	cfg := Config{DefaultTeam: "NEX", DefaultProject: "Website"}
 
@@ -665,8 +632,6 @@ func TestSettingsFromConfigCarriesDefaultNavigation(t *testing.T) {
 	}
 }
 
-// TestSortByRoundTrip verifies the sort chain survives load, config, and the
-// trip back to settings.
 func TestSortByRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "config.json")
@@ -697,9 +662,6 @@ func TestSortByRoundTrip(t *testing.T) {
 	}
 }
 
-// TestValidateSortByMatchesParserSpellings verifies the validator accepts
-// every spelling the TUI parser handles. A stricter validator would abort
-// startup on a config the app is written to understand.
 func TestValidateSortByMatchesParserSpellings(t *testing.T) {
 	for _, fields := range [][]string{
 		{"status", "priority"},
@@ -722,7 +684,6 @@ func TestValidateSortByMatchesParserSpellings(t *testing.T) {
 	}
 }
 
-// assertSettingsEqual compares settings values in tests.
 func assertSettingsEqual(t *testing.T, got Settings, want Settings) {
 	t.Helper()
 
@@ -731,7 +692,6 @@ func assertSettingsEqual(t *testing.T, got Settings, want Settings) {
 	}
 }
 
-// TestValidateKeybindings verifies single-key values and duplicate rejection.
 func TestValidateKeybindings(t *testing.T) {
 	settings := DefaultSettings()
 	settings.Keybindings = map[string]string{"refresh": "R", "copy_id": "c"}
@@ -750,9 +710,6 @@ func TestValidateKeybindings(t *testing.T) {
 	}
 }
 
-// TestEnsureSettingsFileOmitsTheDefaultLogPath pins the reason this field is a
-// pointer: writing the resolved default would put one machine's home directory
-// into a config file that is often shared between machines.
 func TestEnsureSettingsFileOmitsTheDefaultLogPath(t *testing.T) {
 	settingsPath := filepath.Join(t.TempDir(), "config.json")
 
@@ -773,7 +730,6 @@ func TestEnsureSettingsFileOmitsTheDefaultLogPath(t *testing.T) {
 		t.Errorf("log_file written as %q, want the key omitted", value)
 	}
 
-	// Omitted still has to resolve to a usable path.
 	settings, err := LoadSettings(settingsPath)
 	if err != nil {
 		t.Fatalf("LoadSettings() error: %v", err)
@@ -783,9 +739,6 @@ func TestEnsureSettingsFileOmitsTheDefaultLogPath(t *testing.T) {
 	}
 }
 
-// TestLogFileRoundTripDropsTheMachineDefault covers the save path: whatever the
-// settings modal shows, a value matching this machine's default goes back to
-// unset rather than being written out.
 func TestLogFileRoundTripDropsTheMachineDefault(t *testing.T) {
 	custom := filepath.Join(t.TempDir(), "elsewhere.log")
 	machineDefault := DefaultLogFile()

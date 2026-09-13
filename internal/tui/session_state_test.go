@@ -10,9 +10,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/session"
 )
 
-// TestNavSelectionMatchesFetchParams pins capture to the fetch. A saved
-// selection has to scope the issue list the same way the live node did, so
-// the two branch orders must agree for every navigation kind.
 func TestNavSelectionMatchesFetchParams(t *testing.T) {
 	tests := []struct {
 		name string
@@ -98,8 +95,6 @@ func TestNavSelectionMatchesFetchParams(t *testing.T) {
 	}
 }
 
-// TestSessionFiltersRoundTrip verifies filters survive storage in both
-// directions, names included so the status bar keeps reading in words.
 func TestSessionFiltersRoundTrip(t *testing.T) {
 	estimate := 5.0
 	want := IssueFilters{
@@ -129,16 +124,12 @@ func TestSessionFiltersRoundTrip(t *testing.T) {
 	}
 }
 
-// TestSessionFiltersEmptyRoundTrip verifies no filters stays no filters, so a
-// restore does not resurrect an empty date or estimate filter.
 func TestSessionFiltersEmptyRoundTrip(t *testing.T) {
 	if got := filtersFromSession(sessionFiltersFor(IssueFilters{})); !got.Empty() {
 		t.Fatalf("filtersFromSession(empty) = %+v, want empty", got)
 	}
 }
 
-// TestPersistSessionKeepsOtherWorkspaces verifies recording one workspace does
-// not wipe the place saved for another.
 func TestPersistSessionKeepsOtherWorkspaces(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.json")
 	other := session.State{Nav: session.NavSelection{Kind: session.NavTeam, TeamID: "team-9"}}
@@ -173,8 +164,6 @@ func TestPersistSessionKeepsOtherWorkspaces(t *testing.T) {
 	}
 }
 
-// TestPersistSessionSkipped verifies no file appears when there is nowhere to
-// write or the user turned restore off.
 func TestPersistSessionSkipped(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -207,8 +196,6 @@ func TestPersistSessionSkipped(t *testing.T) {
 	}
 }
 
-// TestUseSessionRespectsToggle verifies the restore point is only picked up
-// when the user wants it, while the write path stays armed either way.
 func TestUseSessionRespectsToggle(t *testing.T) {
 	file := session.File{
 		LastWorkspace: "Alpha",
@@ -236,8 +223,6 @@ func TestUseSessionRespectsToggle(t *testing.T) {
 	}
 }
 
-// TestUseSessionIgnoresOtherWorkspaces verifies a record saved for a different
-// workspace does not restore ids that would not resolve here.
 func TestUseSessionIgnoresOtherWorkspaces(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.SessionRestore = true
@@ -255,8 +240,6 @@ func TestUseSessionIgnoresOtherWorkspaces(t *testing.T) {
 	}
 }
 
-// TestSwitchWorkspaceRecordsOutgoingSession verifies the place is captured
-// before the switch clears it, not left to a quit that never sees it.
 func TestSwitchWorkspaceRecordsOutgoingSession(t *testing.T) {
 	t.Setenv("LINEAR_KEY_BETA", "key-beta")
 

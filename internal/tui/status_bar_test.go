@@ -10,9 +10,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
-// TestPaneHintsNameWhatTheKeyboardDoesHere pins each pane's hints. The bar is
-// the only place a key is offered, so a pane naming one it does not answer to,
-// or dropping one it does, is the failure worth catching.
 func TestPaneHintsNameWhatTheKeyboardDoesHere(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -21,10 +18,9 @@ func TestPaneHintsNameWhatTheKeyboardDoesHere(t *testing.T) {
 		wantNot []string
 	}{
 		{
-			name: "navigation",
-			pane: FocusNavigation,
-			want: []string{": palette", "↑↓ move", "⏎ open", "Tab search", "l issues", "< hide nav"},
-			// The tree is the leftmost pane; there is nothing to its left.
+			name:    "navigation",
+			pane:    FocusNavigation,
+			want:    []string{": palette", "↑↓ move", "⏎ open", "Tab search", "l issues", "< hide nav"},
 			wantNot: []string{"panes", "hide details"},
 		},
 		{
@@ -66,8 +62,6 @@ func TestPaneHintsNameWhatTheKeyboardDoesHere(t *testing.T) {
 	}
 }
 
-// The list's scope, ordering and filters belong to the issues pane's own
-// footer. Saying them here as well is the same fact in two places.
 func TestPaneHintsLeaveTheListContextToTheIssuesPane(t *testing.T) {
 	app := newUXTestApp(t)
 	app.selectedNavigation = &NavigationNode{ID: "all", Text: "All Issues"}
@@ -83,8 +77,6 @@ func TestPaneHintsLeaveTheListContextToTheIssuesPane(t *testing.T) {
 	}
 }
 
-// TestPaletteHintLeadsEveryPane covers the one key that reaches everything the
-// bar has no room to name holding the same place in every pane.
 func TestPaletteHintLeadsEveryPane(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -97,10 +89,6 @@ func TestPaletteHintLeadsEveryPane(t *testing.T) {
 	}
 }
 
-// TestZoomedHintsDropTheHideKey covers the bar offering a key that does
-// nothing. Hiding the details pane is inert while zoomed, and the branch that
-// knew that sat below the ones the comment ring picks, so a lit card brought
-// the hint back.
 func TestZoomedHintsDropTheHideKey(t *testing.T) {
 	app := newThreadedTestApp(t)
 	app.toggleDetailsZoom()
@@ -120,8 +108,6 @@ func TestZoomedHintsDropTheHideKey(t *testing.T) {
 			if strings.Contains(got, "hide details") {
 				t.Errorf("zoomed hints = %q, want no hide key while it is inert", got)
 			}
-			// The branches are picked by what the ring is doing, so each of
-			// them has to name the keys by what they do from in here.
 			if !strings.Contains(got, "v close") {
 				t.Errorf("zoomed hints = %q, want the zoom key to read as closing the view", got)
 			}
@@ -131,8 +117,6 @@ func TestZoomedHintsDropTheHideKey(t *testing.T) {
 			if !strings.Contains(got, "←/h navigation") {
 				t.Errorf("zoomed hints = %q, want the way off the zoomed pane", got)
 			}
-			// Esc is a ladder, so the line names one rung: let go of the card,
-			// or leave the zoom when there is no card to let go of.
 			wantEscape := "Esc back to list"
 			if tc.lit != "" {
 				wantEscape = "Esc let go"
@@ -147,8 +131,6 @@ func TestZoomedHintsDropTheHideKey(t *testing.T) {
 	}
 }
 
-// Every key typed into a comment box goes into the text, the palette's
-// included, so the line names none of them.
 func TestWritingDropsTheKeyHints(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusDetails
@@ -161,8 +143,6 @@ func TestWritingDropsTheKeyHints(t *testing.T) {
 	}
 }
 
-// A flashed message takes the strip's right corner rather than the hints, so
-// the keys stay readable while it is up.
 func TestFlashedMessageTakesTheCorner(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
@@ -177,10 +157,6 @@ func TestFlashedMessageTakesTheCorner(t *testing.T) {
 	}
 }
 
-// The corner says four things and colors them apart: plain text is a nudge, the
-// success color is something that finished, the error color is something that
-// failed, and the accent is the app still working. Plain is the default for a
-// nudge so the other three mean something when they show up.
 func TestTheToastColorsSaySuccessAndFailureApart(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -201,8 +177,6 @@ func TestTheToastColorsSaySuccessAndFailureApart(t *testing.T) {
 		})
 	}
 
-	// Progress takes the accent whatever the last flash was: it is the app
-	// working, and it must not inherit the color of a result that has passed.
 	app.flashSuccess("Archived ZNL-1")
 	app.statusMessage = ""
 	if got := app.toastTag(); got != app.themeTags.Accent {
@@ -210,10 +184,7 @@ func TestTheToastColorsSaySuccessAndFailureApart(t *testing.T) {
 	}
 }
 
-// Every theme needs a color to say success in, and the fallback has to give one
-// to a theme that predates the field rather than an unpaintable default.
 func TestEveryThemeHasASuccessColor(t *testing.T) {
-	// The terminal theme is built rather than registered, so it is named here.
 	themes := map[string]Theme{config.ThemeTerminal: TerminalTheme()}
 	for name, theme := range ThemeRegistry {
 		themes[name] = theme
@@ -229,7 +200,6 @@ func TestEveryThemeHasASuccessColor(t *testing.T) {
 	}
 }
 
-// A one-off message used to sit in the bar for the rest of the session.
 func TestFlashedMessageClearsItself(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
@@ -244,7 +214,6 @@ func TestFlashedMessageClearsItself(t *testing.T) {
 	}
 }
 
-// The last message wins: an older clear must not take a newer one down with it.
 func TestASecondFlashKeepsItsOwnClock(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
@@ -260,8 +229,6 @@ func TestASecondFlashKeepsItsOwnClock(t *testing.T) {
 	}
 }
 
-// An error holds the bar: a flash counting down behind it must not repaint over
-// the failure a moment later.
 func TestErrorSurvivesAPendingFlash(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
@@ -279,8 +246,6 @@ func TestErrorSurvivesAPendingFlash(t *testing.T) {
 	}
 }
 
-// Linear errors carry bracketed fragments, which a view reading color tags eats
-// along with whatever names the failure.
 func TestErrorTextIsNotReadAsColorTags(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -291,10 +256,6 @@ func TestErrorTextIsNotReadAsColorTags(t *testing.T) {
 	}
 }
 
-// statusText is the whole strip, the hints and the message corner both, so a
-// test asserting on what the app said does not have to know which half said it.
-// The read goes through uiUpdateMu, the lock the immediate queueUpdateDraw stub
-// applies around anything a background goroutine queues onto the bar.
 func statusText(app *App) string {
 	app.uiUpdateMu.Lock()
 	defer app.uiUpdateMu.Unlock()
@@ -310,8 +271,6 @@ func shortenFlash(t *testing.T) {
 	t.Cleanup(func() { flashDuration = previous })
 }
 
-// watchQueuedUpdates reports every update the app queues, which for a flash is
-// the clear firing off its timer.
 func watchQueuedUpdates(app *App) <-chan struct{} {
 	ran := make(chan struct{}, 1)
 	app.queueUpdateDraw = func(f func()) {
@@ -333,8 +292,6 @@ func waitForQueuedUpdate(t *testing.T, queued <-chan struct{}) {
 	}
 }
 
-// A message longer than the strip used to take a fixed width wider than the
-// row, which left the hints a negative width and drew neither half properly.
 func TestALongFlashLeavesTheHintsRoom(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
@@ -354,8 +311,6 @@ func TestALongFlashLeavesTheHintsRoom(t *testing.T) {
 	}
 }
 
-// Progress must not push a warning off the corner: a warning is said once, a
-// fetch says "Loading..." on every refresh.
 func TestLoadProgressWaitsBehindAWarning(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues

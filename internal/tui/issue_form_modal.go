@@ -12,19 +12,14 @@ import (
 	"github.com/rivo/tview"
 )
 
-// IssueFormOptions describes one opening of the issue form.
 type IssueFormOptions struct {
-	TeamID string
-	// Parent, ParentID, ProjectID and CycleID seed a create from whatever the
-	// navigation tree had selected.
+	TeamID    string
 	Parent    *linearapi.IssueRef
 	ParentID  string
 	ProjectID string
 	CycleID   string
 }
 
-// issueFormValues is what the fields hold at submit. Estimate and due date stay
-// as typed text, so validation reports what the user wrote.
 type issueFormValues struct {
 	title       string
 	description string
@@ -39,15 +34,12 @@ type issueFormValues struct {
 	labelIDs    []string
 }
 
-// pickerOption is one row of a dropdown: what the user reads, and the id the
-// save sends.
 type pickerOption struct {
 	id    string
 	label string
 }
 
-// IssueFormModal is the full issue form, blank, for creating one issue. An
-// existing issue is edited in the details pane.
+// IssueFormModal creates issues only; an existing issue is edited in the details pane.
 type IssueFormModal struct {
 	app *App
 	fm  *FormModal
@@ -67,9 +59,7 @@ type IssueFormModal struct {
 	dueDateField   *tview.InputField
 	labelsField    *FormMultiSelect
 
-	parentID string
-	// formTitle is the border's base text, kept so a team change can retitle
-	// without re-deriving whether this is a sub-issue.
+	parentID  string
 	formTitle string
 
 	team      pickerOption
@@ -80,19 +70,12 @@ type IssueFormModal struct {
 	cycle     pickerOption
 	priority  int
 
-	// saving is true from submit until the write answers. The form stays up
-	// for that, so a refusal keeps the typing and the caret where they were.
 	saving bool
-	// openGen discards an option fetch from an earlier opening of the form.
-	// Atomic because the guard has to hold wherever the queued callback runs:
-	// the tests stub QueueUpdateDraw to run inline, so the loader reads this
-	// on its own goroutine while a close writes it from the test's.
-	openGen atomic.Int64
-	// milestoneGen discards a milestone fetch whose project has since changed.
+	// Atomic because tests stub QueueUpdateDraw inline, so the loader reads it off the goroutine a close writes it from.
+	openGen      atomic.Int64
 	milestoneGen int
 }
 
-// NewIssueFormModal builds the issue form.
 func NewIssueFormModal(app *App) *IssueFormModal {
 	f := &IssueFormModal{app: app}
 
@@ -101,7 +84,6 @@ func NewIssueFormModal(app *App) *IssueFormModal {
 
 	f.parentView = f.fm.AddStatic("")
 	f.parentRowIdx = f.fm.RowCount() - 1
-	// First, because every field below it is loaded for whatever it holds.
 	f.teamField = f.fm.AddPicker("Team", []string{"Loading..."}, 0, nil)
 	f.titleField = f.fm.AddInput("Title", "")
 	f.descField = f.fm.AddTextArea("Description", "", 4)
@@ -132,14 +114,11 @@ func NewIssueFormModal(app *App) *IssueFormModal {
 	)
 	f.fm.SetOnSubmit(f.submit)
 	f.fm.SetOnCancel(f.Hide)
-	// The team governs the form, so it reads first; the title is what the user
-	// opened the form to type.
 	f.fm.SetInitialFocus(f.titleField)
 
 	return f
 }
 
-// Show opens the form for one create.
 func (f *IssueFormModal) Show(options IssueFormOptions) {
 	f.openGen.Add(1)
 	f.parentID = options.ParentID
@@ -159,10 +138,7 @@ func (f *IssueFormModal) Show(options IssueFormOptions) {
 	f.loadMilestones(f.project.id)
 }
 
-// reset empties every field and seeds the ids a create takes from whatever the
-// navigation tree had selected.
 func (f *IssueFormModal) reset(options IssueFormOptions) {
-	// Before the title, which names the team the create is going to.
 	f.team = pickerOption{id: options.TeamID}
 
 	f.formTitle = "New Issue"
@@ -201,8 +177,6 @@ func (f *IssueFormModal) reset(options IssueFormOptions) {
 	f.setPicker(f.cycleField, "No cycle", nil, f.cycle, f.assignCycle)
 }
 
-// createTitle names the team the new issue will land in, so a form scrolled
-// down to its buttons still says where the issue is going.
 func (f *IssueFormModal) createTitle(base string) string {
 	team := findTeamByID(f.app.navTeams, f.team.id)
 	if team == nil {
@@ -211,14 +185,9 @@ func (f *IssueFormModal) createTitle(base string) string {
 	return base + " · " + team.Name
 }
 
-// teamSentinel is the row a create offers before a team is chosen. A scope
-// with no team of its own opens here: a favorited project spans teams, and
-// Linear takes the team as the one field a create cannot do without.
+// Linear refuses a create without a team, and a favorited project spans teams, so a create can open with none chosen.
 const teamSentinel = "Select a team"
 
-// assignTeam moves the whole form to another team. Every field below it is
-// loaded for one team and refused by Linear for any other, so the picks go
-// with the team that offered them.
 func (f *IssueFormModal) assignTeam(option pickerOption) {
 	if option.id == f.team.id {
 		return
@@ -251,12 +220,8 @@ func (f *IssueFormModal) assignAssignee(option pickerOption)  { f.assignee = opt
 func (f *IssueFormModal) assignMilestone(option pickerOption) { f.milestone = option }
 func (f *IssueFormModal) assignCycle(option pickerOption)     { f.cycle = option }
 
-// statusSentinel is the row a create offers when nothing can name the state
-// Linear would pick: a team with no default, or a fetch that failed.
 const statusSentinel = "Team default"
 
-// defaultStateOption is the state a create opens on, which Linear would
-// otherwise apply without naming it. Empty where the team has none set.
 func defaultStateOption(states []linearapi.WorkflowState) pickerOption {
 	for _, state := range states {
 		if state.IsDefault {
@@ -266,8 +231,6 @@ func defaultStateOption(states []linearapi.WorkflowState) pickerOption {
 	return pickerOption{}
 }
 
-// setPicker rebuilds a dropdown around the value the form holds. A value the
-// options cannot show keeps a row of its own, or a slow fetch clears it.
 func (f *IssueFormModal) setPicker(dd *FormPicker, sentinel string, options []pickerOption, current pickerOption, assign func(pickerOption)) {
 	rows := make([]pickerOption, 0, len(options)+2)
 	if sentinel != "" {
@@ -310,8 +273,6 @@ func (f *IssueFormModal) setPicker(dd *FormPicker, sentinel string, options []pi
 	dd.SetCurrentOption(selected)
 }
 
-// assignProject swaps the milestone list to the new project's. A milestone
-// belongs to one project, so the old one would be orphaned.
 func (f *IssueFormModal) assignProject(option pickerOption) {
 	moved := option.id != f.project.id
 	f.project = option
@@ -322,7 +283,6 @@ func (f *IssueFormModal) assignProject(option pickerOption) {
 	f.loadMilestones(option.id)
 }
 
-// values reads the fields back into the shape submitCreate sends.
 func (f *IssueFormModal) values() issueFormValues {
 	return issueFormValues{
 		title:       strings.TrimSpace(f.titleField.GetText()),
@@ -339,8 +299,6 @@ func (f *IssueFormModal) values() issueFormValues {
 	}
 }
 
-// submit validates the form and creates the issue. A rejected form stays open
-// with the reason on the status bar.
 func (f *IssueFormModal) submit() {
 	if f.saving {
 		return
@@ -369,16 +327,11 @@ func (f *IssueFormModal) submit() {
 	f.submitCreate(values, estimate)
 }
 
-// begin marks a write in flight: the form stays up, says so, and takes no
-// second submit until the first one answers.
 func (f *IssueFormModal) begin(message string) {
 	f.saving = true
 	f.fm.SetStatus(message, false)
 }
 
-// completion binds a result handler to this opening of the form. A write the
-// user escaped out of, or one from a form since reopened on another issue,
-// must not close or repaint what is on screen now.
 func (f *IssueFormModal) completion() func(error) {
 	generation := f.openGen.Load()
 	return func(err error) {
@@ -389,8 +342,6 @@ func (f *IssueFormModal) completion() func(error) {
 	}
 }
 
-// finish closes the form on a successful write, or hands the reason back to
-// the user with every field still as they left it.
 func (f *IssueFormModal) finish(err error) {
 	f.saving = false
 	if err != nil {
@@ -401,7 +352,6 @@ func (f *IssueFormModal) finish(err error) {
 	f.Hide()
 }
 
-// fail reports inside the modal, where the user is looking.
 func (f *IssueFormModal) fail(err error) {
 	f.fm.SetStatus(err.Error(), true)
 }
@@ -431,8 +381,6 @@ func (f *IssueFormModal) submitCreate(values issueFormValues, estimate *float64)
 	f.app.createIssueFromForm(input, f.completion())
 }
 
-// warmFor returns the cached metadata only when it belongs to the team being
-// created in. The cache lags a team switch, and Linear rejects a foreign state.
 func warmFor[T any](f *IssueFormModal, cached []T) []T {
 	if f.app.metadataTeamID != f.team.id {
 		return nil
@@ -440,9 +388,6 @@ func warmFor[T any](f *IssueFormModal, cached []T) []T {
 	return cached
 }
 
-// loadIssueFormOptions fills a field from cached team data, or fetches it in
-// the background when the cache is cold. A method cannot take a type
-// parameter, hence the free function.
 func loadIssueFormOptions[T any](
 	f *IssueFormModal,
 	cached []T,
@@ -463,12 +408,9 @@ func loadIssueFormOptions[T any](
 	go func() {
 		loaded, err := fetch(scopeID)
 		f.app.QueueUpdateDraw(func() {
-			// A fetch from an earlier opening must not write into this one.
 			if generation != f.openGen.Load() {
 				return
 			}
-			// Nor one from the team the form has since left: every list here
-			// is team-scoped, and Linear refuses an id from another team.
 			if scopeID != f.team.id {
 				return
 			}
@@ -482,9 +424,6 @@ func loadIssueFormOptions[T any](
 	}()
 }
 
-// loadTeams fills the team picker from the workspace's teams. It is the one
-// option list a create does not scope to a team, so it never reloads on a
-// team change.
 func (f *IssueFormModal) loadTeams() {
 	generation := f.openGen.Load()
 	f.app.teamOptions(func(items []PickerItem) {
@@ -498,8 +437,6 @@ func (f *IssueFormModal) loadTeams() {
 				f.team.label = item.Label
 			}
 		}
-		// The sentinel stood for a team nobody had chosen. Once one is on the
-		// row, leaving it would be a second row meaning no team.
 		sentinel := teamSentinel
 		if f.team.id != "" {
 			sentinel = ""
@@ -527,16 +464,12 @@ func (f *IssueFormModal) loadStatuses() {
 		if f.state.id == "" {
 			f.state = defaultStateOption(states)
 		}
-		// The sentinel stood for a state nobody could name. Naming it leaves two
-		// rows meaning one thing, so it goes wherever the default resolved.
 		sentinel := statusSentinel
 		if f.state.id != "" {
 			sentinel = ""
 		}
 		f.setPicker(f.statusField, sentinel, options, f.state, f.assignState)
 	}, func() {
-		// Reporting the failure as an option would make it selectable, and its
-		// empty id would then be saved as the issue's status.
 		f.setPicker(f.statusField, statusSentinel, nil, f.state, f.assignState)
 		f.fm.SetStatus("Could not load statuses", true)
 	})
@@ -551,8 +484,6 @@ func (f *IssueFormModal) loadAssignees() {
 				label = fmt.Sprintf("%s (me)", user.Name)
 			}
 			options = append(options, pickerOption{id: user.ID, label: label})
-			// Read off the member list rather than App.currentUser, so a team
-			// that does not list the viewer cannot open assigned to them.
 			if user.IsMe && f.assignee.id == "" {
 				f.assignee = options[len(options)-1]
 			}
@@ -599,8 +530,6 @@ func (f *IssueFormModal) loadCycles() {
 	})
 }
 
-// loadLabels fills the label list, keeping whatever is already ticked: the
-// options arrive after the form has been told what the issue carries.
 func (f *IssueFormModal) loadLabels() {
 	selected := f.labelsField.SelectedIDs()
 	fetch := func(teamID string) ([]linearapi.IssueLabel, error) {
@@ -619,9 +548,6 @@ func (f *IssueFormModal) loadLabels() {
 	})
 }
 
-// loadMilestones fills the milestone picker for one project. A fetch whose
-// project has since changed is dropped, so flipping between projects cannot
-// leave one project's milestones under another.
 func (f *IssueFormModal) loadMilestones(projectID string) {
 	f.milestoneGen++
 	generation := f.milestoneGen
@@ -631,8 +557,6 @@ func (f *IssueFormModal) loadMilestones(projectID string) {
 		return
 	}
 
-	// Keep the current value on screen while the fetch runs. A "Loading..."
-	// row would be selectable and would save as no milestone.
 	f.setPicker(f.milestoneField, "No milestone", nil, f.milestone, f.assignMilestone)
 	go func() {
 		milestones, err := f.app.fetchMilestonesFunc(context.Background(), projectID)
@@ -654,20 +578,16 @@ func (f *IssueFormModal) loadMilestones(projectID string) {
 	}()
 }
 
-// Hide closes the form, and retires this opening so a write or a fetch still
-// in flight cannot write into the next one.
+// Hide closes the form and discards any write or fetch still in flight for this opening.
 func (f *IssueFormModal) Hide() {
 	f.openGen.Add(1)
 	f.fm.Hide("issue_form")
 }
 
-// Focus returns keyboard focus to the form, for when an overlay closes.
 func (f *IssueFormModal) Focus() { f.fm.Focus() }
 
-// HandleKey handles keyboard input for the form.
 func (f *IssueFormModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return f.fm.HandleKey(event)
 }
 
-// GetModal returns the modal flex for adding to pages.
 func (f *IssueFormModal) GetModal() *tview.Flex { return f.fm.Root() }

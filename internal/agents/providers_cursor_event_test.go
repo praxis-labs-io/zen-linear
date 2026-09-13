@@ -2,7 +2,6 @@ package agents
 
 import "testing"
 
-// TestCursorProvider_ParseEvent_System verifies system init parsing.
 func TestCursorProvider_ParseEvent_System(t *testing.T) {
 	provider := NewCursorProvider(nil)
 	line := []byte(`{"type":"system","subtype":"init","model":"GPT-5.2","cwd":"/tmp","session_id":"abc","permissionMode":"default","apiKeySource":"login"}`)
@@ -25,7 +24,6 @@ func TestCursorProvider_ParseEvent_System(t *testing.T) {
 	}
 }
 
-// TestCursorProvider_ParseEvent_User verifies user prompt parsing.
 func TestCursorProvider_ParseEvent_User(t *testing.T) {
 	provider := NewCursorProvider(nil)
 	line := []byte(`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"prompt text"}]}}`)
@@ -42,7 +40,6 @@ func TestCursorProvider_ParseEvent_User(t *testing.T) {
 	}
 }
 
-// TestCursorProvider_ParseEvent_Assistant verifies assistant parsing.
 func TestCursorProvider_ParseEvent_Assistant(t *testing.T) {
 	provider := NewCursorProvider(nil)
 	line := []byte(`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"assistant reply"}]}}`)
@@ -59,7 +56,6 @@ func TestCursorProvider_ParseEvent_Assistant(t *testing.T) {
 	}
 }
 
-// TestCursorProvider_ParseEvent_Thinking verifies thinking parsing.
 func TestCursorProvider_ParseEvent_Thinking(t *testing.T) {
 	provider := NewCursorProvider(nil)
 	line := []byte(`{"type":"thinking","text":"reasoning chunk"}`)
@@ -76,7 +72,6 @@ func TestCursorProvider_ParseEvent_Thinking(t *testing.T) {
 	}
 }
 
-// TestCursorProvider_ParseEvent_ToolCall verifies tool call parsing.
 func TestCursorProvider_ParseEvent_ToolCall(t *testing.T) {
 	provider := NewCursorProvider(nil)
 	line := []byte(`{"type":"tool_call","subtype":"started","tool_call":{"readToolCall":{"args":{"path":"README.md"}}}}`)
@@ -96,7 +91,6 @@ func TestCursorProvider_ParseEvent_ToolCall(t *testing.T) {
 	}
 }
 
-// TestCursorProvider_ParseEvent_Result verifies result parsing.
 func TestCursorProvider_ParseEvent_Result(t *testing.T) {
 	provider := NewCursorProvider(nil)
 	line := []byte(`{"type":"result","subtype":"success","duration_ms":1234,"is_error":false}`)

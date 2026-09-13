@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// TestLoad covers the states a session file can be in on disk.
 func TestLoad(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -35,11 +34,6 @@ func TestLoad(t *testing.T) {
 			want:    File{},
 		},
 		{
-			// Version 1 wrote the query box's contents whatever tab was open
-			// and guarded it with section on the way back in. Read as version
-			// 2, a leftover query means "the pane was showing results", so the
-			// record has to go rather than launch into a search its owner had
-			// tabbed away from.
 			name:    "version 1 is discarded rather than read as the new shape",
 			write:   true,
 			content: `{"version": 1, "last_workspace": "Acme", "workspaces": {"acme": {"section": "all", "search": "login"}}}`,
@@ -88,15 +82,12 @@ func TestLoad(t *testing.T) {
 	}
 }
 
-// TestLoadEmptyPath verifies an unresolved path is rejected rather than read.
 func TestLoadEmptyPath(t *testing.T) {
 	if _, err := Load(""); err == nil {
 		t.Fatal("Load(\"\") error = nil, want error")
 	}
 }
 
-// TestRecordKeepsOtherWorkspaces verifies switching between workspaces does
-// not drop the place saved for the one left behind.
 func TestRecordKeepsOtherWorkspaces(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "session.json")
 
@@ -125,8 +116,6 @@ func TestRecordKeepsOtherWorkspaces(t *testing.T) {
 	}
 }
 
-// TestRecordReplacesCorruptFile verifies a bad record on disk does not block
-// the next save.
 func TestRecordReplacesCorruptFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.json")
 	if err := os.WriteFile(path, []byte("{ not json"), 0644); err != nil {
@@ -147,8 +136,6 @@ func TestRecordReplacesCorruptFile(t *testing.T) {
 	}
 }
 
-// TestMarkLastKeepsSavedStates verifies marking the open workspace does not
-// disturb any workspace's saved place.
 func TestMarkLastKeepsSavedStates(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.json")
 	state := State{Nav: NavSelection{Kind: NavCycle, TeamID: "t1", CycleID: "c1"}, IssueID: "i1"}
@@ -172,8 +159,6 @@ func TestMarkLastKeepsSavedStates(t *testing.T) {
 	}
 }
 
-// TestRecordUnnamedWorkspace verifies an API-key or OAuth session, which has
-// no workspace name, round-trips under the empty key.
 func TestRecordUnnamedWorkspace(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.json")
 
@@ -197,7 +182,6 @@ func TestRecordUnnamedWorkspace(t *testing.T) {
 	}
 }
 
-// TestSaveRoundTrip verifies filters and the full state survive a write.
 func TestSaveRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.json")
 	estimate := 3.0
@@ -234,8 +218,6 @@ func TestSaveRoundTrip(t *testing.T) {
 	}
 }
 
-// TestSaveSetsCurrentVersion verifies the writer stamps the version rather
-// than trusting the caller.
 func TestSaveSetsCurrentVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.json")
 	if err := Save(path, File{Version: 0, LastWorkspace: "Alpha"}); err != nil {
@@ -251,7 +233,6 @@ func TestSaveSetsCurrentVersion(t *testing.T) {
 	}
 }
 
-// TestPathUnderConfigDir verifies the file sits beside the other app state.
 func TestPathUnderConfigDir(t *testing.T) {
 	home := t.TempDir()
 	setHomeDir(t, home)
@@ -266,9 +247,6 @@ func TestPathUnderConfigDir(t *testing.T) {
 	}
 }
 
-// TestSaveUsesPrivatePermissions verifies the session file is not readable by
-// other local users. It holds the search text and the issues the user was
-// reading, so it follows the credentials store rather than the config file.
 func TestSaveUsesPrivatePermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("NTFS has no unix permission bits and os.Chmod only toggles the read-only flag there, so this is not a guarantee Windows makes")
@@ -289,9 +267,6 @@ func TestSaveUsesPrivatePermissions(t *testing.T) {
 	}
 }
 
-// TestSaveTightensExistingPermissions verifies a session file left at 0644 by
-// an earlier build is narrowed on the next write. os.WriteFile would have left
-// it wide open forever.
 func TestSaveTightensExistingPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("NTFS has no unix permission bits and os.Chmod only toggles the read-only flag there, so this is not a guarantee Windows makes")
@@ -315,8 +290,6 @@ func TestSaveTightensExistingPermissions(t *testing.T) {
 	}
 }
 
-// TestSaveLeavesNoTempFiles verifies the atomic write cleans up after itself,
-// so the config directory does not fill with .session-*.json on every quit.
 func TestSaveLeavesNoTempFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "session.json")
@@ -340,9 +313,6 @@ func TestSaveLeavesNoTempFiles(t *testing.T) {
 	}
 }
 
-// setHomeDir points os.UserHomeDir at dir on every platform. It reads $HOME on
-// unix and %USERPROFILE% on Windows, so a test setting only one of them runs
-// against the real profile on the other.
 func setHomeDir(t *testing.T, dir string) {
 	t.Helper()
 	t.Setenv("HOME", dir)

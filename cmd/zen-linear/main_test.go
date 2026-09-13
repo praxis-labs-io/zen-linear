@@ -107,8 +107,6 @@ func TestRunHelpListsEveryCommand(t *testing.T) {
 	}
 }
 
-// An unrecognized argument used to launch the app, which is a typo answered by
-// a full screen redraw rather than by the usage it wanted.
 func TestRunUnknownCommandPrintsUsage(t *testing.T) {
 	oldStderr := os.Stderr
 	r, w, err := os.Pipe()

@@ -6,22 +6,17 @@ import (
 )
 
 const (
-	pickerMaxWidth = 50
-	// pickerMaxVisibleRows caps the panel's height; a longer list scrolls.
+	pickerMaxWidth       = 50
 	pickerMaxVisibleRows = 12
 )
 
-// PickerItem represents an item in a picker.
 type PickerItem struct {
 	ID    string
 	Label string
-	// Name is the value without the row's decoration: "Cycle 12", not
-	// "Cycle 12 (active)". Empty when the two are the same.
+	// Name is the value without the row's decoration, empty when the two are the same.
 	Name string
 }
 
-// name is what a save message calls this option: the undecorated value, or the
-// row as drawn when there is nothing to strip.
 func (i PickerItem) name() string {
 	if i.Name != "" {
 		return i.Name
@@ -29,24 +24,16 @@ func (i PickerItem) name() string {
 	return i.Label
 }
 
-// PickerModal manages a picker overlay for selecting from a list of items.
 type PickerModal struct {
 	*listModal
 	items    []PickerItem
 	onSelect func(item PickerItem)
 }
 
-// NewPickerModal creates a new picker modal.
 func NewPickerModal(app *App) *PickerModal {
 	pm := &PickerModal{
 		listModal: newListModal(app, "picker", "↑↓ move   ↵ select   esc close", pickerMaxWidth, pickerMaxVisibleRows),
 	}
-	// Answer the click here and swallow it. tview's own handler assigns
-	// currentItem after firing the row's selected func, and one picker chains
-	// into another on the same list, so that assignment lands on the list the
-	// second picker just filled: a two-option picker left holding the index of
-	// the row clicked in a three-option one, with nothing highlighted and the
-	// keys dead. The palette swallows its clicks for the same reason.
 	pm.list.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		if action != tview.MouseLeftClick {
 			return action, event
@@ -61,8 +48,6 @@ func NewPickerModal(app *App) *PickerModal {
 	return pm
 }
 
-// chooseAt runs the option clicked at the given screen cell. A click past the
-// last row, or on the placeholder standing in for none, picks nothing.
 func (pm *PickerModal) chooseAt(x, y int) {
 	left, top, width, height := pm.list.GetInnerRect()
 	if x < left || x >= left+width || y < top || y >= top+height {
@@ -72,12 +57,10 @@ func (pm *PickerModal) chooseAt(x, y int) {
 	pm.choose(y - top + offset)
 }
 
-// Show displays the picker modal with the given title and items.
 func (pm *PickerModal) Show(title string, items []PickerItem, onSelect func(item PickerItem)) {
 	pm.ShowWithContext(title, "", items, onSelect)
 }
 
-// ShowWithContext also pins an issue context line above the list.
 func (pm *PickerModal) ShowWithContext(title, contextLine string, items []PickerItem, onSelect func(item PickerItem)) {
 	pm.items = items
 	pm.onSelect = onSelect
@@ -86,7 +69,6 @@ func (pm *PickerModal) ShowWithContext(title, contextLine string, items []Picker
 	pm.open(title, contextLine)
 }
 
-// fillList rewrites the options, or the placeholder standing in for none.
 func (pm *PickerModal) fillList() {
 	if len(pm.items) == 0 {
 		pm.showPlaceholder("No options")
@@ -95,7 +77,6 @@ func (pm *PickerModal) fillList() {
 
 	pm.beginRows(len(pm.items))
 	for index, item := range pm.items {
-		// Number shortcuts select the first nine entries directly.
 		var shortcut rune
 		if index < 9 {
 			shortcut = rune('1' + index)
@@ -105,7 +86,6 @@ func (pm *PickerModal) fillList() {
 	pm.list.SetCurrentItem(0)
 }
 
-// choose closes the picker and reports the item at the given index.
 func (pm *PickerModal) choose(index int) {
 	if index < 0 || index >= len(pm.items) {
 		return
@@ -117,7 +97,6 @@ func (pm *PickerModal) choose(index int) {
 	}
 }
 
-// HandleKey handles keyboard input for the picker.
 func (pm *PickerModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyEscape:

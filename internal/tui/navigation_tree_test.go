@@ -11,16 +11,11 @@ import (
 	"github.com/rivo/tview"
 )
 
-// pressEnterOnNavigation drives the real tree input handler, so the test
-// exercises the selection path a keypress takes rather than calling the
-// callback directly.
 func pressEnterOnNavigation(app *App) {
 	handler := app.navigationTree.InputHandler()
 	handler(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), func(tview.Primitive) {})
 }
 
-// TestSelectingNavigationItemKeepsFocusInTheNavigationPane guards the behavior
-// Drew asked for: Enter picks a view without throwing focus at the issues list.
 func TestSelectingNavigationItemKeepsFocusInTheNavigationPane(t *testing.T) {
 	app := newUXTestApp(t)
 	refreshed := make(chan struct{}, 1)
@@ -49,8 +44,6 @@ func TestSelectingNavigationItemKeepsFocusInTheNavigationPane(t *testing.T) {
 	}
 }
 
-// TestSelectingFavoritesFolderOnlyToggles verifies a folder expands instead of
-// filtering.
 func TestSelectingFavoritesFolderOnlyToggles(t *testing.T) {
 	app := newUXTestApp(t)
 	app.fetchIssuesPage = func(context.Context, linearapi.FetchIssuesParams, *string) (linearapi.IssuePage, error) {
@@ -77,10 +70,6 @@ func TestSelectingFavoritesFolderOnlyToggles(t *testing.T) {
 	}
 }
 
-// TestNavigationPaneDrawsItsControlsInOrder covers the pane's stack: the
-// workspace names the pane border, the query box sits in a frame of its own
-// under it, and the tree starts one column off the border with no root row
-// above it.
 func TestNavigationPaneDrawsItsControlsInOrder(t *testing.T) {
 	app := newUXTestApp(t)
 	app.activeWorkspaceName = "Praxis Labs"
@@ -101,8 +90,6 @@ func TestNavigationPaneDrawsItsControlsInOrder(t *testing.T) {
 	if got := lines[3]; !strings.Contains(got, "└") {
 		t.Errorf("third row = %q, want the frame closing under the query box", got)
 	}
-	// One column of border padding, then the row's own blank column, which is
-	// what lines its title up with every other row a selection can land on.
 	if got := lines[4]; !strings.HasPrefix(strings.TrimPrefix(got, "│"), " "+navIconBlank+"All Issues") {
 		t.Errorf("first tree row = %q, want All Issues past the padding and its column", got)
 	}

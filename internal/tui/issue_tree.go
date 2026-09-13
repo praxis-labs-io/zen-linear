@@ -7,32 +7,22 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// IssueRow represents a single row in the issues table with hierarchy info.
 type IssueRow struct {
-	IssueID         string // Reference to the issue
-	Level           int    // Nesting level (0 = top-level, 1 = child, etc.)
-	IsParent        bool   // True if this issue has children
-	HasChildren     bool   // True if this issue has children (same as IsParent for now)
-	IsExpanded      bool   // True if children are shown (only meaningful when HasChildren is true)
-	IsHeader        bool   // True for a group header row (no issue)
-	IsSpacer        bool   // True for a blank gap row above a header (no issue, not selectable)
-	HeaderText      string // Group label for header rows
-	HeaderCount     int    // Number of top-level issues in the group
-	HeaderDimension string // Grouping dimension the header belongs to
-	HeaderLevel     int    // 0 for group headers, 1 for subgroup headers
-	HeaderKey       string // Stable identity for collapse tracking
-	HeaderCollapsed bool   // True when the group's rows are hidden
+	IssueID         string
+	Level           int
+	IsParent        bool
+	HasChildren     bool
+	IsExpanded      bool
+	IsHeader        bool
+	IsSpacer        bool
+	HeaderText      string
+	HeaderCount     int
+	HeaderDimension string
+	HeaderLevel     int
+	HeaderKey       string
+	HeaderCollapsed bool
 }
 
-// statusRank orders workflow states by lifecycle category the way Linear's
-// grouped list does: triage, review, started, unstarted, backlog, completed,
-// canceled. "unstarted" is matched before the started group because it
-// contains "started".
-//
-// Ranking review ahead of in-progress is a placeholder for ZNL-90. Review is
-// a team-added state, so its real order lives in the team's workflow
-// position, which this cannot see. Categories come from the state name here,
-// which only knows the states Linear ships with.
 func statusRank(state string) int {
 	lowerState := strings.ToLower(state)
 	switch {
@@ -51,20 +41,17 @@ func statusRank(state string) int {
 	case strings.Contains(lowerState, "cancel") || strings.Contains(lowerState, "duplicate"):
 		return 6
 	default:
-		return 3 // todo and anything unrecognized sit with unstarted
+		return 3
 	}
 }
 
-// BuildIssueRows constructs a flattened list of rows for table rendering.
-// It builds a hierarchical view where parent issues can be expanded/collapsed.
-// Returns the rows and a map for quick issue lookup by ID.
+// BuildIssueRows flattens issues into table rows, children under expanded parents, with an id lookup.
 func BuildIssueRows(issues []linearapi.Issue, expanded map[string]bool) ([]IssueRow, map[string]*linearapi.Issue) {
 	idToIssue, topLevel, childrenByParent := indexIssues(issues)
 	rows := appendIssueRows(nil, topLevel, childrenByParent, expanded)
 	return rows, idToIssue
 }
 
-// Grouping dimensions supported by the grouped list view.
 const (
 	GroupByNone      = ""
 	GroupByStatus    = "status"
@@ -75,8 +62,6 @@ const (
 	GroupByMilestone = "milestone"
 )
 
-// groupKeyFor returns the group label and ordering rank of an issue along a
-// grouping dimension. Groups sort by rank, then label.
 func groupKeyFor(issue *linearapi.Issue, dimension string) (string, int) {
 	switch dimension {
 	case GroupByPriority:
@@ -101,7 +86,6 @@ func groupKeyFor(issue *linearapi.Issue, dimension string) (string, int) {
 		if issue.Cycle == nil {
 			return "No cycle", 1_000_000
 		}
-		// Recent cycles first.
 		return issue.Cycle.DisplayName(), -issue.Cycle.Number
 	case GroupByProject:
 		if issue.ProjectName == "" {
@@ -112,15 +96,12 @@ func groupKeyFor(issue *linearapi.Issue, dimension string) (string, int) {
 		if issue.ProjectMilestone == nil || issue.ProjectMilestone.Name == "" {
 			return "No milestone", 1_000_000
 		}
-		// Milestones order by their project-defined sort order.
 		return issue.ProjectMilestone.Name, int(issue.ProjectMilestone.SortOrder)
-	default: // GroupByStatus
+	default:
 		return issue.State, statusRank(issue.State)
 	}
 }
 
-// groupTopLevel buckets top-level issues along a dimension, returning group
-// labels in display order.
 func groupTopLevel(topLevel []*linearapi.Issue, dimension string) ([]string, map[string][]*linearapi.Issue) {
 	groups := make(map[string][]*linearapi.Issue)
 	ranks := make(map[string]int)
@@ -142,10 +123,7 @@ func groupTopLevel(topLevel []*linearapi.Issue, dimension string) ([]string, map
 	return order, groups
 }
 
-// BuildGroupedIssueRows constructs rows grouped along a dimension with a
-// header row per group — like Linear's grouped list view — and optionally
-// sub-grouped along a second dimension beneath each header. Hierarchy behaves
-// as in BuildIssueRows; a parent's subtree stays under the parent's group.
+// BuildGroupedIssueRows is BuildIssueRows with a header row per group and subgroup; collapsed hides a header's rows.
 func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, groupBy string, subgroupBy string, collapsed map[string]bool) ([]IssueRow, map[string]*linearapi.Issue) {
 	idToIssue, topLevel, childrenByParent := indexIssues(issues)
 	if groupBy == GroupByNone {
@@ -160,7 +138,6 @@ func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, g
 	for _, label := range order {
 		group := groups[label]
 		key := groupBy + "\x1f" + label
-		// Groups breathe: a gap row above every header except the first.
 		if len(rows) > 0 {
 			rows = append(rows, IssueRow{IsSpacer: true})
 		}
@@ -183,7 +160,6 @@ func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, g
 		for _, subLabel := range subOrder {
 			subGroup := subGroups[subLabel]
 			subKey := key + "\x1f" + subgroupBy + "\x1f" + subLabel
-			// Subgroups gap too, except directly under their group header.
 			if last := rows[len(rows)-1]; !last.IsHeader || last.HeaderLevel != 0 {
 				rows = append(rows, IssueRow{IsSpacer: true})
 			}
@@ -205,10 +181,6 @@ func BuildGroupedIssueRows(issues []linearapi.Issue, expanded map[string]bool, g
 	return rows, idToIssue
 }
 
-// indexIssues splits issues into top-level entries and children keyed by
-// parent, alongside the id lookup map.
-// An issue is "top-level" if it has no parent or its parent is not in the
-// fetched list (orphan sub-issue).
 func indexIssues(issues []linearapi.Issue) (map[string]*linearapi.Issue, []*linearapi.Issue, map[string][]*linearapi.Issue) {
 	idToIssue := make(map[string]*linearapi.Issue, len(issues))
 	for i := range issues {
@@ -230,11 +202,8 @@ func indexIssues(issues []linearapi.Issue) (map[string]*linearapi.Issue, []*line
 	return idToIssue, topLevel, childrenByParent
 }
 
-// appendIssueRows emits table rows for the given top-level issues, expanding
-// children where requested.
 func appendIssueRows(rows []IssueRow, topLevel []*linearapi.Issue, childrenByParent map[string][]*linearapi.Issue, expanded map[string]bool) []IssueRow {
 	for _, issue := range topLevel {
-		// Check if this issue has children in our list
 		children := childrenByParent[issue.ID]
 		hasChildren := len(children) > 0 || len(issue.Children) > 0
 		isExpanded := expanded[issue.ID]
@@ -247,11 +216,8 @@ func appendIssueRows(rows []IssueRow, topLevel []*linearapi.Issue, childrenByPar
 			IsExpanded:  isExpanded,
 		})
 
-		// If expanded, add children
 		if hasChildren && isExpanded {
-			// Use children from our fetched list if available
 			if len(children) > 0 {
-				// Sort children by identifier for consistent ordering
 				sort.Slice(children, func(i, j int) bool {
 					return children[i].Identifier < children[j].Identifier
 				})
@@ -275,26 +241,22 @@ func appendIssueRows(rows []IssueRow, topLevel []*linearapi.Issue, childrenByPar
 	return rows
 }
 
-// ToggleExpanded toggles the expanded state for an issue.
-// Returns the new expanded state.
+// ToggleExpanded flips an issue's expanded state and returns the new one.
 func ToggleExpanded(expanded map[string]bool, issueID string) bool {
 	newState := !expanded[issueID]
 	expanded[issueID] = newState
 	return newState
 }
 
-// CollapseAll sets all issues to collapsed state.
 func CollapseAll(expanded map[string]bool) {
 	for k := range expanded {
 		delete(expanded, k)
 	}
 }
 
-// ExpandAll expands all parent issues.
 func ExpandAll(expanded map[string]bool, issues []linearapi.Issue) {
 	for _, issue := range issues {
 		if len(issue.Children) > 0 || issue.Parent == nil {
-			// Expand issues that have children
 			expanded[issue.ID] = true
 		}
 	}

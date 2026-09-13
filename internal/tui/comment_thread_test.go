@@ -11,8 +11,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// threadedComments is a discussion with a reply, a reply to that reply, and a
-// reply whose parent is older than the fetched page.
 func threadedComments() []linearapi.Comment {
 	now := time.Now()
 	at := func(minutes int) time.Time { return now.Add(time.Duration(minutes) * time.Minute) }
@@ -61,10 +59,7 @@ func TestBuildCommentRows(t *testing.T) {
 		{
 			name:     "replies gather under their parent",
 			comments: threadedComments(),
-			// reply-2 answers reply-1 and lands in the same thread, not a
-			// second level under it. orphan's parent is off the page, so it
-			// reads as a root rather than disappearing.
-			wantIDs: []string{"root-1", "reply-1", "reply-2", "root-2", "orphan"},
+			wantIDs:  []string{"root-1", "reply-1", "reply-2", "root-2", "orphan"},
 			wantDepth: map[string]int{
 				"root-1": 0, "reply-1": 1, "reply-2": 1, "root-2": 0, "orphan": 0,
 			},
@@ -104,9 +99,6 @@ func TestThreadRootID(t *testing.T) {
 		{name: "a root is its own thread", id: "root-1", want: "root-1"},
 		{name: "a reply names its parent", id: "reply-1", want: "root-1"},
 		{name: "a deeper reply names the thread", id: "reply-2", want: "root-1"},
-		// Drawn as a root, because the page has nothing to nest it under, and
-		// still answered to its own parent: Linear refuses a reply whose parent
-		// is a reply, which is what posting against itself would be.
 		{name: "an orphan answers the parent it lost", id: "orphan", want: "off-the-page"},
 		{name: "an unknown comment is left alone", id: "gone", want: "gone"},
 	}
@@ -119,8 +111,6 @@ func TestThreadRootID(t *testing.T) {
 	}
 }
 
-// TestRepliesIndentUnderTheirParent covers the thread reading as a step in.
-// The rows are not trimmed here: the indent is the thing being measured.
 func TestRepliesIndentUnderTheirParent(t *testing.T) {
 	app := newThreadedTestApp(t)
 	lines := drawComments(t, app, 80)
@@ -132,15 +122,10 @@ func TestRepliesIndentUnderTheirParent(t *testing.T) {
 	}
 }
 
-// TestTheThreadRailJoinsRepliesToTheirParent covers the connector: a rail down
-// the gutter, an elbow into each reply's byline, and a corner on the last one so
-// the run stops rather than trailing into the next thread.
 func TestTheThreadRailJoinsRepliesToTheirParent(t *testing.T) {
 	app := newThreadedTestApp(t)
 	lines := drawComments(t, app, 80)
 
-	// The elbow and the corner carry a space the card's own rule and bottom
-	// border do not, which is what tells ├─ the connector from ├─── the rule.
 	rail := 0
 	elbows, corners := 0, 0
 	for _, line := range lines {
@@ -155,7 +140,6 @@ func TestTheThreadRailJoinsRepliesToTheirParent(t *testing.T) {
 		}
 	}
 
-	// One elbow for the first reply of the thread, one corner for the last.
 	if elbows != 1 || corners != 1 {
 		t.Errorf("drew %d elbows and %d corners, want one of each:\n%s", elbows, corners, strings.Join(lines, "\n"))
 	}
@@ -163,7 +147,6 @@ func TestTheThreadRailJoinsRepliesToTheirParent(t *testing.T) {
 		t.Errorf("the replies hang off no rail:\n%s", strings.Join(lines, "\n"))
 	}
 
-	// The elbow meets the byline, one row under the reply's top border.
 	for i, line := range lines {
 		if strings.HasPrefix(strings.TrimLeft(line, " "), "├─ ") {
 			if !strings.Contains(lines[i-1], "╭") {
@@ -174,9 +157,6 @@ func TestTheThreadRailJoinsRepliesToTheirParent(t *testing.T) {
 	}
 }
 
-// cardEdgeColumn returns the column the nth card's top border starts at,
-// counted in cells rather than bytes: the rail drawn in a reply's gutter is
-// three bytes to the cell.
 func cardEdgeColumn(t *testing.T, lines []string, what string, n int) int {
 	t.Helper()
 	seen := 0
@@ -194,10 +174,6 @@ func cardEdgeColumn(t *testing.T, lines []string, what string, n int) int {
 	return 0
 }
 
-// TestEveryPageLineFitsThePane is the invariant the slots and the ring stand
-// on: one line of the page is one row on the screen. A line wider than the
-// pane would be wrapped by the view into two, and every box and every stop
-// below it would be a row out of place.
 func TestEveryPageLineFitsThePane(t *testing.T) {
 	now := time.Now()
 	unbreakable := linearapi.Comment{

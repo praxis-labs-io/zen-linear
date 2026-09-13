@@ -6,7 +6,7 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// IssueFilters contains structured filters applied in addition to navigation.
+// IssueFilters narrows the issue list on top of the navigation selection.
 type IssueFilters struct {
 	AssigneeID   string
 	AssigneeName string

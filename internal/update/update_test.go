@@ -11,10 +11,6 @@ import (
 	"time"
 )
 
-// releaseServer answers like GitHub's latest-release endpoint and counts what
-// reached it, which is how the cache tests tell a served answer from a stored
-// one. It records the User-Agent so the header GitHub refuses a request without
-// can be asserted.
 type releaseServer struct {
 	*httptest.Server
 	calls     int
@@ -59,8 +55,6 @@ func TestCheckReportsANewerRelease(t *testing.T) {
 	if got.Latest != "v0.4.0" {
 		t.Errorf("Latest = %q, want v0.4.0", got.Latest)
 	}
-	// GitHub answers 403 without one, so its absence is a broken check rather
-	// than a cosmetic omission.
 	if server.userAgent != "zen-linear/0.3.0" {
 		t.Errorf("User-Agent = %q, want zen-linear/0.3.0", server.userAgent)
 	}
@@ -82,8 +76,6 @@ func TestCheckSaysNothingWhenCurrent(t *testing.T) {
 	}
 }
 
-// A working tree is not behind anything, and asking on its behalf spends a
-// request to be told so.
 func TestCheckNeverAsksForAnUnstampedBuild(t *testing.T) {
 	for _, current := range []string{"dev", ""} {
 		t.Run(current, func(t *testing.T) {
@@ -107,8 +99,6 @@ func TestCheckNeverAsksForAnUnstampedBuild(t *testing.T) {
 	}
 }
 
-// Every one of these is silence at the UI. The error exists so the caller can
-// log it, and the result carries nothing to print either way.
 func TestCheckReportsNothingToShowOnAFailure(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -139,8 +129,6 @@ func TestCheckReportsNothingToShowOnAFailure(t *testing.T) {
 			if got.Available || got.Latest != "" {
 				t.Errorf("got %+v, want nothing to show", got)
 			}
-			// Nothing useless is kept, or the next launch would answer from it
-			// for a day rather than re-asking.
 			if _, statErr := os.Stat(cachePath); !os.IsNotExist(statErr) {
 				t.Error("a failed lookup wrote a cache file")
 			}
@@ -199,15 +187,11 @@ func TestCheckAsksAgainOnceTheCacheIsStale(t *testing.T) {
 		t.Errorf("server saw %d calls, want 1", server.calls)
 	}
 
-	// The fresh answer replaces the stale one rather than being asked for again
-	// on the next launch.
 	if cached := loadCache(cachePath); cached.LatestTag != "v0.4.0" {
 		t.Errorf("cached tag = %q, want the served v0.4.0", cached.LatestTag)
 	}
 }
 
-// The cache holds a tag, not a verdict, so upgrading past it has to stop the
-// notice without waiting for the TTL to run out.
 func TestAnUpgradeSilencesAStillFreshCache(t *testing.T) {
 	cachePath := filepath.Join(t.TempDir(), cacheFileName)
 	now := time.Now()
@@ -244,8 +228,6 @@ func TestCheckWithNoCachePathAsksEveryTime(t *testing.T) {
 	}
 }
 
-// A cache written by a build that read a different shape is discarded, the way
-// the navigation cache discards its own.
 func TestAStaleSchemaIsIgnored(t *testing.T) {
 	server := newReleaseServer(t, http.StatusOK, tagBody("v0.4.0"))
 	cachePath := filepath.Join(t.TempDir(), cacheFileName)
@@ -295,8 +277,6 @@ func TestAnUnreadableCacheIsIgnored(t *testing.T) {
 	}
 }
 
-// A clock that moved backwards must not hold the cache shut until it catches
-// up, which for a TTL this long could be days.
 func TestACacheStampedInTheFutureIsNotFresh(t *testing.T) {
 	now := time.Now()
 	file := cacheFile{Version: cacheVersion, CheckedAt: now.Add(time.Hour), LatestTag: "v0.4.0"}

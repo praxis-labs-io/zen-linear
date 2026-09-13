@@ -18,8 +18,6 @@ import (
 	"time"
 )
 
-// testPNG is a real image of the requested size, so DecodeConfig reads the
-// dimensions the store reports rather than a fixture agreeing with itself.
 func testPNG(t *testing.T, width, height int) []byte {
 	t.Helper()
 
@@ -33,8 +31,6 @@ func testPNG(t *testing.T, width, height int) []byte {
 	return buf.Bytes()
 }
 
-// newTestStore points a store at a test server and a temporary directory, so
-// nothing here reaches Linear or a real home.
 func newTestStore(t *testing.T, handler http.HandlerFunc, opts Options) (*Store, string) {
 	t.Helper()
 
@@ -50,9 +46,6 @@ func newTestStore(t *testing.T, handler http.HandlerFunc, opts Options) (*Store,
 		opts.CacheDir = t.TempDir()
 	}
 	opts.Host = endpoint.Hostname()
-	// The store insists on https for the real host; the test server speaks
-	// plain HTTP, so the client is redirected to it rather than the scheme
-	// being relaxed.
 	opts.Client = &http.Client{Transport: rewriteTo{host: endpoint.Host}}
 
 	store, err := NewStore(opts)
@@ -62,8 +55,6 @@ func newTestStore(t *testing.T, handler http.HandlerFunc, opts Options) (*Store,
 	return store, "https://" + endpoint.Host + "/shot.png"
 }
 
-// rewriteTo sends every request to the test server, leaving the URL the store
-// was asked for alone so the allowlist is exercised for real.
 type rewriteTo struct {
 	host string
 }
@@ -113,9 +104,6 @@ func TestFetchSendsBearerForOAuth(t *testing.T) {
 	}
 }
 
-// The token is a live credential and a description can point anywhere, so a URL
-// off the upload host is refused before a request is built. This store keeps the
-// real host, or a scheme or prefix case would be refused for the wrong reason.
 func TestFetchRefusesAURLOffTheUploadHost(t *testing.T) {
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -206,9 +194,6 @@ func TestFetchRefusesWhatItCannotMeasure(t *testing.T) {
 			},
 		},
 		{
-			// PNG is the only encoded format the terminal takes, so a JPEG is
-			// refused here and keeps the link glamour draws for it. Storing one
-			// would reserve rows for a picture the terminal cannot decode.
 			name: "a JPEG",
 			handler: func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "image/jpeg")
@@ -272,8 +257,6 @@ func TestNewStorePrunesWhatHasAgedOut(t *testing.T) {
 	}
 }
 
-// The cache path holds no workspace or issue id, because an upload URL carries
-// both and the directory is readable by anything the user runs.
 func TestCacheNameHidesTheURL(t *testing.T) {
 	raw := "https://uploads.linear.app/9e76ca0c/229fe13d/1b54e5df"
 	name := cacheName(raw)

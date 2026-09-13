@@ -12,7 +12,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// AgentOutputModal displays streaming output from an agent run.
 type AgentOutputModal struct {
 	app           *App
 	modal         *tview.Flex
@@ -41,21 +40,13 @@ type AgentOutputModal struct {
 }
 
 const (
-	maxFlushLines = 200
-	// The run needs room to read, so the modal takes what it can up to this and
-	// gives back whatever the terminal is short.
-	agentOutputMaxWidth  = 110
-	agentOutputMaxHeight = 32
-	// agentOutputFooterRows is the resume line, the rule, and the hint.
-	agentOutputFooterRows = 3
-	// agentOutputLeastHeight is the shortest panel that prints anything in both
-	// views. They split what the border and footer leave 2:3, and the stream
-	// gives a row to the status line first, so the stream is what runs out: it
-	// needs four of that split's ten before its own border stops eating the lot.
+	maxFlushLines          = 200
+	agentOutputMaxWidth    = 110
+	agentOutputMaxHeight   = 32
+	agentOutputFooterRows  = 3
 	agentOutputLeastHeight = 2 + agentOutputFooterRows + 10
 )
 
-// NewAgentOutputModal creates a new agent output modal.
 func NewAgentOutputModal(app *App) *AgentOutputModal {
 	om := &AgentOutputModal{
 		app:     app,
@@ -102,8 +93,6 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		SetTitle(" Final ").
 		SetTitleColor(app.theme.Accent)
 
-	// A click focuses a view straight through tview, so each records itself or
-	// the border cue and Focus would answer for the view the user left.
 	om.streamView.SetFocusFunc(func() { om.focused = om.streamView; om.applyFocusBorders() })
 	om.finalView.SetFocusFunc(func() { om.focused = om.finalView; om.applyFocusBorders() })
 
@@ -113,8 +102,6 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 	om.helpView.SetBackgroundColor(app.theme.ModalBackground())
 	om.helpView.SetTextAlign(tview.AlignCenter)
 
-	// The resume command sits above the rule because it is about the run; the
-	// hint below it is about the keys, the same split every other modal has.
 	om.footerView = tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(om.resumeView, 1, 0, false).
@@ -132,25 +119,18 @@ func NewAgentOutputModal(app *App) *AgentOutputModal {
 		AddItem(om.headerView, 1, 0, false).
 		AddItem(om.streamView, 0, 1, false)
 
-	// The panel carries the run's name; the two views inside it are titled for
-	// what they hold, and their borders are the Tab cue.
 	om.modalContent = app.modalPanel("Agent")
 	om.modalContent.
 		AddItem(streamSection, 0, 2, false).
 		AddItem(om.finalView, 0, 3, false).
 		AddItem(om.footerView, agentOutputFooterRows, 0, false)
 
-	// Filled by layout on every Show. The wrapper pointer is not replaced:
-	// pages hold it for as long as the run does.
 	om.modal = tview.NewFlex()
 	om.modal.SetBackgroundColor(app.theme.Background)
 
 	return om
 }
 
-// layout sizes the modal against the terminal. At a fixed 110x32 it was larger
-// than a 100x30 screen before it drew anything, so the run was read through a
-// panel whose edges were off it.
 func (om *AgentOutputModal) layout() {
 	centerModal(om.modal, om.modalContent, func() (int, int) {
 		return om.app.modalWidth(agentOutputMaxWidth),
@@ -158,7 +138,6 @@ func (om *AgentOutputModal) layout() {
 	})
 }
 
-// ApplyTheme updates modal colors to match the active theme.
 func (om *AgentOutputModal) ApplyTheme(theme Theme) {
 	if om.statusView != nil {
 		om.statusView.SetTextColor(theme.SecondaryText).SetBackgroundColor(theme.ModalBackground())
@@ -197,7 +176,6 @@ func (om *AgentOutputModal) ApplyTheme(theme Theme) {
 	}
 }
 
-// Show displays the output modal with a title and cancel handler.
 func (om *AgentOutputModal) Show(title string, onCancel func()) {
 	om.onCancel = onCancel
 	om.streamView.Clear()
@@ -224,7 +202,6 @@ func (om *AgentOutputModal) Show(title string, onCancel func()) {
 	om.focus(om.streamView)
 }
 
-// AppendEvent appends a structured event to the stream view.
 func (om *AgentOutputModal) AppendEvent(event agents.AgentEvent) {
 	om.streamMu.Lock()
 	om.structured = true
@@ -252,7 +229,6 @@ func (om *AgentOutputModal) AppendEvent(event agents.AgentEvent) {
 	}
 }
 
-// AppendRawLine appends a raw line to the stream view.
 func (om *AgentOutputModal) AppendRawLine(line string) {
 	if strings.TrimSpace(line) == "" {
 		return
@@ -275,12 +251,10 @@ func (om *AgentOutputModal) AppendRawLine(line string) {
 	om.streamMu.Unlock()
 }
 
-// AppendLine appends a raw line to the stream view.
 func (om *AgentOutputModal) AppendLine(line string) {
 	om.AppendRawLine(line)
 }
 
-// Hide hides the output modal.
 func (om *AgentOutputModal) Hide() {
 	om.stopFlushTicker()
 	om.spinner.Stop()
@@ -288,16 +262,12 @@ func (om *AgentOutputModal) Hide() {
 	om.app.restoreModalFocus()
 }
 
-// focus records the target so Focus can put the user back where they were.
-// UI thread only.
 func (om *AgentOutputModal) focus(p tview.Primitive) {
 	om.focused = p
 	om.applyFocusBorders()
 	om.app.app.SetFocus(p)
 }
 
-// applyFocusBorders lights the view Tab last landed on. It reads the recorded
-// target rather than live focus, so a draw can reach it safely.
 func (om *AgentOutputModal) applyFocusBorders() {
 	for _, view := range []*tview.TextView{om.streamView, om.finalView} {
 		if view == nil {
@@ -311,9 +281,6 @@ func (om *AgentOutputModal) applyFocusBorders() {
 	}
 }
 
-// Focus returns keyboard focus for when an overlay above this modal closes.
-// Tab picks between the stream and final views, so restoring the stream would
-// scroll the pane the user stopped reading.
 func (om *AgentOutputModal) Focus() {
 	if om.focused == nil {
 		om.focused = om.streamView
@@ -321,9 +288,7 @@ func (om *AgentOutputModal) Focus() {
 	om.app.app.SetFocus(om.focused)
 }
 
-// HandleKey handles keyboard input for the output modal.
 func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
-	// Get the currently focused view for scrolling
 	focused := om.app.app.GetFocus()
 
 	switch event.Key() {
@@ -358,7 +323,6 @@ func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case tcell.KeyTab:
-		// Switch focus between stream and final views
 		if focused == om.streamView {
 			om.focus(om.finalView)
 		} else {
@@ -389,13 +353,11 @@ func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 			}
 			return nil
 		case 'g':
-			// Scroll to top
 			if tv, ok := focused.(*tview.TextView); ok {
 				tv.ScrollToBeginning()
 			}
 			return nil
 		case 'G':
-			// Scroll to bottom
 			if tv, ok := focused.(*tview.TextView); ok {
 				tv.ScrollToEnd()
 			}
@@ -405,7 +367,6 @@ func (om *AgentOutputModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return event
 }
 
-// StopSpinner stops the spinner and updates the status line.
 func (om *AgentOutputModal) StopSpinner() {
 	om.spinner.Stop()
 	om.streamMu.Lock()
@@ -445,7 +406,6 @@ func looksLikeAgentModelError(message string) bool {
 	return strings.Contains(lower, "model") || strings.Contains(lower, "available models") || strings.Contains(lower, "invalid model")
 }
 
-// setResumeHint updates the footer with a resume command hint.
 func (om *AgentOutputModal) setResumeHint(command string) {
 	command = strings.TrimSpace(command)
 	if command == "" {
@@ -459,7 +419,6 @@ func (om *AgentOutputModal) setResumeHint(command string) {
 	})
 }
 
-// setSessionID updates the session display in the header.
 func (om *AgentOutputModal) setSessionID(sessionID string) {
 	if strings.TrimSpace(sessionID) == "" {
 		return
@@ -469,7 +428,6 @@ func (om *AgentOutputModal) setSessionID(sessionID string) {
 	})
 }
 
-// copyResumeCommand copies the resume command to the clipboard.
 func (om *AgentOutputModal) copyResumeCommand() {
 	om.streamMu.Lock()
 	command := strings.TrimSpace(om.resumeCommand)
@@ -482,7 +440,6 @@ func (om *AgentOutputModal) copyResumeCommand() {
 	}
 }
 
-// setStatusText updates the status text safely.
 func (om *AgentOutputModal) setStatusText(text string) {
 	om.streamMu.Lock()
 	om.statusText = text
@@ -492,7 +449,6 @@ func (om *AgentOutputModal) setStatusText(text string) {
 	})
 }
 
-// startFlushTicker begins periodic flushing of stream lines and status.
 func (om *AgentOutputModal) startFlushTicker() {
 	if om.flushTicker != nil {
 		return
@@ -515,7 +471,6 @@ func (om *AgentOutputModal) startFlushTicker() {
 	}()
 }
 
-// stopFlushTicker stops the periodic flush.
 func (om *AgentOutputModal) stopFlushTicker() {
 	if om.flushTicker == nil {
 		return
@@ -528,7 +483,6 @@ func (om *AgentOutputModal) stopFlushTicker() {
 	}
 }
 
-// flushStreamLines renders pending stream lines to the stream view.
 func (om *AgentOutputModal) flushStreamLines() {
 	om.streamMu.Lock()
 	var lines []StreamLine
@@ -553,7 +507,6 @@ func (om *AgentOutputModal) flushStreamLines() {
 	})
 }
 
-// updateStatusLine refreshes the running status and spinner frame.
 func (om *AgentOutputModal) updateStatusLine() {
 	om.streamMu.Lock()
 	statusText := om.statusText
@@ -573,7 +526,6 @@ func (om *AgentOutputModal) updateStatusLine() {
 	})
 }
 
-// renderFinal renders the final assistant output in markdown once.
 func (om *AgentOutputModal) renderFinal(text string) {
 	go func() {
 		rendered := renderMarkdown(text)
@@ -586,7 +538,6 @@ func (om *AgentOutputModal) renderFinal(text string) {
 	}()
 }
 
-// writeStreamLine writes a stream line to the writer with minimal styling.
 func (om *AgentOutputModal) writeStreamLine(writer io.Writer, line StreamLine) {
 	switch line.Kind {
 	case StreamLineThinking:

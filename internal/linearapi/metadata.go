@@ -9,7 +9,6 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
-// ListProjects fetches all projects for a team.
 func (c *Client) ListProjects(ctx context.Context, teamID string) ([]Project, error) {
 	var query struct {
 		Team struct {
@@ -44,7 +43,6 @@ func (c *Client) ListProjects(ctx context.Context, teamID string) ([]Project, er
 	return projects, nil
 }
 
-// ListProjectMilestones fetches all non-archived milestones for a project.
 func (c *Client) ListProjectMilestones(ctx context.Context, projectID string) ([]ProjectMilestone, error) {
 	var after *string
 	milestones := make([]ProjectMilestone, 0)
@@ -118,7 +116,6 @@ func (c *Client) ListProjectMilestones(ctx context.Context, projectID string) ([
 	return milestones, nil
 }
 
-// ListCycles fetches all non-archived cycles for a team.
 func (c *Client) ListCycles(ctx context.Context, teamID string) ([]Cycle, error) {
 	var after *string
 	cycles := make([]Cycle, 0)
@@ -208,7 +205,6 @@ func (c *Client) ListCycles(ctx context.Context, teamID string) ([]Cycle, error)
 	return cycles, nil
 }
 
-// ListUsers fetches all users in a team.
 func (c *Client) ListUsers(ctx context.Context, teamID string) ([]User, error) {
 	var query struct {
 		Team struct {
@@ -248,7 +244,6 @@ func (c *Client) ListUsers(ctx context.Context, teamID string) ([]User, error) {
 	return users, nil
 }
 
-// GetCurrentUser fetches the current authenticated user.
 func (c *Client) GetCurrentUser(ctx context.Context) (User, error) {
 	var query struct {
 		Viewer struct {
@@ -274,11 +269,9 @@ func (c *Client) GetCurrentUser(ctx context.Context) (User, error) {
 	}, nil
 }
 
-// ListWorkflowStates fetches all workflow states for a team.
 func (c *Client) ListWorkflowStates(ctx context.Context, teamID string) ([]WorkflowState, error) {
 	var query struct {
 		Team struct {
-			// Nullable, so a team with none set answers with an empty id.
 			DefaultIssueState struct {
 				ID graphql.String
 			}
@@ -320,10 +313,8 @@ func (c *Client) ListWorkflowStates(ctx context.Context, teamID string) ([]Workf
 	return states, nil
 }
 
-// ListWorkspaceLabels fetches every label in the workspace. The connection is
-// not scoped to a team, so each label carries the team it belongs to and the
-// caller has to drop the ones another team owns: Linear rejects a whole
-// mutation with "labelIds for incorrect team" over a single foreign id.
+// ListWorkspaceLabels returns every label in the workspace, other teams' scoped
+// labels included.
 func (c *Client) ListWorkspaceLabels(ctx context.Context) ([]IssueLabel, error) {
 	var query struct {
 		IssueLabels struct {
@@ -357,7 +348,6 @@ func (c *Client) ListWorkspaceLabels(ctx context.Context) ([]IssueLabel, error) 
 	return labels, nil
 }
 
-// ListTeamLabels fetches labels scoped to a specific team.
 func (c *Client) ListTeamLabels(ctx context.Context, teamID string) ([]IssueLabel, error) {
 	var query struct {
 		Team struct {
@@ -393,24 +383,19 @@ func (c *Client) ListTeamLabels(ctx context.Context, teamID string) ([]IssueLabe
 	return labels, nil
 }
 
-// ListIssueLabels returns the labels an issue on this team can actually carry:
-// the workspace-wide ones plus the team's own, de-duplicated by ID and sorted
-// by name. Another team's labels are dropped, because offering one only ends
-// in Linear rejecting the write.
+// ListIssueLabels returns the labels an issue on teamID can carry: workspace
+// labels plus the team's own, de-duplicated and sorted by name.
 func (c *Client) ListIssueLabels(ctx context.Context, teamID string) ([]IssueLabel, error) {
-	// Fetch workspace labels
 	workspaceLabels, err := c.ListWorkspaceLabels(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Fetch team labels
 	teamLabels, err := c.ListTeamLabels(ctx, teamID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Merge and de-duplicate by ID (team labels override workspace labels if same ID)
 	labelMap := make(map[string]IssueLabel)
 	for _, lbl := range workspaceLabels {
 		if lbl.TeamID != "" && lbl.TeamID != teamID {
@@ -422,7 +407,6 @@ func (c *Client) ListIssueLabels(ctx context.Context, teamID string) ([]IssueLab
 		labelMap[lbl.ID] = lbl
 	}
 
-	// Convert to slice and sort by name
 	labels := make([]IssueLabel, 0, len(labelMap))
 	for _, lbl := range labelMap {
 		labels = append(labels, lbl)

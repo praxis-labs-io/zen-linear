@@ -8,8 +8,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/update"
 )
 
-// runUpdate installs the latest release over the running binary and returns a
-// process exit code.
 func runUpdate(out, errOut io.Writer) int {
 	dir, err := update.InstallDir()
 	if err != nil {
@@ -19,12 +17,8 @@ func runUpdate(out, errOut io.Writer) int {
 
 	ctx := context.Background()
 
-	// No cache path: an explicit update asks GitHub rather than answering from
-	// the record the launch nudge keeps for a day.
 	result, err := update.Check(ctx, update.Options{Current: Version})
 	if err != nil {
-		// Not fatal. The user asked for the latest release, and the installer
-		// resolves that itself.
 		_, _ = fmt.Fprintf(errOut, "Warning: could not check for a newer release: %v\n", err)
 	}
 
@@ -34,8 +28,6 @@ func runUpdate(out, errOut io.Writer) int {
 	case result.Available:
 		_, _ = fmt.Fprintf(out, "%s is available, running %s.\n", result.Latest, Version)
 	case result.Latest != "":
-		// Not "it is what is running": a prerelease is ahead of the latest
-		// release rather than equal to it, and reports Available false too.
 		_, _ = fmt.Fprintf(out, "%s is the latest release. Nothing to install.\n", result.Latest)
 		return 0
 	}

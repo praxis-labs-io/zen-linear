@@ -9,8 +9,6 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
-// issueRelationNode is the relation selection, shared by an issue's relations
-// and inverseRelations connections.
 type issueRelationNode struct {
 	ID    graphql.String
 	Type  graphql.String
@@ -26,8 +24,6 @@ type issueRelationNode struct {
 	}
 }
 
-// historyUserNode is the user selection on a history entry: the actor, and both
-// sides of an assignee change.
 type historyUserNode struct {
 	ID          graphql.String
 	Name        graphql.String
@@ -36,25 +32,18 @@ type historyUserNode struct {
 	IsMe        graphql.Boolean
 }
 
-// actorBotNode is the integration that made a change, in place of a user.
-// avatarUrl, type and subType are left out: the feed names an actor, it does
-// not draw one or route on what kind of bot it is.
 type actorBotNode struct {
 	ID              graphql.String
 	Name            graphql.String
 	UserDisplayName graphql.String
 }
 
-// historyStateNode is narrower than the workflow state selection elsewhere:
-// naming a state that was moved through needs no position or team.
 type historyStateNode struct {
 	ID   graphql.String
 	Name graphql.String
 	Type graphql.String
 }
 
-// historyCycleNode is narrower than cycleRefNode for the same reason. Number is
-// what CycleRef.DisplayName falls back to when a cycle is unnamed.
 type historyCycleNode struct {
 	ID     graphql.String
 	Name   *graphql.String
@@ -78,9 +67,6 @@ type historyIssueNode struct {
 	Title      graphql.String
 }
 
-// issueHistoryNode is one entry in an issue's history. Linear records every
-// change saved together as a single entry, so each from/to pair below is
-// independently null and several may be set at once.
 type issueHistoryNode struct {
 	ID        graphql.String
 	CreatedAt graphql.String
@@ -113,9 +99,7 @@ type issueHistoryNode struct {
 		Type       graphql.String
 	}
 
-	// The priorities are pointers because 0 is Linear's "No priority", a real
-	// target a change can name. A value type reads a demotion to it as no
-	// change at all.
+	// Pointers because 0 is Linear's "No priority", a real target.
 	FromPriority *graphql.Float
 	ToPriority   *graphql.Float
 
@@ -123,9 +107,7 @@ type issueHistoryNode struct {
 	UpdatedDescription *graphql.Boolean
 }
 
-// issueDetailNode is issueQueryNode plus the connections only the details pane
-// needs. The embedded selection is untagged and declared first, which is what
-// makes shurcooL/graphql inline its fields flat and in the original order.
+// The embedded selection must stay untagged and first, or shurcooL stops inlining it flat.
 type issueDetailNode struct {
 	issueQueryNode
 	Relations struct {
@@ -171,8 +153,6 @@ type issueDetailNode struct {
 			}
 		}
 	} `graphql:"comments(first: 100, orderBy: createdAt)"`
-	// Creator and BotActor answer the one activity event with no history entry:
-	// Linear records an issue's creation on the issue itself.
 	Creator  *historyUserNode
 	BotActor *actorBotNode
 	History  struct {
@@ -180,7 +160,6 @@ type issueDetailNode struct {
 	} `graphql:"history(first: 50, orderBy: createdAt)"`
 }
 
-// FetchIssueByID fetches a single issue by its ID.
 func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 	var query struct {
 		Issue issueDetailNode `graphql:"issue(id: $id)"`
@@ -192,11 +171,6 @@ func (c *Client) FetchIssueByID(ctx context.Context, id string) (Issue, error) {
 
 	err := c.client.query(ctx, &query, variables)
 	if err != nil {
-		// The details pane cancels this query on every superseded selection, so
-		// a cancellation here is the design working, not a failure to report.
-		// Test the error rather than the context: a query that fails for a real
-		// reason while a newer selection happens to have canceled it still has
-		// to reach the log at Error.
 		if errors.Is(err, context.Canceled) {
 			logger.Debug("linearapi.client: FetchIssueByID canceled issue_id=%s", id)
 		} else {

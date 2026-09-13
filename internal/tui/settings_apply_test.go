@@ -20,9 +20,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
-// TestApplySettingsPreservesOAuthBearer guards the bug where an in-app settings
-// save rebuilt the API client from config alone, dropping the OAuth bearer
-// scheme and downgrading the session to raw-token auth Linear then rejects.
 func TestApplySettingsPreservesOAuthBearer(t *testing.T) {
 	var mu sync.Mutex
 	var projectsAuth string
@@ -97,7 +94,6 @@ func TestApplySettingsPreservesOAuthBearer(t *testing.T) {
 	startReviewTestApplication(t, app)
 	refreshDone := installRefreshCompletionHook(app)
 
-	// A connection change, or no client is rebuilt and this asserts nothing.
 	saved := cfg
 	saved.Timeout = 45 * time.Second
 	app.applySettings(saved)
@@ -115,9 +111,6 @@ func TestApplySettingsPreservesOAuthBearer(t *testing.T) {
 	waitForRefreshCompletion(t, refreshDone)
 }
 
-// isolateLogging keeps a test that reinitializes the process-global logger from
-// writing into the developer's own ~/.zen-linear and from leaving the logger
-// pointing at a temp directory the next test no longer has.
 func isolateLogging(t *testing.T) {
 	t.Helper()
 	setHomeDir(t, t.TempDir())
@@ -128,25 +121,18 @@ func isolateLogging(t *testing.T) {
 	})
 }
 
-// A log path the app cannot open used to abort applySettings: logger.Reinit
-// returned an error, the handler reported it and returned early, and everything
-// after it — the rebuilt API client included — never ran. Saving a bad log path
-// took the rest of the settings with it.
 func TestApplySettingsSurvivesAnUnwritableLogPath(t *testing.T) {
 	isolateLogging(t)
 
 	app := newUXTestApp(t)
 
 	tmpDir := t.TempDir()
-	// A regular file where the refused path wants a directory.
 	blocker := filepath.Join(tmpDir, "blocker")
 	if err := os.WriteFile(blocker, nil, 0644); err != nil {
 		t.Fatalf("write blocker: %v", err)
 	}
 	refused := filepath.Join(blocker, "nested", "app.log")
 
-	// The API client is rebuilt after the logger line, so the old pointer
-	// surviving is what an early return there looks like from outside.
 	before := app.api
 
 	cfg := app.config
@@ -158,17 +144,13 @@ func TestApplySettingsSurvivesAnUnwritableLogPath(t *testing.T) {
 		t.Error("API client not rebuilt: applySettings stopped at the refused log path")
 	}
 
-	// The config names where logs actually go, not the path that was refused.
 	if app.config.LogFile == refused {
 		t.Errorf("config.LogFile = %q, want the path actually opened", app.config.LogFile)
 	}
-	// Held for the reload to settle, since the reload repaints the hint line.
 	if !strings.Contains(app.pendingWarning, refused) {
 		t.Errorf("held warning %q does not name the refused path %q", app.pendingWarning, refused)
 	}
 
-	// And it lands on the hint line rather than the toast corner, which
-	// truncates to half the row and would drop the half that says what happened.
 	app.reportPendingWarning()
 	if status := app.statusBar.GetText(true); !strings.Contains(status, refused) {
 		t.Errorf("status %q does not name the refused path %q", status, refused)
@@ -178,9 +160,6 @@ func TestApplySettingsSurvivesAnUnwritableLogPath(t *testing.T) {
 	}
 }
 
-// Falling back all the way to no logging is where this save landed, not a
-// setting the user chose. Adopting it would write "log_file": "" on the next
-// save and turn one unwritable path into logging off for good.
 func TestApplySettingsDoesNotAdoptLoggingOffAsASetting(t *testing.T) {
 	isolateLogging(t)
 
@@ -192,7 +171,6 @@ func TestApplySettingsDoesNotAdoptLoggingOffAsASetting(t *testing.T) {
 	}
 	refused := filepath.Join(blocker, "nested", "app.log")
 
-	// Nowhere left to fall back to: HOME is a file, so the default fails too.
 	home := filepath.Join(t.TempDir(), "home-is-a-file")
 	if err := os.WriteFile(home, nil, 0644); err != nil {
 		t.Fatalf("write home: %v", err)
@@ -211,7 +189,6 @@ func TestApplySettingsDoesNotAdoptLoggingOffAsASetting(t *testing.T) {
 	}
 }
 
-// seedPlace fills the state a settings save used to throw away.
 func seedPlace(app *App) {
 	app.selectedNavigation = &NavigationNode{ID: "team-1", TeamID: "team-1", IsTeam: true, Text: "Engineering"}
 	app.issues = []linearapi.Issue{{ID: "issue-1", Identifier: "ZNL-1", Title: "On screen"}}
@@ -234,7 +211,6 @@ func TestSavingAThemeKeepsWhatIsOnScreen(t *testing.T) {
 	cfg.Theme = config.ThemeLinear
 	app.applySettings(cfg)
 
-	// The save landed, so the rest is not a no-op mistaken for a pass.
 	if app.theme != ResolveTheme(config.ThemeLinear) {
 		t.Fatal("theme not applied: the save did not take")
 	}
@@ -265,7 +241,6 @@ func TestSavingAThemeKeepsWhatIsOnScreen(t *testing.T) {
 	}
 }
 
-// Rebuilding the modals shells out to the agent CLI for its model list.
 func TestSavingAPageSizeRebuildsNoModals(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -283,7 +258,6 @@ func TestSavingAPageSizeRebuildsNoModals(t *testing.T) {
 	}
 }
 
-// Reinit writes a session marker, so an ungated restart plants a false one.
 func TestSavingAThemeDoesNotRestartLogging(t *testing.T) {
 	isolateLogging(t)
 
@@ -378,8 +352,7 @@ func TestSavingANewConnectionPutsTheUserBackWhereTheyWere(t *testing.T) {
 		LinearAPIKey: "token",
 		CacheTTL:     time.Minute,
 		PageSize:     10,
-		// Without the re-seed the reload falls through to this.
-		DefaultTeam: "NEX",
+		DefaultTeam:  "NEX",
 	}
 	app := NewApp(linearapi.ClientConfig{Token: "token", Endpoint: server.URL}, cfg, nil)
 	startReviewTestApplication(t, app)
@@ -388,7 +361,6 @@ func TestSavingANewConnectionPutsTheUserBackWhereTheyWere(t *testing.T) {
 
 	saved := cfg
 	saved.Timeout = 45 * time.Second
-	// On the event loop, where the Save button runs it.
 	app.app.QueueUpdate(func() {
 		app.selectedNavigation = &NavigationNode{ID: "team-1", TeamID: "team-1", IsTeam: true, Text: "Engineering"}
 		app.applySettings(saved)
@@ -407,7 +379,6 @@ func TestSavingANewConnectionPutsTheUserBackWhereTheyWere(t *testing.T) {
 	}
 }
 
-// The reload used to rebuild the tree, which re-baked every node's background.
 func TestSavingAThemeRestylesTheNavigationTree(t *testing.T) {
 	app := newUXTestApp(t)
 	app.config.Theme = config.ThemeLinear
@@ -432,7 +403,6 @@ func TestSavingAThemeRestylesTheNavigationTree(t *testing.T) {
 	}
 }
 
-// navNodeBackgrounds counts the tree's nodes by the background they would draw.
 func navNodeBackgrounds(app *App) map[tcell.Color]int {
 	counts := map[tcell.Color]int{}
 	var walk func(*tview.TreeNode)
@@ -450,7 +420,6 @@ func navNodeBackgrounds(app *App) map[tcell.Color]int {
 	return counts
 }
 
-// An ungated rebuild drops imageCache, refetching every decoded picture.
 func TestSavingSettingsRebuildsTheImageStoreOnlyForImages(t *testing.T) {
 	app := newUXTestApp(t)
 	app.imageCache = map[string]*loadedImage{"https://example.test/a.png": {}}

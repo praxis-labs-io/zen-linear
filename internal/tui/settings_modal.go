@@ -17,18 +17,15 @@ import (
 const (
 	defaultAgentModelLabel = "default (use provider default)"
 	settingsModalWidth     = 82
-	// envNoticeMaxFields keeps the one-line context row inside a narrow
-	// terminal. Past it the count stands in for the names.
+	// The context row is one line and does not grow, so more overrides than this are counted rather than named.
 	envNoticeMaxFields = 3
 )
 
-// agentModelOption pairs a model id with its display label.
 type agentModelOption struct {
 	id    string
 	label string
 }
 
-// cursorModelOptions returns Cursor model options, preferring the CLI list.
 func cursorModelOptions() []agentModelOption {
 	options, err := cursorModelOptionsFromCLI()
 	if err == nil && len(options) > 0 {
@@ -37,7 +34,6 @@ func cursorModelOptions() []agentModelOption {
 	return cursorModelFallbackOptions()
 }
 
-// cursorModelFallbackOptions returns a static fallback list for Cursor models.
 func cursorModelFallbackOptions() []agentModelOption {
 	return []agentModelOption{
 		{id: "auto", label: "auto - Auto"},
@@ -65,7 +61,6 @@ func cursorModelFallbackOptions() []agentModelOption {
 	}
 }
 
-// cursorModelOptionsFromCLI loads model options from cursor-agent.
 func cursorModelOptionsFromCLI() ([]agentModelOption, error) {
 	binary, err := resolveCursorAgentBinary()
 	if err != nil {
@@ -83,7 +78,6 @@ func cursorModelOptionsFromCLI() ([]agentModelOption, error) {
 	return options, nil
 }
 
-// resolveCursorAgentBinary resolves the cursor-agent executable path.
 func resolveCursorAgentBinary() (string, error) {
 	if path, err := exec.LookPath("cursor-agent"); err == nil {
 		return path, nil
@@ -94,7 +88,6 @@ func resolveCursorAgentBinary() (string, error) {
 	return "", fmt.Errorf("cursor-agent not found in PATH")
 }
 
-// parseCursorModelOptions parses `cursor-agent --list-models` output into options.
 func parseCursorModelOptions(output string) []agentModelOption {
 	clean := stripANSICodes(output)
 	lines := strings.Split(clean, "\n")
@@ -121,7 +114,6 @@ func parseCursorModelOptions(output string) []agentModelOption {
 	return options
 }
 
-// parseModelLine splits a "id - label" line into id and label.
 func parseModelLine(item string) (string, string) {
 	parts := strings.SplitN(item, " - ", 2)
 	if len(parts) == 1 {
@@ -136,7 +128,6 @@ func parseModelLine(item string) (string, string) {
 	return id, fmt.Sprintf("%s - %s", id, label)
 }
 
-// stripANSICodes removes ANSI escape sequences from CLI output.
 func stripANSICodes(value string) string {
 	var builder strings.Builder
 	builder.Grow(len(value))
@@ -161,7 +152,6 @@ func stripANSICodes(value string) string {
 	return builder.String()
 }
 
-// claudeModelOptions returns Claude model options supported by `claude --model`.
 func claudeModelOptions() []agentModelOption {
 	return []agentModelOption{
 		{id: "sonnet", label: "Claude Sonnet"},
@@ -170,12 +160,10 @@ func claudeModelOptions() []agentModelOption {
 	}
 }
 
-// defaultAgentModelOptions returns the default-only model dropdown values.
 func defaultAgentModelOptions() ([]string, []string) {
 	return []string{defaultAgentModelLabel}, []string{""}
 }
 
-// selectAvailableProvider chooses a valid provider key from available options.
 func selectAvailableProvider(configProvider string, available []string) string {
 	normalized := strings.ToLower(strings.TrimSpace(configProvider))
 	for _, option := range available {
@@ -189,7 +177,6 @@ func selectAvailableProvider(configProvider string, available []string) string {
 	return ""
 }
 
-// agentModelOptionsForProvider builds model labels and values for a provider.
 func agentModelOptionsForProvider(provider string) ([]string, []string) {
 	labels, values := defaultAgentModelOptions()
 	normalized := strings.ToLower(strings.TrimSpace(provider))
@@ -212,27 +199,25 @@ func agentModelOptionsForProvider(provider string) ([]string, []string) {
 	return labels, values
 }
 
-// SettingsModal manages the settings form overlay.
 type SettingsModal struct {
-	app                 *App
-	fm                  *FormModal
-	endpointField       *tview.InputField
-	timeoutField        *tview.InputField
-	pageSizeField       *tview.InputField
-	cacheTTLField       *tview.InputField
-	searchDebounceField *tview.InputField
-	logFileField        *tview.InputField
-	logLevelField       *FormPicker
-	logLevelOptions     []string
-	themeField          *FormPicker
-	themeOptions        []string
-	themeValues         []string
-	densityField        *FormPicker
-	roundedBordersField *FormPicker
-	imagesField         *FormPicker
-	sessionRestoreField *FormPicker
-	updateCheckField    *FormPicker
-	// booleanOptions backs every on/off picker, so they read the same way.
+	app                  *App
+	fm                   *FormModal
+	endpointField        *tview.InputField
+	timeoutField         *tview.InputField
+	pageSizeField        *tview.InputField
+	cacheTTLField        *tview.InputField
+	searchDebounceField  *tview.InputField
+	logFileField         *tview.InputField
+	logLevelField        *FormPicker
+	logLevelOptions      []string
+	themeField           *FormPicker
+	themeOptions         []string
+	themeValues          []string
+	densityField         *FormPicker
+	roundedBordersField  *FormPicker
+	imagesField          *FormPicker
+	sessionRestoreField  *FormPicker
+	updateCheckField     *FormPicker
 	booleanOptions       []string
 	densityOptions       []string
 	densityValues        []string
@@ -249,7 +234,6 @@ type SettingsModal struct {
 	defaultProjectField  *tview.InputField
 }
 
-// NewSettingsModal creates a new settings modal.
 func NewSettingsModal(app *App) *SettingsModal {
 	availableProviders := agents.AvailableProviderKeys(exec.LookPath)
 	selectedProvider := selectAvailableProvider(config.DefaultAgentProvider, availableProviders)
@@ -272,10 +256,6 @@ func NewSettingsModal(app *App) *SettingsModal {
 	sm.fm = NewFormModal(app, "Settings")
 	sm.fm.SetMaxWidth(settingsModalWidth)
 
-	// Five short pages rather than one scroll, most-used first, one field to a
-	// row. The section name is the context, so a field inside Agents is
-	// Provider, not Agent provider: two labels on a row that read the same
-	// were the bug, and a single column is what stops them sharing one.
 	sm.fm.BeginSection("Appearance")
 	sm.themeField = sm.fm.AddPicker("Theme", sm.themeOptions, 0, nil)
 	sm.fm.EndRow()
@@ -332,7 +312,6 @@ func NewSettingsModal(app *App) *SettingsModal {
 	return sm
 }
 
-// Show displays the settings modal with current configuration values.
 func (sm *SettingsModal) Show() {
 	logger.Debug("tui.settings: showing settings modal")
 	settings := config.SettingsFromConfig(sm.app.config)
@@ -366,7 +345,6 @@ func (sm *SettingsModal) Show() {
 	sm.fm.Show("settings")
 }
 
-// currentAgentModelValue returns the currently selected model value.
 func (sm *SettingsModal) currentAgentModelValue() string {
 	index, _ := sm.agentModelField.GetCurrentOption()
 	if index >= 0 && index < len(sm.agentModelValues) {
@@ -375,11 +353,8 @@ func (sm *SettingsModal) currentAgentModelValue() string {
 	return ""
 }
 
-// setAgentModelOptionsForProvider updates model options for the given provider.
+// The provider picker fires during construction, before agentModelField exists.
 func (sm *SettingsModal) setAgentModelOptionsForProvider(provider string) {
-	// The provider picker's initial selection fires during construction,
-	// before the model field exists; the struct literal already holds the
-	// right initial options then.
 	if sm.agentModelField == nil {
 		return
 	}
@@ -395,7 +370,6 @@ func (sm *SettingsModal) setAgentModelOptionsForProvider(provider string) {
 	sm.setAgentModelSelection("")
 }
 
-// setAgentProviderOptions updates the provider dropdown options and callback.
 func (sm *SettingsModal) setAgentProviderOptions(options []string) {
 	sm.agentProviderOptions = options
 	if sm.agentProviderField == nil {
@@ -407,21 +381,17 @@ func (sm *SettingsModal) setAgentProviderOptions(options []string) {
 	})
 }
 
-// Hide hides the settings modal.
 func (sm *SettingsModal) Hide() {
 	logger.Debug("tui.settings: hiding settings modal")
 	sm.fm.Hide("settings")
 }
 
-// Focus returns keyboard focus to the form, for when an overlay closes.
 func (sm *SettingsModal) Focus() { sm.fm.Focus() }
 
-// HandleKey handles keyboard input for the settings modal.
 func (sm *SettingsModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return sm.fm.HandleKey(event)
 }
 
-// saveSettings validates input, persists settings, and applies them to the app.
 func (sm *SettingsModal) saveSettings() {
 	settings, err := sm.settingsFromForm()
 	if err != nil {
@@ -430,9 +400,6 @@ func (sm *SettingsModal) saveSettings() {
 		return
 	}
 
-	// settings is what goes on disk; the session keeps running with the
-	// environment on top, or a save would quietly drop an override that is
-	// still exported.
 	effective, overrides, err := config.ApplyEnvOverrides(settings)
 	if err != nil {
 		logger.ErrorWithErr(err, "tui.settings: failed to apply environment overrides")
@@ -454,8 +421,6 @@ func (sm *SettingsModal) saveSettings() {
 		return
 	}
 
-	// The file has moved on, so a second save must restore against what is
-	// there now rather than what launch read.
 	sm.app.UseFileSettings(settings, overrides)
 
 	logger.Debug("tui.settings: settings saved successfully path=%s", settingsPath)
@@ -510,53 +475,39 @@ func (sm *SettingsModal) settingsFromForm() (config.Settings, error) {
 	}
 
 	settings := config.Settings{
-		APIEndpoint:    strings.TrimSpace(sm.endpointField.GetText()),
-		Timeout:        strings.TrimSpace(sm.timeoutField.GetText()),
-		PageSize:       pageSize,
-		CacheTTL:       strings.TrimSpace(sm.cacheTTLField.GetText()),
-		SearchDebounce: strings.TrimSpace(sm.searchDebounceField.GetText()),
-		LogFile:        config.LogFileSetting(strings.TrimSpace(sm.logFileField.GetText())),
-		LogLevel:       logLevel,
-		Theme:          theme,
-		Density:        density,
-		// No form fields; carry the current values so saving settings never
-		// strips them from the config file.
-		GroupBy:        sm.app.config.GroupBy,
-		SubgroupBy:     sm.app.config.SubgroupBy,
-		SortBy:         sm.app.config.SortBy,
-		Columns:        sm.app.config.Columns,
-		RoundedBorders: booleanOptionValue(sm.roundedBordersField),
-		Images:         images,
-		SessionRestore: booleanOptionValue(sm.sessionRestoreField),
-		UpdateCheck:    booleanOptionValue(sm.updateCheckField),
-		AgentProvider:  agentProvider,
-		AgentSandbox:   agentSandbox,
-		AgentModel:     agentModel,
-		AgentWorkspace: strings.TrimSpace(sm.agentWorkspaceField.GetText()),
-		// No form field; carry the current value so saving settings never
-		// strips it from the config file.
-		Keybindings:    sm.app.config.Keybindings,
-		DefaultTeam:    strings.TrimSpace(sm.defaultTeamField.GetText()),
-		DefaultProject: strings.TrimSpace(sm.defaultProjectField.GetText()),
-		// The form has no fields for these; carry the current values through
-		// so saving settings never strips them from the config file.
+		APIEndpoint:      strings.TrimSpace(sm.endpointField.GetText()),
+		Timeout:          strings.TrimSpace(sm.timeoutField.GetText()),
+		PageSize:         pageSize,
+		CacheTTL:         strings.TrimSpace(sm.cacheTTLField.GetText()),
+		SearchDebounce:   strings.TrimSpace(sm.searchDebounceField.GetText()),
+		LogFile:          config.LogFileSetting(strings.TrimSpace(sm.logFileField.GetText())),
+		LogLevel:         logLevel,
+		Theme:            theme,
+		Density:          density,
+		GroupBy:          sm.app.config.GroupBy,
+		SubgroupBy:       sm.app.config.SubgroupBy,
+		SortBy:           sm.app.config.SortBy,
+		Columns:          sm.app.config.Columns,
+		RoundedBorders:   booleanOptionValue(sm.roundedBordersField),
+		Images:           images,
+		SessionRestore:   booleanOptionValue(sm.sessionRestoreField),
+		UpdateCheck:      booleanOptionValue(sm.updateCheckField),
+		AgentProvider:    agentProvider,
+		AgentSandbox:     agentSandbox,
+		AgentModel:       agentModel,
+		AgentWorkspace:   strings.TrimSpace(sm.agentWorkspaceField.GetText()),
+		Keybindings:      sm.app.config.Keybindings,
+		DefaultTeam:      strings.TrimSpace(sm.defaultTeamField.GetText()),
+		DefaultProject:   strings.TrimSpace(sm.defaultProjectField.GetText()),
 		Workspaces:       sm.app.config.Workspaces,
 		DefaultWorkspace: sm.app.config.DefaultWorkspace,
 	}
 
-	// The environment is where this session's value came from, not where the
-	// next one's should. Writing it back would turn a variable exported for one
-	// launch into a stored setting, which is the ZNL-145 shape.
 	restoreEnvOverrides(&settings, sm.app.fileSettings, sm.app.envOverrides)
 
 	return settings, nil
 }
 
-// lockEnvOverriddenFields makes the fields the environment owns read-only.
-// They are shown, because the reader should see what the session is running
-// with, but an edit to one is discarded by restoreEnvOverrides on the way to
-// disk and by ApplyEnvOverrides on the way back: a field that took the typing
-// and then dropped it silently is worse than one that never took it.
 func (sm *SettingsModal) lockEnvOverriddenFields() {
 	overrides := sm.app.envOverrides
 	for field, primitive := range map[string]tview.Primitive{
@@ -571,18 +522,10 @@ func (sm *SettingsModal) lockEnvOverriddenFields() {
 	}
 }
 
-// envOverrideNotice names the fields the environment owns, for the line pinned
-// above the form. Empty when it owns none, which hides the line.
 func envOverrideNotice(overrides config.EnvOverrides) string {
 	if len(overrides) == 0 {
 		return ""
 	}
-	// The context row is one line and does not grow, so this has to fit a narrow
-	// terminal at every length. Naming the variable beside each field overflowed
-	// it at two overrides, and a list of all six overflows it at 80 columns:
-	// either way the reader is told about one field and never sees the rest.
-	// Field ids alone, capped, with the remainder counted rather than dropped.
-	// The variable is LINEAR_ plus the field, so the id is enough to find it.
 	fields := make([]string, 0, len(overrides))
 	for field := range overrides {
 		fields = append(fields, field)
@@ -598,9 +541,6 @@ func envOverrideNotice(overrides config.EnvOverrides) string {
 	return "From the environment: " + strings.Join(listed, ", ") + suffix
 }
 
-// restoreEnvOverrides puts the file's value back for every field the
-// environment took over, so a save writes what config.json should hold rather
-// than what this launch happened to run with.
 func restoreEnvOverrides(settings *config.Settings, fromFile config.Settings, overrides config.EnvOverrides) {
 	if overrides.Has(config.FieldAPIEndpoint) {
 		settings.APIEndpoint = fromFile.APIEndpoint
@@ -622,7 +562,6 @@ func restoreEnvOverrides(settings *config.Settings, fromFile config.Settings, ov
 	}
 }
 
-// setLogLevelSelection updates the dropdown selection to match the provided level.
 func (sm *SettingsModal) setLogLevelSelection(level string) {
 	selected := 0
 	for i, option := range sm.logLevelOptions {
@@ -637,7 +576,6 @@ func (sm *SettingsModal) setLogLevelSelection(level string) {
 	sm.logLevelField.SetCurrentOption(selected)
 }
 
-// currentThemeValue returns the currently selected theme value.
 func (sm *SettingsModal) currentThemeValue() string {
 	index, _ := sm.themeField.GetCurrentOption()
 	if index >= 0 && index < len(sm.themeValues) {
@@ -646,7 +584,6 @@ func (sm *SettingsModal) currentThemeValue() string {
 	return ""
 }
 
-// setThemeSelection updates the dropdown selection to match the provided theme.
 func (sm *SettingsModal) setThemeSelection(theme string) {
 	selected := 0
 	for i, value := range sm.themeValues {
@@ -661,7 +598,6 @@ func (sm *SettingsModal) setThemeSelection(theme string) {
 	sm.themeField.SetCurrentOption(selected)
 }
 
-// currentDensityValue returns the currently selected density value.
 func (sm *SettingsModal) currentDensityValue() string {
 	index, _ := sm.densityField.GetCurrentOption()
 	if index >= 0 && index < len(sm.densityValues) {
@@ -670,7 +606,6 @@ func (sm *SettingsModal) currentDensityValue() string {
 	return ""
 }
 
-// setDensitySelection updates the dropdown selection to match the provided density.
 func (sm *SettingsModal) setDensitySelection(density string) {
 	selected := 0
 	for i, value := range sm.densityValues {
@@ -685,7 +620,6 @@ func (sm *SettingsModal) setDensitySelection(density string) {
 	sm.densityField.SetCurrentOption(selected)
 }
 
-// setImagesSelection updates the dropdown selection to match the provided value.
 func (sm *SettingsModal) setImagesSelection(images string) {
 	selected := 0
 	for i, option := range sm.imagesOptions {
@@ -700,7 +634,6 @@ func (sm *SettingsModal) setImagesSelection(images string) {
 	sm.imagesField.SetCurrentOption(selected)
 }
 
-// setAgentProviderSelection updates the dropdown selection to match the provided provider.
 func (sm *SettingsModal) setAgentProviderSelection(provider string) {
 	if len(sm.agentProviderOptions) == 0 {
 		return
@@ -715,7 +648,6 @@ func (sm *SettingsModal) setAgentProviderSelection(provider string) {
 	sm.agentProviderField.SetCurrentOption(selected)
 }
 
-// booleanOptionIndex maps a flag onto its index in booleanOptions.
 func booleanOptionIndex(enabled bool) int {
 	if enabled {
 		return 0
@@ -723,13 +655,11 @@ func booleanOptionIndex(enabled bool) int {
 	return 1
 }
 
-// booleanOptionValue reads a flag back off an on/off picker.
 func booleanOptionValue(picker *FormPicker) bool {
 	index, _ := picker.GetCurrentOption()
 	return index == 0
 }
 
-// setAgentSandboxSelection updates the dropdown selection to match the provided sandbox value.
 func (sm *SettingsModal) setAgentSandboxSelection(sandbox string) {
 	selected := 0
 	for i, option := range sm.agentSandboxOptions {
@@ -744,7 +674,6 @@ func (sm *SettingsModal) setAgentSandboxSelection(sandbox string) {
 	sm.agentSandboxField.SetCurrentOption(selected)
 }
 
-// setAgentModelSelection updates the dropdown selection to match the provided model.
 func (sm *SettingsModal) setAgentModelSelection(model string) {
 	selected := 0
 	for i, value := range sm.agentModelValues {

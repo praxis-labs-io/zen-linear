@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// TestListIssueLabelsDropsAnotherTeamsLabels covers a create that Linear
-// rejects outright: the workspace label connection is not scoped to a team, so
-// it hands back every team's labels, and one foreign id fails the whole
-// mutation with "labelIds for incorrect team".
 func TestListIssueLabelsDropsAnotherTeamsLabels(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)

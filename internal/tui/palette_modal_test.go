@@ -9,8 +9,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// paletteRowsFor renders the given commands through the palette and returns
-// the rows the list drew, so the assertions read what a user sees.
 func paletteRowsFor(t *testing.T, commands []Command) (*App, []string) {
 	t.Helper()
 	app := openPaletteOn(t, 100, 30)
@@ -79,9 +77,6 @@ func TestPaletteRowTruncatesATitleThatWouldReachTheShortcut(t *testing.T) {
 	}
 }
 
-// TestEveryCommandFilesUnderAHeading guards the one silent failure in the
-// grouping: a command whose group is missing from commandGroupOrder is listed
-// after every headed group with no heading of its own.
 func TestEveryCommandFilesUnderAHeading(t *testing.T) {
 	app := newUXTestApp(t)
 	for _, cmd := range app.paletteCtrl.commands {
@@ -131,7 +126,6 @@ func TestPaletteCursorStepsOverHeadings(t *testing.T) {
 		{ID: "settings", Title: "Settings", Group: GroupApp},
 	})
 
-	// Rows are: View, Zoom details, App, Settings.
 	if got := pc.Cursor(); got != 1 {
 		t.Fatalf("opened on row %d, want the first command at 1", got)
 	}
@@ -156,8 +150,6 @@ func TestPaletteCursorStepsOverHeadings(t *testing.T) {
 	}
 }
 
-// openPaletteOn draws the palette on a screen of the given size and hands back
-// the app, so a test reads the panel where it actually landed.
 func openPaletteOn(t *testing.T, width, height int) *App {
 	t.Helper()
 	app := newUXTestApp(t)
@@ -165,8 +157,6 @@ func openPaletteOn(t *testing.T, width, height int) *App {
 	app.app.SetScreen(screen)
 	screen.SetSize(width, height)
 	app.app.SetRoot(app.pages, true)
-	// The panel sizes itself against the screen, and the screen is only known
-	// once something has been drawn on it.
 	app.app.ForceDraw()
 	app.focusedPane = FocusIssues
 	app.openPalette()
@@ -174,9 +164,6 @@ func openPaletteOn(t *testing.T, width, height int) *App {
 	return app
 }
 
-// panelRect is where the palette's bordered panel was drawn, worked back from
-// the list inside it: the panel is the list plus a gutter and a border each
-// side, and opens a border and a query box above it.
 func panelRect(t *testing.T, app *App) (x, y, width int) {
 	t.Helper()
 	listX, listY, listWidth, _ := app.paletteList.GetRect()
@@ -186,10 +173,6 @@ func panelRect(t *testing.T, app *App) (x, y, width int) {
 	return listX - modalGutter - 1, listY - paletteQueryBoxRows - 1, listWidth + 2*(modalGutter+1)
 }
 
-// TestPaletteFitsASmallScreen pins the panel inside the terminal. Laid out at
-// its natural size it was drawn from a negative origin, which took the query
-// box off the top on a short screen and the first columns of every row off the
-// left on a narrow one.
 func TestPaletteFitsASmallScreen(t *testing.T) {
 	sizes := []struct{ width, height int }{
 		{100, 12},
@@ -212,9 +195,6 @@ func TestPaletteFitsASmallScreen(t *testing.T) {
 	}
 }
 
-// TestClickingAPaletteRowRunsIt covers the whole click path: the centering has
-// to give the list a rect the pointer is in, and the palette has to answer the
-// click itself rather than let tview move a highlight the controller cannot see.
 func TestClickingAPaletteRowRunsIt(t *testing.T) {
 	app := openPaletteOn(t, 100, 30)
 	ran := ""
@@ -225,7 +205,6 @@ func TestClickingAPaletteRowRunsIt(t *testing.T) {
 	app.updatePaletteList()
 	app.app.ForceDraw()
 
-	// Rows are: View, Zoom details, App, Settings.
 	x, top, _, _ := app.paletteList.GetInnerRect()
 	clickAt(t, app, x+2, top+3)
 

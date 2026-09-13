@@ -10,14 +10,12 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
-// ClaudeProvider invokes the Claude Code CLI.
 type ClaudeProvider struct {
 	lookPath  func(string) (string, error)
 	toolUseMu sync.Mutex
 	toolUses  map[string]claudeToolUseInfo
 }
 
-// NewClaudeProvider creates a Claude provider with an optional lookPath override.
 func NewClaudeProvider(lookPath func(string) (string, error)) *ClaudeProvider {
 	if lookPath == nil {
 		lookPath = exec.LookPath
@@ -28,12 +26,10 @@ func NewClaudeProvider(lookPath func(string) (string, error)) *ClaudeProvider {
 	}
 }
 
-// Name returns the display name for this provider.
 func (p *ClaudeProvider) Name() string {
 	return "Claude"
 }
 
-// ResolveBinary finds the Claude CLI binary.
 func (p *ClaudeProvider) ResolveBinary() (string, bool) {
 	path, err := p.lookPath(ProviderClaude)
 	if err != nil {
@@ -42,7 +38,6 @@ func (p *ClaudeProvider) ResolveBinary() (string, bool) {
 	return path, true
 }
 
-// BuildArgs builds argv for a non-interactive Claude run.
 func (p *ClaudeProvider) BuildArgs(prompt string, issueContext string, options AgentRunOptions) []string {
 	fullPrompt := buildAgentPrompt(prompt, issueContext)
 	args := []string{
@@ -64,7 +59,6 @@ func (p *ClaudeProvider) BuildArgs(prompt string, issueContext string, options A
 	return args
 }
 
-// ParseEvent parses a stream-json line into an AgentEvent.
 func (p *ClaudeProvider) ParseEvent(line []byte) (*AgentEvent, bool) {
 	trimmed := strings.TrimSpace(string(line))
 	if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
@@ -135,7 +129,6 @@ func (p *ClaudeProvider) ParseEvent(line []byte) (*AgentEvent, bool) {
 	return nil, false
 }
 
-// ParseStreamLine attempts to extract display text from Claude stream-json.
 func (p *ClaudeProvider) ParseStreamLine(line []byte) (string, bool) {
 	trimmed := strings.TrimSpace(string(line))
 	if trimmed == "" || !strings.HasPrefix(trimmed, "{") {
@@ -153,7 +146,6 @@ func (p *ClaudeProvider) ParseStreamLine(line []byte) (string, bool) {
 	return text, true
 }
 
-// buildClaudeResumeCommand returns a resume command when a session id is available.
 func buildClaudeResumeCommand(sessionID string) string {
 	if strings.TrimSpace(sessionID) == "" {
 		return ""
@@ -161,7 +153,6 @@ func buildClaudeResumeCommand(sessionID string) string {
 	return fmt.Sprintf("claude --resume %s", sessionID)
 }
 
-// claudePermissionMode maps sandbox settings to Claude permission modes.
 func claudePermissionMode(sandbox string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(sandbox)) {
 	case "enabled":
@@ -173,7 +164,6 @@ func claudePermissionMode(sandbox string) (string, bool) {
 	}
 }
 
-// parseClaudeToolUse converts a tool_use message into a tool call event.
 func (p *ClaudeProvider) parseClaudeToolUse(items []claudeMessageContent) *AgentEvent {
 	for _, item := range items {
 		if item.Type != "tool_use" {
@@ -194,7 +184,6 @@ func (p *ClaudeProvider) parseClaudeToolUse(items []claudeMessageContent) *Agent
 	return nil
 }
 
-// parseClaudeToolResult converts a tool_result message into a tool call event.
 func (p *ClaudeProvider) parseClaudeToolResult(event claudeStreamEvent) *AgentEvent {
 	for _, item := range event.Message.Content {
 		if item.Type != "tool_result" {
@@ -223,7 +212,6 @@ func (p *ClaudeProvider) parseClaudeToolResult(event claudeStreamEvent) *AgentEv
 	return nil
 }
 
-// rememberToolUse stores tool metadata for later tool_result correlation.
 func (p *ClaudeProvider) rememberToolUse(id string, name string, detail string) {
 	if strings.TrimSpace(id) == "" {
 		return
@@ -233,7 +221,6 @@ func (p *ClaudeProvider) rememberToolUse(id string, name string, detail string) 
 	p.toolUseMu.Unlock()
 }
 
-// popToolUse returns stored tool metadata and removes it from the cache.
 func (p *ClaudeProvider) popToolUse(id string) (claudeToolUseInfo, bool) {
 	p.toolUseMu.Lock()
 	defer p.toolUseMu.Unlock()
@@ -244,7 +231,6 @@ func (p *ClaudeProvider) popToolUse(id string) (claudeToolUseInfo, bool) {
 	return claudeToolUseInfo{}, false
 }
 
-// extractClaudeEventText returns the most relevant display text for a stream event.
 func extractClaudeEventText(event claudeStreamEvent) string {
 	if text := strings.TrimSpace(event.Delta.Text); text != "" {
 		return text
@@ -261,7 +247,6 @@ func extractClaudeEventText(event claudeStreamEvent) string {
 	return ""
 }
 
-// extractClaudeMessageText joins text content blocks from a Claude message.
 func extractClaudeMessageText(items []claudeMessageContent) string {
 	var builder strings.Builder
 	for _, item := range items {
@@ -273,7 +258,6 @@ func extractClaudeMessageText(items []claudeMessageContent) string {
 	return builder.String()
 }
 
-// summarizeClaudeToolInput extracts a concise detail string from tool input.
 func summarizeClaudeToolInput(input map[string]any) string {
 	if len(input) == 0 {
 		return ""
@@ -296,7 +280,6 @@ func summarizeClaudeToolInput(input map[string]any) string {
 	return ""
 }
 
-// summarizeClaudeToolResult converts tool result payloads into a short summary.
 func summarizeClaudeToolResult(content any, result *claudeToolUseResultPayload) string {
 	switch value := content.(type) {
 	case string:
@@ -322,7 +305,6 @@ func summarizeClaudeToolResult(content any, result *claudeToolUseResultPayload) 
 	return ""
 }
 
-// buildAgentPrompt combines the user prompt with issue context.
 func buildAgentPrompt(prompt string, issueContext string) string {
 	return strings.TrimSpace(strings.Join([]string{
 		"Use the issue context below to respond to the instruction.",
@@ -335,13 +317,11 @@ func buildAgentPrompt(prompt string, issueContext string) string {
 	}, "\n"))
 }
 
-// claudeToolUseInfo stores tool metadata for result correlation.
 type claudeToolUseInfo struct {
 	Name   string
 	Detail string
 }
 
-// claudeStreamEvent captures common Claude stream-json fields.
 type claudeStreamEvent struct {
 	Type       string `json:"type"`
 	Subtype    string `json:"subtype"`
@@ -361,7 +341,6 @@ type claudeStreamEvent struct {
 	ToolUseResult *claudeToolUseResultPayload `json:"tool_use_result"`
 }
 
-// claudeMessageContent captures message content blocks including tool calls.
 type claudeMessageContent struct {
 	Type      string         `json:"type"`
 	Text      string         `json:"text"`
@@ -372,13 +351,11 @@ type claudeMessageContent struct {
 	Content   any            `json:"content"`
 }
 
-// claudeToolUseResultPayload captures tool_use_result payloads that may be strings or objects.
 type claudeToolUseResultPayload struct {
 	Text   string
 	Result *claudeToolUseResult
 }
 
-// UnmarshalJSON supports either string payloads or structured objects.
 func (p *claudeToolUseResultPayload) UnmarshalJSON(data []byte) error {
 	if len(data) == 0 || string(data) == "null" {
 		return nil
@@ -404,7 +381,6 @@ func (p *claudeToolUseResultPayload) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// claudeToolUseResult captures tool result metadata for summary display.
 type claudeToolUseResult struct {
 	Filenames  []string `json:"filenames"`
 	DurationMs int64    `json:"durationMs"`

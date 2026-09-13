@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// A dotfiles setup links its configs into ~/.config, so the settings file is
-// read from either home. Everything the app writes stays under Dir().
 func TestConfigFilePath(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -86,8 +84,6 @@ func TestConfigFilePath(t *testing.T) {
 	}
 }
 
-// The settings a real launch reads have to come from the XDG copy, not just
-// the path.
 func TestLoadSettingsReadsTheXDGConfig(t *testing.T) {
 	home := t.TempDir()
 	setHomeDir(t, home)
@@ -114,8 +110,6 @@ func TestLoadSettingsReadsTheXDGConfig(t *testing.T) {
 	}
 }
 
-// The log stays under Dir() even when the settings come from XDG, because a
-// per-launch write into a dotfiles repo dirties it on every run.
 func TestDefaultLogFileStaysUnderTheAppDir(t *testing.T) {
 	home := t.TempDir()
 	setHomeDir(t, home)
@@ -138,9 +132,6 @@ func writeConfigJSON(t *testing.T, dir string) {
 	}
 }
 
-// Four writers used to race to create ~/.zen-linear, three of them at 0755.
-// MkdirAll no-ops on one that exists, so whichever ran first decided the mode
-// of the directory holding credentials.json.
 func TestEnsureDirForOwnsTheAppDirsMode(t *testing.T) {
 	home := t.TempDir()
 	setHomeDir(t, home)
@@ -169,9 +160,6 @@ func TestEnsureDirForOwnsTheAppDirsMode(t *testing.T) {
 	})
 }
 
-// The settings file is often written to $XDG_CONFIG_HOME/zen-linear, which is
-// usually a dotfiles checkout. Narrowing a directory that is not ours would be
-// a surprise in someone else's repo.
 func TestEnsureDirForLeavesTheXDGDirAlone(t *testing.T) {
 	home := t.TempDir()
 	setHomeDir(t, home)
@@ -191,8 +179,6 @@ func TestEnsureDirForLeavesTheXDGDirAlone(t *testing.T) {
 func assertDirMode(t *testing.T, dir string, want os.FileMode) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		// NTFS has no unix permission bits, and os.Chmod there only toggles the
-		// read-only flag. There is no mode here to assert against.
 		return
 	}
 	info, err := os.Stat(dir)
@@ -204,9 +190,6 @@ func assertDirMode(t *testing.T, dir string, want os.FileMode) {
 	}
 }
 
-// setHomeDir points os.UserHomeDir at dir on every platform. It reads $HOME on
-// unix and %USERPROFILE% on Windows, so a test setting only one of them runs
-// against the real profile on the other.
 func setHomeDir(t *testing.T, dir string) {
 	t.Helper()
 	t.Setenv("HOME", dir)

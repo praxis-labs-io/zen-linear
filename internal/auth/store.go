@@ -10,10 +10,8 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
-// ErrCredentialsNotFound indicates there is no credentials file on disk.
 var ErrCredentialsNotFound = errors.New("credentials not found")
 
-// CredentialsPath returns the default path for stored OAuth credentials.
 func CredentialsPath() (string, error) {
 	dir, err := config.Dir()
 	if err != nil {
@@ -22,7 +20,7 @@ func CredentialsPath() (string, error) {
 	return filepath.Join(dir, "credentials.json"), nil
 }
 
-// LoadCredentials reads OAuth credentials from path.
+// LoadCredentials returns ErrCredentialsNotFound when path does not exist.
 func LoadCredentials(path string) (Credentials, error) {
 	if path == "" {
 		return Credentials{}, fmt.Errorf("credentials path is empty")
@@ -44,7 +42,7 @@ func LoadCredentials(path string) (Credentials, error) {
 	return creds, nil
 }
 
-// SaveCredentials writes credentials to path with mode 0600.
+// SaveCredentials writes creds to path with mode 0600.
 func SaveCredentials(path string, creds Credentials) error {
 	if path == "" {
 		return fmt.Errorf("credentials path is empty")
@@ -60,14 +58,13 @@ func SaveCredentials(path string, creds Credentials) error {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write credentials: %w", err)
 	}
-	// Ensure mode even if umask altered WriteFile permissions.
 	if err := os.Chmod(path, 0o600); err != nil {
 		return fmt.Errorf("chmod credentials: %w", err)
 	}
 	return nil
 }
 
-// DeleteCredentials removes the credentials file. Missing files are ignored.
+// DeleteCredentials removes path. A missing file is not an error.
 func DeleteCredentials(path string) error {
 	if path == "" {
 		return fmt.Errorf("credentials path is empty")

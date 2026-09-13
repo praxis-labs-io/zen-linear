@@ -9,11 +9,7 @@ import (
 	"github.com/rivo/tview"
 )
 
-// favoriteTargetForNode maps a navigation node onto the Linear entity a
-// favorite would point at. Custom views and predefined views are tested before
-// the entity booleans, the same order refreshIssuesWithFocusChange uses to turn
-// a node into query params. Linear has no favorite type for a workflow state,
-// so status nodes report false.
+// Linear has no favorite type for a workflow state, so status nodes report false.
 func favoriteTargetForNode(node *NavigationNode) (linearapi.FavoriteTarget, bool) {
 	if node == nil || node.IsFolder || node.IsGroup {
 		return linearapi.FavoriteTarget{}, false
@@ -38,8 +34,6 @@ func favoriteTargetForNode(node *NavigationNode) (linearapi.FavoriteTarget, bool
 	return linearapi.FavoriteTarget{}, false
 }
 
-// favoriteMatchesTarget reports whether an existing favorite already points at
-// the target entity.
 func favoriteMatchesTarget(favorite linearapi.Favorite, target linearapi.FavoriteTarget) bool {
 	switch {
 	case target.CustomViewID != "":
@@ -59,10 +53,6 @@ func favoriteMatchesTarget(favorite linearapi.Favorite, target linearapi.Favorit
 	return false
 }
 
-// favoriteForNode finds the favorite a navigation node stands for. Nodes in the
-// Favorites section carry the id outright; everything else matches on the
-// entity, so pressing the key on an already favorited project removes it
-// instead of adding a second one.
 func favoriteForNode(favorites []linearapi.Favorite, node *NavigationNode) (linearapi.Favorite, bool) {
 	if node == nil {
 		return linearapi.Favorite{}, false
@@ -86,7 +76,6 @@ func favoriteForNode(favorites []linearapi.Favorite, node *NavigationNode) (line
 	return linearapi.Favorite{}, false
 }
 
-// currentNavigationNode returns the node under the navigation cursor.
 func (a *App) currentNavigationNode() *NavigationNode {
 	if a.navigationTree == nil {
 		return nil
@@ -99,8 +88,6 @@ func (a *App) currentNavigationNode() *NavigationNode {
 	return node
 }
 
-// handleToggleFavorite favorites or unfavorites the navigation item under the
-// cursor.
 func handleToggleFavorite(a *App) {
 	node := a.currentNavigationNode()
 	if node == nil {
@@ -119,7 +106,6 @@ func handleToggleFavorite(a *App) {
 	a.addFavorite(node.Text, target)
 }
 
-// addFavorite creates a favorite and folds it into the rendered section.
 func (a *App) addFavorite(label string, target linearapi.FavoriteTarget) {
 	var created linearapi.Favorite
 	a.runFavoriteAction(
@@ -137,7 +123,6 @@ func (a *App) addFavorite(label string, target linearapi.FavoriteTarget) {
 	)
 }
 
-// removeFavorite deletes a favorite and drops it from the rendered section.
 func (a *App) removeFavorite(favorite linearapi.Favorite) {
 	label := favoriteLabel(favorite)
 	a.runFavoriteAction(
@@ -153,8 +138,6 @@ func (a *App) removeFavorite(favorite linearapi.Favorite) {
 	)
 }
 
-// favoriteReorder is the pair of sort-order writes that moves a favorite one
-// slot among its siblings.
 type favoriteReorder struct {
 	MovedID      string
 	MovedSort    float64
@@ -162,10 +145,7 @@ type favoriteReorder struct {
 	NeighborSort float64
 }
 
-// planFavoriteReorder works out the swap that moves a favorite one slot.
-// delta is -1 for up and 1 for down; it reports false at either end of the
-// sibling list. Swapping the two sort orders reuses values Linear already
-// assigned, so repeated moves cannot drift the way interpolation does.
+// Swaps the two existing sort orders, so repeated moves cannot drift the way interpolation does.
 func planFavoriteReorder(favorites []linearapi.Favorite, favoriteID, parentID string, delta int) (favoriteReorder, bool) {
 	siblings := favoriteSiblings(favorites, parentID)
 	index := indexOfFavorite(siblings, favoriteID)
@@ -186,16 +166,12 @@ func planFavoriteReorder(favorites []linearapi.Favorite, favoriteID, parentID st
 	}, true
 }
 
-// favoriteMove is a reparenting write: where a favorite lands and at what
-// position.
 type favoriteMove struct {
 	FavoriteID string
 	ParentID   string
 	SortOrder  float64
 }
 
-// planFavoriteEnterFolder steps a favorite into the expanded folder beside it,
-// as first child going down and last going up. Folders never enter one.
 func planFavoriteEnterFolder(favorites []linearapi.Favorite, favoriteID, parentID string, delta int, isExpanded func(folderID string) bool) (favoriteMove, bool) {
 	siblings := favoriteSiblings(favorites, parentID)
 	index := indexOfFavorite(siblings, favoriteID)
@@ -211,7 +187,6 @@ func planFavoriteEnterFolder(favorites []linearapi.Favorite, favoriteID, parentI
 		return favoriteMove{}, false
 	}
 
-	// Land on the end the step arrives at, next to the row it left.
 	children := favoriteSiblings(favorites, folder.ID)
 	sortOrder := folder.SortOrder + 1
 	switch {
@@ -224,8 +199,6 @@ func planFavoriteEnterFolder(favorites []linearapi.Favorite, favoriteID, parentI
 	return favoriteMove{FavoriteID: favoriteID, ParentID: folder.ID, SortOrder: sortOrder}, true
 }
 
-// planFavoriteLeaveFolder steps a favorite off the edge of its folder, landing
-// just past that folder among the folder's own siblings.
 func planFavoriteLeaveFolder(favorites []linearapi.Favorite, favoriteID, parentID string, delta int) (favoriteMove, bool) {
 	if parentID == "" {
 		return favoriteMove{}, false
@@ -247,8 +220,6 @@ func planFavoriteLeaveFolder(favorites []linearapi.Favorite, favoriteID, parentI
 	outer := favoriteSiblings(favorites, grandparent)
 	folderIndex := indexOfFavorite(outer, folder.ID)
 
-	// Slot between the folder and whatever it is stepping towards. A tied pair
-	// has no midpoint to take, so step off the folder instead of landing on it.
 	sortOrder := folder.SortOrder + float64(delta)
 	if neighbor := folderIndex + delta; folderIndex >= 0 && neighbor >= 0 && neighbor < len(outer) {
 		if gap := outer[neighbor].SortOrder - folder.SortOrder; gap != 0 {
@@ -258,7 +229,6 @@ func planFavoriteLeaveFolder(favorites []linearapi.Favorite, favoriteID, parentI
 	return favoriteMove{FavoriteID: favoriteID, ParentID: grandparent, SortOrder: sortOrder}, true
 }
 
-// reparentFavorite writes a move and folds it into the rendered section.
 func (a *App) reparentFavorite(plan favoriteMove) {
 	a.runFavoriteAction(
 		func(ctx context.Context) error {
@@ -272,13 +242,11 @@ func (a *App) reparentFavorite(plan favoriteMove) {
 	)
 }
 
-// favoriteFolderExpanded reports whether a folder's rendered node is open.
 func (a *App) favoriteFolderExpanded(folderID string) bool {
 	node := findFavoriteTreeNode(a.favoritesGroup, folderID)
 	return node != nil && node.IsExpanded()
 }
 
-// applyFavoriteMove records a reparent locally.
 func applyFavoriteMove(favorites []linearapi.Favorite, plan favoriteMove) []linearapi.Favorite {
 	updated := make([]linearapi.Favorite, len(favorites))
 	copy(updated, favorites)
@@ -293,7 +261,6 @@ func applyFavoriteMove(favorites []linearapi.Favorite, plan favoriteMove) []line
 	return updated
 }
 
-// indexOfFavorite returns the position of a favorite in a slice, or -1.
 func indexOfFavorite(favorites []linearapi.Favorite, favoriteID string) int {
 	for i, favorite := range favorites {
 		if favorite.ID == favoriteID {
@@ -303,7 +270,6 @@ func indexOfFavorite(favorites []linearapi.Favorite, favoriteID string) int {
 	return -1
 }
 
-// favoriteByID looks a favorite up by id.
 func favoriteByID(favorites []linearapi.Favorite, favoriteID string) (linearapi.Favorite, bool) {
 	if i := indexOfFavorite(favorites, favoriteID); i >= 0 {
 		return favorites[i], true
@@ -311,8 +277,6 @@ func favoriteByID(favorites []linearapi.Favorite, favoriteID string) (linearapi.
 	return linearapi.Favorite{}, false
 }
 
-// moveFavorite steps a favorite one place in visual order, entering, leaving,
-// or reordering as the neighbor requires. delta is -1 for up and 1 for down.
 func (a *App) moveFavorite(node *NavigationNode, delta int) bool {
 	if node == nil || node.FavoriteID == "" {
 		return false
@@ -339,8 +303,6 @@ func (a *App) moveFavorite(node *NavigationNode, delta int) bool {
 			return
 		}
 		if err := a.updateFavoriteSortFunc(ctx, plan.NeighborID, plan.NeighborSort); err != nil {
-			// The first write landed, so the pair now shares a sort order.
-			// Linear keeps a stable order and the next move repairs it.
 			a.reportFavoriteError(err, "reorder failed favorite_id=%s", plan.NeighborID)
 			return
 		}
@@ -356,9 +318,6 @@ func (a *App) moveFavorite(node *NavigationNode, delta int) bool {
 	return true
 }
 
-// runFavoriteAction runs a background favorites write, reporting a failure
-// through reportFavoriteError and otherwise applying onSuccess on the UI thread.
-// favoritesSettled always fires so tests can wait on the goroutine either way.
 func (a *App) runFavoriteAction(write func(context.Context) error, onSuccess func(), errFmt string, errArgs ...interface{}) {
 	go func() {
 		if err := write(context.Background()); err != nil {
@@ -372,7 +331,6 @@ func (a *App) runFavoriteAction(write func(context.Context) error, onSuccess fun
 	}()
 }
 
-// reportFavoriteError logs a failed favorites mutation and surfaces it.
 func (a *App) reportFavoriteError(err error, format string, args ...interface{}) {
 	logger.ErrorWithErr(err, "tui.favorites: "+format, args...)
 	a.QueueUpdateDraw(func() {
@@ -381,17 +339,13 @@ func (a *App) reportFavoriteError(err error, format string, args ...interface{})
 	})
 }
 
-// favoritesSettled signals that a favorites mutation finished, for tests that
-// need to wait on the goroutine.
+// Exists so tests can wait on the favorites goroutine.
 func (a *App) favoritesSettled() {
 	if a.favoritesChanged != nil {
 		a.favoritesChanged()
 	}
 }
 
-// favoriteSiblings returns the renderable favorites sharing a parent folder, in
-// display order. Favorite types the tree drops are excluded, so a move never
-// swaps past something invisible.
 func favoriteSiblings(favorites []linearapi.Favorite, parentID string) []linearapi.Favorite {
 	parents := favoriteParentIDs(favorites)
 	siblings := make([]linearapi.Favorite, 0, len(favorites))
@@ -405,7 +359,6 @@ func favoriteSiblings(favorites []linearapi.Favorite, parentID string) []lineara
 	return siblings
 }
 
-// upsertFavorite replaces a favorite with the same id, or appends it.
 func upsertFavorite(favorites []linearapi.Favorite, favorite linearapi.Favorite) []linearapi.Favorite {
 	updated := make([]linearapi.Favorite, 0, len(favorites)+1)
 	replaced := false
@@ -424,8 +377,6 @@ func upsertFavorite(favorites []linearapi.Favorite, favorite linearapi.Favorite)
 	return updated
 }
 
-// removeFavoriteByID drops a favorite, along with anything nested inside it
-// when it is a folder.
 func removeFavoriteByID(favorites []linearapi.Favorite, favoriteID string) []linearapi.Favorite {
 	updated := make([]linearapi.Favorite, 0, len(favorites))
 	for _, favorite := range favorites {
@@ -437,7 +388,6 @@ func removeFavoriteByID(favorites []linearapi.Favorite, favoriteID string) []lin
 	return updated
 }
 
-// applyFavoriteSortOrders writes new sort orders and re-sorts.
 func applyFavoriteSortOrders(favorites []linearapi.Favorite, orders map[string]float64) []linearapi.Favorite {
 	updated := make([]linearapi.Favorite, len(favorites))
 	copy(updated, favorites)
@@ -450,7 +400,6 @@ func applyFavoriteSortOrders(favorites []linearapi.Favorite, orders map[string]f
 	return updated
 }
 
-// favoriteLabel names a favorite for the status bar.
 func favoriteLabel(favorite linearapi.Favorite) string {
 	if favorite.Title != "" {
 		return favorite.Title
@@ -464,13 +413,7 @@ func favoriteLabel(favorite linearapi.Favorite) string {
 	return favorite.Type
 }
 
-// refreshFavoritesSection rebuilds only the Favorites group. The full
-// rebuildNavigationTree drops team expansion and resets the cursor to All
-// Issues, which a toggle or a reorder has no business doing.
-//
-// preferFavoriteID, when it resolves, takes the cursor, so a reorder follows the
-// item it moved. Otherwise the cursor stays where it was, unless the node under
-// it is the one that just went away.
+// Rebuilds only the Favorites group: rebuildNavigationTree would drop team expansion and reset the cursor.
 func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 	if a.navigationTree == nil {
 		return
@@ -480,9 +423,6 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 		return
 	}
 
-	// The reassembly builds the root from the rows this holds, so a tree that
-	// went back to waiting under it has none to build from. Leave it; the
-	// fetch that replaces the waiting root brings the section with it.
 	if a.allIssuesNode == nil {
 		return
 	}
@@ -494,8 +434,6 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 	}
 	restoreFavoriteExpansion(previous, group)
 
-	// The rows the reassembly drops: the old section, and the blank rows that
-	// are built fresh with it. Nothing else clears their label cache entries.
 	for _, child := range root.GetChildren() {
 		if child != a.allIssuesNode && child != a.teamsGroup {
 			a.forgetNavNodeLabels(child)
@@ -507,13 +445,9 @@ func (a *App) refreshFavoritesSection(preferFavoriteID string) {
 	a.applyNavigationNodeColors(root)
 	a.applyNavSelectionStyle(root)
 	a.restoreNavigationCursor(root, group, preferFavoriteID)
-	// The disk copy is what the next launch paints, so a toggle or a reorder
-	// has to reach it too, or the tree comes back wrong for a moment.
 	a.recordNavCacheAsync()
 }
 
-// restoreNavigationCursor keeps the cursor on something that still exists after
-// the Favorites group is replaced.
 func (a *App) restoreNavigationCursor(root, group *tview.TreeNode, preferFavoriteID string) {
 	if preferFavoriteID != "" {
 		if node := findFavoriteTreeNode(group, preferFavoriteID); node != nil {
@@ -533,8 +467,6 @@ func (a *App) restoreNavigationCursor(root, group *tview.TreeNode, preferFavorit
 	}
 }
 
-// restoreFavoriteExpansion carries collapsed folders across a rebuild, which
-// buildFavoritesGroup would otherwise reopen. Only top-level folders collapse.
 func restoreFavoriteExpansion(previous, group *tview.TreeNode) {
 	if previous == nil || group == nil {
 		return
@@ -550,8 +482,6 @@ func restoreFavoriteExpansion(previous, group *tview.TreeNode) {
 	}
 }
 
-// forgetNavNodeLabels drops a subtree from the label cache, which is otherwise
-// only cleared on a full rebuild.
 func (a *App) forgetNavNodeLabels(node *tview.TreeNode) {
 	if node == nil || a.navNodeLabels == nil {
 		return
@@ -562,7 +492,6 @@ func (a *App) forgetNavNodeLabels(node *tview.TreeNode) {
 	}
 }
 
-// findFavoriteTreeNode locates the rendered node for a favorite id.
 func findFavoriteTreeNode(node *tview.TreeNode, favoriteID string) *tview.TreeNode {
 	if node == nil {
 		return nil
@@ -578,7 +507,6 @@ func findFavoriteTreeNode(node *tview.TreeNode, favoriteID string) *tview.TreeNo
 	return nil
 }
 
-// firstSelectableChild returns the first node a cursor may rest on.
 func firstSelectableChild(node *tview.TreeNode) *tview.TreeNode {
 	if node == nil {
 		return nil
@@ -594,7 +522,6 @@ func firstSelectableChild(node *tview.TreeNode) *tview.TreeNode {
 	return nil
 }
 
-// treeContains reports whether a node is still attached to the tree.
 func treeContains(root, target *tview.TreeNode) bool {
 	if root == nil || target == nil {
 		return false

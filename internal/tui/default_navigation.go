@@ -10,10 +10,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// applyDefaultNavigation selects the configured default team (and optionally
-// project) once teams have loaded. It must run off the UI goroutine; UI
-// mutations are queued. Missing teams or projects log a warning and flash the
-// status bar, leaving the standard "All Issues" selection in place.
 func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team) bool {
 	teamQuery := strings.TrimSpace(a.config.DefaultTeam)
 	if teamQuery == "" {
@@ -68,7 +64,6 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 			a.refreshIssues()
 			return
 		}
-		// Leave children unpopulated on fetch errors so expanding the team retries.
 		if childrenLoaded && !teamChildrenLoaded(teamNode) {
 			a.populateTeamNodeChildren(teamNode, team.ID, projects, states, cycles)
 		}
@@ -94,7 +89,6 @@ func (a *App) applyDefaultNavigation(ctx context.Context, teams []linearapi.Team
 	return true
 }
 
-// findTeamTreeNode returns the tree node for a team ID, or nil if absent.
 func (a *App) findTeamTreeNode(teamID string) *tview.TreeNode {
 	if a.teamsGroup == nil {
 		return nil
@@ -107,16 +101,12 @@ func (a *App) findTeamTreeNode(teamID string) *tview.TreeNode {
 	return nil
 }
 
-// findProjectTreeNode returns the node for a project ID under a team, or nil if
-// absent. Projects sit inside the team's Projects group, not directly under it.
 func findProjectTreeNode(teamNode *tview.TreeNode, projectID string) *tview.TreeNode {
 	return findTeamDescendant(teamNode, func(nav *NavigationNode) bool {
 		return nav.IsProject && nav.ID == projectID
 	})
 }
 
-// findTeamByKeyOrName returns the team whose key or name matches the query
-// (case-insensitive, whitespace-trimmed), or nil if no team matches.
 func findTeamByKeyOrName(teams []linearapi.Team, query string) *linearapi.Team {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -130,8 +120,6 @@ func findTeamByKeyOrName(teams []linearapi.Team, query string) *linearapi.Team {
 	return nil
 }
 
-// findProjectByName returns the project whose name matches the query
-// (case-insensitive, whitespace-trimmed), or nil if no project matches.
 func findProjectByName(projects []linearapi.Project, query string) *linearapi.Project {
 	query = strings.TrimSpace(query)
 	if query == "" {

@@ -9,8 +9,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/session"
 )
 
-// newSessionRestoreTestApp extends the default-navigation harness with the
-// states, cycles, and captured fetch params a session restore needs.
 func newSessionRestoreTestApp(t *testing.T, state session.State) (*App, *linearapi.FetchIssuesParams) {
 	t.Helper()
 
@@ -40,8 +38,6 @@ func newSessionRestoreTestApp(t *testing.T, state session.State) (*App, *lineara
 	return app, &captured
 }
 
-// sessionFavorites returns favorite fixtures covering a custom view nested in
-// a folder and a top-level project.
 func sessionFavorites() []linearapi.Favorite {
 	return []linearapi.Favorite{
 		{ID: "fav-folder", Type: "folder", FolderName: "Saved views"},
@@ -50,14 +46,10 @@ func sessionFavorites() []linearapi.Favorite {
 	}
 }
 
-// startSessionRestore mirrors loadInitialData: the pending session and the
-// fetch seams are snapshotted first, then the resolve runs against them.
 func (a *App) startSessionRestore(ctx context.Context, teams []linearapi.Team, favorites []linearapi.Favorite) bool {
 	return a.applySessionNavigation(ctx, a.consumePendingSession(), teams, favorites, a.teamChildFetchers())
 }
 
-// restoreSession runs a full startup restore against the fixtures and returns
-// whether the restore claimed the startup refresh.
 func restoreSession(t *testing.T, app *App, favorites []linearapi.Favorite) bool {
 	t.Helper()
 	refreshDone := installRefreshCompletionHook(app)
@@ -89,8 +81,6 @@ func TestApplySessionNavigationSelectsProject(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationSelectsStatus covers the node kind nested under a
-// non-selectable group, which a search of a team's direct children misses.
 func TestApplySessionNavigationSelectsStatus(t *testing.T) {
 	app, params := newSessionRestoreTestApp(t, session.State{
 		Nav: session.NavSelection{Kind: session.NavStatus, TeamID: "team-1", StateID: "state-2"},
@@ -142,8 +132,6 @@ func TestApplySessionNavigationSelectsTeam(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationSelectsFavoriteInFolder verifies a favorite is
-// found without a team anchor, folder nesting included.
 func TestApplySessionNavigationSelectsFavoriteInFolder(t *testing.T) {
 	app, params := newSessionRestoreTestApp(t, session.State{
 		Nav: session.NavSelection{Kind: session.NavCustomView, CustomViewID: "view-1", FavoriteID: "fav-view"},
@@ -162,9 +150,6 @@ func TestApplySessionNavigationSelectsFavoriteInFolder(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationRestoresFiltersBeforeFetch pins the ordering:
-// the fetch reads the filters the moment it starts, so restoring them after
-// the refresh call would send an unfiltered query.
 func TestApplySessionNavigationRestoresFiltersBeforeFetch(t *testing.T) {
 	app, params := newSessionRestoreTestApp(t, session.State{
 		Nav: session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
@@ -206,8 +191,6 @@ func TestApplySessionNavigationRestoresFocusedIssue(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationMissingIssueFallsBack verifies a deleted issue
-// leaves the user on the first row rather than nothing.
 func TestApplySessionNavigationMissingIssueFallsBack(t *testing.T) {
 	app, _ := newSessionRestoreTestApp(t, session.State{
 		Nav:     session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
@@ -239,17 +222,12 @@ func TestApplySessionNavigationRestoresSearch(t *testing.T) {
 	if app.searchQuery != "login" {
 		t.Fatalf("searchQuery = %q, want login", app.searchQuery)
 	}
-	// The restored query runs through the debounce, and the section follows the
-	// results rather than being restored on its own.
 	waitForSearchRows(t, app, 2)
 	if app.activeIssuesSection != IssuesSectionSearch {
 		t.Fatalf("activeIssuesSection = %v, want Search", app.activeIssuesSection)
 	}
 }
 
-// TestApplySessionNavigationSelectsSavedSearchIssue verifies a restored search
-// reopens on the issue it was left on. updateIssuesData returns early while
-// results are showing, so the selection can only happen once they land.
 func TestApplySessionNavigationSelectsSavedSearchIssue(t *testing.T) {
 	app, _ := newSessionRestoreTestApp(t, session.State{
 		Nav:     session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
@@ -267,9 +245,6 @@ func TestApplySessionNavigationSelectsSavedSearchIssue(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationSkipsSearchWithNoSavedQuery verifies a session left
-// on the list opens on the list, and spends no API call on a search nobody
-// asked for.
 func TestApplySessionNavigationSkipsSearchWithNoSavedQuery(t *testing.T) {
 	app, _ := newSessionRestoreTestApp(t, session.State{
 		Nav: session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
@@ -287,8 +262,6 @@ func TestApplySessionNavigationSkipsSearchWithNoSavedQuery(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationKeepsNavigationFocus verifies the restore never
-// pulls focus out of the navigation pane, with or without a saved query.
 func TestApplySessionNavigationKeepsNavigationFocus(t *testing.T) {
 	for name, query := range map[string]string{"list": "", "search": "login"} {
 		t.Run(name, func(t *testing.T) {
@@ -301,8 +274,6 @@ func TestApplySessionNavigationKeepsNavigationFocus(t *testing.T) {
 				t.Fatal("applySessionNavigation() = false, want true")
 			}
 			if query != "" {
-				// The restored query runs through the debounce; let it land
-				// rather than leaving its goroutine to outlive the test.
 				waitForSearchRows(t, app, 2)
 			}
 
@@ -313,8 +284,6 @@ func TestApplySessionNavigationKeepsNavigationFocus(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationMissingTargets verifies every unresolvable saved
-// selection hands startup back to the configured default, quietly.
 func TestApplySessionNavigationMissingTargets(t *testing.T) {
 	tests := []struct {
 		name string
@@ -342,9 +311,6 @@ func TestApplySessionNavigationMissingTargets(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationIsOneShot verifies a settings save or workspace
-// switch, both of which re-run loadInitialData, does not reapply a stale
-// place over where the user actually is.
 func TestApplySessionNavigationIsOneShot(t *testing.T) {
 	app, _ := newSessionRestoreTestApp(t, session.State{
 		Nav: session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},
@@ -358,8 +324,6 @@ func TestApplySessionNavigationIsOneShot(t *testing.T) {
 	}
 }
 
-// TestApplySessionNavigationWithoutPendingState verifies an app that never
-// had a session to restore leaves startup to the configured default.
 func TestApplySessionNavigationWithoutPendingState(t *testing.T) {
 	app := newDefaultNavTestApp(t, config.Config{SessionRestore: true})
 
@@ -368,9 +332,6 @@ func TestApplySessionNavigationWithoutPendingState(t *testing.T) {
 	}
 }
 
-// A restore that needs no team children must not build the team's rows out of
-// the empty slices it never fetched. That left the team holding its own All
-// Issues row and nothing else, with no open able to go back for the rest.
 func TestRestoringATeamLeavesItsRowsToBeLoaded(t *testing.T) {
 	app, _ := newSessionRestoreTestApp(t, session.State{
 		Nav: session.NavSelection{Kind: session.NavTeam, TeamID: "team-1"},

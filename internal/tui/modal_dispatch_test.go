@@ -8,9 +8,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// modalDispatchGolden is the priority the global key handler gives modals,
-// written out rather than read from the registry so a reordered registry fails
-// here instead of agreeing with itself.
 var modalDispatchGolden = []string{
 	"confirmation",
 	"picker",
@@ -24,10 +21,6 @@ var modalDispatchGolden = []string{
 	"keys",
 }
 
-// TestModalDispatchGoldenCoversTheRegistry keeps the two lists the same length
-// and the same order. Without it a fourteenth modal added to the registry and
-// forgotten here is skipped by every test in this file and the suite stays
-// green.
 func TestModalDispatchGoldenCoversTheRegistry(t *testing.T) {
 	if len(modalBindings) != len(modalDispatchGolden) {
 		t.Fatalf("registry has %d modals, golden list has %d", len(modalBindings), len(modalDispatchGolden))
@@ -39,9 +32,6 @@ func TestModalDispatchGoldenCoversTheRegistry(t *testing.T) {
 	}
 }
 
-// openModal opens one modal through the same call the app makes, so the test
-// exercises whatever state that path sets up. The picker goes through a real
-// command rather than PickerModal.Show, which no caller uses on its own.
 func openModal(t *testing.T, app *App, page string) {
 	t.Helper()
 	switch page {
@@ -81,7 +71,6 @@ func escape(app *App) {
 	sendKey(app, tcell.KeyEscape)
 }
 
-// openPages reports which of the golden pages are currently up.
 func openPages(app *App) map[string]bool {
 	open := make(map[string]bool, len(modalDispatchGolden))
 	for _, page := range modalDispatchGolden {
@@ -92,11 +81,6 @@ func openPages(app *App) map[string]bool {
 	return open
 }
 
-// TestModalDispatchOrder is the guard on priority. Every modal is up at once
-// and each Escape has to reach the highest-priority one, so a chain that
-// dispatched by stack position or by any other order fails here. Modals open
-// in priority order, which puts the lowest-priority one on top of the page
-// stack: the point is that dispatch ignores that.
 func TestModalDispatchOrder(t *testing.T) {
 	app := newUXTestApp(t)
 	for _, page := range modalDispatchGolden {
@@ -123,9 +107,6 @@ func TestModalDispatchOrder(t *testing.T) {
 	}
 }
 
-// TestModalDispatchRoutesToTheOpenModal covers each modal on its own, so a
-// registry entry pointing at the wrong page or the wrong modal shows up even
-// where the priority test would mask it.
 func TestModalDispatchRoutesToTheOpenModal(t *testing.T) {
 	for _, page := range modalDispatchGolden {
 		t.Run(page, func(t *testing.T) {
@@ -145,10 +126,6 @@ func TestModalDispatchRoutesToTheOpenModal(t *testing.T) {
 	}
 }
 
-// modalFocusTargets names where keyboard focus belongs once an overlay above a
-// modal closes. Form-backed modals answer with their own current field, which
-// still fails if the registry hands the overlay's Focus call to the wrong
-// modal: the field belongs to a different form.
 var modalFocusTargets = []struct {
 	page string
 	want func(*App) tview.Primitive
@@ -163,14 +140,6 @@ var modalFocusTargets = []struct {
 	{"agent_output", func(a *App) tview.Primitive { return a.agentOutputModal.streamView }},
 }
 
-// TestOverlayRestoresFocusToTheModalBeneath covers what the picker's own
-// focus-restore missed: it named only a subset of modals, so closing a
-// picker over any other modal handed focus to a pane instead.
-//
-// The overlay is a picker, which is how this happens for real: one opened
-// behind a fetch lands on whatever the user opened while it waited. The picker
-// itself needs an overlay that outranks it, and confirmation is the only one.
-// Confirmation has no such overlay and so has no row here.
 func TestOverlayRestoresFocusToTheModalBeneath(t *testing.T) {
 	for _, target := range modalFocusTargets {
 		t.Run(target.page, func(t *testing.T) {
@@ -195,10 +164,6 @@ func TestOverlayRestoresFocusToTheModalBeneath(t *testing.T) {
 	}
 }
 
-// TestOverlayRestoresTheFieldTheUserWasIn covers the two modals whose focus
-// moves inside them. Restoring their opening default drops the user somewhere
-// they did not leave, and on the templates modal that is destructive: the list
-// arms 'a' and 'd' as add and delete, so a typed 'd' removes a template.
 func TestOverlayRestoresTheFieldTheUserWasIn(t *testing.T) {
 	t.Run("prompt_templates", func(t *testing.T) {
 		app := newUXTestApp(t)
@@ -237,8 +202,6 @@ func TestOverlayRestoresTheFieldTheUserWasIn(t *testing.T) {
 	})
 }
 
-// TestGlobalKeyCaptureIsBound drives the capture tview actually installed,
-// rather than handleGlobalKey directly, so an unbound handler fails somewhere.
 func TestGlobalKeyCaptureIsBound(t *testing.T) {
 	app := newUXTestApp(t)
 	capture := app.app.GetInputCapture()

@@ -7,13 +7,9 @@ import (
 	"github.com/rivo/tview"
 )
 
-// panelTitleRow is the row a centered panel drew its own top border on, or -1
-// where the panel landed off the screen entirely.
 func panelTitleRow(t *testing.T, wrapper *tview.Flex, title string, width, height int) int {
 	t.Helper()
 	for row, line := range drawPrimitiveAt(t, wrapper, width, height) {
-		// The corner as well as the name: a panel wider or taller than the
-		// screen is centered at a negative offset, which cuts its edges off.
 		if strings.Contains(line, title) && strings.Contains(line, "┌") {
 			return row
 		}
@@ -21,11 +17,7 @@ func panelTitleRow(t *testing.T, wrapper *tview.Flex, title string, width, heigh
 	return -1
 }
 
-// A panel's size is fixed where centerModal put it, so a terminal that shrank
-// under an open modal used to hand the column one taller than itself.
 func TestACenteredModalRefitsWhenTheTerminalResizes(t *testing.T) {
-	// FormModal builds its own shell, so it needs a handle the table can reach
-	// from both halves of its case.
 	var refitForm *FormModal
 	for _, tc := range []struct {
 		name    string

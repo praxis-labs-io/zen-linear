@@ -10,7 +10,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// paneTitles returns each pane's title with the color tags stripped.
 func paneTitles(app *App) map[string]string {
 	app.updateAllPaneTitles()
 	return map[string]string{
@@ -20,14 +19,12 @@ func paneTitles(app *App) map[string]string {
 	}
 }
 
-// stripTags renders a title the way a view would and reads back the plain text.
 func stripTags(title string) string {
 	view := tview.NewTextView().SetDynamicColors(true)
 	view.SetText(title)
 	return view.GetText(true)
 }
 
-// TestPaneTitlesCarryTheirNumber covers the numbered, caret-free titles.
 func TestPaneTitlesCarryTheirNumber(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
@@ -44,9 +41,6 @@ func TestPaneTitlesCarryTheirNumber(t *testing.T) {
 	}
 }
 
-// A pane that names one thing has nothing to contrast a middle shade against,
-// so its label dims and lights with the number beside it. Left on the tab
-// strip's active-tab color it reads as lit from across the screen.
 func TestASinglePaneLabelDimsWithItsNumber(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
@@ -74,8 +68,6 @@ func TestASinglePaneLabelDimsWithItsNumber(t *testing.T) {
 	}
 }
 
-// TestPaneTitlesDropTheFocusCaret covers focus no longer being spelled with a
-// caret: the border color and the active tab carry it instead.
 func TestPaneTitlesDropTheFocusCaret(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
@@ -90,7 +82,6 @@ func TestPaneTitlesDropTheFocusCaret(t *testing.T) {
 	}
 }
 
-// TestNumberKeysFocusPanes covers typing a pane's number to reach it.
 func TestNumberKeysFocusPanes(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
@@ -113,8 +104,6 @@ func TestNumberKeysFocusPanes(t *testing.T) {
 	}
 }
 
-// TestNumberKeyRevealsAHiddenPane covers a number summoning a pane that was
-// toggled off, rather than doing nothing.
 func TestNumberKeyRevealsAHiddenPane(t *testing.T) {
 	app := newUXTestApp(t)
 	if !app.detailsHidden {
@@ -137,8 +126,6 @@ func TestNumberKeyRevealsAHiddenPane(t *testing.T) {
 	}
 }
 
-// TestNumberKeysRebind covers the numbers going through actionKey rather than
-// being compared against a literal rune.
 func TestNumberKeysRebind(t *testing.T) {
 	app := NewApp(linearapi.ClientConfig{}, config.Config{
 		PageSize: 1,
@@ -163,8 +150,6 @@ func TestNumberKeysRebind(t *testing.T) {
 	}
 }
 
-// TestFocusedPaneNumberTakesTheAccent covers the number carrying focus along
-// with the border: dim while the pane is idle, accent while it holds the keys.
 func TestFocusedPaneNumberTakesTheAccent(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
@@ -190,8 +175,6 @@ func TestFocusedPaneNumberTakesTheAccent(t *testing.T) {
 	}
 }
 
-// TestNavigationTitleNamesTheWorkspace covers the workspace moving from a tree
-// row to the pane border.
 func TestNavigationTitleNamesTheWorkspace(t *testing.T) {
 	app := newUXTestApp(t)
 	app.activeWorkspaceName = "Praxis Labs"
@@ -201,7 +184,6 @@ func TestNavigationTitleNamesTheWorkspace(t *testing.T) {
 	}
 }
 
-// The workspace name is the user's, and the title is built from color tags.
 func TestNavigationTitleKeepsABracketedWorkspace(t *testing.T) {
 	app := newUXTestApp(t)
 	app.activeWorkspaceName = "[red] labs"

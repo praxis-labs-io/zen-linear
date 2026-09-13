@@ -5,13 +5,11 @@ import (
 	"strings"
 )
 
-// Provider keys as they appear in config and on the agent CLIs' own binaries.
 const (
 	ProviderCursor = "cursor"
 	ProviderClaude = "claude"
 )
 
-// AvailableProviderKeys returns provider keys with resolvable binaries.
 func AvailableProviderKeys(lookPath func(string) (string, error)) []string {
 	providers := []struct {
 		key      string
@@ -30,7 +28,7 @@ func AvailableProviderKeys(lookPath func(string) (string, error)) []string {
 	return available
 }
 
-// ProviderForKey constructs a provider for the given config key.
+// ProviderForKey returns the provider for a config key, or an error for an unknown one.
 func ProviderForKey(key string, lookPath func(string) (string, error)) (Provider, error) {
 	normalized := strings.ToLower(strings.TrimSpace(key))
 	switch normalized {

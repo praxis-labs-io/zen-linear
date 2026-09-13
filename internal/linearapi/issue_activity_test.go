@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// fetchActivity serves one issue whose history is the given entries and returns
-// the activity the detail fetch built from it. issueFields overrides the fields
-// carried on the issue itself, which is where the creation event comes from.
 func fetchActivity(t *testing.T, issueFields, historyNodes string) []IssueActivity {
 	t.Helper()
 
@@ -42,7 +39,6 @@ func fetchActivity(t *testing.T, issueFields, historyNodes string) []IssueActivi
 	return issue.Activity
 }
 
-// entry wraps one history node's fields with the id and time every node has.
 func entry(fields string) string {
 	return `{"id": "h1", "createdAt": "2026-08-10T19:05:04Z", ` + fields + `}`
 }
@@ -70,7 +66,6 @@ func TestHistoryEntriesMapToActivityKinds(t *testing.T) {
 			},
 		},
 		{
-			// The first move out of the initial state records no from side.
 			name: "state set with no previous state",
 			node: entry(actorDrew + `, "toState": {"id": "s2", "name": "To Do", "type": "unstarted"}`),
 			want: IssueActivityStateChanged,
@@ -81,8 +76,6 @@ func TestHistoryEntriesMapToActivityKinds(t *testing.T) {
 			},
 		},
 		{
-			// An entry naming only where the issue came from has nowhere to say
-			// it went, and the phrase would end on a dangling preposition.
 			name: "a state change with no destination is dropped",
 			node: entry(actorDrew + `, "fromState": {"id": "s1", "name": "Backlog", "type": "backlog"}, "toState": null, "toTitle": "kept"`),
 			want: IssueActivityTitleChanged,
@@ -198,8 +191,6 @@ func TestHistoryEntriesMapToActivityKinds(t *testing.T) {
 			},
 		},
 		{
-			// 0 is Linear's "No priority", a real target. A value type would read
-			// this as no change and drop the event.
 			name: "priority cleared to none",
 			node: entry(actorDrew + `, "fromPriority": 2, "toPriority": 0`),
 			want: IssueActivityPriorityChanged,
@@ -240,8 +231,6 @@ func TestHistoryEntriesMapToActivityKinds(t *testing.T) {
 	}
 }
 
-// The type codes are undocumented. These are the ones a real workspace's
-// history produced, plus the removals that follow the same pattern.
 func TestRelationChangeCodesReadAsAddedOrRemoved(t *testing.T) {
 	tests := []struct {
 		code         string
@@ -280,7 +269,6 @@ func TestRelationChangeCodesReadAsAddedOrRemoved(t *testing.T) {
 	}
 }
 
-// A code this does not recognize costs a line rather than printing a wrong one.
 func TestAnUnknownRelationCodeDropsTheEvent(t *testing.T) {
 	node := entry(actorDrew + `, "relationChanges": [{"identifier": "ABC-9", "type": "zz"}]`)
 	if activity := fetchActivity(t, "", node); len(activity) != 0 {
@@ -288,8 +276,6 @@ func TestAnUnknownRelationCodeDropsTheEvent(t *testing.T) {
 	}
 }
 
-// Linear saves everything changed together as one entry, and the feed draws one
-// icon and one phrase per line.
 func TestOneHistoryEntryYieldsAnEventPerChange(t *testing.T) {
 	node := entry(actorDrew +
 		`, "fromState": {"id": "s1", "name": "To Do", "type": "unstarted"}` +
@@ -311,7 +297,6 @@ func TestOneHistoryEntryYieldsAnEventPerChange(t *testing.T) {
 	}
 }
 
-// An entry recording only changes this does not render is dropped whole.
 func TestAnEntryWithNothingRenderableIsDropped(t *testing.T) {
 	if activity := fetchActivity(t, "", entry(actorDrew+`, "updatedDescription": false`)); len(activity) != 0 {
 		t.Fatalf("got %d events, want none: %+v", len(activity), activity)
@@ -349,8 +334,6 @@ func TestTheCreationEventHeadsTheFeed(t *testing.T) {
 		}
 	})
 
-	// An event with no time would sort above the creation and read as though it
-	// just happened.
 	t.Run("dropped when the issue carries no created time", func(t *testing.T) {
 		activity := fetchActivity(t, `"creator": {"id": "u1", "displayName": "drew"},`, "")
 		if len(activity) != 0 {
@@ -359,8 +342,6 @@ func TestTheCreationEventHeadsTheFeed(t *testing.T) {
 	})
 }
 
-// Linear returns the history newest first, which is what keeps the query's cap
-// of 50 on the most recent fifty. A feed reads the other way.
 func TestActivityIsOldestFirst(t *testing.T) {
 	nodes := `{"id": "h3", "createdAt": "2026-08-10T19:05:21Z", "toTitle": "third"},` +
 		`{"id": "h2", "createdAt": "2026-08-10T19:05:12Z", "toTitle": "second"},` +
@@ -378,8 +359,6 @@ func TestActivityIsOldestFirst(t *testing.T) {
 	}
 }
 
-// Linear records no actor on an automated transition, an API key with no user,
-// or a deleted account.
 func TestAnEventSurvivesAMissingActor(t *testing.T) {
 	node := entry(`"actor": null, "botActor": null, "toTitle": "renamed"`)
 	activity := fetchActivity(t, "", node)
@@ -391,7 +370,6 @@ func TestAnEventSurvivesAMissingActor(t *testing.T) {
 	}
 }
 
-// A person acting through an integration is still the person.
 func TestAUserActorWinsOverABotActor(t *testing.T) {
 	node := entry(actorDrew + `, "botActor": {"id": "b1", "name": "Linear", "userDisplayName": "Linear"}, "toTitle": "renamed"`)
 	activity := fetchActivity(t, "", node)
@@ -403,8 +381,6 @@ func TestAUserActorWinsOverABotActor(t *testing.T) {
 	}
 }
 
-// The feed sorts on the time and reads an age off it, so an entry whose time
-// did not parse would head the feed drawing no age.
 func TestAnEntryWithNoUsableTimeIsDropped(t *testing.T) {
 	nodes := `{"id": "broken", "createdAt": "not a time", "toTitle": "first"},` +
 		`{"id": "h1", "createdAt": "2026-08-10T19:05:04Z", "toTitle": "second"}`

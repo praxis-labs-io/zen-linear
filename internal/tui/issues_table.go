@@ -13,20 +13,15 @@ import (
 	"github.com/rivo/tview"
 )
 
-// Tree icons for expand/collapse indicators.
 const (
 	IconExpanded    = "▼"
 	IconCollapsed   = "▶"
 	IconChildPrefix = "└─"
 )
 
-// priorityLabels names each Linear priority. The index is the priority value,
-// so pickers can map a selection straight onto the API field.
+// Indexed by Linear's priority value.
 var priorityLabels = []string{"No priority", "Urgent", "High", "Normal", "Low"}
 
-// priorityLabel names a priority, falling back to the number itself for a value
-// Linear has added since. The list column has no room for a word; this is for
-// the surfaces that do.
 func priorityLabel(priority int) string {
 	if priority < 0 || priority >= len(priorityLabels) {
 		return fmt.Sprintf("P%d", priority)
@@ -34,27 +29,21 @@ func priorityLabel(priority int) string {
 	return priorityLabels[priority]
 }
 
-// formatPriority renders a priority as an arrow glyph — up for high, equals
-// for normal, down for low, triangle for urgent — all single-cell text
-// presentation so rows stay aligned (no emoji-width variance).
-// Linear priority: 0 = No priority, 1 = Urgent, 2 = High, 3 = Normal, 4 = Low.
 func formatPriority(priority int, theme Theme) (string, tcell.Color) {
 	switch priority {
 	case 1:
-		return "▲", theme.StatusCanceled // Red for urgent
+		return "▲", theme.StatusCanceled
 	case 2:
-		return "↑", theme.StatusInProgress // Yellow for high
+		return "↑", theme.StatusInProgress
 	case 3:
-		return "=", theme.Foreground // Default for normal
+		return "=", theme.Foreground
 	case 4:
-		return "↓", theme.SecondaryText // Gray for low
+		return "↓", theme.SecondaryText
 	default:
-		return "-", theme.SecondaryText // No priority
+		return "-", theme.SecondaryText
 	}
 }
 
-// formatGroupHeaderIcon returns the icon for a group header row based on its
-// grouping dimension. Assignee and cycle groups have no icon.
 func formatGroupHeaderIcon(row IssueRow, theme Theme) (string, tcell.Color) {
 	switch row.HeaderDimension {
 	case GroupByPriority:
@@ -72,13 +61,11 @@ func formatGroupHeaderIcon(row IssueRow, theme Theme) (string, tcell.Color) {
 		}
 	case GroupByAssignee, GroupByCycle:
 		return "", theme.SecondaryText
-	default: // status
+	default:
 		return formatStateIcon(row.HeaderText, theme)
 	}
 }
 
-// formatStateIcon renders a workflow state as a colored icon from a single
-// circle family so every state occupies one cell at the same visual weight.
 func formatStateIcon(state string, theme Theme) (string, tcell.Color) {
 	lowerState := strings.ToLower(state)
 	switch {
@@ -99,7 +86,6 @@ func formatStateIcon(state string, theme Theme) (string, tcell.Color) {
 	}
 }
 
-// formatUpdatedAt renders the last-updated timestamp like Linear's list view.
 func formatUpdatedAt(updatedAt time.Time) string {
 	if updatedAt.IsZero() {
 		return "-"
@@ -110,13 +96,6 @@ func formatUpdatedAt(updatedAt time.Time) string {
 	return updatedAt.Format("Jan 2")
 }
 
-// formatAssigneeInitials condenses a full name to the first letters of its
-// first and last words, so the column costs a couple of cells instead of a
-// name's worth. A one-word name gives one letter. An empty name gives an
-// empty string, which callers render as unassigned.
-//
-// Words that do not start with a letter are skipped, so a pronoun or a role
-// in parentheses does not turn the initials into punctuation.
 func formatAssigneeInitials(name string) string {
 	words := make([]string, 0, 2)
 	for _, word := range strings.Fields(name) {
@@ -134,14 +113,11 @@ func formatAssigneeInitials(name string) string {
 	return initials
 }
 
-// initialLetter returns a word's first rune, uppercased. Callers filter to
-// words starting with a letter, so there is always a rune to read.
 func initialLetter(word string) string {
 	first, _ := utf8.DecodeRuneInString(word)
 	return string(unicode.ToUpper(first))
 }
 
-// formatLabels renders label names as a compact comma list.
 func formatLabels(labels []linearapi.IssueLabel) string {
 	if len(labels) == 0 {
 		return "-"
@@ -153,7 +129,6 @@ func formatLabels(labels []linearapi.IssueLabel) string {
 	return strings.Join(names, ", ")
 }
 
-// Issue list column identifiers, configurable via the columns setting.
 const (
 	ColumnPriority  = "priority"
 	ColumnID        = "id"
@@ -169,19 +144,16 @@ const (
 	ColumnMilestone = "milestone"
 )
 
-// DefaultIssueColumns matches Linear's own list view.
 var DefaultIssueColumns = []string{
 	ColumnPriority, ColumnID, ColumnState, ColumnTitle, ColumnLabels, ColumnAssignee, ColumnUpdated,
 }
 
-// issueColumnSpec describes how one column renders.
 type issueColumnSpec struct {
 	header    string
 	expansion int
 	maxWidth  int
 }
 
-// issueColumnSpecs maps column identifiers to their rendering properties.
 var issueColumnSpecs = map[string]issueColumnSpec{
 	ColumnPriority:  {header: " ", expansion: 0},
 	ColumnID:        {header: "ID", expansion: 0},
@@ -197,7 +169,6 @@ var issueColumnSpecs = map[string]issueColumnSpec{
 	ColumnMilestone: {header: "Milestone", expansion: 1, maxWidth: 18},
 }
 
-// columnIndex returns the position of a column in the layout, or fallback.
 func columnIndex(columns []string, name string, fallback int) int {
 	for index, column := range columns {
 		if column == name {
@@ -207,8 +178,6 @@ func columnIndex(columns []string, name string, fallback int) int {
 	return fallback
 }
 
-// setIssuesTableHeaders writes the list header row for the configured
-// columns. The default order and visibility match Linear's own list view.
 func setIssuesTableHeaders(table *tview.Table, theme Theme, columns []string) {
 	headerStyle := tcell.StyleDefault.
 		Foreground(theme.HeaderText).
@@ -225,9 +194,6 @@ func setIssuesTableHeaders(table *tview.Table, theme Theme, columns []string) {
 	}
 }
 
-// headerText indents a column header to match the lead space its cells carry:
-// the ID column reserves one for the tree icon wherever it sits, and whatever
-// column lands first gets one from setIssueRowCells.
 func headerText(header, name string, column int) string {
 	if name == ColumnID || column == 0 {
 		return " " + header
@@ -235,7 +201,6 @@ func headerText(header, name string, column int) string {
 	return header
 }
 
-// issueColumnCell renders one issue cell for a column identifier.
 func issueColumnCell(name string, issue *linearapi.Issue, identifierPrefix string, theme Theme) (string, tcell.Color) {
 	switch name {
 	case ColumnPriority:
@@ -292,10 +257,8 @@ func issueColumnCell(name string, issue *linearapi.Issue, identifierPrefix strin
 	return "", theme.SecondaryText
 }
 
-// getIssueFromRowModel returns the issue for a given table row using the provided model.
-// Returns nil if the row is invalid.
 func getIssueFromRowModel(row int, rows []IssueRow, idToIssue map[string]*linearapi.Issue) *linearapi.Issue {
-	rowIndex := row - 1 // Account for header row
+	rowIndex := row - 1
 	if rowIndex < 0 || rowIndex >= len(rows) {
 		return nil
 	}
@@ -306,49 +269,38 @@ func getIssueFromRowModel(row int, rows []IssueRow, idToIssue map[string]*linear
 	return nil
 }
 
-// getRowForIssueModel returns the table row for a given issue ID using the provided model.
-// Returns -1 if not found.
 func getRowForIssueModel(issueID string, rows []IssueRow) int {
 	for i, row := range rows {
 		if row.IssueID == issueID {
-			return i + 1 // +1 for header row
+			return i + 1
 		}
 	}
 	return -1
 }
 
-// IssuesSection is what the issues pane is showing: the list the navigation
-// tree picked, or search results. They are separate models, so a background
-// refresh of the list cannot overwrite results the user is browsing.
 type IssuesSection int
 
-// List is the zero value so a freshly built App opens on it.
 const (
 	IssuesSectionList IssuesSection = iota
 	IssuesSectionSearch
 )
 
-// buildIssuesTable creates and configures the table backing one issues section.
-// It carries no title of its own: updateAllPaneTitles writes the pane title on
-// whichever table is mounted.
 func (a *App) buildIssuesTable(section IssuesSection) *tview.Table {
 	table := tview.NewTable()
-	table.SetBorders(false). // Remove cell borders for cleaner look
-					SetSelectable(true, false).
-					SetBorder(true).
-					SetTitleAlign(tview.AlignLeft).
-					SetTitleColor(a.theme.Foreground).
-					SetBorderColor(a.theme.Border).
-					SetBackgroundColor(a.theme.Background)
+	table.SetBorders(false).
+		SetSelectable(true, false).
+		SetBorder(true).
+		SetTitleAlign(tview.AlignLeft).
+		SetTitleColor(a.theme.Foreground).
+		SetBorderColor(a.theme.Border).
+		SetBackgroundColor(a.theme.Background)
 
 	table.SetSelectedStyle(selectionStyle(a.theme))
 
 	setIssuesTableHeaders(table, a.theme, a.issueColumns())
 
-	// Set fixed column widths
 	table.SetFixed(1, 0)
 
-	// Handle selection (Enter toggles the details pane; Space toggles expand)
 	table.SetSelectedFunc(func(row, _ int) {
 		if rows := a.rowsForSection(section); row >= 1 && row <= len(rows) && rows[row-1].IsHeader {
 			a.toggleGroupCollapse(section, rows[row-1])
@@ -361,12 +313,8 @@ func (a *App) buildIssuesTable(section IssuesSection) *tview.Table {
 		a.toggleDetailsPane()
 	})
 
-	// Set up keyboard navigation with cross-section support
 	a.setupIssuesTableNavigation(table, section)
 
-	// A search is workspace-wide and takes neither the tree's scope, the rich
-	// filters, nor the sort chain, so the context line would be false about
-	// these results.
 	if section != IssuesSectionSearch {
 		a.attachIssuesContext(table.Box)
 	}
@@ -374,15 +322,12 @@ func (a *App) buildIssuesTable(section IssuesSection) *tview.Table {
 	return table
 }
 
-// setupIssuesTableNavigation sets up keyboard navigation for an issues table with cross-section support.
 func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSection) {
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyRune:
 			return a.handleIssuesTableRune(table, section, event)
 		case tcell.KeyEnter:
-			// Enter toggles a header's group, or the details pane while
-			// staying in the list; Space toggles expand/collapse on parents.
 			row, _ := table.GetSelection()
 			if rows := a.rowsForSection(section); row >= 1 && row <= len(rows) && rows[row-1].IsHeader {
 				a.toggleGroupCollapse(section, rows[row-1])
@@ -413,8 +358,6 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 					a.activeIssuesSection = section
 				}
 			} else if section == IssuesSectionSearch {
-				// The way into these results was the query box, so the way back
-				// off the top of them is the same box, over in the nav pane.
 				a.focusNavSearch()
 			}
 			return nil
@@ -423,7 +366,6 @@ func (a *App) setupIssuesTableNavigation(table *tview.Table, section IssuesSecti
 	})
 }
 
-// rowsForSection returns the row model for the specified section.
 func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 	switch section {
 	case IssuesSectionList:
@@ -434,7 +376,6 @@ func (a *App) rowsForSection(section IssuesSection) []IssueRow {
 	return nil
 }
 
-// issueMapForSection returns the id lookup backing a section's rows.
 func (a *App) issueMapForSection(section IssuesSection) map[string]*linearapi.Issue {
 	switch section {
 	case IssuesSectionList:
@@ -445,11 +386,6 @@ func (a *App) issueMapForSection(section IssuesSection) map[string]*linearapi.Is
 	return nil
 }
 
-// renderIssueSections paints the mounted section and defers the rest. Only one
-// is ever on screen, so painting the other costs a table's worth of cell
-// allocations for something nobody can see, and resets its selection to the
-// first row every time. Deferred sections paint in updateIssuesColumnLayout,
-// which every move between the list and search already routes through.
 func (a *App) renderIssueSections(selected map[IssuesSection]string) {
 	if a.pendingSectionRenders == nil {
 		a.pendingSectionRenders = make(map[IssuesSection]string, len(selected))
@@ -473,8 +409,6 @@ func (a *App) renderIssueSection(section IssuesSection, selectedIssueID string) 
 	renderIssuesTableModel(table, a.rowsForSection(section), a.issueMapForSection(section), selectedIssueID, a.theme, a.issueColumns())
 }
 
-// flushPendingSectionRender paints a section whose render was deferred while it
-// was off screen.
 func (a *App) flushPendingSectionRender(section IssuesSection) {
 	selectedIssueID, pending := a.pendingSectionRenders[section]
 	if !pending {
@@ -484,7 +418,6 @@ func (a *App) flushPendingSectionRender(section IssuesSection) {
 	a.renderIssueSection(section, selectedIssueID)
 }
 
-// scrollIssueColumns scrolls the issue table horizontally: H left, L right.
 func scrollIssueColumns(table *tview.Table, key rune) {
 	rowOffset, columnOffset := table.GetOffset()
 	switch {
@@ -495,9 +428,6 @@ func scrollIssueColumns(table *tview.Table, key rune) {
 	}
 }
 
-// selectIssueRow selects a table row and, when the selection reaches the
-// first issue row, resets the scroll offset so leading group headers stay
-// reachable (they are not selectable, so scrolling alone never reveals them).
 func selectIssueRow(table *tview.Table, rows []IssueRow, row int) {
 	table.Select(row, 0)
 	if row <= nextIssueRow(rows, 0, 1) {
@@ -505,9 +435,6 @@ func selectIssueRow(table *tview.Table, rows []IssueRow, row int) {
 	}
 }
 
-// nextIssueRow returns the next table row holding an issue in the given
-// direction, skipping group headers and spacer rows. Returns 0 when none
-// remains.
 func nextIssueRow(rows []IssueRow, from int, delta int) int {
 	for row := from + delta; row >= 1 && row <= len(rows); row += delta {
 		if !rows[row-1].IsHeader && !rows[row-1].IsSpacer {
@@ -517,8 +444,6 @@ func nextIssueRow(rows []IssueRow, from int, delta int) int {
 	return 0
 }
 
-// nextSelectableRow returns the next selectable table row (issue or header)
-// in the given direction, skipping spacer rows. Returns 0 when none remains.
 func nextSelectableRow(rows []IssueRow, from int, delta int) int {
 	for row := from + delta; row >= 1 && row <= len(rows); row += delta {
 		if !rows[row-1].IsSpacer {
@@ -528,7 +453,6 @@ func nextSelectableRow(rows []IssueRow, from int, delta int) int {
 	return 0
 }
 
-// handleIssuesTableRune handles single-rune keys for an issues table.
 func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, event *tcell.EventKey) *tcell.EventKey {
 	switch event.Rune() {
 	case 'j':
@@ -550,13 +474,10 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 				a.activeIssuesSection = section
 			}
 		} else if section == IssuesSectionSearch {
-			// The way into these results was the query box, so the way back off
-			// the top of them is the same box, over in the nav pane.
 			a.focusNavSearch()
 		}
 		return nil
 	case 'g':
-		// Go to top of current section
 		if first := nextIssueRow(a.rowsForSection(section), 0, 1); first > 0 {
 			selectIssueRow(table, a.rowsForSection(section), first)
 			if issue := a.getIssueFromRowForSection(first, section); issue != nil {
@@ -566,7 +487,6 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 		}
 		return nil
 	case 'G':
-		// Go to bottom of current section
 		rows := a.rowsForSection(section)
 		if last := nextIssueRow(rows, len(rows)+1, -1); last > 0 {
 			table.Select(last, 0)
@@ -576,9 +496,6 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 			}
 		}
 		return nil
-	// h and l never arrive here: handleIssuesKey claims them for pane movement,
-	// which is what the README documents. g and G do arrive, because no command
-	// holds a movement rune and no keybinding may take one.
 	case a.actionKey("columns_left", 'H'):
 		scrollIssueColumns(table, 'H')
 		return nil
@@ -587,9 +504,8 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 		return nil
 	case ' ':
 		if section == IssuesSectionSearch {
-			return nil // search results are a flat list
+			return nil
 		}
-		// Space toggles expand/collapse
 		row, _ := table.GetSelection()
 		if rows := a.rowsForSection(section); row >= 1 && row <= len(rows) && rows[row-1].IsHeader {
 			a.toggleGroupCollapse(section, rows[row-1])
@@ -606,18 +522,14 @@ func (a *App) handleIssuesTableRune(table *tview.Table, section IssuesSection, e
 	return event
 }
 
-// getIssueFromRowForSection returns the issue for a given table row in the specified section.
 func (a *App) getIssueFromRowForSection(row int, section IssuesSection) *linearapi.Issue {
 	return getIssueFromRowModel(row, a.rowsForSection(section), a.issueMapForSection(section))
 }
 
-// getRowForIssueInSection returns the table row for a given issue ID in the specified section.
 func (a *App) getRowForIssueInSection(issueID string, section IssuesSection) int {
 	return getRowForIssueModel(issueID, a.rowsForSection(section))
 }
 
-// buildFlatSearchRows maps search results 1:1 to rows, preserving the API's
-// relevance order: no grouping, no parent/child nesting.
 func buildFlatSearchRows(issues []linearapi.Issue) ([]IssueRow, map[string]*linearapi.Issue) {
 	rows := make([]IssueRow, 0, len(issues))
 	idToIssue := make(map[string]*linearapi.Issue, len(issues))
@@ -629,18 +541,12 @@ func buildFlatSearchRows(issues []linearapi.Issue) ([]IssueRow, map[string]*line
 	return rows, idToIssue
 }
 
-// setIssueRowCells writes one issue's cells into a table row. Splitting this
-// out of the render loop lets a single-issue update repaint its own row instead
-// of clearing and reallocating the whole table.
 func setIssueRowCells(table *tview.Table, row int, issueRow IssueRow, issue *linearapi.Issue, theme Theme, columns []string) {
-	// Build identifier with hierarchy indicator
 	identifierPrefix := " "
 
 	if issueRow.Level > 0 {
-		// Child issue - show indent prefix
 		identifierPrefix = " " + IconChildPrefix + " "
 	} else if issueRow.HasChildren {
-		// Parent issue - show expand/collapse indicator
 		if issueRow.IsExpanded {
 			identifierPrefix = " " + IconExpanded + " "
 		} else {
@@ -663,7 +569,6 @@ func setIssueRowCells(table *tview.Table, row int, issueRow IssueRow, issue *lin
 	}
 }
 
-// renderIssuesTableModel renders a table with the given rows and issue lookup map.
 func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[string]*linearapi.Issue, selectedIssueID string, theme Theme, columns []string) {
 	if len(columns) == 0 {
 		columns = DefaultIssueColumns
@@ -672,7 +577,6 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 
 	setIssuesTableHeaders(table, theme, columns)
 
-	// Add issue rows using the hierarchical structure
 	for i, issueRow := range rows {
 		row := i + 1
 
@@ -701,8 +605,6 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 				indicator = "▸ "
 			}
 			indent := strings.Repeat("  ", issueRow.HeaderLevel)
-			// Group labels read distinctly from issue titles: accent for the
-			// main level, subtle header color for subgroups.
 			labelColor := theme.Accent
 			if issueRow.HeaderLevel > 0 {
 				labelColor = theme.HeaderText
@@ -722,14 +624,12 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		setIssueRowCells(table, row, issueRow, issue, theme, columns)
 	}
 
-	// Select the specified issue or first issue row (skipping group headers)
 	if len(rows) > 0 {
 		selectedRow := nextIssueRow(rows, 0, 1)
 		if selectedIssueID != "" {
-			// Find the row with matching issue ID
 			for i, row := range rows {
 				if row.IssueID == selectedIssueID {
-					selectedRow = i + 1 // +1 because row 0 is header
+					selectedRow = i + 1
 					break
 				}
 			}
@@ -739,7 +639,6 @@ func renderIssuesTableModel(table *tview.Table, rows []IssueRow, idToIssue map[s
 		}
 		selectIssueRow(table, rows, selectedRow)
 	} else {
-		// Show empty state message
 		for column := range columns {
 			table.SetCell(1, column, tview.NewTableCell("").SetSelectable(false))
 		}
@@ -771,9 +670,6 @@ func formatMilestoneName(milestone *linearapi.ProjectMilestoneRef) string {
 	return milestone.Name
 }
 
-// renderIssueRow formats an issue for display in the table, in column order:
-// priority, id, state, title, labels, assignee, updated.
-// This is a helper function that can be used for testing.
 func renderIssueRow(issue linearapi.Issue) []string {
 	identifier := issue.Identifier
 	if len(identifier) > 10 {

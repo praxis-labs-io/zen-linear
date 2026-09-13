@@ -82,8 +82,6 @@ func TestCredentialsStoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stat() error: %v", err)
 	}
-	// NTFS has no unix permission bits, so the mode is only asserted where it
-	// means something. The round trip below is checked on every platform.
 	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("permissions = %o, want 0600", info.Mode().Perm())
 	}

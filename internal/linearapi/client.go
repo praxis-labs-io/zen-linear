@@ -13,28 +13,22 @@ import (
 )
 
 const (
-	// DefaultEndpoint is the default Linear API GraphQL endpoint.
 	DefaultEndpoint = "https://api.linear.app/graphql"
 )
 
-// ClientConfig contains configuration for creating a new Linear API client.
 type ClientConfig struct {
-	// Token is the Linear API key or OAuth access token for authentication.
 	Token string
-	// UseBearer prefixes the Authorization header with "Bearer " (OAuth tokens).
-	// Personal API keys must leave this false.
+	// UseBearer prefixes the token with "Bearer ". Personal API keys leave it false.
 	UseBearer bool
-	// OnUnauthorized optionally refreshes credentials after a 401 and retries once.
+	// OnUnauthorized refreshes the token after a 401. The request is retried once.
 	OnUnauthorized func(ctx context.Context) (string, error)
-	// Endpoint is the GraphQL API endpoint (defaults to Linear's production endpoint).
-	Endpoint string
-	// HTTPClient is an optional custom HTTP client (useful for testing).
+	// Endpoint empty means DefaultEndpoint.
+	Endpoint   string
 	HTTPClient *http.Client
-	// Timeout is the HTTP request timeout (defaults to 30s).
+	// Timeout zero means 30s.
 	Timeout time.Duration
 }
 
-// Client is a client for interacting with the Linear GraphQL API.
 type Client struct {
 	httpClient *http.Client
 	endpoint   string
@@ -43,7 +37,6 @@ type Client struct {
 	limits     *rateLimitTracker
 }
 
-// NewClient creates a new Linear API client with the provided configuration.
 func NewClient(cfg ClientConfig) *Client {
 	endpoint := cfg.Endpoint
 	if endpoint == "" {
@@ -64,7 +57,6 @@ func NewClient(cfg ClientConfig) *Client {
 
 	var httpClient *http.Client
 	if cfg.HTTPClient != nil {
-		// Use provided HTTP client but wrap its transport with auth
 		httpClient = cfg.HTTPClient
 		if httpClient.Transport == nil {
 			httpClient.Transport = http.DefaultTransport
@@ -72,7 +64,6 @@ func NewClient(cfg ClientConfig) *Client {
 		transport.Base = httpClient.Transport
 		httpClient.Transport = retry
 	} else {
-		// Create a new HTTP client
 		transport.Base = http.DefaultTransport
 		httpClient = &http.Client{
 			Timeout:   timeout,
@@ -89,9 +80,7 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 }
 
-// gqlClient is the package's only door to shurcooL/graphql. query marks the
-// context replayable and mutate does not, so no mutation is ever resent after a
-// 5xx or a dropped connection.
+// Queries are marked replayable and mutations are not, so no write is resent.
 type gqlClient struct {
 	inner *graphql.Client
 }
@@ -104,17 +93,13 @@ func (g *gqlClient) mutate(ctx context.Context, m interface{}, variables map[str
 	return g.inner.Mutate(ctx, m, variables)
 }
 
-// NewClientWithToken creates a new Linear API client with just a token (convenience method).
 func NewClientWithToken(token string) *Client {
 	return NewClient(ClientConfig{Token: token})
 }
 
-// refreshTimeout bounds the post-401 token refresh. It runs detached from the
-// triggering request's cancellation, so it needs a deadline of its own.
+// The refresh ignores the request's cancellation: abandoning a token rotation logs the user out.
 const refreshTimeout = 30 * time.Second
 
-// authTransport adds the Authorization header to requests and optionally
-// refreshes OAuth credentials once after a 401 response.
 type authTransport struct {
 	mu             sync.Mutex
 	Token          string
@@ -123,7 +108,6 @@ type authTransport struct {
 	Base           http.RoundTripper
 }
 
-// RoundTrip implements http.RoundTripper.
 func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	base := t.Base
 	if base == nil {
@@ -143,10 +127,6 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	_ = resp.Body.Close()
 
-	// A refresh rotates the token server-side and writes the new one to disk.
-	// Canceling it part-way leaves the stored credential dead and logs the
-	// user out, so it must not inherit the cancellation of whichever request
-	// happened to hit the 401. It gets its own deadline instead.
 	refreshCtx, cancelRefresh := context.WithTimeout(context.WithoutCancel(req.Context()), refreshTimeout)
 	newToken, refreshErr := t.OnUnauthorized(refreshCtx)
 	cancelRefresh()
@@ -166,7 +146,6 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return base.RoundTrip(retryReq)
 }
 
-// setAuthHeader applies the current token to the request Authorization header.
 func (t *authTransport) setAuthHeader(req *http.Request) {
 	t.mu.Lock()
 	token := t.Token
@@ -180,7 +159,6 @@ func (t *authTransport) setAuthHeader(req *http.Request) {
 	req.Header.Set("Authorization", token)
 }
 
-// cloneRequestForRetry duplicates req so the body can be resent after a 401 refresh.
 func cloneRequestForRetry(req *http.Request) (*http.Request, error) {
 	clone := req.Clone(req.Context())
 	if req.Body == nil || req.Body == http.NoBody {
@@ -194,7 +172,6 @@ func cloneRequestForRetry(req *http.Request) (*http.Request, error) {
 		clone.Body = body
 		return clone, nil
 	}
-	// Fall back to buffering when GetBody is unavailable.
 	data, err := io.ReadAll(req.Body)
 	_ = req.Body.Close()
 	if err != nil {
@@ -210,8 +187,7 @@ func cloneRequestForRetry(req *http.Request) (*http.Request, error) {
 	return clone, nil
 }
 
-// RateLimit reports what the last answered request said about the user's
-// budgets. The zero value is a client nothing has answered yet.
+// RateLimit returns what the last answered request said about the budgets.
 func (c *Client) RateLimit() RateLimitSnapshot {
 	if c.limits == nil {
 		return RateLimitSnapshot{}
@@ -219,7 +195,6 @@ func (c *Client) RateLimit() RateLimitSnapshot {
 	return c.limits.snapshot()
 }
 
-// Endpoint returns the GraphQL endpoint being used.
 func (c *Client) Endpoint() string {
 	return c.endpoint
 }

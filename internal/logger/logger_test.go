@@ -11,14 +11,11 @@ import (
 )
 
 func TestLogger(t *testing.T) {
-	// Reset global state
 	resetLogger()
 
-	// Create temporary directory for test logs
 	tmpDir := t.TempDir()
 	logPath := filepath.Join(tmpDir, "test.log")
 
-	// Initialize logger
 	err := Init(logPath, LevelDebug)
 	if err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
@@ -27,18 +24,15 @@ func TestLogger(t *testing.T) {
 		_ = Close()
 	}()
 
-	// Write test logs
 	Debug("Debug message: %s", "test debug")
 	Info("Info message: %s", "test info")
 	Warning("Warning message: %s", "test warning")
 	Error("Error message: %s", "test error")
 
-	// Close to ensure all writes are flushed
 	if err := Close(); err != nil {
 		t.Fatalf("Failed to close logger: %v", err)
 	}
 
-	// Read log file
 	content, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
@@ -46,7 +40,6 @@ func TestLogger(t *testing.T) {
 
 	logContent := string(content)
 
-	// Verify session markers
 	if !strings.Contains(logContent, "=== Session started ===") {
 		t.Error("Log file should contain session start marker")
 	}
@@ -54,7 +47,6 @@ func TestLogger(t *testing.T) {
 		t.Error("Log file should contain session end marker")
 	}
 
-	// Verify log levels
 	if !strings.Contains(logContent, "DEBUG: Debug message: test debug") {
 		t.Error("Log file should contain debug message")
 	}
@@ -70,14 +62,11 @@ func TestLogger(t *testing.T) {
 }
 
 func TestLoggerWithMinLevel(t *testing.T) {
-	// Reset global state
 	resetLogger()
 
-	// Create temporary directory for test logs
 	tmpDir := t.TempDir()
 	logPath := filepath.Join(tmpDir, "test-min-level.log")
 
-	// Initialize logger with Warning minimum level
 	err := Init(logPath, LevelWarning)
 	if err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
@@ -86,18 +75,15 @@ func TestLoggerWithMinLevel(t *testing.T) {
 		_ = Close()
 	}()
 
-	// Write test logs
 	Debug("Should not appear")
 	Info("Should not appear")
 	Warning("Should appear")
 	Error("Should appear")
 
-	// Close to ensure all writes are flushed
 	if err := Close(); err != nil {
 		t.Fatalf("Failed to close logger: %v", err)
 	}
 
-	// Read log file
 	content, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
@@ -105,7 +91,6 @@ func TestLoggerWithMinLevel(t *testing.T) {
 
 	logContent := string(content)
 
-	// Verify filtered messages
 	if strings.Contains(logContent, "DEBUG:") {
 		t.Error("Log file should not contain debug messages when min level is Warning")
 	}
@@ -120,9 +105,7 @@ func TestLoggerWithMinLevel(t *testing.T) {
 	}
 }
 
-// TestReinitLogger verifies logging switches to the new file after reinit.
 func TestReinitLogger(t *testing.T) {
-	// Reset global state
 	resetLogger()
 
 	tmpDir := t.TempDir()
@@ -173,9 +156,6 @@ func TestReinitLogger(t *testing.T) {
 	}
 }
 
-// A log path the user cannot write used to take the rest of the session down
-// with it: the old file was already closed, so nothing landed anywhere, not
-// even the report of the failure.
 func TestReinitToAnUnwritablePathKeepsLogging(t *testing.T) {
 	resetLogger()
 
@@ -185,7 +165,6 @@ func TestReinitToAnUnwritablePathKeepsLogging(t *testing.T) {
 		t.Fatalf("Init() error: %v", err)
 	}
 
-	// A regular file where the new path wants a directory.
 	blocker := filepath.Join(tmpDir, "blocker")
 	if err := os.WriteFile(blocker, nil, 0644); err != nil {
 		t.Fatalf("write blocker: %v", err)
@@ -209,9 +188,6 @@ func TestReinitToAnUnwritablePathKeepsLogging(t *testing.T) {
 	}
 }
 
-// A settings save or a workspace switch reinitializes the logger from the UI
-// thread while background fetches are still logging. The race detector is the
-// assertion here.
 func TestReinitWhileOtherGoroutinesLog(t *testing.T) {
 	resetLogger()
 
@@ -245,36 +221,29 @@ func TestReinitWhileOtherGoroutinesLog(t *testing.T) {
 }
 
 func TestLoggerDisabled(t *testing.T) {
-	// Reset global state
 	resetLogger()
 
-	// Initialize logger with empty path (disabled)
 	err := Init("", LevelDebug)
 	if err != nil {
 		t.Fatalf("Failed to initialize disabled logger: %v", err)
 	}
 
-	// These should not panic or error
 	Debug("Test debug")
 	Info("Test info")
 	Warning("Test warning")
 	Error("Test error")
 
-	// Close should not error
 	if err := Close(); err != nil {
 		t.Errorf("Close should not error for disabled logger: %v", err)
 	}
 }
 
 func TestErrorWithErr(t *testing.T) {
-	// Reset global state
 	resetLogger()
 
-	// Create temporary directory for test logs
 	tmpDir := t.TempDir()
 	logPath := filepath.Join(tmpDir, "test-error.log")
 
-	// Initialize logger
 	err := Init(logPath, LevelDebug)
 	if err != nil {
 		t.Fatalf("Failed to initialize logger: %v", err)
@@ -283,19 +252,15 @@ func TestErrorWithErr(t *testing.T) {
 		_ = Close()
 	}()
 
-	// Write error with context
 	testErr := os.ErrNotExist
 	ErrorWithErr(testErr, "Failed to open file")
 
-	// Give it a moment to write
 	time.Sleep(10 * time.Millisecond)
 
-	// Close to ensure all writes are flushed
 	if err := Close(); err != nil {
 		t.Fatalf("Failed to close logger: %v", err)
 	}
 
-	// Read log file
 	content, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
@@ -303,7 +268,6 @@ func TestErrorWithErr(t *testing.T) {
 
 	logContent := string(content)
 
-	// Verify error message with context
 	if !strings.Contains(logContent, "ERROR: Failed to open file") {
 		t.Error("Log file should contain error message")
 	}
@@ -333,7 +297,6 @@ func TestLogLevelString(t *testing.T) {
 	}
 }
 
-// resetLogger resets the global logger state for testing.
 func resetLogger() {
 	globalMu.Lock()
 	defer globalMu.Unlock()
@@ -344,15 +307,10 @@ func resetLogger() {
 	defaultLogger = nil
 }
 
-// A log path that cannot be opened used to end the process: Init failed, main
-// printed the error and returned 1, and the setting that caused it lived in a
-// modal the app never got far enough to show. Logging is diagnostics, so it
-// degrades instead.
 func TestStartFallsBackWhenThePathCannotBeOpened(t *testing.T) {
 	resetLogger()
 
 	tmpDir := t.TempDir()
-	// A regular file where the refused path wants a directory.
 	blocker := filepath.Join(tmpDir, "blocker")
 	if err := os.WriteFile(blocker, nil, 0644); err != nil {
 		t.Fatalf("write blocker: %v", err)
@@ -399,7 +357,6 @@ func TestStartWithNowhereToLogLeavesLoggingOff(t *testing.T) {
 		t.Errorf("warning %q does not name the refused path %q", warning, refused)
 	}
 
-	// Logging off is still a working logger, not a nil one.
 	Info("Goes nowhere")
 	if err := Close(); err != nil {
 		t.Fatalf("Close() error: %v", err)
@@ -424,8 +381,6 @@ func TestStartOnAWritablePathReportsNoWarning(t *testing.T) {
 	}
 }
 
-// Restart must not fall back over a close failure on the file being left
-// behind: the new path opened, which is the only thing the caller retries on.
 func TestRestartMovesToTheNewPath(t *testing.T) {
 	resetLogger()
 
@@ -458,8 +413,6 @@ func TestRestartMovesToTheNewPath(t *testing.T) {
 	}
 }
 
-// Init is a no-op once a logger exists, so a naive Start would report a path it
-// never opened and leave the session logging to the previous file.
 func TestStartReplacesALoggerAlreadyRunning(t *testing.T) {
 	resetLogger()
 
@@ -499,9 +452,6 @@ func TestStartReplacesALoggerAlreadyRunning(t *testing.T) {
 	}
 }
 
-// A log that is already at the cap when it opens rotates on the first write
-// rather than growing forever. Truncate makes the fixture sparse, so the test
-// costs no real bytes.
 func TestAFullLogRotatesAndKeepsWriting(t *testing.T) {
 	resetLogger()
 
@@ -542,8 +492,6 @@ func TestAFullLogRotatesAndKeepsWriting(t *testing.T) {
 	}
 }
 
-// One generation, not a chain: a second rotation replaces app.log.1 rather
-// than shifting it to app.log.2.
 func TestRotatingTwiceKeepsOneGeneration(t *testing.T) {
 	resetLogger()
 
@@ -605,9 +553,6 @@ func TestALogUnderTheCapDoesNotRotate(t *testing.T) {
 	}
 }
 
-// A rotation whose rename fails reopens the same full log rather than starting
-// a counter from nought against it, which would let the file grow another whole
-// cap before the next attempt, and again after that.
 func TestAFailedRotationDoesNotResetTheCounter(t *testing.T) {
 	resetLogger()
 
@@ -620,7 +565,6 @@ func TestAFailedRotationDoesNotResetTheCounter(t *testing.T) {
 		t.Fatalf("grow log to the cap: %v", err)
 	}
 
-	// A directory where the rotation wants to put the file, so Rename fails.
 	if err := os.Mkdir(logPath+rotatedSuffix, 0o755); err != nil {
 		t.Fatalf("block the rotation target: %v", err)
 	}

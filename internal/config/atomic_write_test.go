@@ -23,8 +23,6 @@ func TestWriteFileAtomicCreatesParentDirectories(t *testing.T) {
 	}
 }
 
-// TestWriteFileAtomicTightensExistingPermissions covers the file an earlier
-// build left at 0644: the rename replaces the inode, so the new mode wins.
 func TestWriteFileAtomicTightensExistingPermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("NTFS has no unix permission bits and os.Chmod only toggles the read-only flag there, so this is not a guarantee Windows makes")
@@ -55,8 +53,6 @@ func TestWriteFileAtomicTightensExistingPermissions(t *testing.T) {
 	}
 }
 
-// TestWriteFileAtomicLeavesNoTempFiles verifies the write cleans up after
-// itself, so the application directory does not fill with dotfiles.
 func TestWriteFileAtomicLeavesNoTempFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "file.json")

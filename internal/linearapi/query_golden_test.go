@@ -13,9 +13,6 @@ import (
 	"testing"
 )
 
-// updateGoldensEnv rewrites the goldens instead of comparing them. It is an
-// environment variable rather than a flag because a flag registered here makes
-// `go test ./... -update` abort in every other package.
 const updateGoldensEnv = "ZEN_UPDATE_GOLDENS"
 
 const regenerateHint = "regenerate with: " + updateGoldensEnv + "=1 go test ./internal/linearapi -run TestQueryGoldens"
@@ -25,14 +22,6 @@ type goldenCase struct {
 	invoke func(context.Context, *Client)
 }
 
-// captureQuery runs invoke against a server that records the GraphQL request
-// body and answers with an empty data object. Empty data leaves every field
-// zero, so a paginating caller stops after one request. The error invoke
-// returns is ignored: the request is the assertion, and what a call site makes
-// of an empty response is another test's business.
-//
-// Exactly one request per case is required. The golden pins one query, so a
-// call site that grew a second one would leave it unchecked.
 func captureQuery(t *testing.T, invoke func(context.Context, *Client)) string {
 	t.Helper()
 
@@ -71,8 +60,6 @@ func captureQuery(t *testing.T, invoke func(context.Context, *Client)) string {
 	return queries[0]
 }
 
-// goldenQueryCases names one case per c.client.query/mutate site in the
-// package. TestQueryGoldensCoverEveryCallSite is what keeps that true.
 func goldenQueryCases() []goldenCase {
 	title := "Golden"
 
@@ -142,10 +129,6 @@ func goldenQueryCases() []goldenCase {
 	}
 }
 
-// TestQueryGoldens pins the selection set every call site sends. Linear rejects
-// a whole query over one misplaced field, and the canned-JSON tests elsewhere in
-// this package never see the request, so this is the only check that a
-// refactor of the query structs left the wire format alone.
 func TestQueryGoldens(t *testing.T) {
 	for _, tc := range goldenQueryCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -170,9 +153,6 @@ func TestQueryGoldens(t *testing.T) {
 	}
 }
 
-// TestQueryGoldensCoverEveryCallSite keeps the case table honest. A query added
-// without a golden is exactly the silent drift the goldens exist to catch, and
-// a hand-maintained table gives no warning on its own.
 func TestQueryGoldensCoverEveryCallSite(t *testing.T) {
 	cases := goldenQueryCases()
 

@@ -9,8 +9,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// hexPtr is the string glamour styles by: an index for a palette color, so
-// markdown follows the terminal's palette, a hex for RGB, nil for default.
 func hexPtr(color tcell.Color) *string {
 	if !color.Valid() {
 		return nil
@@ -27,10 +25,7 @@ func uintPtr(value uint) *uint { return &value }
 
 func boolPtr(value bool) *bool { return &value }
 
-// themeMarkdownStyle derives a glamour style from the active theme so rendered
-// markdown matches the rest of the UI instead of glamour's stock palette. The
-// document margin is dropped and wrapping is left to the surrounding text
-// view, which knows its own width.
+// Links carry no underline: tview's [-:-:-] reset leaves tcell's underline style set, so it would run to the end of the pane.
 func themeMarkdownStyle(theme Theme) ansi.StyleConfig {
 	style := styles.DarkStyleConfig
 
@@ -46,10 +41,6 @@ func themeMarkdownStyle(theme Theme) ansi.StyleConfig {
 
 	style.HorizontalRule.Color = hexPtr(theme.Border)
 
-	// Links carry no underline: tview's own attribute reset ("[-:-:-]") clears
-	// tcell's attribute mask but not the underline style beside it, so an
-	// underline the page opens can never be closed and runs to the end of the
-	// pane. Color is what marks a link here.
 	style.Link.Color = hexPtr(theme.StatusDone)
 	style.Link.Underline = boolPtr(false)
 	style.LinkText.Color = hexPtr(theme.Accent)
@@ -57,9 +48,6 @@ func themeMarkdownStyle(theme Theme) ansi.StyleConfig {
 	style.Image.Underline = boolPtr(false)
 	style.ImageText.Color = hexPtr(theme.SecondaryText)
 
-	// Inline code keeps a highlight color but loses the stock background chip,
-	// which clashes with themed (and transparent) backgrounds. Code blocks drop
-	// chroma's palette for a single theme color for the same reason.
 	style.Code.Color = hexPtr(theme.StatusInProgress)
 	style.Code.BackgroundColor = nil
 	style.CodeBlock.Color = hexPtr(theme.StatusDone)

@@ -15,12 +15,10 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// stringPtr returns a string pointer for test helpers.
 func stringPtr(value string) *string {
 	return &value
 }
 
-// waitForCondition polls until a condition is true or times out.
 func waitForCondition(t *testing.T, timeout time.Duration, check func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -49,10 +47,6 @@ func waitForRefreshCompletions(t *testing.T, done <-chan struct{}, count int) {
 	for i := 0; i < count; i++ {
 		select {
 		case <-done:
-		// Generous on purpose: the wait is event-driven, so a longer bound
-		// costs nothing when the refresh lands and only decides how fast a
-		// genuine hang reports. A second was tight enough that -race on a
-		// loaded machine failed the restore tests roughly one run in four.
 		case <-time.After(30 * time.Second):
 			t.Fatalf("timed out waiting for refresh completion %d of %d", i+1, count)
 		}
@@ -64,7 +58,6 @@ func waitForRefreshCompletion(t *testing.T, done <-chan struct{}) {
 	waitForRefreshCompletions(t, done, 1)
 }
 
-// TestRefreshIssues_LazyLoadsPages verifies first page renders before background pages.
 func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 	cfg := config.Config{
 		PageSize: 2,
@@ -104,8 +97,6 @@ func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 
 	app.refreshIssues()
 
-	// The selection is a later write under its own lock, so waiting on the list
-	// alone can read it back before it lands.
 	waitForCondition(t, time.Second, func() bool {
 		app.issuesMu.RLock()
 		defer app.issuesMu.RUnlock()
@@ -133,7 +124,6 @@ func TestRefreshIssues_LazyLoadsPages(t *testing.T) {
 	}
 }
 
-// TestRefreshIssues_CancelsStaleLoad verifies stale background pages are ignored.
 func TestRefreshIssues_CancelsStaleLoad(t *testing.T) {
 	cfg := config.Config{
 		PageSize: 2,
@@ -334,9 +324,6 @@ func TestRefreshIssues_IncludesCycleID(t *testing.T) {
 	waitForRefreshCompletion(t, refreshDone)
 }
 
-// waitForSearchRows waits until the Search tab holds the given number of
-// result rows. Reads go through uiUpdateMu, the lock the immediate
-// queueUpdateDraw stub applies around search-result updates.
 func waitForSearchRows(t *testing.T, app *App, want int) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)
@@ -361,7 +348,6 @@ func TestSearchTabTypingDebouncesLatestQuery(t *testing.T) {
 	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopBackgroundWorkOnCleanup(t, app)
 	app.queueUpdateDraw = func(f func()) { f() }
-	// A selected team must not scope the search: it is workspace-wide.
 	app.selectedNavigation = &NavigationNode{ID: "team-1", TeamID: "team-1", IsTeam: true}
 
 	called := make(chan linearapi.FetchIssuesParams, 4)
@@ -415,8 +401,6 @@ func TestSearchTabTypingDebouncesLatestQuery(t *testing.T) {
 		t.Fatal("search input lost focus during live search")
 	}
 
-	// Wait for the result callback to finish before the test returns: it
-	// renders through tview globals the next test's NewApp rewrites.
 	waitForCondition(t, time.Second, func() bool {
 		app.uiUpdateMu.Lock()
 		defer app.uiUpdateMu.Unlock()
@@ -438,8 +422,6 @@ func TestSearchTabEnterMovesFocusToResults(t *testing.T) {
 	app.fetchIssuesPage = func(ctx context.Context, params linearapi.FetchIssuesParams, after *string) (linearapi.IssuePage, error) {
 		return linearapi.IssuePage{Issues: []linearapi.Issue{issue}}, nil
 	}
-	// Hold the detail fetch until assertions are done so its immediate
-	// queueUpdateDraw stub cannot run concurrently with them.
 	releaseDetails := make(chan struct{})
 	defer close(releaseDetails)
 	app.fetchIssueByID = func(ctx context.Context, id string) (linearapi.Issue, error) {
@@ -494,7 +476,6 @@ func TestSearchStaleResultsDropped(t *testing.T) {
 	waitForSearchRows(t, app, 1)
 	close(releaseFirst)
 
-	// Give the stale response a chance to land (it must be discarded).
 	time.Sleep(50 * time.Millisecond)
 	app.uiUpdateMu.Lock()
 	defer app.uiUpdateMu.Unlock()
@@ -536,7 +517,7 @@ func TestSearchTabTypedLettersReachInput(t *testing.T) {
 	cfg := config.Config{
 		PageSize:       1,
 		CacheTTL:       time.Minute,
-		SearchDebounce: time.Hour, // keep the debounce from firing mid-test
+		SearchDebounce: time.Hour,
 	}
 	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
 	stopBackgroundWorkOnCleanup(t, app)
@@ -547,8 +528,6 @@ func TestSearchTabTypedLettersReachInput(t *testing.T) {
 		t.Fatal("navSearchActive() = false after focusNavSearch")
 	}
 
-	// The quit shortcut must pass through to the input instead of stopping
-	// the app.
 	event := tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModNone)
 	if got := app.handleNavSearchKey(event); got != event {
 		t.Fatalf("handleNavSearchKey(q) = %v, want the event passed through", got)
@@ -583,10 +562,6 @@ func TestResetCachedStateClearsSearch(t *testing.T) {
 	}
 }
 
-// A workspace switch clears the selection, and the details pane used to keep
-// painting the issue from the workspace being left until the new list landed.
-// GetSelectedIssue is already nil there, so every command aimed at what the
-// pane showed did nothing.
 func TestResetCachedStateEmptiesTheDetailsPane(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
@@ -606,13 +581,6 @@ func TestResetCachedStateEmptiesTheDetailsPane(t *testing.T) {
 	}
 }
 
-// Clearing the row models is not enough. A tab that is off screen keeps the
-// cells it was last painted with, so a workspace switch used to leave the
-// previous workspace's issues sitting in the My tab until something repainted
-// it, which for a failed fetch is never.
-// A table off screen keeps its painted cells until something repaints it, so a
-// workspace switch that only clears the models leaves the old workspace's rows
-// waiting behind the search results.
 func TestResetCachedStateClearsTheOffScreenListTable(t *testing.T) {
 	app, _ := newIssueUpdateTestApp(t, []linearapi.Issue{
 		{ID: "issue-1", Identifier: "LIN-1", Title: "Alpha"},
@@ -620,8 +588,6 @@ func TestResetCachedStateClearsTheOffScreenListTable(t *testing.T) {
 	app.rebuildIssueRowModels()
 	holdDetailFetches(t, app)
 
-	// Paint the list, then move to search so it holds this workspace's rows
-	// unseen.
 	app.renderIssueSections(map[IssuesSection]string{IssuesSectionList: "issue-1"})
 	app.activeIssuesSection = IssuesSectionSearch
 	if len(renderedTitles(app, IssuesSectionList)) == 0 {
@@ -638,9 +604,6 @@ func TestResetCachedStateClearsTheOffScreenListTable(t *testing.T) {
 	}
 }
 
-// TestAssignMe_DuringCurrentUserFetch drives assign_me through the real command
-// handler while the current-user fetch is still in flight, on both sides of the
-// queued write that installs the user.
 func TestAssignMe_DuringCurrentUserFetch(t *testing.T) {
 	app := NewApp(linearapi.ClientConfig{}, config.Config{PageSize: 1, CacheTTL: time.Minute}, nil)
 	stopBackgroundWorkOnCleanup(t, app)
@@ -660,9 +623,6 @@ func TestAssignMe_DuringCurrentUserFetch(t *testing.T) {
 
 	var assignedMu sync.Mutex
 	var assigned []string
-	// The empty response stops applyIssueUpdate at its first check. What the
-	// command sent is the subject here, and a repaint would outlive the test on
-	// the update goroutines the dispatch loop below leaves in flight.
 	app.updateIssueFunc = func(_ context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
 		assignedMu.Lock()
 		if input.AssigneeID != nil {
@@ -681,8 +641,6 @@ func TestAssignMe_DuringCurrentUserFetch(t *testing.T) {
 	if assignMe == nil {
 		t.Fatal("assign_me command not found")
 	}
-	// Every dispatch goes through the same queue the fetch writes through, the
-	// contract the command relies on to see a whole user or none.
 	dispatch := func() { app.QueueUpdateDraw(func() { assignMe.Run(app) }) }
 
 	dispatch()
@@ -695,8 +653,6 @@ func TestAssignMe_DuringCurrentUserFetch(t *testing.T) {
 		t.Fatalf("status message = %q, want the no-user message", status)
 	}
 
-	// Dispatch across the window where the fetch lands, so the command handler
-	// and the queued write overlap.
 	hammered := make(chan struct{})
 	go func() {
 		defer close(hammered)
@@ -763,9 +719,6 @@ func TestDefaultCommands_IncludesCycleCommands(t *testing.T) {
 	}
 }
 
-// renderedTitles returns the title cell of every issue row in a section. Group
-// headers render their label into the title column, so they have to be skipped
-// by row kind, not by an empty-cell check.
 func renderedTitles(app *App, section IssuesSection) []string {
 	table := app.tableForSection(section)
 	rows := app.rowsForSection(section)
@@ -783,9 +736,6 @@ func renderedTitles(app *App, section IssuesSection) []string {
 	return titles
 }
 
-// TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage verifies pages after the
-// first accumulate without repainting. Repainting per page regroups and
-// re-renders the whole table for an end state only the last page settles.
 func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
 	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
 	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
@@ -818,7 +768,6 @@ func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
 
 	app.refreshIssues()
 
-	// Page 2 has merged but must not have reached the table yet.
 	waitForCondition(t, time.Second, func() bool {
 		app.issuesMu.RLock()
 		defer app.issuesMu.RUnlock()
@@ -838,9 +787,6 @@ func TestRefreshIssues_PaintsOncePerRefreshNotOncePerPage(t *testing.T) {
 	}
 }
 
-// TestRefreshIssues_KeepsSelectionAcrossPagination guards the one thing the
-// deferred paint could break: the cursor moving because a later page reordered
-// the list under it.
 func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
 	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
 	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
@@ -851,7 +797,6 @@ func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
 		return linearapi.Issue{ID: id}, nil
 	}
 
-	// Page 2 sorts ahead of page 1, so the selected row moves.
 	pages := []linearapi.Issue{
 		{ID: "issue-b", Identifier: "ABC-2", Title: "Beta", State: "Todo", Priority: 3},
 		{ID: "issue-a", Identifier: "ABC-1", Title: "Alpha", State: "Todo", Priority: 1},
@@ -884,10 +829,6 @@ func TestRefreshIssues_KeepsSelectionAcrossPagination(t *testing.T) {
 	}
 }
 
-// TestAccumulateIssues_ReconcilesAfterAnOutsideSplice guards the dedup set
-// against another path appending to a.issues mid-refresh: insertIssue does
-// exactly that when an edit brings an issue into scope, and a page carrying
-// the same issue would otherwise add it twice.
 func TestAccumulateIssues_ReconcilesAfterAnOutsideSplice(t *testing.T) {
 	app := newUXTestApp(t)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
@@ -902,12 +843,10 @@ func TestAccumulateIssues_ReconcilesAfterAnOutsideSplice(t *testing.T) {
 	merge.reset(app.issues)
 	app.issuesMu.RUnlock()
 
-	// Something else adds issue-2 while pagination is still running.
 	app.issuesMu.Lock()
 	app.issues = append(app.issues, spliced)
 	app.issuesMu.Unlock()
 
-	// The next server page carries it too.
 	app.accumulateIssues([]linearapi.Issue{spliced, {ID: "issue-3", Identifier: "ZNL-3"}}, merge)
 
 	app.issuesMu.RLock()
@@ -924,8 +863,6 @@ func TestAccumulateIssues_ReconcilesAfterAnOutsideSplice(t *testing.T) {
 	}
 }
 
-// TestAccumulateIssues_KeepsTheListSorted guards the repaint paths that read
-// a.issues directly mid-pagination and do not sort first.
 func TestAccumulateIssues_KeepsTheListSorted(t *testing.T) {
 	app := newUXTestApp(t)
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
@@ -948,13 +885,8 @@ func TestAccumulateIssues_KeepsTheListSorted(t *testing.T) {
 	}
 }
 
-// TestRenderAccumulatedIssues_KeepsTheHydratedSelection guards the details
-// pane: the list model carries no comments or attachments, so overwriting a
-// surviving selection with it silently strips them.
 func TestRenderAccumulatedIssues_KeepsTheHydratedSelection(t *testing.T) {
 	app := newUXTestApp(t)
-	// Set the state directly: updateIssuesData fires an async detail fetch
-	// that would race the selection this test installs.
 	hydrated := linearapi.Issue{
 		ID: "issue-1", Identifier: "ZNL-1", Title: "First",
 		Comments: []linearapi.Comment{{ID: "comment-1", Body: "still here"}},
@@ -976,13 +908,8 @@ func TestRenderAccumulatedIssues_KeepsTheHydratedSelection(t *testing.T) {
 	}
 }
 
-// TestRenderAccumulatedIssues_LeavesTheSearchTabAlone mirrors the guard
-// updateIssuesData carries: a background refresh must not clear the selection
-// the user is browsing in search results.
 func TestRenderAccumulatedIssues_LeavesTheSearchTabAlone(t *testing.T) {
 	app := newUXTestApp(t)
-	// A search hit that is not in the My/Other models. State is set directly
-	// so no async detail fetch races the selection.
 	offList := linearapi.Issue{ID: "issue-99", Identifier: "ZNL-99", Title: "Elsewhere"}
 	app.issuesMu.Lock()
 	app.issues = []linearapi.Issue{{ID: "issue-1", Identifier: "ZNL-1", Title: "First"}}
@@ -999,8 +926,6 @@ func TestRenderAccumulatedIssues_LeavesTheSearchTabAlone(t *testing.T) {
 	}
 }
 
-// TestRefreshIssues_PaintsDuringPagination guards the budget: pages fetched
-// early in a slow load must become reachable without waiting for the last one.
 func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 	cfg := config.Config{PageSize: 1, CacheTTL: time.Minute}
 	app := NewApp(linearapi.ClientConfig{}, cfg, nil)
@@ -1008,8 +933,6 @@ func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 	app.fetchIssueByID = func(_ context.Context, id string) (linearapi.Issue, error) {
 		return linearapi.Issue{ID: id}, nil
 	}
-	// The table belongs to the draw goroutine, so snapshot it there rather
-	// than reading it from the test.
 	var paintedMu sync.Mutex
 	var painted []string
 	app.queueUpdateDraw = func(f func()) {
@@ -1039,7 +962,6 @@ func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 			<-blockLast
 		}
 		if index > 0 {
-			// Push page 2 past the repaint budget so it must paint on its own.
 			time.Sleep(issuesRepaintInterval + 50*time.Millisecond)
 		}
 		return linearapi.IssuePage{
@@ -1051,7 +973,6 @@ func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 
 	app.refreshIssues()
 
-	// Page 2 must reach the table while page 3 is still blocked.
 	waitForCondition(t, 3*time.Second, func() bool {
 		return slices.Equal(lastPainted(), []string{"First", "Second"})
 	})
@@ -1066,10 +987,6 @@ func TestRefreshIssues_PaintsDuringPagination(t *testing.T) {
 	}
 }
 
-// TestRenderedTitles_SkipsGroupHeaders guards the test helper itself: group
-// headers write their label into the title column, so an empty-cell check does
-// not exclude them and every assertion built on it would silently compare
-// against header text once grouping is on.
 func TestRenderedTitles_SkipsGroupHeaders(t *testing.T) {
 	cfg := config.Config{PageSize: 10, CacheTTL: time.Minute, GroupBy: GroupByStatus}
 	app := NewApp(linearapi.ClientConfig{}, cfg, nil)

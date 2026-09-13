@@ -10,8 +10,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// zoomKey presses the zoom shortcut through the real global handler, so the
-// per-pane dispatch that has to reach the command is part of what is covered.
 func zoomKey(app *App) {
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, 'v', tcell.ModNone))
 }
@@ -24,8 +22,6 @@ func newZoomTestApp(t *testing.T) *App {
 	return app
 }
 
-// The zoom is reachable from every pane, because it is a palette command and
-// all three pane handlers fall through to the shortcut lookup.
 func TestZoomFiresFromEveryPane(t *testing.T) {
 	for _, pane := range []FocusTarget{FocusNavigation, FocusIssues, FocusDetails} {
 		app := newZoomTestApp(t)
@@ -56,9 +52,6 @@ func TestZoomFocusesTheDetailsPane(t *testing.T) {
 	}
 }
 
-// The zoom is a round trip. Unzooming puts you back where you asked from,
-// rather than always landing on one pane: from the list you get the list back,
-// and from the details pane you stay in it.
 func TestUnzoomReturnsToThePaneTheZoomCameFrom(t *testing.T) {
 	for _, from := range []FocusTarget{FocusNavigation, FocusIssues, FocusDetails} {
 		app := newZoomTestApp(t)
@@ -84,9 +77,6 @@ func TestUnzoomReturnsToThePaneTheZoomCameFrom(t *testing.T) {
 	}
 }
 
-// The zoom forces the details pane open. Every way back out has to put that
-// right, not just the one that pairs with the zoom key, or the rail is left
-// on screen for someone who never opened it.
 func TestEveryExitFromTheZoomRestoresAClosedDetailsPane(t *testing.T) {
 	exits := map[string]func(*App){
 		"v again":       zoomKey,
@@ -120,7 +110,6 @@ func TestEveryExitFromTheZoomRestoresAClosedDetailsPane(t *testing.T) {
 			if !app.detailsHidden {
 				t.Errorf("%s left the details rail on screen, when it was closed before the zoom", name)
 			}
-			// The flag is bookkeeping; what is mounted is what the user sees.
 			if !mountsIssuesColumn(app) {
 				t.Errorf("%s left the issues column off screen", name)
 			}
@@ -128,8 +117,6 @@ func TestEveryExitFromTheZoomRestoresAClosedDetailsPane(t *testing.T) {
 	}
 }
 
-// The details pane opens on demand, so zooming from a layout that had it
-// closed must not leave it open afterwards.
 func TestUnzoomRestoresAClosedDetailsPane(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.focusedPane = FocusIssues
@@ -151,9 +138,6 @@ func TestUnzoomRestoresAClosedDetailsPane(t *testing.T) {
 	}
 }
 
-// contentPanes lists the panes currently mounted in the content flex, which is
-// what is actually on screen. Clearing the zoom flag without a rebuild leaves
-// the old arrangement up, so the flag alone proves nothing.
 func contentPanes(app *App) []tview.Primitive {
 	panes := make([]tview.Primitive, 0, app.contentFlex.GetItemCount())
 	for i := 0; i < app.contentFlex.GetItemCount(); i++ {
@@ -171,7 +155,6 @@ func mountsIssuesColumn(app *App) bool {
 	return false
 }
 
-// Picking a list is asking to see it, so the zoom covering it gives way.
 func TestSelectingANavigationNodeBringsTheIssuesListBack(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -192,7 +175,6 @@ func TestSelectingANavigationNodeBringsTheIssuesListBack(t *testing.T) {
 	}
 }
 
-// Zooming an empty pane would show a full-width "No issue selected".
 func TestZoomNeedsASelectedIssue(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues
@@ -203,7 +185,6 @@ func TestZoomNeedsASelectedIssue(t *testing.T) {
 	}
 }
 
-// A pane step must not offer a pane the zoom has taken off screen.
 func TestStepSkipsTheIssuesPaneWhileZoomed(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -223,8 +204,6 @@ func TestStepSkipsTheIssuesPaneWhileZoomed(t *testing.T) {
 	}
 }
 
-// Below the wide breakpoint the nav tree is not mounted either, so it must not
-// be offered.
 func TestStepHoldsTheDetailsPaneWhileZoomedAndNarrow(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -238,7 +217,6 @@ func TestStepHoldsTheDetailsPaneWhileZoomedAndNarrow(t *testing.T) {
 	}
 }
 
-// Asking for the issues pane by number is the other way out of the zoom.
 func TestPaneNumberTwoReleasesTheZoom(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -255,8 +233,6 @@ func TestPaneNumberTwoReleasesTheZoom(t *testing.T) {
 	}
 }
 
-// Escape leaves the zoom without also closing the details pane, which is what
-// Enter does when the pane is a rail.
 func TestEscapeReleasesTheZoomAndKeepsThePane(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -276,9 +252,6 @@ func TestEscapeReleasesTheZoomAndKeepsThePane(t *testing.T) {
 	}
 }
 
-// Left and h walk to the pane on the left, which while zoomed is the
-// navigation tree. They used to name the issues pane, which the zoom has
-// taken off screen.
 func TestLeftMovesToTheNavigationPaneWhileZoomed(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -296,8 +269,6 @@ func TestLeftMovesToTheNavigationPaneWhileZoomed(t *testing.T) {
 	}
 }
 
-// Right walks back into the zoomed pane rather than into the issues column
-// the zoom replaced.
 func TestRightReturnsToTheZoomedDetailsPane(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -312,8 +283,6 @@ func TestRightReturnsToTheZoomedDetailsPane(t *testing.T) {
 	}
 }
 
-// With the nav gone too there is nothing to the left, so the key holds rather
-// than dropping focus onto an unmounted pane.
 func TestLeftHoldsTheZoomedPaneWithNoNavOnScreen(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -348,8 +317,6 @@ func TestZoomHonoursAKeybindingOverride(t *testing.T) {
 	}
 }
 
-// Half-page scrolling is ours: tview's TextView stops at whole pages and keeps
-// its page size private.
 func TestCtrlDAndCtrlUScrollTheDetailsPaneHalfAPage(t *testing.T) {
 	const height = 40
 	app := newDetailsTestApp(t)
@@ -374,7 +341,6 @@ func TestCtrlDAndCtrlUScrollTheDetailsPaneHalfAPage(t *testing.T) {
 	}
 }
 
-// Scrolling up at the top must not walk the offset negative.
 func TestCtrlUStopsAtTheTop(t *testing.T) {
 	app := newDetailsTestApp(t)
 	app.focusedPane = FocusDetails
@@ -386,8 +352,6 @@ func TestCtrlUStopsAtTheTop(t *testing.T) {
 	}
 }
 
-// Crossing the wide breakpoint while zoomed drops the nav tree whoever is in
-// it, so the rebuild has to move focus off a pane it just unmounted.
 func TestShrinkingBelowWideMovesFocusOffTheDroppedNavPane(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -405,8 +369,6 @@ func TestShrinkingBelowWideMovesFocusOffTheDroppedNavPane(t *testing.T) {
 	}
 }
 
-// A workspace switch drops the selection the zoom was opened on. Left on, the
-// content area is one empty details pane with the list still hidden.
 func TestResetCachedStateReleasesTheZoom(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -419,8 +381,6 @@ func TestResetCachedStateReleasesTheZoom(t *testing.T) {
 	}
 }
 
-// Typing 1 has to reach the navigation tree. Zoomed and narrow there is no
-// room for it beside the details pane, so the zoom gives way.
 func TestPaneNumberOneReachesTheNavigationTreeWhileZoomed(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -450,7 +410,6 @@ func TestPaneNumberOneReachesTheNavigationTreeWhileZoomed(t *testing.T) {
 	}
 }
 
-// The zoomed help must not offer a key that does nothing.
 func TestZoomedStatusBarHelpMatchesTheKeysThatWork(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.detailsHidden = false
@@ -477,9 +436,6 @@ func TestZoomedStatusBarHelpMatchesTheKeysThatWork(t *testing.T) {
 	}
 }
 
-// Releasing the zoom can close the details pane, so whoever was reading in it
-// has to be moved. Without this the keys keep routing to a pane that is no
-// longer mounted.
 func TestReleasingTheZoomFromTheNavSpineMovesFocusOffTheClosedPane(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.layoutMode = layoutWide
@@ -497,8 +453,6 @@ func TestReleasingTheZoomFromTheNavSpineMovesFocusOffTheClosedPane(t *testing.T)
 	}
 }
 
-// Picking a favorited issue is a request to read it, the opposite of picking a
-// list, so the zoom it would be read in survives.
 func TestSelectingAFavoritedIssueKeepsTheZoom(t *testing.T) {
 	app := newZoomTestApp(t)
 	app.layoutMode = layoutWide

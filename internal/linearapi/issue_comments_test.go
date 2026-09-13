@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// Linear returns the comments newest first, which is what keeps the query's
-// cap of 100 on the most recent hundred. A thread reads the other way.
 func TestIssueCommentsAreOldestFirst(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -48,9 +46,6 @@ func TestIssueCommentsAreOldestFirst(t *testing.T) {
 	}
 }
 
-// TestIssueCommentsCarryTheirThread covers the two fields the details page
-// threads and links by. Linear returns a null parentId on a top-level comment,
-// which has to read as no parent rather than as one.
 func TestIssueCommentsCarryTheirThread(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -92,9 +87,6 @@ func TestIssueCommentsCarryTheirThread(t *testing.T) {
 	}
 }
 
-// TestCreateCommentSendsItsParent covers the input the mutation actually puts
-// on the wire. The query golden pins the selection, not the variables, and a
-// parentId left out of them posts every reply at top level.
 func TestCreateCommentSendsItsParent(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -107,8 +99,6 @@ func TestCreateCommentSendsItsParent(t *testing.T) {
 			want:  "root",
 		},
 		{
-			// Linear rejects a null parentId, so an empty one is left out of
-			// the input rather than sent as one.
 			name:  "a top-level comment sends no parent",
 			input: CreateCommentInput{IssueID: "issue-1", Body: "hi"},
 			want:  nil,
@@ -144,9 +134,6 @@ func TestCreateCommentSendsItsParent(t *testing.T) {
 	}
 }
 
-// TestUpdateCommentReturnsWhatLinearRecorded covers the answer the card is
-// redrawn from. The updatedAt in it is what lights the "edited" byline, so a
-// response read wrong leaves an edit looking like it never happened.
 func TestUpdateCommentReturnsWhatLinearRecorded(t *testing.T) {
 	var sent map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -204,7 +191,6 @@ func TestUpdateCommentReturnsWhatLinearRecorded(t *testing.T) {
 	}
 }
 
-// TestDeleteCommentSendsItsID pins the variable, which is the whole of the call.
 func TestDeleteCommentSendsItsID(t *testing.T) {
 	var sent string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -231,8 +217,6 @@ func TestDeleteCommentSendsItsID(t *testing.T) {
 	}
 }
 
-// A refused write answers 200 with success false. Reading only the transport
-// error would report a comment edited or deleted that Linear left alone.
 func TestCommentWritesReportARefusedOperation(t *testing.T) {
 	tests := []struct {
 		name     string

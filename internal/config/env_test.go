@@ -7,9 +7,6 @@ import (
 	"time"
 )
 
-// The six overrides were documented for months while the only code reading
-// them had no production caller. These drive the path the app actually boots
-// with, ConfigFromSettings, rather than the env reader in isolation.
 func TestEnvOverridesReachTheRunningConfig(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -85,8 +82,6 @@ func TestEnvOverridesReachTheRunningConfig(t *testing.T) {
 	}
 }
 
-// LINEAR_LOG_FILE is the one read with LookupEnv: set-but-empty means logging
-// off, where unset leaves whatever the file said.
 func TestLogFileOverrideDistinguishesUnsetFromEmpty(t *testing.T) {
 	fromFile := filepath.Join(t.TempDir(), "from-file.log")
 
@@ -138,8 +133,6 @@ func TestLogFileOverrideDistinguishesUnsetFromEmpty(t *testing.T) {
 	})
 }
 
-// A malformed override fails the launch. Ignoring it would be the same silence
-// this ticket exists to end.
 func TestAMalformedEnvOverrideFailsTheLaunch(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -167,8 +160,6 @@ func TestAMalformedEnvOverrideFailsTheLaunch(t *testing.T) {
 
 func TestNoEnvironmentLeavesSettingsAlone(t *testing.T) {
 	for _, name := range []string{LinearAPIEndpoint, TimeoutEnv, PageSizeEnv, CacheTTLEnv, LogFileEnv, LogLevelEnv} {
-		// Setenv first so the restore is registered, then clear it: an empty
-		// LINEAR_LOG_FILE means logging off, which is not the same as unset.
 		t.Setenv(name, "")
 		if err := os.Unsetenv(name); err != nil {
 			t.Fatalf("unset %s: %v", name, err)

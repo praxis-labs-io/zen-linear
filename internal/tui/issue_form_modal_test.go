@@ -13,10 +13,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// newIssueFormTestApp seeds the team metadata the form reads, so every option
-// list but milestones fills synchronously and no fetch reaches the network.
-// UI callbacks are routed to the test goroutine: a background fetch writing
-// into the form has to be ordered against the assertions.
 func newIssueFormTestApp(t *testing.T) (*App, chan func()) {
 	t.Helper()
 	app := newUXTestApp(t)
@@ -33,8 +29,6 @@ func newIssueFormTestApp(t *testing.T) (*App, chan func()) {
 		{ID: "label-chore", Name: "Chore"},
 	}
 	app.metadataTeamID = "team-1"
-	// The team picker reads the tree's teams, so seeding them keeps its options
-	// synchronous and off the network like every other list here.
 	app.navTeams = []linearapi.Team{
 		{ID: "team-1", Key: "ENG", Name: "Engineering"},
 		{ID: "team-2", Key: "DES", Name: "Design"},
@@ -43,9 +37,6 @@ func newIssueFormTestApp(t *testing.T) (*App, chan func()) {
 	app.fetchMilestonesFunc = func(_ context.Context, projectID string) ([]linearapi.ProjectMilestone, error) {
 		return []linearapi.ProjectMilestone{{ID: "milestone-" + projectID, Name: "Milestone " + projectID}}, nil
 	}
-	// Every fetch is stubbed, including the ones the seeded caches usually
-	// answer: a form opened for another team goes to these, and a test must
-	// never reach the network.
 	app.fetchWorkflowStatesFunc = func(_ context.Context, teamID string) ([]linearapi.WorkflowState, error) {
 		return []linearapi.WorkflowState{{ID: "state-" + teamID, Name: "Todo " + teamID}}, nil
 	}
@@ -70,7 +61,6 @@ func newIssueFormTestApp(t *testing.T) (*App, chan func()) {
 	return app, pending
 }
 
-// runNextUpdate runs the next queued UI callback on the test goroutine.
 func runNextUpdate(t *testing.T, pending chan func()) {
 	t.Helper()
 	select {
@@ -81,8 +71,6 @@ func runNextUpdate(t *testing.T, pending chan func()) {
 	}
 }
 
-// runUpdatesUntil drains queued UI callbacks until the condition holds. A
-// background option fetch can queue ahead of the callback under test.
 func runUpdatesUntil(t *testing.T, pending chan func(), cond func() bool) {
 	t.Helper()
 	for i := 0; i < 16; i++ {
@@ -96,8 +84,6 @@ func runUpdatesUntil(t *testing.T, pending chan func(), cond func() bool) {
 	}
 }
 
-// toggleLabel focuses the multi-select, moves its highlight, and toggles the
-// row through the form's own key handling.
 func toggleLabel(app *App, form *IssueFormModal, index int) {
 	app.app.SetFocus(form.labelsField.list)
 	form.labelsField.list.SetCurrentItem(index)
@@ -117,22 +103,18 @@ func TestIssueFormProjectChangeClearsAndReloadsMilestone(t *testing.T) {
 		return linearapi.Issue{ID: "issue-9"}, nil
 	}
 
-	// Seeded from a project in the navigation tree, which is the only way a
-	// create opens with one already chosen.
 	form := app.issueFormModal
 	form.Show(IssueFormOptions{TeamID: "team-1", ProjectID: "project-1"})
 	if got := <-fetched; got != "project-1" {
 		t.Fatalf("first milestone fetch = %q, want project-1", got)
 	}
-	// The options have to land before one can be picked, or the milestone this
-	// test is about clearing was never set.
 	runNextUpdate(t, pending)
 	form.milestoneField.SetCurrentOption(1)
 	if form.milestone.id != "milestone-project-1" {
 		t.Fatalf("milestone = %+v, want project-1's picked before the move", form.milestone)
 	}
 
-	form.projectField.SetCurrentOption(2) // "No project", "Alpha", "Beta"
+	form.projectField.SetCurrentOption(2)
 
 	if got := <-fetched; got != "project-2" {
 		t.Fatalf("second milestone fetch = %q, want project-2", got)
@@ -149,7 +131,6 @@ func TestIssueFormProjectChangeClearsAndReloadsMilestone(t *testing.T) {
 		if input.ProjectID != "project-2" {
 			t.Fatalf("input.ProjectID = %q, want project-2", input.ProjectID)
 		}
-		// A milestone belongs to one project, so moving project orphans it.
 		if input.ProjectMilestoneID != "" {
 			t.Fatalf("input.ProjectMilestoneID = %q, want it cleared", input.ProjectMilestoneID)
 		}
@@ -158,8 +139,6 @@ func TestIssueFormProjectChangeClearsAndReloadsMilestone(t *testing.T) {
 	}
 }
 
-// awaitFetch reads the team one option load asked for, failing rather than
-// blocking when the form answered from a cache instead of fetching.
 func awaitFetch(t *testing.T, what string, asked chan string) {
 	t.Helper()
 	select {
@@ -172,8 +151,6 @@ func awaitFetch(t *testing.T, what string, asked chan string) {
 	}
 }
 
-// The warm caches follow the navigation tree and lag a team switch, so a form
-// opened for a team they do not belong to has to fetch rather than offer them.
 func TestIssueFormFetchesForTheTeamItCreatesIn(t *testing.T) {
 	app, pending := newIssueFormTestApp(t)
 	states := make(chan string, 4)
@@ -187,12 +164,9 @@ func TestIssueFormFetchesForTheTeamItCreatesIn(t *testing.T) {
 		return []linearapi.IssueLabel{{ID: "label-other", Name: "Other"}}, nil
 	}
 
-	// The tree warmed team-1; the create is for the team it has moved to.
 	form := app.issueFormModal
 	form.Show(IssueFormOptions{TeamID: "team-2"})
 
-	// Timed rather than a bare receive: a form that wrongly reads the warm cache
-	// never fetches at all, and this has to fail rather than block.
 	awaitFetch(t, "statuses", states)
 	awaitFetch(t, "labels", labels)
 	runUpdatesUntil(t, pending, func() bool { return len(form.statusField.options) > 1 })
@@ -204,9 +178,6 @@ func TestIssueFormFetchesForTheTeamItCreatesIn(t *testing.T) {
 	}
 }
 
-// TestIssueFormStaleMilestoneLoadIsIgnored covers the flip from one project to
-// another and back: the first fetch must not paint its milestones under the
-// project the form has moved on to.
 func TestIssueFormStaleMilestoneLoadIsIgnored(t *testing.T) {
 	app, pending := newIssueFormTestApp(t)
 	form := app.issueFormModal
@@ -215,8 +186,6 @@ func TestIssueFormStaleMilestoneLoadIsIgnored(t *testing.T) {
 	form.loadMilestones("project-2")
 	form.loadMilestones("project-3")
 
-	// Three fetches are in flight: the one Show kicked off, then these two.
-	// Only the last one may land.
 	runNextUpdate(t, pending)
 	runNextUpdate(t, pending)
 	runNextUpdate(t, pending)
@@ -252,7 +221,6 @@ func TestIssueFormRejectsInvalidInput(t *testing.T) {
 			}
 			form := app.issueFormModal
 			form.Show(IssueFormOptions{TeamID: "team-1"})
-			// A valid title, so the two field cases fail on their own field.
 			form.titleField.SetText("Fresh issue")
 
 			tc.mutate(form)
@@ -288,11 +256,11 @@ func TestIssueFormCreateSendsEveryFieldInOneInput(t *testing.T) {
 
 	form.titleField.SetText("Fresh issue")
 	form.descField.SetText("Body", true)
-	form.statusField.SetCurrentOption(2) // "Team default", "Todo", "In Progress"
+	form.statusField.SetCurrentOption(2)
 	form.assigneeField.SetCurrentOption(1)
 	form.priorityField.SetCurrentOption(2)
-	form.projectField.SetCurrentOption(1) // "No project", "Alpha", "Beta"
-	runNextUpdate(t, pending)             // the milestone fetch the project change kicked off
+	form.projectField.SetCurrentOption(1)
+	runNextUpdate(t, pending)
 	form.milestoneField.SetCurrentOption(1)
 	form.cycleField.SetCurrentOption(1)
 	form.estimateField.SetText("5")
@@ -332,7 +300,6 @@ func TestIssueFormCreateSendsEveryFieldInOneInput(t *testing.T) {
 func TestIssueFormCreateResetsFieldsAndShowsParent(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	form := app.issueFormModal
-	// A form left half filled in, which is what the next opening must not show.
 	form.Show(IssueFormOptions{TeamID: "team-1"})
 	form.titleField.SetText("Abandoned")
 	form.descField.SetText("Abandoned body", true)
@@ -366,8 +333,6 @@ func TestIssueFormCreateResetsFieldsAndShowsParent(t *testing.T) {
 	}
 }
 
-// A cold cache must not clear a field: an empty project list would otherwise
-// throw away the project the navigation tree seeded the create from.
 func TestIssueFormKeepsAProjectTheOptionsCannotShow(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	app.teamProjects = nil
@@ -418,8 +383,6 @@ func TestIssueFormEscapeClosesTheOpenMenuBeforeModal(t *testing.T) {
 	}
 }
 
-// TestIssueFormCreateFailureKeepsTheFormAndTheTyping is the data-loss guard:
-// a refused create used to close the form and take the description with it.
 func TestIssueFormCreateFailureKeepsTheFormAndTheTyping(t *testing.T) {
 	app, pending := newIssueFormTestApp(t)
 	attempted := make(chan linearapi.CreateIssueInput, 2)
@@ -469,8 +432,6 @@ func TestIssueFormCreateFailureKeepsTheFormAndTheTyping(t *testing.T) {
 	}
 }
 
-// TestIssueFormIgnoresASecondSubmitWhileSaving keeps a slow write from being
-// fired twice.
 func TestIssueFormIgnoresASecondSubmitWhileSaving(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	created := make(chan linearapi.CreateIssueInput, 4)
@@ -497,14 +458,11 @@ func TestIssueFormIgnoresASecondSubmitWhileSaving(t *testing.T) {
 	}
 }
 
-// TestIssueFormStaleSaveDoesNotCloseAReopenedForm covers escaping out of a
-// slow create and reopening: the first write must not tear down the second form.
 func TestIssueFormStaleSaveDoesNotCloseAReopenedForm(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	form := app.issueFormModal
 	form.Show(IssueFormOptions{TeamID: "team-1"})
 
-	// The result handler the first create would carry.
 	stale := form.completion()
 
 	form.Hide()
@@ -525,8 +483,6 @@ func TestIssueFormStaleSaveDoesNotCloseAReopenedForm(t *testing.T) {
 	}
 }
 
-// TestIssueFormCreateTitleNamesTheTeam pins the team into the border, which is
-// what a form scrolled past its first field still says the create is going to.
 func TestIssueFormCreateTitleNamesTheTeam(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	app.navTeams = []linearapi.Team{
@@ -550,17 +506,12 @@ func TestIssueFormCreateTitleNamesTheTeam(t *testing.T) {
 	}
 	form.Hide()
 
-	// A team the tree does not carry leaves the base title rather than a
-	// dangling separator.
 	form.Show(IssueFormOptions{TeamID: "team-unknown"})
 	if form.fm.title != "New Issue" {
 		t.Fatalf("title = %q, want the base with no team", form.fm.title)
 	}
 }
 
-// TestIssueFormOpensOnTheTeamTheTreeHadSelected verifies the picker seeds from
-// the navigation scope rather than making the user name a team they are
-// already standing in.
 func TestIssueFormOpensOnTheTeamTheTreeHadSelected(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	form := app.issueFormModal
@@ -572,8 +523,6 @@ func TestIssueFormOpensOnTheTeamTheTreeHadSelected(t *testing.T) {
 	}
 }
 
-// TestIssueFormWithNoTeamOpensOnTheSentinel verifies a scope that carries no
-// team, a favorited project, asks for one rather than failing at submit.
 func TestIssueFormWithNoTeamOpensOnTheSentinel(t *testing.T) {
 	app, _ := newIssueFormTestApp(t)
 	form := app.issueFormModal
@@ -590,9 +539,6 @@ func TestIssueFormWithNoTeamOpensOnTheSentinel(t *testing.T) {
 	}
 }
 
-// TestIssueFormTeamChangeReloadsTheFieldsUnderIt verifies the picks that
-// belong to the old team go with it: Linear refuses a state or a label from
-// another team, so carrying them over would be a create that fails.
 func TestIssueFormTeamChangeReloadsTheFieldsUnderIt(t *testing.T) {
 	app, pending := newIssueFormTestApp(t)
 	form := app.issueFormModal
@@ -608,8 +554,6 @@ func TestIssueFormTeamChangeReloadsTheFieldsUnderIt(t *testing.T) {
 		t.Fatalf("a pick survived the team move: project %q state %q assignee %q cycle %q",
 			form.project.id, form.state.id, form.assignee.id, form.cycle.id)
 	}
-	// The reloads answer for the new team, not out of the caches the old one
-	// warmed: metadataTeamID still names team-1, so warmFor refuses them.
 	hasOption := func(picker *FormPicker, label string) func() bool {
 		return func() bool { return slices.Contains(picker.options, label) }
 	}
@@ -620,8 +564,6 @@ func TestIssueFormTeamChangeReloadsTheFieldsUnderIt(t *testing.T) {
 	}
 }
 
-// selectPickerOption picks a row by its label, the way a user reading the
-// dropdown does.
 func selectPickerOption(t *testing.T, picker *FormPicker, label string) {
 	t.Helper()
 	for i, option := range picker.options {
@@ -633,12 +575,8 @@ func selectPickerOption(t *testing.T, picker *FormPicker, label string) {
 	t.Fatalf("no option labeled %q in the picker, which has %v", label, picker.options)
 }
 
-// TestIssueFormDropsOptionsFromTheTeamItLeft verifies a fetch that answers
-// after the team changed writes nothing: its ids belong to the old team, and
-// Linear refuses each of them.
 func TestIssueFormDropsOptionsFromTheTeamItLeft(t *testing.T) {
 	app, pending := newIssueFormTestApp(t)
-	// Cold, so every list is a fetch rather than the seeded cache.
 	app.metadataTeamID = ""
 	release := make(chan struct{})
 	app.fetchWorkflowStatesFunc = func(_ context.Context, teamID string) ([]linearapi.WorkflowState, error) {
@@ -656,7 +594,6 @@ func TestIssueFormDropsOptionsFromTheTeamItLeft(t *testing.T) {
 		t.Fatalf("status options = %v, want the new team's before the old one answers", form.statusField.options)
 	}
 
-	// team-1's states land only now, with the form already on team-2.
 	close(release)
 	drainQueuedUpdates(t, pending)
 
@@ -665,8 +602,6 @@ func TestIssueFormDropsOptionsFromTheTeamItLeft(t *testing.T) {
 	}
 }
 
-// drainQueuedUpdates runs every queued UI callback, and the ones a callback
-// queues behind it, until the queue has been quiet for a moment.
 func drainQueuedUpdates(t *testing.T, pending chan func()) {
 	t.Helper()
 	deadline := time.After(3 * time.Second)

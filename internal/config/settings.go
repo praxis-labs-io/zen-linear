@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// SettingsFile represents the on-disk JSON with optional fields.
 type SettingsFile struct {
 	APIEndpoint      *string           `json:"api_endpoint"`
 	Timeout          *string           `json:"timeout"`
@@ -40,15 +39,13 @@ type SettingsFile struct {
 	UpdateCheck      *bool             `json:"update_check"`
 }
 
-// Settings contains concrete settings values for UI and persistence.
 type Settings struct {
 	APIEndpoint    string `json:"api_endpoint"`
 	Timeout        string `json:"timeout"`
 	PageSize       int    `json:"page_size"`
 	CacheTTL       string `json:"cache_ttl"`
 	SearchDebounce string `json:"search_debounce"`
-	// LogFile is nil when unset (use DefaultLogFile) and empty when logging is
-	// off. Storing the resolved default would pin the file to one machine.
+	// LogFile is nil for this machine's default and "" for logging off.
 	LogFile          *string           `json:"log_file,omitempty"`
 	LogLevel         string            `json:"log_level"`
 	Theme            string            `json:"theme"`
@@ -72,7 +69,6 @@ type Settings struct {
 	UpdateCheck      bool              `json:"update_check"`
 }
 
-// DefaultSettings returns the default settings for the config file and UI.
 func DefaultSettings() Settings {
 	return Settings{
 		APIEndpoint:    DefaultAPIEndpoint,
@@ -98,9 +94,6 @@ func DefaultSettings() Settings {
 	}
 }
 
-// ResolvedLogFile returns the log path to open: this machine's default when the
-// setting is unset, and the configured value otherwise. An empty value is a
-// deliberate "logging off" and stays empty.
 func (s Settings) ResolvedLogFile() string {
 	if s.LogFile == nil {
 		return DefaultLogFile()
@@ -108,8 +101,8 @@ func (s Settings) ResolvedLogFile() string {
 	return *s.LogFile
 }
 
-// LogFileSetting is the inverse: a resolved path matching this machine's default
-// goes back to unset, so saving never writes one machine's home into the file.
+// LogFileSetting maps a path equal to DefaultLogFile back to nil, so a save
+// never writes it.
 func LogFileSetting(logFile string) *string {
 	if logFile == DefaultLogFile() {
 		return nil
@@ -117,7 +110,6 @@ func LogFileSetting(logFile string) *string {
 	return &logFile
 }
 
-// SettingsFromConfig converts runtime config into settings values.
 func SettingsFromConfig(cfg Config) Settings {
 	return Settings{
 		APIEndpoint:      cfg.APIEndpoint,
@@ -149,8 +141,8 @@ func SettingsFromConfig(cfg Config) Settings {
 	}
 }
 
-// ConfigFromSettings builds runtime configuration from settings and a resolved auth token.
-// Callers should resolve the token via LINEAR_API_KEY or OAuth credentials before calling.
+// ConfigFromSettings validates settings and builds a Config around an already
+// resolved token.
 func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 	if apiKey == "" {
 		return Config{}, fmt.Errorf("auth token is empty")
@@ -265,8 +257,8 @@ func ConfigFromSettings(apiKey string, settings Settings) (Config, error) {
 	}, nil
 }
 
-// ConfigFilePath returns the settings file path: an existing
-// $XDG_CONFIG_HOME/zen-linear/config.json, else Dir()/config.json.
+// ConfigFilePath returns $XDG_CONFIG_HOME/zen-linear/config.json when it exists,
+// else config.json under Dir().
 func ConfigFilePath() (string, error) {
 	const name = "config.json"
 
@@ -289,7 +281,6 @@ func ConfigFilePath() (string, error) {
 	return filepath.Join(dir, name), nil
 }
 
-// EnsureSettingsFile ensures the settings file exists and returns its settings.
 func EnsureSettingsFile(path string) (Settings, error) {
 	if path == "" {
 		return Settings{}, fmt.Errorf("settings path is empty")
@@ -309,7 +300,6 @@ func EnsureSettingsFile(path string) (Settings, error) {
 	return settings, nil
 }
 
-// LoadSettings loads settings from a JSON file and applies defaults.
 func LoadSettings(path string) (Settings, error) {
 	if path == "" {
 		return Settings{}, fmt.Errorf("settings path is empty")
@@ -406,7 +396,7 @@ func LoadSettings(path string) (Settings, error) {
 	return settings, nil
 }
 
-// SaveSettings writes settings to a JSON file, creating directories as needed.
+// Written in place, not atomically, so a hard link to the config keeps its inode.
 func SaveSettings(path string, settings Settings) error {
 	if path == "" {
 		return fmt.Errorf("settings path is empty")
@@ -429,7 +419,6 @@ func SaveSettings(path string, settings Settings) error {
 	return nil
 }
 
-// parseDuration parses a duration string with a labeled error message.
 func parseDuration(value string, label string) (time.Duration, error) {
 	duration, err := time.ParseDuration(value)
 	if err != nil {
@@ -450,7 +439,6 @@ func parsePositiveDuration(value string, label string) (time.Duration, error) {
 	return duration, nil
 }
 
-// validatePageSize validates the allowed page size range.
 func validatePageSize(pageSize int, label string) error {
 	if pageSize < 1 || pageSize > 250 {
 		return fmt.Errorf("%s must be between 1 and 250, got %d", label, pageSize)
@@ -459,7 +447,6 @@ func validatePageSize(pageSize int, label string) error {
 	return nil
 }
 
-// validateLogLevel validates the allowed log level values.
 func validateLogLevel(logLevel string, label string) error {
 	switch logLevel {
 	case "debug", "info", "warning", "error":
@@ -469,7 +456,6 @@ func validateLogLevel(logLevel string, label string) error {
 	}
 }
 
-// validateTheme validates the allowed theme values.
 func validateTheme(theme string, label string) error {
 	switch theme {
 	case ThemeTerminal, ThemeLinear, ThemeHighContrast, ThemeColorBlind, ThemeRosePineMoon:
@@ -479,8 +465,6 @@ func validateTheme(theme string, label string) error {
 	}
 }
 
-// validateKeybindings validates that every binding maps to a single key and
-// that no key is bound twice.
 func validateKeybindings(bindings map[string]string, label string) error {
 	used := make(map[string]string, len(bindings))
 	for action, key := range bindings {
@@ -495,7 +479,6 @@ func validateKeybindings(bindings map[string]string, label string) error {
 	return nil
 }
 
-// validateColumns validates the issue list column selection.
 func validateColumns(columns []string, label string) error {
 	known := map[string]bool{
 		"priority": true, "id": true, "state": true, "title": true,
@@ -516,10 +499,6 @@ func validateColumns(columns []string, label string) error {
 	return nil
 }
 
-// validateSortBy validates the issue list sort chain. Order matters: the
-// first field decides, later fields break ties. Names are matched the way the
-// UI parses them, case and spacing insensitive, with the API spellings of the
-// timestamps accepted alongside the short ones.
 func validateSortBy(fields []string, label string) error {
 	canonical := map[string]string{
 		"status": "status", "priority": "priority",
@@ -540,7 +519,6 @@ func validateSortBy(fields []string, label string) error {
 	return nil
 }
 
-// validateGroupDimension validates the allowed grouping dimensions.
 func validateGroupDimension(dimension string, label string) error {
 	switch dimension {
 	case "", "status", "priority", "assignee", "cycle", "project", "milestone":
@@ -550,8 +528,6 @@ func validateGroupDimension(dimension string, label string) error {
 	}
 }
 
-// validateWorkspaces validates workspace entries: every entry needs a name and
-// an API key environment variable, and names must be unique.
 func validateWorkspaces(workspaces []Workspace, label string) error {
 	seen := make(map[string]bool, len(workspaces))
 	for i, workspace := range workspaces {
@@ -571,7 +547,6 @@ func validateWorkspaces(workspaces []Workspace, label string) error {
 	return nil
 }
 
-// validateDensity validates the allowed density values.
 func validateDensity(density string, label string) error {
 	switch density {
 	case DensityComfortable, DensityCompact:
@@ -581,7 +556,6 @@ func validateDensity(density string, label string) error {
 	}
 }
 
-// validateImages validates the allowed image values.
 func validateImages(images string, label string) error {
 	switch images {
 	case ImagesAuto, ImagesOff:
@@ -591,7 +565,6 @@ func validateImages(images string, label string) error {
 	}
 }
 
-// validateAgentProvider validates the allowed agent providers.
 func validateAgentProvider(provider string, label string) error {
 	switch provider {
 	case "cursor", "claude":
@@ -601,7 +574,6 @@ func validateAgentProvider(provider string, label string) error {
 	}
 }
 
-// validateAgentSandbox validates the allowed sandbox values.
 func validateAgentSandbox(sandbox string, label string) error {
 	switch sandbox {
 	case "enabled", "disabled":

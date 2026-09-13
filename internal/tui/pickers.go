@@ -10,21 +10,15 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
-// optionScope is what a field's options belong to: the team for states, users,
-// cycles and projects, the project for milestones.
 type optionScope struct {
 	teamID    string
 	projectID string
 }
 
-// navOptionScope scopes a field to whatever the navigation tree is showing,
-// which is what a filter means by a team.
 func (a *App) navOptionScope() optionScope {
 	return optionScope{teamID: a.GetSelectedTeamID()}
 }
 
-// issueOptionScope scopes a field to the issue that owns it. Linear rejects a
-// state from another team and a milestone from another project.
 func (a *App) issueOptionScope(issue linearapi.Issue) optionScope {
 	teamID := issue.TeamID
 	if teamID == "" {
@@ -33,8 +27,6 @@ func (a *App) issueOptionScope(issue linearapi.Issue) optionScope {
 	return optionScope{teamID: teamID, projectID: issue.ProjectID}
 }
 
-// pickerLoad is one field's options: what they are, where they are cached,
-// where they come from, and who hears the answer.
 type pickerLoad[T any] struct {
 	name   string
 	teamID string
@@ -45,8 +37,6 @@ type pickerLoad[T any] struct {
 	fail   func(error)
 }
 
-// showCachedPicker renders cached options at once, or fetches them first. The
-// cache follows the navigation tree, so no other team reads or writes it.
 func showCachedPicker[T any](a *App, p pickerLoad[T]) {
 	if a.metadataTeamID == p.teamID && len(p.cached) > 0 {
 		p.render(p.cached)
@@ -55,8 +45,6 @@ func showCachedPicker[T any](a *App, p pickerLoad[T]) {
 	if p.teamID == "" {
 		logger.Warning("tui.app: cannot load %s, no team", p.name)
 		if p.fail != nil {
-			// p.name is a log string, not copy: "projects for picker" has no
-			// business in the status bar.
 			p.fail(fmt.Errorf("team context is required"))
 		}
 		return
@@ -73,8 +61,6 @@ func showCachedPicker[T any](a *App, p pickerLoad[T]) {
 				}
 				return
 			}
-			// Checked here, not before the fetch: the tree can move while one is
-			// in flight, and the cache belongs to wherever it is now.
 			if a.metadataTeamID == teamID {
 				p.store(values)
 			}
@@ -83,14 +69,10 @@ func showCachedPicker[T any](a *App, p pickerLoad[T]) {
 	}()
 }
 
-// presentPicker opens the shared picker modal over items, forwarding the chosen
-// one to onSelect.
 func (a *App) presentPicker(title, contextLine string, items []PickerItem, onSelect func(item PickerItem)) {
 	a.pickerModal.ShowWithContext(title, contextLine, items, onSelect)
 }
 
-// issueFieldOptions loads the rows a field can be set to, in the scope that
-// field belongs to. onFail hears every way the options do not arrive.
 func (a *App) issueFieldOptions(field issueField, scope optionScope, onLoaded func(items []PickerItem), onFail func(error)) {
 	switch field {
 	case issueFieldState:
@@ -131,8 +113,6 @@ func (a *App) issueFieldOptions(field issueField, scope optionScope, onLoaded fu
 			},
 		})
 	case issueFieldCycle:
-		// Snapshotted here rather than read in the worker: applySettings
-		// reassigns linearDeps whole, so the closure would race it.
 		fetchCycles := a.fetchCyclesFunc
 		showCachedPicker(a, pickerLoad[linearapi.Cycle]{
 			name:   "cycles for picker",
@@ -206,8 +186,6 @@ func (a *App) issueFieldOptions(field issueField, scope optionScope, onLoaded fu
 	}
 }
 
-// projectMilestoneOptions loads one project's milestones. They are neither
-// cached nor team-scoped: a milestone belongs to a project and nothing else.
 func (a *App) projectMilestoneOptions(projectID string, onLoaded func(items []PickerItem), onFail func(error)) {
 	if strings.TrimSpace(projectID) == "" {
 		if onFail != nil {
@@ -215,8 +193,6 @@ func (a *App) projectMilestoneOptions(projectID string, onLoaded func(items []Pi
 		}
 		return
 	}
-	// Snapshotted on the UI thread: applySettings reassigns linearDeps whole,
-	// so reading the seam inside the goroutine races it.
 	fetch := a.fetchMilestonesFunc
 	go func() {
 		milestones, err := fetch(context.Background(), projectID)
@@ -241,8 +217,6 @@ func (a *App) projectMilestoneOptions(projectID string, onLoaded func(items []Pi
 	}()
 }
 
-// milestoneOptionLabel dates a milestone, which is how a user tells two of the
-// same name apart.
 func milestoneOptionLabel(milestone linearapi.ProjectMilestone) string {
 	if milestone.TargetDate != nil && *milestone.TargetDate != "" {
 		return milestone.Name + " (" + *milestone.TargetDate + ")"
@@ -250,8 +224,6 @@ func milestoneOptionLabel(milestone linearapi.ProjectMilestone) string {
 	return milestone.Name
 }
 
-// cycleOptionLabel marks where a cycle sits relative to now, which is how a
-// user picks one without knowing its number.
 func cycleOptionLabel(cycle linearapi.Cycle) string {
 	switch {
 	case cycle.IsActive:
@@ -264,7 +236,6 @@ func cycleOptionLabel(cycle linearapi.Cycle) string {
 	return cycle.DisplayName()
 }
 
-// fieldPickerTitles is what the overlay calls each field it can pick.
 var fieldPickerTitles = map[issueField]string{
 	issueFieldState:     "Select Status",
 	issueFieldAssignee:  "Select Assignee",
@@ -274,13 +245,9 @@ var fieldPickerTitles = map[issueField]string{
 	issueFieldPriority:  "Set Priority",
 }
 
-// ShowFieldPicker opens the overlay over one field's options. contextLine names
-// the issue being edited, and is empty for a filter.
 func (a *App) ShowFieldPicker(field issueField, scope optionScope, contextLine string, onSelect func(item PickerItem)) {
 	logger.Debug("tui.app: showing %s picker", field)
 	a.issueFieldOptions(field, scope, func(items []PickerItem) {
-		// An empty overlay is a panel to dismiss for no reason. The team and
-		// parent pickers already say so instead of opening.
 		if len(items) == 0 {
 			a.flashStatus("No " + issueFieldNames[field] + " available")
 			return
@@ -291,17 +258,11 @@ func (a *App) ShowFieldPicker(field issueField, scope optionScope, contextLine s
 	})
 }
 
-// teamOptions loads the workspace's teams. They are scoped to nothing: a team
-// move is the one write whose options do not belong to the issue's own team.
-// The navigation tree is built from that same list, so this only fetches in the
-// window before the tree has painted.
 func (a *App) teamOptions(onLoaded func(items []PickerItem), onFail func(error)) {
 	if len(a.navTeams) > 0 {
 		onLoaded(teamPickerItems(a.navTeams))
 		return
 	}
-	// Snapshotted on the UI thread: applySettings reassigns linearDeps whole,
-	// so reading the seam inside the goroutine races it.
 	fetch := a.fetchTeamsFunc
 	go func() {
 		teams, err := fetch(context.Background())
@@ -318,8 +279,6 @@ func (a *App) teamOptions(onLoaded func(items []PickerItem), onFail func(error))
 	}()
 }
 
-// teamPickerItems names a team by its key as well, which is how a workspace
-// with two teams of similar names is read.
 func teamPickerItems(teams []linearapi.Team) []PickerItem {
 	items := make([]PickerItem, 0, len(teams))
 	for _, team := range teams {
@@ -332,8 +291,6 @@ func teamPickerItems(teams []linearapi.Team) []PickerItem {
 	return items
 }
 
-// ShowTeamPicker shows a picker for the workspace's teams. contextLine names
-// the issue being moved.
 func (a *App) ShowTeamPicker(contextLine string, onSelect func(item PickerItem)) {
 	logger.Debug("tui.app: showing team picker")
 	a.teamOptions(func(items []PickerItem) {
@@ -346,11 +303,7 @@ func (a *App) ShowTeamPicker(contextLine string, onSelect func(item PickerItem))
 	}, a.updateStatusBarWithError)
 }
 
-// ShowParentIssuePicker shows a picker for selecting a parent issue.
-// It lists all top-level issues (issues without a parent) from the current
-// list. contextLine names the issue being reparented.
 func (a *App) ShowParentIssuePicker(contextLine string, onSelect func(item PickerItem)) {
-	// Filter to only show issues that could be parents (no parent themselves)
 	a.issuesMu.RLock()
 	issues := a.issues
 	selectedIssue := a.selectedIssue

@@ -8,10 +8,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// hydratedGroupingApp seeds a grouped two-issue list with a selection carrying
-// the connections only the detail fetch produces. State is set directly, as in
-// TestRenderAccumulatedIssues_KeepsTheHydratedSelection: going through the
-// selection handlers fires an async fetch that races the assertions.
 func hydratedGroupingApp(t *testing.T) *App {
 	t.Helper()
 	app := newUXTestApp(t)
@@ -49,9 +45,6 @@ func assertSelectionStaysHydrated(t *testing.T, app *App) {
 	}
 }
 
-// TestRegroupIssues_KeepsTheHydratedSelection guards the details pane: a
-// grouping change must not strip the comments and attachments off the issue
-// already on screen.
 func TestRegroupIssues_KeepsTheHydratedSelection(t *testing.T) {
 	app := hydratedGroupingApp(t)
 
@@ -61,8 +54,6 @@ func TestRegroupIssues_KeepsTheHydratedSelection(t *testing.T) {
 	assertSelectionStaysHydrated(t, app)
 }
 
-// TestToggleGroupCollapse_KeepsTheHydratedSelection covers the same strip
-// through the collapse path, which rebuilds the tables the same way.
 func TestToggleGroupCollapse_KeepsTheHydratedSelection(t *testing.T) {
 	app := hydratedGroupingApp(t)
 
@@ -81,9 +72,6 @@ func TestToggleGroupCollapse_KeepsTheHydratedSelection(t *testing.T) {
 	assertSelectionStaysHydrated(t, app)
 }
 
-// TestRegroupIssues_FetchesDetailsForANewSelection covers the other branch:
-// with nothing selected the rebuild falls back to the first issue row, and that
-// issue has no comments or attachments until something fetches them.
 func TestRegroupIssues_FetchesDetailsForANewSelection(t *testing.T) {
 	app := newUXTestApp(t)
 	fetched := make(chan string, 1)

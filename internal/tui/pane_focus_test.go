@@ -10,8 +10,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// stepKey drives the real global handler rather than stepPane, so a handler
-// that claims h or l before the pane step shows up here.
 func stepKey(app *App, r rune) {
 	app.handleGlobalKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 }
@@ -51,8 +49,6 @@ func TestStepSkipsTheHiddenNavigationPane(t *testing.T) {
 	}
 }
 
-// Tab belongs to a pane's own controls. It used to leave the pane too, which
-// made those controls and pane navigation fight over one key.
 func TestTabDoesNotMoveBetweenPanes(t *testing.T) {
 	app := newUXTestApp(t)
 	app.detailsHidden = false
@@ -73,8 +69,6 @@ func TestTabDoesNotMoveBetweenPanes(t *testing.T) {
 	}
 }
 
-// The details pane never dispatched command shortcuts, so every palette rune
-// was dead there. < and > are how it showed up: the pane toggles did nothing.
 func TestPaneTogglesFireFromTheDetailsPane(t *testing.T) {
 	app := NewApp(linearapi.ClientConfig{}, config.Config{
 		PageSize: 1,
@@ -113,8 +107,6 @@ func TestDetailsPaneKeepsItsScrollKeys(t *testing.T) {
 	}
 }
 
-// TestTheDetailsPaneTitleIsJustDetails covers the tab strip being gone: the
-// pane shows one thing and its border names one thing.
 func TestTheDetailsPaneTitleIsJustDetails(t *testing.T) {
 	app := newThreadedTestApp(t)
 

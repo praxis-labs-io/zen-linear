@@ -10,8 +10,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// TestASupersededRefreshDoesNotPaintItsFirstPage guards the suite's flakes: the
-// first page's closure rebuilds the tables, unguarded by the generation check.
 func TestASupersededRefreshDoesNotPaintItsFirstPage(t *testing.T) {
 	app := newUXTestApp(t)
 	done := make(chan struct{})
@@ -23,8 +21,6 @@ func TestASupersededRefreshDoesNotPaintItsFirstPage(t *testing.T) {
 		}}, nil
 	}
 
-	// The bump lands while the first page's closure is queued, which is the
-	// window the check on the fetching side cannot cover.
 	var bump sync.Once
 	app.queueUpdateDraw = func(f func()) {
 		bump.Do(func() { app.refreshGeneration.Add(1) })
@@ -51,10 +47,6 @@ func TestASupersededRefreshDoesNotPaintItsFirstPage(t *testing.T) {
 	}
 }
 
-// TestASupersededRefreshDoesNotReportItsFailure covers the other half of being
-// superseded. queueIssuesRefresh bumps refreshGeneration and leaves
-// loadingGeneration alone, so a stale refresh that then fails still passed
-// finishIssuesLoad's own check and flashed an error over a healthy list.
 func TestASupersededRefreshDoesNotReportItsFailure(t *testing.T) {
 	app := newUXTestApp(t)
 	done := make(chan struct{})
@@ -64,8 +56,6 @@ func TestASupersededRefreshDoesNotReportItsFailure(t *testing.T) {
 		return linearapi.IssuePage{}, errors.New("the fetch that lost the race")
 	}
 
-	// The bump lands while the failure's closure is queued, which is what
-	// queueIssuesRefresh does to a refresh already out.
 	var bump sync.Once
 	app.queueUpdateDraw = func(f func()) {
 		bump.Do(func() { app.refreshGeneration.Add(1) })
@@ -83,7 +73,6 @@ func TestASupersededRefreshDoesNotReportItsFailure(t *testing.T) {
 	if app.issuesErr != nil {
 		t.Errorf("a superseded refresh recorded %v as the list's error", app.issuesErr)
 	}
-	// It still has to settle, or the refresh that replaced it never starts.
 	if app.isLoading {
 		t.Error("a superseded refresh left the pane loading")
 	}

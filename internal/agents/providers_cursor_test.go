@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-// TestCursorProvider_BuildArgs pins the whole argv rather than grepping it. A
-// substring check is what let --sandbox and --workspace ship for months against
-// a cursor-agent that has neither, failing every run. Adding a flag has to
-// break this test.
 func TestCursorProvider_BuildArgs(t *testing.T) {
 	prompt := buildAgentPrompt("Summarize", "Issue context")
 
@@ -51,7 +47,6 @@ func TestCursorProvider_BuildArgs(t *testing.T) {
 	}
 }
 
-// TestCursorProvider_ParseStreamLine verifies text extraction.
 func TestCursorProvider_ParseStreamLine(t *testing.T) {
 	provider := NewCursorProvider(nil)
 

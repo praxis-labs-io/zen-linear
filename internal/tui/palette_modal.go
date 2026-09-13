@@ -9,33 +9,19 @@ import (
 )
 
 const (
-	// paletteMaxVisibleRows caps how many commands the palette shows at once;
-	// longer lists scroll.
 	paletteMaxVisibleRows = 12
-	// paletteMinVisibleRows keeps the panel from resizing under every
-	// keystroke as the match count falls.
 	paletteMinVisibleRows = 4
-	// paletteQueryBoxRows is the framed field: the input plus its border.
-	paletteQueryBoxRows = 3
-	paletteMaxWidth     = 60
-	// paletteRowGap is the least space kept between a title and its shortcut,
-	// so a long title is truncated rather than run into one.
-	paletteRowGap = 2
-	// paletteRowIndent sets a command in from the heading above it.
-	paletteRowIndent = "  "
+	paletteQueryBoxRows   = 3
+	paletteMaxWidth       = 60
+	paletteRowGap         = 2
+	paletteRowIndent      = "  "
 )
 
-// paletteRowWidth is what a command row has to lay out in: the panel less its
-// border and both gutters.
 func (a *App) paletteRowWidth() int {
 	return a.modalWidth(paletteMaxWidth) - 2 - (2 * modalGutter)
 }
 
-// newThemedInputField creates an InputField whose inner text area fills with
-// the given background. tview captures the global primitive background at
-// construction time and offers no setter for it afterwards, so without this
-// the field row renders in the default (possibly transparent) background with
-// color chips behind only the typed text.
+// tview captures the global primitive background at construction and offers no setter for the inner fill.
 func newThemedInputField(fill tcell.Color) *tview.InputField {
 	previous := tview.Styles.PrimitiveBackgroundColor
 	tview.Styles.PrimitiveBackgroundColor = fill
@@ -44,9 +30,6 @@ func newThemedInputField(fill tcell.Color) *tview.InputField {
 	return field
 }
 
-// buildPaletteQueryBox creates the palette's query box: the navigation pane's
-// framed field, on the modal panel. It always holds the keyboard, so the frame
-// takes the focused border outright.
 func (a *App) buildPaletteQueryBox() {
 	panel := a.theme.ModalBackground()
 
@@ -62,8 +45,6 @@ func (a *App) buildPaletteQueryBox() {
 	a.paletteInput.SetBackgroundColor(panel)
 
 	a.paletteSearchFrame = tview.NewFlex().SetDirection(tview.FlexRow)
-	// Flex sets dontClear and never paints its own background; restore the
-	// fill so the layer beneath cannot bleed through.
 	a.paletteSearchFrame.Box = tview.NewBox().SetBackgroundColor(panel)
 	a.paletteSearchFrame.
 		SetBorder(true).
@@ -72,31 +53,19 @@ func (a *App) buildPaletteQueryBox() {
 	a.paletteSearchFrame.AddItem(a.paletteInput, 0, 1, true)
 }
 
-// paletteChromeLines counts the panel's non-list lines inside its border: the
-// query box, the footer rule and its hint line, and the density spacer above
-// them.
 func (a *App) paletteChromeLines() int {
 	return paletteQueryBoxRows + 2 + a.density.ModalSpacerLines
 }
 
-// buildPaletteModal creates and configures the command palette modal overlay.
 func (a *App) buildPaletteModal() *tview.Flex {
 	a.buildPaletteQueryBox()
 
 	a.paletteList = tview.NewList().
 		ShowSecondaryText(false).
-		// Unselected rows sit back in the muted text color; the selection is
-		// what brings a title up to the foreground.
 		SetMainTextStyle(tcell.StyleDefault.Foreground(a.theme.SecondaryText).Background(a.theme.ModalBackground())).
-		// The same selection the tree and the issue tables paint, so a focused
-		// row reads the same wherever it is.
 		SetSelectedStyle(selectionStyle(a.theme)).
 		SetHighlightFullLine(true)
 	a.paletteList.SetBackgroundColor(a.theme.ModalBackground())
-	// tview's own click handler takes focus for the list and moves a highlight
-	// the controller knows nothing about, and it does both after the callbacks
-	// it fires, so nothing a callback sets survives it. Answer the click here
-	// and swallow it, and the query box keeps the keyboard and the cursor.
 	a.paletteList.SetMouseCapture(func(action tview.MouseAction, event *tcell.EventMouse) (tview.MouseAction, *tcell.EventMouse) {
 		if action != tview.MouseLeftClick {
 			return action, event
@@ -112,9 +81,6 @@ func (a *App) buildPaletteModal() *tview.Flex {
 	return a.layoutPaletteModal(0)
 }
 
-// runPaletteRowAt runs the command clicked at the given screen cell. A click
-// on a heading or past the last row is not something to run, and leaves the
-// palette exactly as it was.
 func (a *App) runPaletteRowAt(x, y int) {
 	left, top, width, height := a.paletteList.GetInnerRect()
 	if x < left || x >= left+width || y < top || y >= top+height {
@@ -133,8 +99,6 @@ func (a *App) runPaletteRowAt(x, y int) {
 	command.Run(a)
 }
 
-// layoutPaletteModal rebuilds the panel around that many matches and centers
-// it. Run per keystroke: the input, frame and list are reused, wrappers are not.
 func (a *App) layoutPaletteModal(matches int) *tview.Flex {
 	panel := a.theme.ModalBackground()
 
@@ -156,8 +120,6 @@ func (a *App) layoutPaletteModal(matches int) *tview.Flex {
 
 	modal := tview.NewFlex()
 	modal.SetBackgroundColor(a.theme.Background)
-	// The list is the flexible row and the rows are counted against the live
-	// screen, so a terminal that shrank takes rows off it rather than the frame.
 	centerModal(modal, content, func() (int, int) {
 		return a.modalWidth(paletteMaxWidth), a.paletteListRows(matches) + a.paletteChromeLines() + 2
 	})
@@ -165,8 +127,6 @@ func (a *App) layoutPaletteModal(matches int) *tview.Flex {
 	return modal
 }
 
-// paletteListRows is how many command rows fit: the match count, capped by the
-// palette's own limit and by what the screen leaves.
 func (a *App) paletteListRows(matches int) int {
 	rows := matches
 	if rows > paletteMaxVisibleRows {
@@ -176,9 +136,6 @@ func (a *App) paletteListRows(matches int) int {
 		rows = paletteMinVisibleRows
 	}
 
-	// The screen has the last word. A panel taller than the terminal is drawn
-	// off the top, taking the query box and the footer with it, so the margin
-	// is what gets dropped first and the rows only after that.
 	_, screenH := a.modalScreen()
 	if screenH <= 0 {
 		return rows
@@ -196,9 +153,6 @@ func (a *App) paletteListRows(matches int) int {
 	return rows
 }
 
-// paletteRow draws one line of the palette: a heading, or a command with its
-// title indented under one and its shortcut against the right edge. A command
-// with no shortcut leaves that end blank.
 func (a *App) paletteRow(row PaletteRow) string {
 	if row.IsHeader {
 		return a.themeTags.Accent + string(row.Heading) + "[-]"
@@ -217,14 +171,11 @@ func (a *App) paletteRow(row PaletteRow) string {
 	title := runewidth.Truncate(row.Command.Title, room, "…")
 	pad := room - runewidth.StringWidth(title) + paletteRowGap
 	if pad < 1 {
-		// Truncate keeps its ellipsis even when the room is gone, so a panel at
-		// the minimum width can still leave the title wider than it was given.
 		pad = 1
 	}
 	return paletteRowIndent + title + strings.Repeat(" ", pad) + a.themeTags.Accent + shortcut + "[-]"
 }
 
-// updatePaletteList updates the palette list with filtered commands.
 func (a *App) updatePaletteList() {
 	a.paletteList.Clear()
 	rows := a.paletteCtrl.Rows()
@@ -238,7 +189,6 @@ func (a *App) updatePaletteList() {
 
 	a.paletteModal = a.layoutPaletteModal(len(rows))
 
-	// Replace the modal in pages
 	a.pages.RemovePage("palette")
 	a.pages.AddPage("palette", a.paletteModal, true, false)
 	if a.focusedPane == FocusPalette {

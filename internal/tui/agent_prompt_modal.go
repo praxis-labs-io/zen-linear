@@ -8,7 +8,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// AgentPromptModal manages the prompt input for agent runs.
 type AgentPromptModal struct {
 	app             *App
 	fm              *FormModal
@@ -22,7 +21,6 @@ type AgentPromptModal struct {
 
 const agentPromptModalWidth = 90
 
-// NewAgentPromptModal creates a new agent prompt modal.
 func NewAgentPromptModal(app *App) *AgentPromptModal {
 	am := &AgentPromptModal{app: app}
 	am.fm = NewFormModal(app, "Ask Agent")
@@ -57,8 +55,6 @@ func NewAgentPromptModal(app *App) *AgentPromptModal {
 	return am
 }
 
-// Show displays the prompt modal. contextLine names the issue the agent will
-// be asked about.
 func (am *AgentPromptModal) Show(contextLine string, onSubmit func(prompt string, workspace string)) {
 	am.onSubmit = onSubmit
 	am.fm.SetContext(contextLine)
@@ -83,20 +79,16 @@ func (am *AgentPromptModal) Show(contextLine string, onSubmit func(prompt string
 	am.fm.Show("agent_prompt")
 }
 
-// Hide hides the prompt modal.
 func (am *AgentPromptModal) Hide() {
 	am.fm.Hide("agent_prompt")
 }
 
-// Focus returns keyboard focus to the form, for when an overlay closes.
 func (am *AgentPromptModal) Focus() { am.fm.Focus() }
 
-// HandleKey handles keyboard input for the prompt modal.
 func (am *AgentPromptModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	return am.fm.HandleKey(event)
 }
 
-// submitPrompt validates and submits the prompt text.
 func (am *AgentPromptModal) submitPrompt() {
 	if am.promptField == nil {
 		return
@@ -118,7 +110,6 @@ func (am *AgentPromptModal) submitPrompt() {
 	}
 }
 
-// applyTemplatePrompt updates the prompt field from the selected template.
 func (am *AgentPromptModal) applyTemplatePrompt(index int) {
 	if am.promptField == nil {
 		return

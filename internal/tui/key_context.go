@@ -1,7 +1,5 @@
 package tui
 
-// keyContext is where the keyboard is, at the grain the keys reference groups
-// by: one value per handler handleGlobalKey routes a key to.
 type keyContext int
 
 const (
@@ -19,8 +17,6 @@ const (
 	keyContextPalette
 )
 
-// keyContext is the handler the next key would reach, read in handleGlobalKey's
-// own routing order so the reference cannot disagree with the dispatch.
 func (a *App) keyContext() keyContext {
 	switch {
 	case a.focusedPane == FocusPalette:
@@ -47,8 +43,6 @@ func (a *App) keyContext() keyContext {
 	case FocusIssues:
 		return keyContextIssues
 	case FocusDetails:
-		// The lit card answers ahead of the page, which is what handleDetailsKey
-		// does by giving handleCommentKey the key first.
 		if _, lit := a.focusedComment(); lit && len(a.commentSpans) > 0 {
 			return keyContextComment
 		}

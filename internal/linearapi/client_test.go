@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// issueNodeJSON returns a JSON object string for an issue node used in tests.
 func issueNodeJSON(id, identifier, title string) string {
 	return fmt.Sprintf(`{
 		"id": %q,
@@ -65,7 +64,6 @@ func issueNodeWithPlanningFieldsJSON(id, identifier, title string) string {
 		"children": {"nodes": []}`, 1)
 }
 
-// issuesPageResponse builds a GraphQL response with issue nodes and page info.
 func issuesPageResponse(nodes []string, hasNextPage bool, endCursor string) string {
 	return fmt.Sprintf(`{
 		"data": {
@@ -256,7 +254,6 @@ func TestNewClient_CustomHTTPClient(t *testing.T) {
 
 	ctx := context.Background()
 	_, err := client.ListTeams(ctx)
-	// May fail due to GraphQL response format, but we can verify auth header was set
 	_ = err
 
 	if authHeader != "my-token" {
@@ -362,20 +359,17 @@ func TestAuthTransportUnauthorizedRefreshRetry(t *testing.T) {
 
 func TestFetchIssues_RequestFormat(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check Authorization header format
 		auth := r.Header.Get("Authorization")
 		expected := "test-token"
 		if auth != expected {
 			t.Errorf("Authorization header = %q, want %q", auth, expected)
 		}
 
-		// Check Content-Type
 		contentType := r.Header.Get("Content-Type")
 		if contentType != "application/json" {
 			t.Errorf("Content-Type = %q, want application/json", contentType)
 		}
 
-		// Parse request body to verify GraphQL query structure
 		var reqBody map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 			t.Errorf("Failed to decode request body: %v", err)
@@ -383,17 +377,14 @@ func TestFetchIssues_RequestFormat(t *testing.T) {
 			return
 		}
 
-		// Verify request has query field
 		if _, ok := reqBody["query"]; !ok {
 			t.Error("Request body missing 'query' field")
 		}
 
-		// Verify request has variables field
 		if _, ok := reqBody["variables"]; !ok {
 			t.Error("Request body missing 'variables' field")
 		}
 
-		// Send a valid GraphQL response
 		response := `{
 			"data": {
 				"issues": {
@@ -411,7 +402,6 @@ func TestFetchIssues_RequestFormat(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create client with test server URL using new config
 	client := NewClient(ClientConfig{
 		Token:    "test-token",
 		Endpoint: server.URL,
@@ -420,13 +410,10 @@ func TestFetchIssues_RequestFormat(t *testing.T) {
 	ctx := context.Background()
 	_, err := client.FetchIssues(ctx, FetchIssuesParams{First: 10})
 	if err != nil {
-		// We expect this might fail due to GraphQL parsing, but we've verified
-		// the request format is correct
 		t.Logf("FetchIssues() error (expected for test): %v", err)
 	}
 }
 
-// TestFetchIssues_PaginatesAllPages verifies that all pages are fetched and concatenated.
 func TestFetchIssues_PaginatesAllPages(t *testing.T) {
 	var afterValues []interface{}
 	requestCount := 0
@@ -560,7 +547,6 @@ func TestListCycles_PaginatesAndParses(t *testing.T) {
 	}
 }
 
-// TestFetchIssuesPage_Defaults verifies page defaults and pagination metadata.
 func TestFetchIssuesPage_Defaults(t *testing.T) {
 	var firstValue interface{}
 	response := issuesPageResponse([]string{
@@ -765,8 +751,6 @@ func TestFetchIssueByID_ParsesRelationsSubscribersAndAttachments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchIssueByID() error: %v", err)
 	}
-	// The shared selection reaches the detail node through an embedded struct,
-	// so these assertions are what prove the flattened response still lands.
 	if issue.ID != "issue-1" || issue.Identifier != "ABC-1" || issue.Title != "Full issue" {
 		t.Fatalf("issue identity = %q/%q/%q, want issue-1/ABC-1/Full issue", issue.ID, issue.Identifier, issue.Title)
 	}
@@ -818,7 +802,6 @@ func TestFetchIssueByID_ParsesRelationsSubscribersAndAttachments(t *testing.T) {
 	}
 }
 
-// TestFetchIssuesPage_NoNextPage verifies end cursor is cleared when pagination ends.
 func TestFetchIssuesPage_NoNextPage(t *testing.T) {
 	response := issuesPageResponse([]string{}, false, "cursor-ignored")
 
@@ -847,7 +830,6 @@ func TestFetchIssuesPage_NoNextPage(t *testing.T) {
 	}
 }
 
-// TestFetchIssues_ProgressCallback verifies progress updates per page.
 func TestFetchIssues_ProgressCallback(t *testing.T) {
 	pageOne := issuesPageResponse([]string{
 		issueNodeJSON("issue-1", "ABC-1", "First issue"),
@@ -900,7 +882,6 @@ func TestFetchIssues_ProgressCallback(t *testing.T) {
 	}
 }
 
-// TestFetchIssues_StopsWhenNoNextPage verifies pagination stops at the last page.
 func TestFetchIssues_StopsWhenNoNextPage(t *testing.T) {
 	requestCount := 0
 	response := issuesPageResponse([]string{
@@ -980,7 +961,6 @@ func TestBuildBaseIssueFilter(t *testing.T) {
 	}
 }
 
-// TestBuildIssueFilter_SearchTerms verifies search term filtering behavior.
 func TestBuildIssueFilter_SearchTerms(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -1355,7 +1335,6 @@ func TestIssueWithParentAndChildren(t *testing.T) {
 		Children:   children,
 	}
 
-	// Test parent
 	if issue.Parent == nil {
 		t.Fatal("Parent should not be nil")
 	}
@@ -1363,7 +1342,6 @@ func TestIssueWithParentAndChildren(t *testing.T) {
 		t.Errorf("Parent.ID = %q, want %q", issue.Parent.ID, "parent-123")
 	}
 
-	// Test children
 	if len(issue.Children) != 2 {
 		t.Fatalf("Children length = %d, want 2", len(issue.Children))
 	}
@@ -1486,7 +1464,6 @@ func TestCreateIssue_SendsPriority(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateIssue() error: %v", err)
 	}
-	// JSON decodes numbers as float64.
 	if input["priority"] != float64(2) {
 		t.Fatalf("priority = %#v, want 2", input["priority"])
 	}
@@ -1782,10 +1759,6 @@ func TestUpdateIssue_SetsAndClearsProjectID(t *testing.T) {
 	}
 }
 
-// TestUpdateIssue_ReturnsFieldsTheListRenders guards the mutation selection
-// against drifting behind the list query. The TUI splices this response
-// straight into the list instead of refetching, so a field missing here shows
-// up as a row that silently loses its due date, estimate, or hierarchy.
 func TestUpdateIssue_ReturnsFieldsTheListRenders(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -1904,8 +1877,6 @@ func TestIssueMatchesScope_SendsScopeAndIDFilter(t *testing.T) {
 			if !ok || len(ids) != 1 || ids[0] != "issue-1" {
 				t.Fatalf("filter.id.in = %#v, want [issue-1]", idFilter["in"])
 			}
-			// The scope has to ride along, otherwise the check answers a
-			// different question than the list asks.
 			if _, ok := filter["team"]; !ok {
 				t.Fatalf("filter = %#v, want the team scope carried through", filter)
 			}
@@ -2031,10 +2002,6 @@ func TestIssueRelationMutationsAndSubscriptions(t *testing.T) {
 	}
 }
 
-// TestAuthTransport_RefreshSurvivesRequestCancellation guards the credential on
-// disk. A refresh rotates the token server-side and then saves it; if the
-// request that hit the 401 is canceled part-way, the save never runs and the
-// stored refresh token is dead, which logs the user out for good.
 func TestAuthTransport_RefreshSurvivesRequestCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -2048,7 +2015,6 @@ func TestAuthTransport_RefreshSurvivesRequestCancellation(t *testing.T) {
 		UseBearer: true,
 		Endpoint:  server.URL,
 		OnUnauthorized: func(refreshCtx context.Context) (string, error) {
-			// The caller gives up while the token exchange is in flight.
 			cancel()
 			select {
 			case <-refreshCtx.Done():
@@ -2072,8 +2038,6 @@ func TestAuthTransport_RefreshSurvivesRequestCancellation(t *testing.T) {
 	}
 }
 
-// TestAuthTransport_RefreshCarriesItsOwnDeadline confirms detaching from the
-// caller did not leave the refresh able to hang forever.
 func TestAuthTransport_RefreshCarriesItsOwnDeadline(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

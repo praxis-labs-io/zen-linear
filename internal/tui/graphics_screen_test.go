@@ -6,9 +6,6 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// A frame the details page does not draw stranded a picture over the issue
-// list: every unmount path goes through contentFlex.Clear, so its Draw never
-// runs and the last frame's list stood.
 func TestAFrameWithoutTheDetailsPaneAsksForNoPictures(t *testing.T) {
 	app := newUXTestApp(t)
 
@@ -33,8 +30,6 @@ func TestAFrameWithoutTheDetailsPaneAsksForNoPictures(t *testing.T) {
 	}
 }
 
-// A picture is above the cells, so an overlay drawn after the details pane does
-// not cover it. Every modal goes through one registry, so this is the class.
 func TestNoPictureIsPlacedWhileAnOverlayIsUp(t *testing.T) {
 	app := newUXTestApp(t)
 	app.pendingImages = []screenImage{{id: 1, path: "shot.png", x: 4, y: 6, cols: 40, rows: 10}}
@@ -57,8 +52,6 @@ func TestNoPictureIsPlacedWhileAnOverlayIsUp(t *testing.T) {
 	}
 }
 
-// Taken whole or not at all: the terminal scales into exactly the box it is
-// given, so a shortened box squashes the picture.
 func TestVisibleImagesTakeTheScrollOffset(t *testing.T) {
 	page := &detailsPage{
 		images: []pageImage{
@@ -102,8 +95,6 @@ func TestVisibleImagesTakeTheScrollOffset(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// x=3 and y=6 stand for the pane's own inner rect plus its gutter,
-			// so the columns and rows below are offsets rather than absolutes.
 			visible := page.visibleImages(3, 6, test.height, test.top)
 
 			if len(visible) != len(test.wantID) {
@@ -121,8 +112,6 @@ func TestVisibleImagesTakeTheScrollOffset(t *testing.T) {
 	}
 }
 
-// The column is the page's own, so a picture in an indented block lands under
-// the text it belongs to rather than at the margin.
 func TestVisibleImagesKeepTheirColumn(t *testing.T) {
 	page := &detailsPage{
 		images: []pageImage{{id: 1, path: "one", row: 0, rows: 4, column: 5, cols: 30}},

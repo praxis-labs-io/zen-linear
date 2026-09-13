@@ -2,25 +2,18 @@ package tui
 
 import "github.com/gdamore/tcell/v2"
 
-// modalController is what a modal implements to take part in global key
-// dispatch. Focus is part of it, not an optional assertion, so a new modal
-// cannot register without saying where keyboard focus belongs.
 type modalController interface {
 	HandleKey(*tcell.EventKey) *tcell.EventKey
 	Focus()
 }
 
-// modalBinding ties a page name to the modal that owns keys while that page is
-// up.
 type modalBinding struct {
 	page string
-	// Resolved on every lookup: rebuildModals replaces every modal pointer on
-	// a theme or settings change.
+	// Resolved per lookup, since rebuildModals replaces every modal pointer.
 	controller func(*App) modalController
 }
 
-// modalBindings is dispatch priority, not stack order. The first page found
-// open takes the key, whichever modal opened last.
+// Dispatch priority, not stack order: the first open page takes the key, whichever opened last.
 var modalBindings = []modalBinding{
 	{"confirmation", func(a *App) modalController { return a.confirmationModal }},
 	{"picker", func(a *App) modalController { return a.pickerModal }},
@@ -31,14 +24,9 @@ var modalBindings = []modalBinding{
 	{"prompt_templates", func(a *App) modalController { return a.promptTemplatesModal }},
 	{"agent_prompt", func(a *App) modalController { return a.agentPromptModal }},
 	{"agent_output", func(a *App) modalController { return a.agentOutputModal }},
-	// Last: the reference opens nothing and is opened from no modal, so it can
-	// only ever be the one page up.
 	{"keys", func(a *App) modalController { return a.keysModal }},
 }
 
-// activeModal returns the modal that owns keys right now, or nil when none is
-// open. A page is only ever added by the modal that owns it, so a page present
-// means its pointer is set.
 func (a *App) activeModal() modalController {
 	for _, binding := range modalBindings {
 		if a.pages.HasPage(binding.page) {
@@ -48,8 +36,6 @@ func (a *App) activeModal() modalController {
 	return nil
 }
 
-// restoreModalFocus hands keys back to whatever an overlay covered. It raises
-// the same modal activeModal would pick, so what is on top is what types.
 func (a *App) restoreModalFocus() {
 	for _, binding := range modalBindings {
 		if !a.pages.HasPage(binding.page) {
@@ -62,11 +48,6 @@ func (a *App) restoreModalFocus() {
 	a.updateFocus()
 }
 
-// repairModalFocus takes the keyboard back from a pane a click reached past an
-// overlay. A press that misses the modal's panel falls through Pages to the
-// layer beneath, where the widget focuses itself, and the next key would type
-// into a pane behind the modal. Every modal's Focus lands on the field it was
-// already on, so the repair costs the user nothing.
 func (a *App) repairModalFocus() {
 	for _, binding := range modalBindings {
 		if !a.pages.HasPage(binding.page) {

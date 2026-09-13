@@ -61,8 +61,6 @@ func TestInstallScriptURLPerPlatform(t *testing.T) {
 	}
 }
 
-// PowerShell refuses -File on a path that is not .ps1, so the extension is
-// part of the contract rather than decoration.
 func TestStagedScriptCarriesThePlatformExtension(t *testing.T) {
 	for goos, want := range map[string]string{"darwin": ".sh", "windows": ".ps1"} {
 		path, cleanup, err := stageScript(goos, []byte("echo hi\n"))
@@ -133,8 +131,6 @@ func TestInstallHandsTheRunnerTheStagedScriptAndDirectory(t *testing.T) {
 	}
 }
 
-// A download that failed must not be reported as an upgrade that worked, which
-// is the whole reason the script is staged rather than piped into a shell.
 func TestInstallRefusesWhatItCouldNotDownload(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -212,8 +208,6 @@ func TestInstallDirIsTheRunningBinarysDirectory(t *testing.T) {
 	}
 }
 
-// The real exec path, since what the installer sees in its environment is the
-// whole point of this call and a stubbed runner would not prove it.
 func TestTheInstallerSeesTheDirectoryAndNoPinnedVersion(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the staged script is sh")
@@ -221,8 +215,6 @@ func TestTheInstallerSeesTheDirectoryAndNoPinnedVersion(t *testing.T) {
 
 	out := filepath.Join(t.TempDir(), "env")
 	t.Setenv("ZEN_TEST_OUT", out)
-	// Exported for something else entirely. It pins a release in both
-	// installers, and an update asked for by name means the latest.
 	t.Setenv("VERSION", "v9.9.9")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -246,8 +238,6 @@ func TestTheInstallerSeesTheDirectoryAndNoPinnedVersion(t *testing.T) {
 	}
 }
 
-// A failing installer has to fail the command, which is the whole reason the
-// script is staged rather than piped into a shell.
 func TestAFailedInstallerIsReported(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the staged script is sh")
@@ -267,8 +257,6 @@ func TestAFailedInstallerIsReported(t *testing.T) {
 	}
 }
 
-// Half an installer would run as far as the cut and report whatever it exited
-// with, so a body at the cap is refused rather than truncated to it.
 func TestInstallRefusesAnOversizedScript(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(make([]byte, maxScriptBytes+1))

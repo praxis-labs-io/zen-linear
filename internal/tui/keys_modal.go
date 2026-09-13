@@ -10,25 +10,18 @@ import (
 )
 
 const (
-	// keysKeyGutter pads the key out so the verbs line up as a column, the way
-	// the details grid pads its labels.
-	keysKeyGutter = 12
-	// keysChromeRows is the panel's two borders, the footer's rule and its hint.
+	keysKeyGutter  = 12
 	keysChromeRows = 4
-	// keysMinWidth keeps the panel wide enough to read at all.
-	keysMinWidth = 34
+	keysMinWidth   = 34
 )
 
-// keySection is one context's keys. rows is a function because every key is
-// resolved when the modal opens: a settings save rebinds them mid-session.
 type keySection struct {
 	context keyContext
 	title   string
-	rows    func(*App) []hint
+	// Resolved at open time, since a settings save rebinds keys mid-session.
+	rows func(*App) []hint
 }
 
-// keySections is one legend per context. Only the reader's own is shown, with
-// Anywhere under it, so a section is what the footer strip could not fit.
 var keySections = []keySection{
 	{keyContextGlobal, "Anywhere", func(a *App) []hint {
 		return []hint{
@@ -145,15 +138,12 @@ var keySections = []keySection{
 	}},
 }
 
-// keysReferenceKey is the rune for the chooser, which is default-deny and so
-// never reaches the shortcut dispatch. 0 where a binding took it, as actionKey.
+// The chooser is default-deny and never reaches the shortcut dispatch, so it asks for this rune directly. 0 where a binding took it.
 func (a *App) keysReferenceKey() rune {
 	key, _ := a.commandShortcutRune("show_keys")
 	return key
 }
 
-// KeysModal is the hint legend: the keys for where the reader is, in full,
-// where the status strip has room for about five of them.
 type KeysModal struct {
 	app   *App
 	modal *tview.Flex
@@ -162,7 +152,6 @@ type KeysModal struct {
 	hint  *tview.TextView
 }
 
-// NewKeysModal builds the legend.
 func NewKeysModal(app *App) *KeysModal {
 	km := &KeysModal{app: app}
 
@@ -177,15 +166,12 @@ func NewKeysModal(app *App) *KeysModal {
 		SetTextColor(app.theme.SecondaryText).
 		SetBackgroundColor(app.theme.ModalBackground())
 
-	// Rebuilt per Show, since its title names the context. The wrapper is not:
-	// pages hold this pointer.
 	km.modal = tview.NewFlex()
 	km.modal.SetBackgroundColor(app.theme.Background)
 
 	return km
 }
 
-// Show opens the legend for the context the keyboard is in.
 func (km *KeysModal) Show() {
 	section, ok := keySectionFor(km.app.keyContext())
 	if !ok {
@@ -209,7 +195,6 @@ func (km *KeysModal) Show() {
 	km.app.app.SetFocus(km.view)
 }
 
-// keySectionFor is the legend for one context.
 func keySectionFor(context keyContext) (keySection, bool) {
 	for _, section := range keySections {
 		if section.context == context {
@@ -219,8 +204,6 @@ func keySectionFor(context keyContext) (keySection, bool) {
 	return keySection{}, false
 }
 
-// keyLines is the context's own keys, then the ones that work anywhere. The
-// pane numbers and quit are part of what a reader can do here.
 func (a *App) keyLines(section keySection) []string {
 	lines := a.keyRows(section.rows(a))
 	if section.context == keyContextGlobal {
@@ -234,8 +217,6 @@ func (a *App) keyLines(section keySection) []string {
 	return append(lines, a.keyRows(global.rows(a))...)
 }
 
-// keysPanelWidth is the panel the rows need: the widest of them, plus the
-// border and both gutters modalPanel takes out of it.
 func keysPanelWidth(lines []string) int {
 	widest := 0
 	for _, line := range lines {
@@ -244,8 +225,6 @@ func keysPanelWidth(lines []string) int {
 	return max(widest+2+2*modalGutter, keysMinWidth)
 }
 
-// keyRows renders one section's pairs, dropping any left keyless because a
-// binding took the rune. Same rule as hintLine: never state a dead key.
 func (a *App) keyRows(rows []hint) []string {
 	lines := make([]string, 0, len(rows))
 	for _, row := range rows {
@@ -259,17 +238,13 @@ func (a *App) keyRows(rows []hint) []string {
 	return lines
 }
 
-// Hide closes the legend and hands the keys back to whatever it covered.
 func (km *KeysModal) Hide() {
 	km.app.pages.RemovePage("keys")
 	km.app.restoreModalFocus()
 }
 
-// Focus returns keyboard focus to the page, for when an overlay closes.
 func (km *KeysModal) Focus() { km.app.app.SetFocus(km.view) }
 
-// HandleKey closes the legend. Default-deny: it is a legend, not a place to
-// run anything from, and the key that opened it closes it again.
 func (km *KeysModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Key() {
 	case tcell.KeyCtrlC:
@@ -288,14 +263,11 @@ func (km *KeysModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 			}
 		}
 	default:
-		// The arrows and the page keys belong to the view under the cursor.
 		return event
 	}
 	return nil
 }
 
-// scroll steps a legend too tall for the terminal, since the view answers the
-// arrows and not j/k.
 func (km *KeysModal) scroll(delta int) {
 	row, column := km.view.GetScrollOffset()
 	km.view.ScrollTo(max(0, row+delta), column)

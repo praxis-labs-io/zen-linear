@@ -9,20 +9,18 @@ import (
 	"github.com/rivo/tview"
 )
 
-// TestTheDetailsPaneIsOneScrollingPage is what the pane is now: the issue, its
-// description and the conversation about it, in that order, in one scroll.
 func TestTheDetailsPaneIsOneScrollingPage(t *testing.T) {
 	app := newThreadedTestApp(t)
 	page := strings.Join(drawComments(t, app, 90), "\n")
 
 	at := 0
 	for _, want := range []string{
-		"ZNO-5",                       // the identifier
-		"Status:",                     // a metadata field
-		"─────",                       // the rule closing the metadata
-		"Description:",                // the description's own label
-		"The debounce is the problem", // the first comment
-		"write a comment",             // the compose card, at the end
+		"ZNO-5",
+		"Status:",
+		"─────",
+		"Description:",
+		"The debounce is the problem",
+		"write a comment",
 	} {
 		found := strings.Index(page[at:], want)
 		if found < 0 {
@@ -32,20 +30,10 @@ func TestTheDetailsPaneIsOneScrollingPage(t *testing.T) {
 	}
 }
 
-// TestThePaletteSurvivesAKeystrokeFromTheDetailsPane is the regression test for
-// what folding the tab in cost. The page's focus func used to be reachable only
-// while the Comments tab was mounted; it is the whole pane now, so tview's
-// focus re-delegation on the palette's per-keystroke page rebuild walked into
-// it and took focusedPane back. The palette then failed its own re-show check
-// and went dead with nothing on screen to say so.
 func TestThePaletteSurvivesAKeystrokeFromTheDetailsPane(t *testing.T) {
 	app := newThreadedTestApp(t)
 	app.openPalette()
 
-	// What tview does on its own: the palette rebuilds its page on every
-	// keystroke, and RemovePage re-delegates focus down the tree to the item
-	// buildLayout flagged, which is this pane. Driven directly because the
-	// delegation itself needs a running Application to fire.
 	app.app.SetFocus(app.detailsPageView)
 
 	if got := app.focusedPane; got != FocusPalette {
@@ -56,9 +44,6 @@ func TestThePaletteSurvivesAKeystrokeFromTheDetailsPane(t *testing.T) {
 	}
 }
 
-// TestTabInAnotherPaneLeavesTheWritingBoxesAlone covers the other half of Tab
-// narrowing to a box and its button: detailsFocus outlives the pane being
-// left, so an unscoped Tab elsewhere stepped a box nobody was looking at.
 func TestTabInAnotherPaneLeavesTheWritingBoxesAlone(t *testing.T) {
 	app := newThreadedTestApp(t)
 	app.detailsFocus = detailsFocusText
@@ -74,10 +59,6 @@ func TestTabInAnotherPaneLeavesTheWritingBoxesAlone(t *testing.T) {
 	}
 }
 
-// TestTheActivityLabelHeadsTheSection covers the label the comment count used
-// to be. It heads the feed the way Description: heads the description, and it
-// carries no number: comments and events share the section, so a count could
-// not say which it meant.
 func TestTheActivityLabelHeadsTheSection(t *testing.T) {
 	app := newThreadedTestApp(t)
 
@@ -97,9 +78,6 @@ func TestTheActivityLabelHeadsTheSection(t *testing.T) {
 	}
 }
 
-// TestTheDescriptionScrollsWithTheComments pins the one scroll. Two views would
-// each keep their own offset, and scrolling the conversation would leave the
-// issue where it was.
 func TestTheDescriptionScrollsWithTheComments(t *testing.T) {
 	app := newThreadedTestApp(t)
 	showComments(t, app, 80, 20)
@@ -115,11 +93,6 @@ func TestTheDescriptionScrollsWithTheComments(t *testing.T) {
 	}
 }
 
-// TestLongDescriptionLinesWrapToTheMeasure is the one that catches the trap in
-// merging the two views: the page counts its own lines, so nothing written to
-// it may overrun the measure. Glamour wraps prose but cannot break a bare URL
-// and does not wrap a code block, and a description that overran would push
-// every card and every box below it a row out of place.
 func TestLongDescriptionLinesWrapToTheMeasure(t *testing.T) {
 	app := newDetailsTestApp(t)
 	issue := detailsFixture()
@@ -140,10 +113,6 @@ func TestLongDescriptionLinesWrapToTheMeasure(t *testing.T) {
 	}
 }
 
-// TestTheRingCountsThePageFromTheTop covers the offset the merge introduced:
-// the cards start however many rows down the issue took, and the spans the ring
-// moves by have to agree with where they landed. Read off the screen, because
-// spans that agreed only with themselves is exactly the failure.
 func TestTheRingCountsThePageFromTheTop(t *testing.T) {
 	app := newThreadedTestApp(t)
 	stepComments(t, app, false)
@@ -165,9 +134,6 @@ func TestTheRingCountsThePageFromTheTop(t *testing.T) {
 	}
 }
 
-// TestTheComposeBoxIsDrawnOverItsHoleBelowTheDescription is the other half of
-// that offset: the widgets are placed by the render, not mounted in a layout,
-// so a slot counted from the wrong row paints the box over the wrong card.
 func TestTheComposeBoxIsDrawnOverItsHoleBelowTheDescription(t *testing.T) {
 	app := newThreadedTestApp(t)
 	drawPrimitiveAt(t, app.detailsPage, 90, 160)
@@ -188,9 +154,6 @@ func TestTheComposeBoxIsDrawnOverItsHoleBelowTheDescription(t *testing.T) {
 	}
 }
 
-// TestBracesAnchorFromTheDescription covers the reader who has scrolled up into
-// the issue with nothing lit. The ring has no stop to step from, so it takes
-// the first card they can see rather than hauling them somewhere else.
 func TestBracesAnchorFromTheDescription(t *testing.T) {
 	app := newThreadedTestApp(t)
 	showComments(t, app, 80, 16)
@@ -209,9 +172,6 @@ func TestBracesAnchorFromTheDescription(t *testing.T) {
 	}
 }
 
-// TestTheEmptyPaneSaysSoAndDropsTheRing covers clearing the selection: the page
-// has nothing to write on and nothing to write in, so the ring cannot be left
-// aimed at a card that is no longer drawn.
 func TestTheEmptyPaneSaysSoAndDropsTheRing(t *testing.T) {
 	app := newThreadedTestApp(t)
 	stepComments(t, app, false)
@@ -235,10 +195,6 @@ func TestTheEmptyPaneSaysSoAndDropsTheRing(t *testing.T) {
 	}
 }
 
-// TestAWritingBoxDropsItsFrameInANarrowPane covers a pane too small to frame a
-// card. The box keeps its rows and its button; only the border goes, because
-// two border cells and two pad cells out of a pane this size leave nothing to
-// write in, and a frame drawn anyway ran past the measure.
 func TestAWritingBoxDropsItsFrameInANarrowPane(t *testing.T) {
 	app := newDetailsTestApp(t)
 	app.selectedIssue = detailsFixture()
@@ -254,11 +210,6 @@ func TestAWritingBoxDropsItsFrameInANarrowPane(t *testing.T) {
 	}
 }
 
-// TestAStyledDescriptionLineDoesNotBleedDownThePage covers the reset glamour
-// puts at the end of a line and the padding trimmer used to take with it. A
-// description ending inside a link left the underline open, and every tag below
-// it names a color rather than a full style, so the rule, the cards and the
-// compose box all came out underlined.
 func TestAStyledDescriptionLineDoesNotBleedDownThePage(t *testing.T) {
 	app := newDetailsTestApp(t)
 	issue := detailsFixture()
@@ -280,8 +231,6 @@ func TestAStyledDescriptionLineDoesNotBleedDownThePage(t *testing.T) {
 	app.detailsView.Draw(screen)
 	screen.Show()
 
-	// Everything from the Activity heading down belongs to the page, not to the
-	// description, so nothing there may wear a style the description opened.
 	cells, screenWidth, screenHeight := screen.GetContents()
 	below := false
 	for y := 0; y < screenHeight; y++ {

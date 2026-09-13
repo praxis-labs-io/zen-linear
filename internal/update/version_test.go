@@ -49,15 +49,12 @@ func TestIsNewer(t *testing.T) {
 		{name: "a newer major", current: "0.9.9", latest: "v1.0.0", want: true},
 		{name: "the same version", current: "0.3.0", latest: "v0.3.0"},
 		{name: "an older release", current: "0.3.0", latest: "v0.2.0"},
-		// The reason the comparison is numeric rather than a string compare.
 		{name: "ten is ahead of nine", current: "0.9.0", latest: "v0.10.0", want: true},
 		{name: "nine is not ahead of ten", current: "0.10.0", latest: "v0.9.0"},
 		{name: "a patch past nine", current: "0.1.9", latest: "v0.1.10", want: true},
-		// Somebody who installed an rc is behind the final it led to.
 		{name: "the final over its rc", current: "0.3.0-rc.1", latest: "v0.3.0", want: true},
 		{name: "an rc is not ahead of its final", current: "0.3.0", latest: "v0.3.0-rc.1"},
 		{name: "a later minor over an rc", current: "0.3.0-rc.1", latest: "v0.4.0", want: true},
-		// Nothing ranks against a tag that will not parse, in either direction.
 		{name: "an unstamped build", current: "dev", latest: "v0.3.0"},
 		{name: "an unparseable tag", current: "0.3.0", latest: "nightly"},
 		{name: "neither parses", current: "dev", latest: "nightly"},

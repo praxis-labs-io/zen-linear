@@ -7,11 +7,7 @@ import (
 	"github.com/rivo/tview"
 )
 
-// FormMultiSelect is FormModal's inline multi-select field: a framed list of
-// toggle rows, no overlay. The form owns its keys, so it takes Space, t and
-// Enter through FormModal.HandleKey.
 type FormMultiSelect struct {
-	// app is held for the row marks, which are colored from the theme.
 	app         *App
 	list        *tview.List
 	items       []MultiSelectItem
@@ -19,8 +15,6 @@ type FormMultiSelect struct {
 	placeholder string
 }
 
-// newMultiSelect builds a themed toggle list. Placing it is the caller's job:
-// the only one in the form shares its row with other fields.
 func (fm *FormModal) newMultiSelect() *FormMultiSelect {
 	theme := fm.app.theme
 
@@ -34,8 +28,6 @@ func (fm *FormModal) newMultiSelect() *FormMultiSelect {
 		SetMainTextStyle(tcell.StyleDefault.Foreground(theme.Foreground).Background(theme.ModalBackground())).
 		SetSelectedStyle(fm.app.listSelectionStyle()).
 		SetHighlightFullLine(true)
-	// The cursor bar is a focus cue, not a selection: unfocused it reads as a
-	// ticked row and competes with the field that does have focus.
 	ms.list.SetSelectedFocusOnly(true)
 	ms.list.SetBackgroundColor(theme.ModalBackground())
 	ms.refresh()
@@ -44,8 +36,6 @@ func (fm *FormModal) newMultiSelect() *FormMultiSelect {
 	return ms
 }
 
-// SetPlaceholder sets the single dim row shown when there are no options,
-// so a loading fetch and an empty result read differently.
 func (ms *FormMultiSelect) SetPlaceholder(text string) {
 	ms.placeholder = text
 	if len(ms.items) == 0 {
@@ -53,8 +43,6 @@ func (ms *FormMultiSelect) SetPlaceholder(text string) {
 	}
 }
 
-// SetItems replaces the options and the selection, keeping the highlight at
-// the top.
 func (ms *FormMultiSelect) SetItems(items []MultiSelectItem, selectedIDs []string) {
 	ms.items = items
 	ms.selected = make(map[string]bool, len(selectedIDs))
@@ -64,8 +52,7 @@ func (ms *FormMultiSelect) SetItems(items []MultiSelectItem, selectedIDs []strin
 	ms.refresh()
 }
 
-// SelectedIDs returns the checked option ids, sorted so a caller can compare
-// them against a previous selection.
+// SelectedIDs returns the checked option ids, sorted.
 func (ms *FormMultiSelect) SelectedIDs() []string {
 	ids := make([]string, 0, len(ms.selected))
 	for id := range ms.selected {
@@ -75,7 +62,6 @@ func (ms *FormMultiSelect) SelectedIDs() []string {
 	return ids
 }
 
-// toggle flips the highlighted option.
 func (ms *FormMultiSelect) toggle() {
 	idx := ms.list.GetCurrentItem()
 	if idx < 0 || idx >= len(ms.items) {
@@ -91,8 +77,6 @@ func (ms *FormMultiSelect) toggle() {
 	ms.list.SetCurrentItem(idx)
 }
 
-// refresh rebuilds the rows, marked the same way the multi-select modal marks
-// its own.
 func (ms *FormMultiSelect) refresh() {
 	current := ms.list.GetCurrentItem()
 	ms.list.Clear()

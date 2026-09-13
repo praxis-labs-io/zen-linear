@@ -5,19 +5,16 @@ import (
 	"github.com/rivo/tview"
 )
 
-// ConfirmationModal manages a small confirm/cancel overlay for risky actions.
 type ConfirmationModal struct {
 	app       *App
 	modal     *tview.Modal
 	onConfirm func()
 }
 
-// NewConfirmationModal creates a confirmation modal.
 func NewConfirmationModal(app *App) *ConfirmationModal {
 	return &ConfirmationModal{app: app}
 }
 
-// Show displays the confirmation prompt.
 func (cm *ConfirmationModal) Show(title, message, confirmLabel string, onConfirm func()) {
 	cm.onConfirm = onConfirm
 	cm.modal = tview.NewModal().
@@ -32,7 +29,6 @@ func (cm *ConfirmationModal) Show(title, message, confirmLabel string, onConfirm
 		})
 	cm.modal.SetBackgroundColor(cm.app.theme.ModalBackground())
 	cm.modal.SetTextColor(cm.app.theme.Foreground)
-	// Focus-only accent: the focused button is the single loud element.
 	cm.modal.SetButtonStyle(tcell.StyleDefault.
 		Background(cm.app.theme.ModalBackground()).
 		Foreground(cm.app.theme.SecondaryText))
@@ -49,16 +45,13 @@ func (cm *ConfirmationModal) Show(title, message, confirmLabel string, onConfirm
 	cm.app.app.SetFocus(cm.modal)
 }
 
-// Hide closes the confirmation prompt.
 func (cm *ConfirmationModal) Hide() {
 	cm.app.pages.RemovePage("confirmation")
 	cm.app.restoreModalFocus()
 }
 
-// Focus returns keyboard focus to the buttons, for when an overlay closes.
 func (cm *ConfirmationModal) Focus() { cm.app.app.SetFocus(cm.modal) }
 
-// HandleKey handles confirmation-level shortcuts.
 func (cm *ConfirmationModal) HandleKey(event *tcell.EventKey) *tcell.EventKey {
 	if event.Key() == tcell.KeyEscape {
 		cm.Hide()

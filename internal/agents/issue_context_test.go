@@ -8,7 +8,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// TestBuildIssueContext_RendersFields verifies basic rendering.
 func TestBuildIssueContext_RendersFields(t *testing.T) {
 	issue := linearapi.Issue{
 		Title:       "Example Issue",
@@ -40,7 +39,6 @@ func TestBuildIssueContext_RendersFields(t *testing.T) {
 	}
 }
 
-// TestBuildIssueContext_EmptyFields verifies empty description/comments behavior.
 func TestBuildIssueContext_EmptyFields(t *testing.T) {
 	issue := linearapi.Issue{
 		Title: "Empty Fields",
@@ -56,7 +54,6 @@ func TestBuildIssueContext_EmptyFields(t *testing.T) {
 	}
 }
 
-// TestBuildIssueContext_NoTruncation verifies full context is preserved.
 func TestBuildIssueContext_NoTruncation(t *testing.T) {
 	longDesc := strings.Repeat("a", 1200)
 	longComment := strings.Repeat("b", 900)

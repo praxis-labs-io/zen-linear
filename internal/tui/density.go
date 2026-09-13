@@ -2,7 +2,6 @@ package tui
 
 import "github.com/praxis-labs-io/zen-linear/internal/config"
 
-// DensityProfile defines spacing values for UI layouts.
 type DensityProfile struct {
 	ID                string
 	DetailsPadding    Padding
@@ -12,7 +11,6 @@ type DensityProfile struct {
 	DetailsSectionGap int
 }
 
-// Padding captures per-side padding values.
 type Padding struct {
 	Top    int
 	Bottom int
@@ -20,7 +18,6 @@ type Padding struct {
 	Right  int
 }
 
-// DensityRegistry maps density identifiers to profiles.
 var DensityRegistry = map[string]DensityProfile{
 	config.DensityComfortable: {
 		ID: config.DensityComfortable,
@@ -52,7 +49,7 @@ var DensityRegistry = map[string]DensityProfile{
 	},
 }
 
-// ResolveDensity returns the density profile for a given name, or the default.
+// ResolveDensity returns the profile for name, or the default when name is unknown.
 func ResolveDensity(name string) DensityProfile {
 	if density, ok := DensityRegistry[name]; ok {
 		return density

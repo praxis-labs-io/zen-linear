@@ -52,7 +52,6 @@ func TestFindTeamByKeyOrName(t *testing.T) {
 	}
 }
 
-// defaultNavTeams returns the team fixtures used by default-navigation tests.
 func defaultNavTeams() []linearapi.Team {
 	return []linearapi.Team{
 		{ID: "team-1", Key: "ENG", Name: "Engineering"},
@@ -60,9 +59,6 @@ func defaultNavTeams() []linearapi.Team {
 	}
 }
 
-// newDefaultNavTestApp builds an App with seams stubbed for default-navigation
-// tests. It registers its own cleanup: every caller starts background work, and
-// a caller that forgets leaks a goroutine into whatever test runs next.
 func newDefaultNavTestApp(t testing.TB, cfg config.Config) *App {
 	t.Helper()
 
@@ -81,8 +77,6 @@ func newDefaultNavTestApp(t testing.TB, cfg config.Config) *App {
 			{ID: "proj-2", Name: "Mobile App", TeamID: teamID},
 		}, nil
 	}
-	// Every Linear team has states, and a load that brings back none is the
-	// one the tree treats as unloaded.
 	app.fetchWorkflowStatesFunc = func(context.Context, string) ([]linearapi.WorkflowState, error) {
 		return []linearapi.WorkflowState{{ID: "state-1", Name: "Todo"}}, nil
 	}
@@ -92,7 +86,6 @@ func newDefaultNavTestApp(t testing.TB, cfg config.Config) *App {
 	return app
 }
 
-// currentNavigationNode returns the NavigationNode referenced by the tree's current node.
 func currentNavigationNode(t *testing.T, app *App) *NavigationNode {
 	t.Helper()
 	node := app.navigationTree.GetCurrentNode()
@@ -148,8 +141,6 @@ func TestApplyDefaultNavigationSelectsProject(t *testing.T) {
 		t.Fatalf("selectedNavigation = %+v, want project selection", app.selectedNavigation)
 	}
 
-	// Projects open folded, so the cursor would otherwise land on a row the
-	// pane never draws.
 	projectNode := app.navigationTree.GetCurrentNode()
 	var group *tview.TreeNode
 	for _, child := range app.findTeamTreeNode("team-2").GetChildren() {
@@ -291,10 +282,6 @@ func TestFindProjectByName(t *testing.T) {
 	}
 }
 
-// TestCurrentFetchParamsScopesNavigationSelection verifies the fetch narrows to
-// whatever the selected navigation node scopes to. A team-scoped All Issues
-// favorite carries only a TeamID, with none of the IsTeam/IsProject flags, so
-// it needs its own branch without shadowing the richer ones.
 func TestCurrentFetchParamsScopesNavigationSelection(t *testing.T) {
 	tests := []struct {
 		name          string

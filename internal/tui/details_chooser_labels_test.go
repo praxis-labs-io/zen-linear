@@ -11,15 +11,11 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// markedRow is one chooser row as its box and its label, for a test that cares
-// which are toggled on.
 func markedRow(t *testing.T, app *App, label string) string {
 	t.Helper()
 	page := strings.Split(app.detailsPageView.GetText(false), "\n")
 	for _, line := range page {
 		plain := stripTags(line)
-		// The glyph is what tells a chooser row from the Labels row above it,
-		// which says the same words.
 		if !strings.Contains(plain, label) || !strings.ContainsAny(plain, "◼◻") {
 			continue
 		}
@@ -51,8 +47,6 @@ func TestTheLabelChooserOpensOnTheFirstRow(t *testing.T) {
 
 	openChooser(t, app)
 
-	// The marks say what is set, so the cursor has nothing left to mark and
-	// starts at the top even though the issue's own label is below it.
 	if lit := litOption(t, app); lit != "◻ Chore" {
 		t.Fatalf("lit option = %q, want the first row", lit)
 	}
@@ -82,8 +76,6 @@ func TestTheLitLabelRowIsPaintedEndToEnd(t *testing.T) {
 			lit, _, _ = strings.Cut(line[at+len(app.themeTags.Selection):], "[-:-:-]")
 		}
 	}
-	// A colored mark closes with its own reset, which would drop the label
-	// after it to the terminal default over the cursor line's background.
 	if lit == "" || strings.Contains(lit, "[-]") {
 		t.Fatalf("lit row = %q, want one unbroken run of the cursor line", lit)
 	}
@@ -93,7 +85,6 @@ func TestApplyingLabelsWritesTheWholeSet(t *testing.T) {
 	app, writes, _ := chooserFixture(t, issueFieldLabels)
 	openChooser(t, app)
 
-	// Chore on, Bug left alone: one write carrying both, not one per toggle.
 	pressField(app, 'j')
 	pressField(app, ' ')
 	pressFieldKey(app, tcell.KeyEnter)
@@ -112,8 +103,6 @@ func TestApplyingLabelsWritesTheWholeSet(t *testing.T) {
 
 func TestApplyingLabelsUnchangedSendsNothing(t *testing.T) {
 	app, writes, _ := chooserFixture(t, issueFieldLabels)
-	// Held in the order Linear returned them, which is not the order the two
-	// sets are compared in.
 	app.selectedIssue.Labels = []linearapi.IssueLabel{{ID: "label-2", Name: "Chore"}, {ID: "label-1", Name: "Bug"}}
 	app.updateDetailsView()
 	drawDetails(t, app, 90)
@@ -123,8 +112,6 @@ func TestApplyingLabelsUnchangedSendsNothing(t *testing.T) {
 	if app.detailsEdit.open != "" {
 		t.Fatal("the chooser stayed open")
 	}
-	// Then a set that did change. Reading the first write is the assertion: a
-	// channel checked on the spot only races the goroutine that fills it.
 	openChooser(t, app)
 	pressField(app, ' ')
 	pressFieldKey(app, tcell.KeyEnter)
@@ -160,8 +147,6 @@ func TestEscapeDropsTheLabelToggles(t *testing.T) {
 		t.Fatalf("edit mode = %v with %q open, want the chooser closed and the mode kept", app.detailsEdit.on, app.detailsEdit.open)
 	}
 
-	// Reopening is the assertion the toggle went nowhere: it seeds from the
-	// issue, so a mark that survived would be a mark the write never made.
 	openChooser(t, app)
 	if got := markedRow(t, app, "Bug"); got != "◼ Bug" {
 		t.Fatalf("the Bug row = %q, want the issue's own labels back", got)
@@ -175,8 +160,6 @@ func TestEscapeDropsTheLabelToggles(t *testing.T) {
 
 func TestALabelTheListDoesNotCarrySurvivesTheApply(t *testing.T) {
 	app, writes, _ := chooserFixture(t, issueFieldLabels)
-	// A label on the issue that the team's own list never offers, which is how
-	// a workspace label reaches a cross-team issue.
 	app.selectedIssue.Labels = append(app.selectedIssue.Labels, linearapi.IssueLabel{ID: "label-9", Name: "Hidden"})
 	app.updateDetailsView()
 	drawDetails(t, app, 90)
@@ -192,7 +175,6 @@ func TestALabelTheListDoesNotCarrySurvivesTheApply(t *testing.T) {
 	}
 }
 
-// refreshIssueLabels is the background refresh landing under an open chooser.
 func refreshIssueLabels(app *App, labels []linearapi.IssueLabel) {
 	app.issuesMu.Lock()
 	refreshed := *app.selectedIssue
@@ -205,8 +187,6 @@ func TestALabelAddedWhileTheChooserIsOpenSurvivesTheApply(t *testing.T) {
 	app, writes, _ := chooserFixture(t, issueFieldLabels)
 	openChooser(t, app)
 
-	// The list never offered it, so no row of the chooser says anything about
-	// it and the reader cannot have decided to drop it.
 	refreshIssueLabels(app, []linearapi.IssueLabel{{ID: "label-1", Name: "Bug"}, {ID: "label-9", Name: "Hidden"}})
 
 	pressField(app, 'j')
@@ -223,12 +203,9 @@ func TestApplyingWithNoToggleSendsNothingAfterARefresh(t *testing.T) {
 	app, writes, _ := chooserFixture(t, issueFieldLabels)
 	openChooser(t, app)
 
-	// The reader touched nothing, so Enter is a close. Comparing against the
-	// refreshed issue instead would write the new label straight back off.
 	refreshIssueLabels(app, []linearapi.IssueLabel{{ID: "label-1", Name: "Bug"}, {ID: "label-2", Name: "Chore"}})
 	pressFieldKey(app, tcell.KeyEnter)
 
-	// Then a set that did change. Reading the first write is the assertion.
 	openChooser(t, app)
 	pressField(app, ' ')
 	pressFieldKey(app, tcell.KeyEnter)
@@ -278,13 +255,9 @@ func TestTheLabelHintNamesSpaceAndApply(t *testing.T) {
 	}
 }
 
-// The overlay and the chooser share one loader, so the team it asks for is the
-// issue's own rather than whatever the navigation tree is on.
 func TestTheLabelsOverlayLoadsTheIssuesOwnTeam(t *testing.T) {
 	app := newDetailsTestApp(t)
 	app.selectedIssue.TeamID = "team-other"
-	// The tree is parked on another team, which is what the loader used to
-	// follow: a search result belongs to whichever team owns it.
 	app.selectedNavigation = &NavigationNode{ID: chooserTeamID, TeamID: chooserTeamID, IsTeam: true}
 	app.metadataTeamID = chooserTeamID
 	navLabels := []linearapi.IssueLabel{{ID: "label-1", Name: "Bug"}}

@@ -14,8 +14,6 @@ import (
 
 const teamsOK = `{"data":{"teams":{"nodes":[]}}}`
 
-// callRecorder counts handler calls and what each one carried. The handler runs
-// on the server's goroutine, so the mutex is not optional.
 type callRecorder struct {
 	mu      sync.Mutex
 	calls   int
@@ -65,8 +63,6 @@ func (r *callRecorder) distinctRemotes() int {
 	return len(seen)
 }
 
-// newFastRetryClient builds the production transport chain with the backoff
-// shrunk so a retry test finishes in milliseconds.
 func newFastRetryClient(t *testing.T, cfg ClientConfig) *Client {
 	t.Helper()
 	client := NewClient(cfg)
@@ -137,7 +133,7 @@ func TestRetryTransportBackoff(t *testing.T) {
 		{attempt: 1, want: 200 * time.Millisecond},
 		{attempt: 2, want: 400 * time.Millisecond},
 		{attempt: 3, want: 400 * time.Millisecond},
-		{attempt: 40, want: 400 * time.Millisecond}, // the shift overflows
+		{attempt: 40, want: 400 * time.Millisecond},
 	}
 
 	for _, tt := range tests {
@@ -193,8 +189,6 @@ func TestRetryTransportRetriesOnNetworkError(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if recorder.record(r) == 1 {
-			// net/http does not replay a POST on its own, so any second call
-			// here is ours.
 			hijacker, ok := w.(http.Hijacker)
 			if !ok {
 				t.Error("test server does not support hijacking")
@@ -221,8 +215,6 @@ func TestRetryTransportRetriesOnNetworkError(t *testing.T) {
 	}
 }
 
-// TestRetryTransportDoesNotRetryMutationOn5xx is the duplicate-comment guard. A
-// 5xx may mean the write landed and only the reply was lost.
 func TestRetryTransportDoesNotRetryMutationOn5xx(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -241,10 +233,6 @@ func TestRetryTransportDoesNotRetryMutationOn5xx(t *testing.T) {
 	}
 }
 
-// TestRetryTransportDoesNotRetryMutationOn429 keeps the duplicate-comment guard
-// whole. A rate limiter usually rejects before the resolver runs, but a 429
-// applied on the response path would mean the write already landed, and no
-// saved keystroke is worth a duplicate comment.
 func TestRetryTransportDoesNotRetryMutationOn429(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -284,8 +272,6 @@ func TestRetryTransportRetriesQueryOn429(t *testing.T) {
 	}
 }
 
-// TestRetryTransportDoesNotRetryPermanentTransportErrors keeps a bad endpoint
-// from costing three attempts and two backoffs before the user sees the error.
 func TestRetryTransportDoesNotRetryPermanentTransportErrors(t *testing.T) {
 	client := newFastRetryClient(t, ClientConfig{Endpoint: "https://zen-linear.invalid/graphql"})
 
@@ -375,8 +361,6 @@ func TestRetryTransportStopsWhenBackoffExceedsDeadline(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// The default 250ms backoff plus the reserve does not fit in a 200ms
-	// budget, so the 503 reaches the caller instead of a deadline error.
 	client := NewClient(ClientConfig{Endpoint: server.URL, Timeout: 200 * time.Millisecond})
 	start := time.Now()
 	_, err := client.ListTeams(context.Background())
@@ -410,9 +394,6 @@ func TestRetryTransportAbortsOnContextCancel(t *testing.T) {
 	}()
 
 	_, err := client.ListTeams(ctx)
-	// The cancellation has to reach the caller as itself. Handing back the
-	// attempt's 503 instead would report a user-initiated cancel as a server
-	// error, and the details pane cancels one on every superseded selection.
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("ListTeams() error = %v, want a wrapped context.Canceled", err)
 	}
@@ -421,9 +402,6 @@ func TestRetryTransportAbortsOnContextCancel(t *testing.T) {
 	}
 }
 
-// TestRetryTransportRefreshesAuthHeaderPerAttempt fails if the retry loop ever
-// moves inside authTransport, which would replay a credential the refresh
-// rotated.
 func TestRetryTransportRefreshesAuthHeaderPerAttempt(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -494,9 +472,6 @@ func TestRetryTransportDoesNotRetryFailedRefresh(t *testing.T) {
 	}
 }
 
-// TestRetryTransportReusesConnectionAcrossAttempts is how a drained body shows
-// up in behavior: an abandoned one pins the connection and the retry opens a
-// fresh socket.
 func TestRetryTransportReusesConnectionAcrossAttempts(t *testing.T) {
 	var recorder callRecorder
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -518,9 +493,6 @@ func TestRetryTransportReusesConnectionAcrossAttempts(t *testing.T) {
 	}
 }
 
-// TestFetchIssueByIDReportsCancellation pins the error a canceled detail fetch
-// returns. The details pane cancels one on every superseded selection, so the
-// caller has to be able to tell that apart from a real failure.
 func TestFetchIssueByIDReportsCancellation(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Error("a canceled fetch still reached the server")

@@ -11,8 +11,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// editorFixture is chooserFixture with the typed fields filled in, since two of
-// the three read as empty on the shared one.
 func editorFixture(t *testing.T, field issueField) (*App, <-chan linearapi.UpdateIssueInput, <-chan func()) {
 	t.Helper()
 
@@ -26,8 +24,6 @@ func editorFixture(t *testing.T, field issueField) (*App, <-chan linearapi.Updat
 	drawDetails(t, app, 90)
 	cursorTo(t, app, field)
 
-	// Room for a write that should not have happened, so an extra one lands
-	// where the test can see it instead of blocking its goroutine.
 	writes := make(chan linearapi.UpdateIssueInput, 4)
 	app.updateIssueFunc = func(_ context.Context, input linearapi.UpdateIssueInput) (linearapi.Issue, error) {
 		writes <- input
@@ -38,8 +34,6 @@ func editorFixture(t *testing.T, field issueField) (*App, <-chan linearapi.Updat
 	return app, writes, pending
 }
 
-// openEditor presses Enter and draws twice: the first draw is what gives the
-// queued caret nudge a width, and the nudge is spent between them.
 func openEditor(t *testing.T, app *App, pending <-chan func()) []string {
 	t.Helper()
 	pressFieldKey(app, tcell.KeyEnter)
@@ -51,14 +45,10 @@ func openEditor(t *testing.T, app *App, pending <-chan func()) []string {
 	return drawDetails(t, app, 90)
 }
 
-// typeInto replaces what the box holds. The widget owns its text; only the two
-// keys the mode intercepts go through the handler.
 func typeInto(app *App, text string) {
 	app.detailsFieldInput.SetText(text)
 }
 
-// onlyWriteIs sends an edit that must land and returns it, having proven the
-// attempt before it sent nothing: this one arrived first, and none followed.
 func onlyWriteIs(t *testing.T, app *App, writes <-chan linearapi.UpdateIssueInput, pending <-chan func(), text string) linearapi.UpdateIssueInput {
 	t.Helper()
 	if app.detailsEdit.editing == "" {
@@ -67,8 +57,6 @@ func onlyWriteIs(t *testing.T, app *App, writes <-chan linearapi.UpdateIssueInpu
 	typeInto(app, text)
 	pressFieldKey(app, tcell.KeyEnter)
 	input := awaitWrite(t, writes)
-	// The skipped write's goroutine was launched first, so if it existed at all
-	// it has had longer than this to reach a channel with room on it.
 	select {
 	case extra := <-writes:
 		t.Fatalf("a second write followed: %+v", extra)
@@ -103,7 +91,6 @@ func TestTheBoxHangsOffTheFieldsValueColumn(t *testing.T) {
 	if !ok {
 		t.Fatal("the page carries no slot for the box")
 	}
-	// The gutter and the cursor's two cells: the box is the value, in place.
 	want := detailsLabelGutter + detailsCursorGutter
 	if slot.column != want {
 		t.Errorf("slot column = %d, want %d, the value's own column", slot.column, want)
@@ -114,15 +101,11 @@ func TestTheBoxHangsOffTheFieldsValueColumn(t *testing.T) {
 	}
 }
 
-// The row prints its value under the box otherwise, and a value longer than the
-// box shows its tail past the end of the field.
 func TestTheRowBeingEditedKeepsItsLabelAndDropsItsValue(t *testing.T) {
 	app, _, pending := editorFixture(t, issueFieldDueDate)
 
 	openEditor(t, app, pending)
 
-	// The page text under the widget, not the screen: the box paints the value
-	// back on top. A value longer than the box would show its tail past it.
 	page := strings.Split(app.detailsPageView.GetText(false), "\n")
 	row := findLine(t, page, "Due date:")
 	if strings.Contains(row, "2026-08-20") {
@@ -143,8 +126,6 @@ func TestTheDateBoxOpensOnWhatTheIssueHolds(t *testing.T) {
 func TestTheEstimateBoxOpensEmptyRatherThanOnADash(t *testing.T) {
 	app, _, pending := editorFixture(t, issueFieldEstimate)
 
-	// The read row prints "-" for no estimate, which typed back in is not a
-	// number. The box has to open empty instead.
 	if got := fieldEditorText(issueFieldEstimate, linearapi.Issue{}); got != "" {
 		t.Errorf("box would hold %q on an issue with no estimate, want it empty", got)
 	}
@@ -284,8 +265,6 @@ func TestALetterInTheBoxTypesRatherThanQuits(t *testing.T) {
 	app, _, pending := editorFixture(t, issueFieldTitle)
 	openEditor(t, app, pending)
 
-	// Handed back rather than swallowed is what puts it in the widget: the mode
-	// around the box is default-deny and would have quit on this.
 	if event := pressField(app, 'q'); event == nil {
 		t.Fatal("q was swallowed, want it handed to the box")
 	}
@@ -306,8 +285,6 @@ func TestTabInTheBoxMovesNoFocus(t *testing.T) {
 	}
 }
 
-// The keys the mode hands back have to land somewhere. Everything else here
-// fills the box directly, which would pass with the widget wired to nothing.
 func TestATypedLetterReachesTheBoxAndIsDrawnInIt(t *testing.T) {
 	app, _, pending := editorFixture(t, issueFieldEstimate)
 	openEditor(t, app, pending)
@@ -323,7 +300,6 @@ func TestATypedLetterReachesTheBoxAndIsDrawnInIt(t *testing.T) {
 	if got := app.detailsFieldInput.GetText(); got != "8" {
 		t.Fatalf("box holds %q, want the digit routed into it", got)
 	}
-	// Drawn in the row, not just held in the widget.
 	if row := findLine(t, drawDetails(t, app, 90), "Estimate:"); !strings.Contains(row, "8") {
 		t.Errorf("estimate row = %q, want the digit drawn in it", row)
 	}
@@ -367,15 +343,12 @@ func TestTheIssueChangingDropsTheBoxAndTheKeyboard(t *testing.T) {
 	if _, ok := app.fieldEditorSlot(); ok {
 		t.Error("the page still carries a slot for the box")
 	}
-	// The flag alone is half of it. The next event is what has to spend it.
 	pressField(app, 'j')
 	if app.app.GetFocus() == app.detailsFieldInput {
 		t.Error("a key later the keyboard is still in the box")
 	}
 }
 
-// Entering the mode reaches enterDetailsFocus on the cards, so the guard above
-// cannot be unconditional.
 func TestEnteringEditModeSurvivesItsOwnFocusCallback(t *testing.T) {
 	app := newDetailsTestApp(t)
 	seedChooserOptions(app)
@@ -392,7 +365,6 @@ func TestAKeyBringsABoxScrolledOffTheTopBack(t *testing.T) {
 	app, _, pending := editorFixture(t, issueFieldTitle)
 	openEditor(t, app, pending)
 
-	// What the wheel does: the page scrolls under a box that keeps the keyboard.
 	app.detailsPageView.ScrollTo(app.detailsEditorSpan.end+20, 0)
 	pressField(app, 'x')
 
@@ -401,8 +373,6 @@ func TestAKeyBringsABoxScrolledOffTheTopBack(t *testing.T) {
 	}
 }
 
-// The chooser dims the marker because the keyboard moved into a list below. A
-// box is in the row, so it stays lit and says the row is being written in.
 func TestTheMarkerSaysTheRowIsBeingWrittenIn(t *testing.T) {
 	app, _, pending := editorFixture(t, issueFieldTitle)
 
@@ -427,8 +397,6 @@ func TestClickingAWritingBoxClosesTheEditor(t *testing.T) {
 	app, _, pending := editorFixture(t, issueFieldTitle)
 	openEditor(t, app, pending)
 
-	// What a click into the compose box does: the widget focuses itself and its
-	// callback records the stop.
 	app.enterDetailsFocus(detailsFocusText)
 
 	if app.detailsEdit.on || app.detailsEdit.editing != "" {
@@ -436,8 +404,6 @@ func TestClickingAWritingBoxClosesTheEditor(t *testing.T) {
 	}
 }
 
-// The value column can fall past a pane this narrow, which would put the box
-// past the drawn line: invisible, and holding the keyboard.
 func TestANarrowPaneStillLeavesSomethingToTypeIn(t *testing.T) {
 	app, _, _ := editorFixture(t, issueFieldDueDate)
 	pressFieldKey(app, tcell.KeyEnter)
@@ -452,8 +418,6 @@ func TestANarrowPaneStillLeavesSomethingToTypeIn(t *testing.T) {
 	}
 }
 
-// Editing an issue should look like the issue. A filled field reads as a form,
-// and the title stops being bold the moment you type in it.
 func TestTheBoxDrawsTheValueTheWayTheRowReadsIt(t *testing.T) {
 	app, _, pending := editorFixture(t, issueFieldTitle)
 	openEditor(t, app, pending)
@@ -466,7 +430,6 @@ func TestTheBoxDrawsTheValueTheWayTheRowReadsIt(t *testing.T) {
 		t.Error("the title lost its weight on the way into the box")
 	}
 
-	// The box owns the keys, so the cursor cannot be walked out from under it.
 	pressFieldKey(app, tcell.KeyEscape)
 	cursorTo(t, app, issueFieldEstimate)
 	openEditor(t, app, pending)
@@ -475,8 +438,6 @@ func TestTheBoxDrawsTheValueTheWayTheRowReadsIt(t *testing.T) {
 	}
 }
 
-// Driven through the mouse capture rather than the focus callback: the
-// shortcut proved the guard and not the path that reaches it.
 func TestARealClickOnThePageBodyClosesTheEditor(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 180, 40, FocusDetails)
@@ -498,7 +459,6 @@ func TestARealClickOnThePageBodyClosesTheEditor(t *testing.T) {
 	}
 }
 
-// A press in the box is placing the caret, not leaving.
 func TestAClickInsideTheBoxKeepsIt(t *testing.T) {
 	app := newMouseTestApp(t)
 	layOut(t, app, 180, 40, FocusDetails)
@@ -514,8 +474,6 @@ func TestAClickInsideTheBoxKeepsIt(t *testing.T) {
 	}
 }
 
-// A title longer than the row opened on its head with the caret past the right
-// edge, so nothing on screen said where typing would land.
 func TestALongValueOpensScrolledToItsCaret(t *testing.T) {
 	app, _, pending := editorFixture(t, issueFieldTitle)
 	app.selectedIssue.Title = "HEAD" + strings.Repeat(" middle", 18) + " TAILEND"
@@ -528,8 +486,6 @@ func TestALongValueOpensScrolledToItsCaret(t *testing.T) {
 	if !strings.Contains(row, "TAILEND") || strings.Contains(row, "HEAD") {
 		t.Fatalf("title row = %q, want the end of the value on screen", row)
 	}
-	// Where a keystroke lands is where the caret is, and the only way to read
-	// it: the caret itself is the terminal's, not the page's.
 	event := pressField(app, 'X')
 	app.detailsPage.InputHandler()(event, func(tview.Primitive) {})
 	if got := app.detailsFieldInput.GetText(); !strings.HasSuffix(got, "TAILENDX") {
@@ -537,13 +493,10 @@ func TestALongValueOpensScrolledToItsCaret(t *testing.T) {
 	}
 }
 
-// Both freezes this feature caused were invisible to the stubbed queue: they
-// need a real loop, because the loop is what the blocking call waits on.
 func TestOpeningAFieldBoxKeepsTheAppAlive(t *testing.T) {
 	app := newDetailsTestApp(t)
 	seedChooserOptions(app)
 	app.updateDetailsView()
-	// The real queue, not the harness stub that runs it inline.
 	app.queueUpdateDraw = nil
 	app.app.SetRoot(app.detailsView, true)
 
@@ -558,8 +511,6 @@ func TestOpeningAFieldBoxKeepsTheAppAlive(t *testing.T) {
 	go func() { _ = app.app.Run() }()
 	t.Cleanup(func() { app.app.Stop() })
 
-	// On the loop, which is where the freeze lives: work running there cannot
-	// wait for the loop to run anything else.
 	opened := make(chan bool, 1)
 	go app.app.QueueUpdateDraw(func() {
 		app.enterDetailsEdit()

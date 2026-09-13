@@ -7,7 +7,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
-// TestResolveThemeKnownNames verifies every registered theme resolves by name.
 func TestResolveThemeKnownNames(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -28,16 +27,12 @@ func TestResolveThemeKnownNames(t *testing.T) {
 	}
 }
 
-// An unknown name returns the adaptive theme, so a config naming a theme that
-// has gone away still follows the terminal.
 func TestResolveThemeUnknownFallsBack(t *testing.T) {
 	if got := ResolveTheme("rainbow"); got != TerminalTheme() {
 		t.Errorf("ResolveTheme(\"rainbow\") = %+v, want the terminal theme", got)
 	}
 }
 
-// TestInverseTextColor verifies the explicit inverse color wins and legacy
-// themes fall back to their background.
 func TestInverseTextColor(t *testing.T) {
 	if got := LinearTheme.InverseTextColor(); got != LinearTheme.Background {
 		t.Errorf("LinearTheme.InverseTextColor() = %v, want Background %v", got, LinearTheme.Background)
@@ -49,9 +44,6 @@ func TestInverseTextColor(t *testing.T) {
 	}
 }
 
-// TestThemeTagsAssigneeUsesTheAccessor covers the tag a comment byline colors
-// its author with. Built off the raw field, a theme that predates it would tag
-// as [default] rather than falling back to the foreground.
 func TestThemeTagsAssigneeUsesTheAccessor(t *testing.T) {
 	if got := NewThemeTags(LinearTheme).AssigneeText; got != colorTag(LinearTheme.AssigneeText) {
 		t.Errorf("AssigneeText tag = %q, want the theme's own color %q", got, colorTag(LinearTheme.AssigneeText))
@@ -64,18 +56,12 @@ func TestThemeTagsAssigneeUsesTheAccessor(t *testing.T) {
 	}
 }
 
-// TestRosePineMoonBackgroundTransparent pins the transparent background: the
-// theme must keep tcell.ColorDefault so the terminal background shows through.
 func TestRosePineMoonBackgroundTransparent(t *testing.T) {
 	if RosePineMoonTheme.Background != tcell.ColorDefault {
 		t.Errorf("RosePineMoonTheme.Background = %v, want tcell.ColorDefault", RosePineMoonTheme.Background)
 	}
 }
 
-// TestRosePineMoonStaysInItsPalette is the guard on the borrowed color. The
-// palette has six hues and no green, and a role whose convention is green used
-// to carry a hex from another theme: on screen that read as a color the rest of
-// the app never uses. Every field here has to come from the palette above.
 func TestRosePineMoonStaysInItsPalette(t *testing.T) {
 	palette := map[tcell.Color]bool{
 		tcell.ColorDefault:    true,

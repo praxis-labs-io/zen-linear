@@ -7,8 +7,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/linearapi"
 )
 
-// issueField names a field of an issue: what a save is keyed by, and what the
-// details pane's field cursor points at.
 type issueField string
 
 const (
@@ -27,7 +25,6 @@ const (
 	issueFieldParent      issueField = "parent"
 )
 
-// issueFieldNames is what the status bar calls each field.
 var issueFieldNames = map[issueField]string{
 	issueFieldTitle:       "title",
 	issueFieldDescription: "description",
@@ -44,23 +41,16 @@ var issueFieldNames = map[issueField]string{
 	issueFieldParent:      "parent",
 }
 
-// issueFieldSave is one field's write. Build one with a constructor below, so
-// the id and the message come from the same place.
 type issueFieldSave struct {
-	// Captured where the user chose the issue. A picker outlives a refresh
-	// that moves the selection; reading it at send time writes to that.
 	issueID string
 	message string
 	apply   func(*linearapi.UpdateIssueInput)
 }
 
-// saveIssueField sends one field and flashes what it did.
 func (a *App) saveIssueField(save issueFieldSave) {
 	a.saveIssueFieldWithResult(save, nil)
 }
 
-// saveIssueFieldWithResult is saveIssueField plus the outcome, for a caller
-// holding words it cannot put back once its box has gone.
 func (a *App) saveIssueFieldWithResult(save issueFieldSave, onDone func(error)) {
 	if save.issueID == "" {
 		a.flashStatus("No issue selected")
@@ -74,8 +64,6 @@ func (a *App) saveIssueFieldWithResult(save issueFieldSave, onDone func(error)) 
 	a.runIssueUpdateWithResult(input, save.message, onDone)
 }
 
-// The three shapes a save reports. One rule here is how "Changed status for
-// ZNL-1" and "Updated due date" stop being in the same app.
 func fieldSetMessage(field issueField, value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -88,13 +76,10 @@ func fieldClearMessage(field issueField) string {
 	return fmt.Sprintf("Cleared %s", issueFieldNames[field])
 }
 
-// fieldUpdateMessage is for a field whose new value is not one name to print.
 func fieldUpdateMessage(field issueField) string {
 	return fmt.Sprintf("Updated %s", issueFieldNames[field])
 }
 
-// Refuses the empty title Linear refuses, so a caller can keep its editor open.
-// The message names no value: a title is too long for the toast corner.
 func issueFieldTitleSave(issue linearapi.Issue, text string) (issueFieldSave, error) {
 	title := strings.TrimSpace(text)
 	if title == "" {
@@ -107,8 +92,6 @@ func issueFieldTitleSave(issue linearapi.Issue, text string) (issueFieldSave, er
 	}, nil
 }
 
-// Sent as written, since leading whitespace is an indented code block to
-// Linear. Empty is the clear: Linear reads the empty string as one.
 func issueFieldDescriptionSave(issue linearapi.Issue, body string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
@@ -157,8 +140,6 @@ func issueFieldLabelsSave(issue linearapi.Issue, labelIDs []string) issueFieldSa
 	}
 }
 
-// A milestone belongs to one project, so a project change nulls it rather than
-// orphaning it against the new one.
 func issueFieldProjectSave(issue linearapi.Issue, projectID, projectName string) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
@@ -213,8 +194,6 @@ func issueFieldCycleClear(issue linearapi.Issue) issueFieldSave {
 	}
 }
 
-// Refuses what Linear would refuse, so a caller can keep its editor open on the
-// text the user actually typed.
 func issueFieldDueDateSave(issue linearapi.Issue, text string) (issueFieldSave, error) {
 	date := strings.TrimSpace(text)
 	if err := validateLinearDate(date); err != nil {
@@ -247,8 +226,7 @@ func issueFieldEstimateSave(issue linearapi.Issue, text string) (issueFieldSave,
 	}, nil
 }
 
-// ClearEstimate rather than a zero pointer, which Linear reads as an estimate
-// of nought.
+// ClearEstimate rather than a zero pointer, which Linear reads as an estimate of nought.
 func issueFieldEstimateClear(issue linearapi.Issue) issueFieldSave {
 	return issueFieldSave{
 		issueID: issue.ID,
@@ -257,8 +235,6 @@ func issueFieldEstimateClear(issue linearapi.Issue) issueFieldSave {
 	}
 }
 
-// A team move renumbers the issue, so the message names the identifier the user
-// picked it by rather than the one it now has.
 func issueFieldTeamSave(issue linearapi.Issue, teamID, teamName string) issueFieldSave {
 	message := fmt.Sprintf("Moved %s", issue.Identifier)
 	if teamName != "" {
@@ -287,8 +263,7 @@ func issueFieldParentClear(issue linearapi.Issue) issueFieldSave {
 	}
 }
 
-// clearedID is the empty string Linear reads as an explicit null. Each caller
-// needs its own address, hence a function and not a variable.
+// Linear reads an empty string as an explicit null; each caller needs its own address.
 func clearedID() *string {
 	empty := ""
 	return &empty

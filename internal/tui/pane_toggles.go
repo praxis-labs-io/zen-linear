@@ -1,37 +1,24 @@
 package tui
 
-// layoutMode captures how many panes fit the current terminal width.
 type layoutMode int
 
 const (
-	layoutWide   layoutMode = iota // three panes
-	layoutMedium                   // two panes: details appears only when focused
-	layoutNarrow                   // one pane: whichever has focus
+	layoutWide layoutMode = iota
+	layoutMedium
+	layoutNarrow
 )
 
-// Flex weights for the content split, as shares of the visible panes' total.
-// The nav pane takes a different share in each of the three arrangements it
-// appears in, so it has a weight per case; the other two panes keep theirs.
-// The issues weight is 15 because that is the smallest number leaving every
-// nav weight a whole one. Change a share by working out the fraction it should
-// be of the panes on screen, not by rescaling these.
 const (
-	navWeight            = 5 // nav and issues, with details toggled off
-	navWeightWithDetails = 6 // all three panes
-	navWeightZoomed      = 3 // the zoomed details view, with the nav kept as a spine
+	navWeight            = 5
+	navWeightWithDetails = 6
+	navWeightZoomed      = 3
 	issuesWeight         = 15
 	detailsWeight        = 10
 )
 
-// navWidthMedium fixes the nav pane's width in the two-pane layout rather than
-// giving it a share. A share of a terminal that narrow ran from 18 columns down
-// to 11 across the range, and 11 is a tree of ellipses. It is a column of names,
-// so it needs a width, not a fraction. It is 21 because that is what the
-// three-pane share gives the pane at the wide breakpoint, so narrowing the
-// terminal one column past that line cannot widen the pane.
+// Fixed rather than a share, which ran down to 11 columns; 21 matches the three-pane share at the wide breakpoint.
 const navWidthMedium = 21
 
-// layoutModeForWidth picks the layout mode for a terminal width in cells.
 func layoutModeForWidth(width int) layoutMode {
 	switch {
 	case width >= 110:
@@ -43,10 +30,6 @@ func layoutModeForWidth(width int) layoutMode {
 	}
 }
 
-// rebuildContentLayout re-adds the visible panes to the content flex,
-// honoring both manual pane toggles and the responsive layout mode. The
-// issues column is the anchor; on narrow terminals only the focused pane
-// shows, and focus movement (h/l and the pane numbers) walks between panes.
 func (a *App) rebuildContentLayout() {
 	if a.contentFlex == nil {
 		return
@@ -58,10 +41,6 @@ func (a *App) rebuildContentLayout() {
 	nav := navWeight
 	navFixed := 0
 	if a.detailsZoomed && showDetails {
-		// The zoom drops the issues list. The nav tree is the spine you keep
-		// your place on, so it survives on a wide terminal; below that
-		// breakpoint it does not fit beside the reading measure, and the
-		// reading is the point.
 		a.contentFlex.Clear()
 		if showNav && a.layoutMode == layoutWide {
 			a.contentFlex.AddItem(a.navigationPanel, 0, navWeightZoomed, a.focusedPane == FocusNavigation)
@@ -89,7 +68,6 @@ func (a *App) rebuildContentLayout() {
 
 	a.contentFlex.Clear()
 	if showNav {
-		// A fixed size wins over the weight; only the medium layout sets one.
 		a.contentFlex.AddItem(a.navigationPanel, navFixed, nav, a.focusedPane == FocusNavigation)
 	}
 	if showIssues {
@@ -100,41 +78,23 @@ func (a *App) rebuildContentLayout() {
 	}
 }
 
-// watchLayoutWidth re-evaluates the responsive layout before every draw and
-// rebuilds the panes when the terminal crosses a breakpoint.
-//
-// It runs inside Application.draw, which holds the app lock for the whole
-// frame, so nothing here may call SetFocus: that takes the same lock and the
-// process freezes with no way out but a kill. Everything below sets App fields
-// and primitive state only.
+// Runs inside Application.draw under the app lock, so it must never call SetFocus or GetFocus.
 func (a *App) watchLayoutWidth(width int) {
 	mode := layoutModeForWidth(width)
 	if mode == a.layoutMode {
 		return
 	}
 	a.layoutMode = mode
-	// The responsive modes mount whatever holds focus, so a plain rebuild keeps
-	// it. The zoom does not: it drops the nav tree below the wide breakpoint
-	// whoever is in it, which leaves the keys on a tree that is no longer on
-	// screen. Correct the pane now, and flag the keyboard to follow.
 	if a.detailsZoomed && a.focusedPane != FocusDetails {
 		a.resolveFocusedPane()
 		a.layoutFocusStale = true
 	}
 	a.rebuildContentLayout()
-	// Every cue the moved pane changed, repainted in the frame that moved it.
-	// The comment ring is left out: it rewrites the details page, and the draw
-	// this runs inside has already measured it.
 	a.applyPaneBorders()
 	a.applyNavSearchStyles()
 	a.updateStatusBar()
 }
 
-// repairLayoutFocus puts the keyboard where a breakpoint or a closing editor
-// moved it off.
-// Every event path calls it before routing, the way releaseStrandedCompose
-// does, since the draw that moved the pane could not move focus itself. No
-// event can arrive in between, so nobody sees the gap.
 func (a *App) repairLayoutFocus() {
 	if !a.layoutFocusStale {
 		return
@@ -143,7 +103,6 @@ func (a *App) repairLayoutFocus() {
 	a.updateFocus()
 }
 
-// toggleNavigationPane shows or hides the navigation pane.
 func (a *App) toggleNavigationPane() {
 	a.navigationHidden = !a.navigationHidden
 	a.rebuildContentLayout()
@@ -155,11 +114,6 @@ func (a *App) toggleNavigationPane() {
 	}
 }
 
-// toggleDetailsPane shows or hides the details pane. It is inert while zoomed:
-// the zoom is the details pane holding the whole screen, so a key that hides it
-// from inside can only end the zoom, and ending the zoom is what v is for. It
-// used to do exactly that, which read as the key doing something unrelated to
-// what it says.
 func (a *App) toggleDetailsPane() {
 	if a.detailsZoomed {
 		return
@@ -174,10 +128,6 @@ func (a *App) toggleDetailsPane() {
 	}
 }
 
-// releaseDetailsZoom undoes what the zoom changed: the flag, and the details
-// pane it forced open. Every way out of a zoom goes through here, so the
-// layout lands the same whichever key ended it. Restoring focus is the
-// caller's, since that is the one thing they disagree on.
 func (a *App) releaseDetailsZoom() {
 	if !a.detailsZoomed {
 		return
@@ -186,17 +136,11 @@ func (a *App) releaseDetailsZoom() {
 	a.detailsHidden = a.zoomPreviousHidden
 }
 
-// toggleDetailsZoom widens the details pane over the issues list, for reading a
-// whole issue rather than glancing at one.
 func (a *App) toggleDetailsZoom() {
 	if !a.detailsZoomed && a.GetSelectedIssue() == nil {
 		a.flashStatus("No issue selected")
 		return
 	}
-	// The zoom is a round trip: it hands you the details pane to read, then
-	// puts the layout back the way it was. Zooming out of the pane you were
-	// already in leaves you in it, and a details pane that was closed before
-	// the zoom closes again after it.
 	if a.detailsZoomed {
 		a.releaseDetailsZoom()
 		a.focusedPane = a.zoomPreviousPane

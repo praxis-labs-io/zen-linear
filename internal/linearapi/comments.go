@@ -8,12 +8,6 @@ import (
 	"github.com/shurcooL/graphql"
 )
 
-// commentNode is one comment as a mutation hands it back. Create and update
-// share it so a comment just written and one written an hour ago are the same
-// shape on the way in.
-//
-// It carries no issue: the payload is asked for the comment alone, and the
-// caller already names the issue it wrote to.
 type commentNode struct {
 	ID        graphql.String
 	Body      graphql.String
@@ -30,7 +24,6 @@ type commentNode struct {
 	}
 }
 
-// toComment converts the node, stamped with the issue the caller wrote to.
 func (n commentNode) toComment(issueID string) Comment {
 	parentID := ""
 	if n.ParentID != nil {
@@ -54,7 +47,6 @@ func (n commentNode) toComment(issueID string) Comment {
 	}
 }
 
-// CreateComment creates a new comment on an issue.
 func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (Comment, error) {
 	var mutation struct {
 		CommentCreate struct {
@@ -63,7 +55,6 @@ func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (C
 		} `graphql:"commentCreate(input: $input)"`
 	}
 
-	// Build input object
 	commentInput := make(CommentCreateInput)
 	commentInput["issueId"] = graphql.ID(input.IssueID)
 	commentInput["body"] = graphql.String(input.Body)
@@ -89,8 +80,6 @@ func (c *Client) CreateComment(ctx context.Context, input CreateCommentInput) (C
 	return mutation.CommentCreate.Comment.toComment(input.IssueID), nil
 }
 
-// UpdateComment rewrites a comment's body and returns it as Linear recorded it,
-// which is where the updatedAt behind the "edited" marker comes from.
 func (c *Client) UpdateComment(ctx context.Context, input UpdateCommentInput) (Comment, error) {
 	var mutation struct {
 		CommentUpdate struct {
@@ -120,11 +109,6 @@ func (c *Client) UpdateComment(ctx context.Context, input UpdateCommentInput) (C
 	return mutation.CommentUpdate.Comment.toComment(input.IssueID), nil
 }
 
-// DeleteComment removes a comment. Linear keeps the replies under a deleted
-// parent, so a thread outlives its root.
-//
-// The payload carries nothing worth reading back: the comment is gone, and the
-// error is the whole of the answer.
 func (c *Client) DeleteComment(ctx context.Context, commentID string) error {
 	var mutation struct {
 		CommentDelete struct {

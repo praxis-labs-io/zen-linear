@@ -7,8 +7,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/logger"
 )
 
-// workspaceNameForKey returns the name of the workspace whose API key matches
-// the given token, or "" when none matches (explicit key or OAuth session).
 func workspaceNameForKey(workspaces []config.Workspace, token string) string {
 	if token == "" {
 		return ""
@@ -21,7 +19,6 @@ func workspaceNameForKey(workspaces []config.Workspace, token string) string {
 	return ""
 }
 
-// workspacePickerItems builds picker entries, marking the active workspace.
 func workspacePickerItems(workspaces []config.Workspace, active string) []PickerItem {
 	items := make([]PickerItem, 0, len(workspaces))
 	for _, workspace := range workspaces {
@@ -34,7 +31,6 @@ func workspacePickerItems(workspaces []config.Workspace, active string) []Picker
 	return items
 }
 
-// showWorkspacePicker opens the workspace selection modal.
 func (a *App) showWorkspacePicker() {
 	if len(a.config.Workspaces) == 0 {
 		a.flashError("No workspaces configured — add a workspaces list to config.json")
@@ -46,8 +42,6 @@ func (a *App) showWorkspacePicker() {
 	})
 }
 
-// switchWorkspace swaps the API client to the named workspace's key and
-// reloads all data through the settings-apply path.
 func (a *App) switchWorkspace(name string) {
 	if name == a.activeWorkspaceName {
 		a.flashStatus(fmt.Sprintf("Already on %s", name))
@@ -75,22 +69,14 @@ func (a *App) switchWorkspace(name string) {
 	}
 
 	logger.Info("tui.workspace: switching workspace name=%s", workspace.Name)
-	// The switch clears every field the snapshot reads, so the outgoing
-	// workspace's place has to go to disk before applySettings runs.
 	a.persistSession()
-	// Unposted comments belong to issues this workspace is leaving behind.
-	// Dropped here rather than in resetCachedState, which a settings save also
-	// runs: saving settings is no reason to lose what someone has written.
 	a.clearComposeDrafts()
 	a.activeWorkspaceName = workspace.Name
 	a.markSessionWorkspace()
-	// A workspace key is a personal API key, not an OAuth token, so drop any
-	// bearer scheme and 401 refresh carried from an OAuth session first.
 	a.apiUseBearer = false
 	a.apiOnUnauthorized = nil
 	a.config.LinearAPIKey = key
 	a.reloadWorkspace()
-	// The navigation pane's title is the workspace name.
 	a.updateAllPaneTitles()
 	a.flashSuccess(fmt.Sprintf("Switched to %s", workspace.Name))
 }

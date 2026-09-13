@@ -19,26 +19,15 @@ const (
 	defaultMaxAttempts = 3
 	defaultBaseDelay   = 250 * time.Millisecond
 	defaultMaxDelay    = 4 * time.Second
-	// maxRetryAfterWait abandons a retry the server wants delayed past what
-	// anyone will sit in front of. Clamping the server's number down instead
-	// would retry earlier than we were told, which is worse than not retrying.
-	maxRetryAfterWait = 8 * time.Second
-	// retryAfterJitter spreads clients the server handed an identical
-	// Retry-After, which would otherwise all wake and re-burst together.
-	retryAfterJitter = 250 * time.Millisecond
-	// minRetryBudget keeps a backoff from eating the whole remaining deadline
-	// and leaving no room for the request it is waiting to make.
-	minRetryBudget = 500 * time.Millisecond
-	maxDrainBytes  = 64 << 10
+	maxRetryAfterWait  = 8 * time.Second
+	retryAfterJitter   = 250 * time.Millisecond
+	minRetryBudget     = 500 * time.Millisecond
+	maxDrainBytes      = 64 << 10
 )
 
-// errAuthRefresh marks a token exchange that failed. Replaying the request just
-// fails the same way, so the retry layer treats it as terminal.
 var errAuthRefresh = errors.New("refresh auth after 401")
 
-// replayableKey marks a context as carrying an operation that is safe to send
-// again. Only queries set it. A mutation that draws a 5xx or a dropped
-// connection may have been applied already, so a replay would double-apply it.
+// A mutation that drew a 5xx may already have applied, so only queries set this.
 type replayableKey struct{}
 
 func withReplayable(ctx context.Context) context.Context {
@@ -50,9 +39,7 @@ func isReplayable(ctx context.Context) bool {
 	return replayable
 }
 
-// retryTransport resends a request after a rate limit or a transient server or
-// network failure. It wraps authTransport rather than living inside it, so every attempt
-// re-stamps the token a concurrent refresh may have rotated.
+// Wraps authTransport so every attempt re-stamps a token a refresh may have rotated.
 type retryTransport struct {
 	base        http.RoundTripper
 	maxAttempts int
@@ -70,13 +57,10 @@ func newRetryTransport(base http.RoundTripper) *retryTransport {
 	}
 }
 
-// RoundTrip implements http.RoundTripper.
 func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 	replayable := isReplayable(ctx)
 
-	// Clone once up front: on a request without GetBody this is what installs
-	// it, and that is what makes every later attempt possible.
 	if _, err := cloneRequestForRetry(req); err != nil {
 		return nil, err
 	}
@@ -94,16 +78,11 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		delay, ok := t.retryDelay(attempt, resp, snap, limited && named)
 		if !ok || !fitsInDeadline(ctx, delay) {
-			// Both stop paths hand the response back unread, so the caller
-			// still gets the status and body it would have seen without a
-			// retry layer at all.
 			return resp, err
 		}
 
 		logger.Debug("linearapi.retry: retrying attempt=%d/%d status=%s wait=%s",
 			attempt+1, t.maxAttempts, statusOf(resp), delay)
-		// Committed to another attempt, so free the connection before waiting
-		// on it rather than pinning it for the length of the backoff.
 		drainAndClose(resp)
 		if waitErr := sleepBeforeRetry(ctx, delay); waitErr != nil {
 			return nil, waitErr
@@ -111,9 +90,6 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 }
 
-// observe records what a response said about the user's budgets and reports
-// whether it was a refusal to spend more. Every response is read for it,
-// mutations included: the budget belongs to the user, not to the request.
 func (t *retryTransport) observe(resp *http.Response) (snap RateLimitSnapshot, named, limited bool) {
 	if resp == nil {
 		return RateLimitSnapshot{}, false, false
@@ -129,9 +105,6 @@ func (t *retryTransport) observe(resp *http.Response) (snap RateLimitSnapshot, n
 	return snap, named, true
 }
 
-// shouldRetry classifies one attempt. Only a replayable operation is ever sent
-// again: a rate limit is usually rejected before the resolver runs, but
-// "usually" is not a guarantee worth a duplicate comment.
 func shouldRetry(resp *http.Response, err error, replayable, limited bool) bool {
 	if !replayable {
 		return false
@@ -145,9 +118,6 @@ func shouldRetry(resp *http.Response, err error, replayable, limited bool) bool 
 	return limited || resp.StatusCode >= 500
 }
 
-// isTransient reports whether a transport error is worth another attempt.
-// A refused name, an untrusted certificate, and a canceled request all fail the
-// same way every time, so retrying them only delays the error the user needs.
 func isTransient(err error) bool {
 	if errors.Is(err, errAuthRefresh) || errors.Is(err, context.Canceled) ||
 		errors.Is(err, context.DeadlineExceeded) {
@@ -161,25 +131,14 @@ func isTransient(err error) bool {
 	return !errors.As(err, &certErr)
 }
 
-// retryDelay picks how long to wait, reporting false when the wait is long
-// enough that giving up beats holding the request.
 func (t *retryTransport) retryDelay(attempt int, resp *http.Response, snap RateLimitSnapshot, limited bool) (time.Duration, bool) {
 	if resp != nil {
 		if wait, ok := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now()); ok {
 			if wait > maxRetryAfterWait {
 				return 0, false
 			}
-			// Every client rate-limited in the same burst is handed the same
-			// number, so honoring it verbatim wakes them all together. Jitter
-			// on top staggers them; never below, because the server named a
-			// floor.
 			return wait + rand.N(retryAfterJitter), true
 		}
-		// Linear sends no Retry-After, so the end of the window its own headers
-		// count down is the only floor there is. Same rule, same jitter. Only a
-		// window this response named is trusted: one carried over from an older
-		// answer may have closed already, and waiting nothing on it spends an
-		// attempt to be refused again.
 		if limited {
 			if wait, ok := snap.wait(time.Now()); ok {
 				if wait > maxRetryAfterWait {
@@ -192,9 +151,6 @@ func (t *retryTransport) retryDelay(attempt int, resp *http.Response, snap RateL
 	return t.nextBackoff(attempt), true
 }
 
-// fitsInDeadline reports whether a wait leaves room for the request it precedes.
-// http.Client.Timeout lands on the context as a deadline, so a retry spends the
-// same budget; sleeping past it would turn a readable 503 into a deadline error.
 func fitsInDeadline(ctx context.Context, delay time.Duration) bool {
 	deadline, ok := ctx.Deadline()
 	if !ok {
@@ -203,9 +159,6 @@ func fitsInDeadline(ctx context.Context, delay time.Duration) bool {
 	return !time.Now().Add(delay + minRetryBudget).After(deadline)
 }
 
-// nextBackoff returns the delay before the attempt after this one. Equal jitter
-// keeps a burst of requests from re-synchronizing on every retry without
-// letting the delay collapse to zero.
 func (t *retryTransport) nextBackoff(attempt int) time.Duration {
 	delay := t.baseDelay << attempt
 	if delay > t.maxDelay || delay <= 0 {
@@ -218,8 +171,6 @@ func (t *retryTransport) nextBackoff(attempt int) time.Duration {
 	return half + rand.N(half)
 }
 
-// parseRetryAfter reads both forms RFC 9110 allows: delta-seconds and an
-// HTTP-date. A value of 0 is legal and means retry now.
 func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -241,8 +192,6 @@ func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
 	return 0, false
 }
 
-// sleepBeforeRetry waits out the backoff, reporting the context's error when
-// the caller gives up mid-wait.
 func sleepBeforeRetry(ctx context.Context, delay time.Duration) error {
 	if delay <= 0 {
 		return nil
@@ -257,8 +206,6 @@ func sleepBeforeRetry(ctx context.Context, delay time.Duration) error {
 	}
 }
 
-// drainAndClose frees the connection for reuse; an unread body pins it and the
-// next attempt opens a fresh one.
 func drainAndClose(resp *http.Response) {
 	if resp == nil || resp.Body == nil {
 		return

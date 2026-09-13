@@ -10,8 +10,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// Column order matches Linear's list view: priority, id, state, title,
-// labels, assignee, updated.
 const (
 	rowColPriority = iota
 	rowColID
@@ -40,7 +38,7 @@ func TestRenderIssueRow(t *testing.T) {
 				Title:      "Test Issue",
 				State:      "Todo",
 				Assignee:   "John Doe",
-				Priority:   3, // Normal priority
+				Priority:   3,
 				Labels:     []linearapi.IssueLabel{{Name: "Bug"}, {Name: "UI"}},
 			},
 			wantID:       "LIN-1",
@@ -57,7 +55,7 @@ func TestRenderIssueRow(t *testing.T) {
 				Title:      "Another Issue",
 				State:      "In Progress",
 				Assignee:   "",
-				Priority:   1, // Urgent priority
+				Priority:   1,
 			},
 			wantID:       "LIN-2",
 			wantState:    "⊙",
@@ -73,9 +71,9 @@ func TestRenderIssueRow(t *testing.T) {
 				Title:      "Long ID Issue",
 				State:      "Done",
 				Assignee:   "Jane",
-				Priority:   0, // No priority
+				Priority:   0,
 			},
-			wantID:       "VERY-LONG-", // truncated to 10 chars
+			wantID:       "VERY-LONG-",
 			wantState:    "●",
 			wantPriority: "-",
 			wantAssignee: "J",
@@ -114,10 +112,10 @@ func TestRenderIssueRow(t *testing.T) {
 func TestRenderIssueRow_Truncation(t *testing.T) {
 	issue := linearapi.Issue{
 		ID:         "test",
-		Identifier: "ABCDEFGHIJKLMNOP", // 16 chars
+		Identifier: "ABCDEFGHIJKLMNOP",
 		Title:      "Test",
 		State:      "In Progress",
-		Assignee:   "ABCDEFGHIJKLMNOP", // 16 chars
+		Assignee:   "ABCDEFGHIJKLMNOP",
 		Priority:   1,
 		UpdatedAt:  time.Now(),
 	}
@@ -152,8 +150,6 @@ func TestBuildFlatSearchRowsPreservesOrder(t *testing.T) {
 		ID: "child", Identifier: "ABC-2", Title: "Child", State: "Todo",
 		Parent: &linearapi.IssueRef{ID: "parent"},
 	}
-	// Relevance order puts the child first; flat rows must keep it there
-	// instead of re-nesting it under its parent.
 	rows, idToIssue := buildFlatSearchRows([]linearapi.Issue{child, parent})
 
 	if len(rows) != 2 {
@@ -172,8 +168,6 @@ func TestBuildFlatSearchRowsPreservesOrder(t *testing.T) {
 	}
 }
 
-// TestFormatStateIcon pins one distinct icon and color per lifecycle state.
-// Triage used to fall through to the Todo default and render identically.
 func TestFormatStateIcon(t *testing.T) {
 	tests := []struct {
 		state     string
@@ -198,8 +192,6 @@ func TestFormatStateIcon(t *testing.T) {
 	}
 }
 
-// TestFormatStateIconTriageFallsBackToTodo covers themes that predate
-// StatusTriage: the icon still separates triage from todo.
 func TestFormatStateIconTriageFallsBackToTodo(t *testing.T) {
 	legacy := LinearTheme
 	legacy.StatusTriage = tcell.ColorDefault
@@ -213,8 +205,6 @@ func TestFormatStateIconTriageFallsBackToTodo(t *testing.T) {
 	}
 }
 
-// TestFormatAssigneeInitials covers the name shapes the column has to render
-// in two cells.
 func TestFormatAssigneeInitials(t *testing.T) {
 	tests := []struct {
 		name string
@@ -243,8 +233,6 @@ func TestFormatAssigneeInitials(t *testing.T) {
 	}
 }
 
-// TestAssigneeColumnCell pins what the list actually renders, including the
-// dash an unassigned issue gets.
 func TestAssigneeColumnCell(t *testing.T) {
 	assigned := &linearapi.Issue{Assignee: "Drew White"}
 	if text, color := issueColumnCell(ColumnAssignee, assigned, "", LinearTheme); text != "DW" || color != LinearTheme.AssigneeText {
@@ -257,8 +245,6 @@ func TestAssigneeColumnCell(t *testing.T) {
 	}
 }
 
-// TestAssigneeTextColorFallsBackToForeground covers themes that predate the
-// AssigneeText field.
 func TestAssigneeTextColorFallsBackToForeground(t *testing.T) {
 	legacy := LinearTheme
 	legacy.AssigneeText = tcell.ColorDefault
@@ -268,8 +254,6 @@ func TestAssigneeTextColorFallsBackToForeground(t *testing.T) {
 	}
 }
 
-// renderTableLines draws an issues table and returns the screen as text, one
-// string per row.
 func renderTableLines(t *testing.T, issues []linearapi.Issue, columns []string) []string {
 	t.Helper()
 
@@ -306,9 +290,6 @@ func renderTableLines(t *testing.T, issues []linearapi.Issue, columns []string) 
 	return lines
 }
 
-// TestIssueColumnHeadersAlignWithCells covers the header row sitting one cell
-// left of its values: every ID cell leads with the space the tree icon uses,
-// and the header has to lead with one too.
 func TestIssueColumnHeadersAlignWithCells(t *testing.T) {
 	issues := []linearapi.Issue{
 		{ID: "1", Identifier: "ZNL-82", Title: "Triage status icons", State: "Triage"},
@@ -340,9 +321,6 @@ func TestIssueColumnHeadersAlignWithCells(t *testing.T) {
 	}
 }
 
-// TestGoToTopReachesTheIssuesTable pins the collision the default set cleared.
-// edit_labels held g, so the key never got past the command dispatch and the
-// list had no way to jump to either end.
 func TestGoToTopReachesTheIssuesTable(t *testing.T) {
 	app := newUXTestApp(t)
 	app.focusedPane = FocusIssues

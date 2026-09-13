@@ -9,9 +9,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// appOnScreen builds an app drawn on a terminal of the given size. The modals
-// size themselves against the screen, and the screen is only known once
-// something has been drawn on it.
 func appOnScreen(t *testing.T, width, height int) *App {
 	t.Helper()
 	app := newUXTestApp(t)
@@ -23,9 +20,6 @@ func appOnScreen(t *testing.T, width, height int) *App {
 	return app
 }
 
-// listPanelRect is where a list modal's bordered panel was drawn, worked back
-// from the list inside it: the panel is the list plus a gutter and a border
-// each side.
 func listPanelRect(t *testing.T, list *tview.List) (x, y, width int) {
 	t.Helper()
 	listX, listY, listWidth, _ := list.GetRect()
@@ -35,8 +29,6 @@ func listPanelRect(t *testing.T, list *tview.List) (x, y, width int) {
 	return listX - modalGutter - 1, listY, listWidth + 2*(modalGutter+1)
 }
 
-// rowsOf is where a primitive was drawn vertically: its top row and how many
-// rows it took.
 func rowsOf(p tview.Primitive) (y, height int) {
 	_, y, _, height = p.GetRect()
 	return y, height
@@ -50,12 +42,6 @@ func pickerItems(n int) []PickerItem {
 	return items
 }
 
-// TestListModalsFitASmallScreen pins both panels inside the terminal, and pins
-// a row of options inside the panel. Laid out at a fixed 50x15 and 60x20 they
-// were drawn from a negative origin, which took the footer off a short screen
-// and the first columns of every row off a narrow one. Sizing them to the
-// screen then took the other end: the chrome ate the whole panel and the list
-// was drawn at zero rows, or below zero, with the panel edges still tidy.
 func TestListModalsFitASmallScreen(t *testing.T) {
 	sizes := []struct{ width, height int }{
 		{100, 12},
@@ -80,9 +66,6 @@ func TestListModalsFitASmallScreen(t *testing.T) {
 	}
 }
 
-// assertPanelOnScreen checks the panel's own edges, worked back from the two
-// rows that sit against them: the list is a gutter and a border in from each
-// side, and the hint is the last row above the bottom border.
 func assertPanelOnScreen(t *testing.T, list *tview.List, hint *tview.TextView, screenW, screenH int) {
 	t.Helper()
 	x, listY, width := listPanelRect(t, list)
@@ -91,21 +74,17 @@ func assertPanelOnScreen(t *testing.T, list *tview.List, hint *tview.TextView, s
 	if x < 0 || x+width > screenW {
 		t.Errorf("panel spans columns %d..%d on a %d-column screen", x, x+width, screenW)
 	}
-	// A border row above the list, and one below the hint.
 	if listY < 1 {
 		t.Errorf("the list starts at row %d, leaving no room for the top border", listY)
 	}
 	if bottom := hintY + 1; bottom >= screenH {
 		t.Errorf("the bottom border lands on row %d of a %d-row screen", bottom, screenH)
 	}
-	// A panel with no room left for an option is chrome around nothing.
 	if _, rows := rowsOf(list); rows < 1 {
 		t.Errorf("the list drew %d rows, want at least one option visible", rows)
 	}
 }
 
-// TestPickerHeightTracksItsOptions is the fixed-height fix: a two-option picker
-// cost fifteen rows whatever it held.
 func TestPickerHeightTracksItsOptions(t *testing.T) {
 	short := appOnScreen(t, 100, 30)
 	short.pickerModal.Show("Group Issues By", pickerItems(2), func(PickerItem) {})
@@ -125,8 +104,6 @@ func TestPickerHeightTracksItsOptions(t *testing.T) {
 	}
 }
 
-// TestPickerCapsItsHeight keeps a long list scrolling rather than filling the
-// terminal.
 func TestPickerCapsItsHeight(t *testing.T) {
 	app := appOnScreen(t, 100, 40)
 	app.pickerModal.Show("Set Status", pickerItems(30), func(PickerItem) {})
@@ -136,8 +113,6 @@ func TestPickerCapsItsHeight(t *testing.T) {
 	}
 }
 
-// TestPickerNamesItselfOnTheBorderOnly is the duplicate-title fix: the title
-// was a content row, and edit labels drew it twice.
 func TestPickerNamesItselfOnTheBorderOnly(t *testing.T) {
 	app := appOnScreen(t, 100, 30)
 	app.pickerModal.Show("Set Priority", pickerItems(3), func(PickerItem) {})
@@ -148,8 +123,6 @@ func TestPickerNamesItselfOnTheBorderOnly(t *testing.T) {
 	}
 }
 
-// TestEmptyPickerSaysSoAndPicksNothing covers the missing empty state. An
-// options-less picker used to draw a blank box that answered Enter.
 func TestEmptyPickerSaysSoAndPicksNothing(t *testing.T) {
 	app := appOnScreen(t, 100, 30)
 	chosen := false
@@ -180,8 +153,6 @@ func multiSelectItems(n int) []MultiSelectItem {
 	return items
 }
 
-// TestEmptyMultiSelectSavesNothing is the other half of the empty state: an
-// empty selection over real options is a choice, over none it is not.
 func TestEmptyMultiSelectSavesNothing(t *testing.T) {
 	app := appOnScreen(t, 100, 30)
 	saved := false
@@ -201,9 +172,6 @@ func TestEmptyMultiSelectSavesNothing(t *testing.T) {
 	}
 }
 
-// TestMultiSelectRewritesOneRowPerToggle pins the arrow keys to moving the
-// list's own cursor. Every press used to rebuild every row to redraw a
-// hand-rolled "> " marker.
 func TestMultiSelectRewritesOneRowPerToggle(t *testing.T) {
 	app := appOnScreen(t, 100, 30)
 	app.multiSelectModal.Show("Filter Labels", []MultiSelectItem{
@@ -237,8 +205,6 @@ func multiSelectRows(app *App) string {
 	return rows
 }
 
-// TestAgentOutputFitsTheScreen is the one that did not fit at all: 110x32 is
-// larger than a 100x30 terminal before the modal draws anything.
 func TestAgentOutputFitsTheScreen(t *testing.T) {
 	app := appOnScreen(t, 100, 30)
 	app.agentOutputModal.Show("Summarize", func() {})
@@ -254,13 +220,7 @@ func TestAgentOutputFitsTheScreen(t *testing.T) {
 	}
 }
 
-// TestAgentOutputKeepsBothViewsReadable is the other end of sizing it to the
-// screen: clamped without a floor, the chrome took the whole panel and the
-// stream view was drawn at a negative height while the panel edges stayed tidy.
 func TestAgentOutputKeepsBothViewsReadable(t *testing.T) {
-	// agentOutputLeastHeight is the floor: a border, a status line, a footer and
-	// two bordered views. Under that the terminal cannot hold the modal at all,
-	// and clipping is the only thing left to do.
 	for _, size := range []struct{ width, height int }{{100, agentOutputLeastHeight}, {60, 20}, {120, 40}} {
 		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
 			app := appOnScreen(t, size.width, size.height)
@@ -268,8 +228,6 @@ func TestAgentOutputKeepsBothViewsReadable(t *testing.T) {
 			t.Cleanup(app.agentOutputModal.Hide)
 			app.app.ForceDraw()
 
-			// Inside its own border, which is what the run is printed into. The
-			// rect alone passed on a view that was all border and no content.
 			if _, rows := rowsOf(app.agentOutputModal.streamView); rows-2 < 1 {
 				t.Errorf("the stream view has %d rows inside its border", rows-2)
 			}
@@ -280,8 +238,6 @@ func TestAgentOutputKeepsBothViewsReadable(t *testing.T) {
 	}
 }
 
-// TestAgentOutputTitleIsPaddedOnce covers the caller already passing a padded
-// title, which the shell then padded again.
 func TestAgentOutputTitleIsPaddedOnce(t *testing.T) {
 	app := appOnScreen(t, 120, 40)
 	app.agentOutputModal.Show("  Claude Output  ", func() {})
@@ -292,8 +248,6 @@ func TestAgentOutputTitleIsPaddedOnce(t *testing.T) {
 	}
 }
 
-// TestAgentOutputLightsTheViewTabLandsOn covers the focus cue: both views wore
-// the accent, so nothing said which one the scroll keys reached.
 func TestAgentOutputLightsTheViewTabLandsOn(t *testing.T) {
 	app := appOnScreen(t, 120, 40)
 	modal := app.agentOutputModal
@@ -316,7 +270,6 @@ func TestAgentOutputLightsTheViewTabLandsOn(t *testing.T) {
 	}
 }
 
-// markOf is the toggle box a row drew, past the color tag in front of it.
 func markOf(row string) rune {
 	for _, r := range row {
 		if r == '◼' || r == '◻' {
@@ -326,11 +279,6 @@ func markOf(row string) rune {
 	return 0
 }
 
-// TestClickingAPickerRowThatOpensAnother covers the trap tview's List sets: it
-// assigns currentItem after firing the row's callback, and one picker chains
-// into another on the same list, so the second picker was left holding the row
-// index clicked in the first. A two-option picker holding index 2 highlights
-// nothing and answers no keys.
 func TestClickingAPickerRowThatOpensAnother(t *testing.T) {
 	app := appOnScreen(t, 100, 30)
 	app.pickerModal.Show("Filter Issues", []PickerItem{

@@ -9,7 +9,6 @@ import (
 	"github.com/praxis-labs-io/zen-linear/internal/config"
 )
 
-// OpenURL opens url in the user's default browser.
 func OpenURL(url string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
@@ -26,7 +25,7 @@ func OpenURL(url string) error {
 	return nil
 }
 
-// ClientID returns LINEAR_CLIENT_ID if set, otherwise the embedded default.
+// ClientID returns LINEAR_CLIENT_ID when set, else defaultID.
 func ClientID(defaultID string) string {
 	if id := os.Getenv(config.LinearClientIDEnv); id != "" {
 		return id

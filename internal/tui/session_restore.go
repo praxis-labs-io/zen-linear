@@ -10,8 +10,6 @@ import (
 	"github.com/rivo/tview"
 )
 
-// teamChildren holds a team's lazily loaded navigation children, fetched so a
-// restored project, status, or cycle node exists to select.
 type teamChildren struct {
 	projects []linearapi.Project
 	states   []linearapi.WorkflowState
@@ -19,16 +17,13 @@ type teamChildren struct {
 	loaded   bool
 }
 
-// teamChildFetchers is the trio of fetches a restore needs, taken off the App
-// so the background goroutines never read fields applySettings reassigns on
-// the UI thread.
+// Taken off the App so restore goroutines never read fields applySettings reassigns on the UI thread.
 type teamChildFetchers struct {
 	projects func(context.Context, string) ([]linearapi.Project, error)
 	states   func(context.Context, string) ([]linearapi.WorkflowState, error)
 	cycles   func(context.Context, string) ([]linearapi.Cycle, error)
 }
 
-// teamChildFetchers snapshots the fetch seams. UI thread only.
 func (a *App) teamChildFetchers() teamChildFetchers {
 	return teamChildFetchers{
 		projects: a.fetchProjectsFunc,
@@ -37,14 +32,7 @@ func (a *App) teamChildFetchers() teamChildFetchers {
 	}
 }
 
-// applySessionNavigation reopens the saved place: filters, tab, navigation
-// selection, focused issue, and search query. It must run off the UI
-// goroutine; UI mutations are queued and the lazy child fetches would block
-// the event loop. Reports whether it took ownership of the startup refresh.
-//
-// Anything it cannot resolve returns false without a status flash, unlike
-// applyDefaultNavigation: a session record is machine state, and warning on
-// every launch after a project is deleted is noise the user cannot act on.
+// Must run off the UI goroutine: the lazy child fetches would block the event loop.
 func (a *App) applySessionNavigation(ctx context.Context, state *session.State, teams []linearapi.Team, favorites []linearapi.Favorite, fetchers teamChildFetchers) bool {
 	if state == nil {
 		return false
@@ -52,8 +40,6 @@ func (a *App) applySessionNavigation(ctx context.Context, state *session.State, 
 
 	nav := state.Nav
 	if !isKnownNavKind(nav.Kind) {
-		// A newer build wrote a kind this one cannot scope a list to, and a
-		// near miss is worse than the configured default.
 		logger.Debug("tui.session: unsupported saved navigation kind=%s", nav.Kind)
 		return false
 	}
@@ -69,8 +55,6 @@ func (a *App) applySessionNavigation(ctx context.Context, state *session.State, 
 		return true
 	}
 
-	// Custom views and predefined views only exist in the tree as favorites,
-	// so without one there is no node left to select.
 	if nav.Kind == session.NavCustomView || nav.Kind == session.NavStateType {
 		return false
 	}
@@ -87,9 +71,6 @@ func (a *App) applySessionNavigation(ctx context.Context, state *session.State, 
 		return false
 	}
 
-	// loaded says a fetch answered, so a restore that needs no children leaves
-	// it false. Claiming otherwise built the team's rows out of three empty
-	// slices, which is a team stubbed to its own All Issues row.
 	var children teamChildren
 	if navKindNeedsTeamChildren(nav.Kind) {
 		children = fetchTeamChildren(ctx, fetchers, nav.TeamID)
@@ -105,8 +86,6 @@ func (a *App) applySessionNavigation(ctx context.Context, state *session.State, 
 	return true
 }
 
-// restoreSessionAllIssues reopens the workspace-wide All Issues list, which
-// the tree already has selected, so only the surrounding state is restored.
 func (a *App) restoreSessionAllIssues(state session.State) {
 	a.beginSessionRestore(state)
 	defer func() { a.restoringSession = false }()
@@ -118,7 +97,6 @@ func (a *App) restoreSessionAllIssues(state session.State) {
 	a.selectSessionNode(current, state)
 }
 
-// restoreSessionFavorite reopens a list saved from the Favorites section.
 func (a *App) restoreSessionFavorite(state session.State) {
 	a.beginSessionRestore(state)
 	defer func() { a.restoringSession = false }()
@@ -130,8 +108,6 @@ func (a *App) restoreSessionFavorite(state session.State) {
 	a.selectSessionNode(target, state)
 }
 
-// restoreSessionTeamNode reopens a team node or one of its descendants,
-// populating the team's children first when they have not been built yet.
 func (a *App) restoreSessionTeamNode(state session.State, children teamChildren) {
 	a.beginSessionRestore(state)
 	defer func() { a.restoringSession = false }()
@@ -141,7 +117,6 @@ func (a *App) restoreSessionTeamNode(state session.State, children teamChildren)
 		a.refreshIssuesWithFocusChange(false)
 		return
 	}
-	// Leave children unpopulated on fetch errors so expanding the team retries.
 	if children.loaded && !teamChildrenLoaded(teamNode) {
 		a.populateTeamNodeChildren(teamNode, state.Nav.TeamID, children.projects, children.states, children.cycles)
 	}
@@ -164,36 +139,20 @@ func (a *App) restoreSessionTeamNode(state session.State, children teamChildren)
 	a.selectSessionNode(target, state)
 }
 
-// beginSessionRestore reinstates the state a refresh reads before it starts.
-// Everything it sets has to land before the refresh, which reads the filters
-// the moment it begins and runs on a goroutine that reads the rest.
-//
-// restoringSession is what keeps the query: selecting the saved node is a
-// navigation pick like any other, and one of those drops a live search.
 func (a *App) beginSessionRestore(state session.State) {
 	a.richFilters = filtersFromSession(state.Filters)
 	a.restoringSession = true
 	a.restoreSessionSearch(state)
 }
 
-// restoreSessionSearch puts the saved query back in the box.
 func (a *App) restoreSessionSearch(state session.State) {
 	if state.Search == "" || a.navSearchInput == nil {
 		return
 	}
-	// The keyboard stays on the tree. A launch that opens with the cursor in a
-	// text field swallows the first key the user types, and the query is
-	// already there to read; / and Shift+Tab are the way back into it.
-	// updateIssuesData returns early while results are showing, so the saved
-	// issue can only be reselected once the search results themselves land.
 	a.pendingSearchIssueID = state.IssueID
-	// The box's change handler schedules the debounced search, which mounts the
-	// results and moves the section; there is no fetch call to make here.
 	a.navSearchInput.SetText(state.Search)
 }
 
-// selectSessionNode moves the tree cursor to the restored node and opens its
-// list on the saved issue.
 func (a *App) selectSessionNode(target *tview.TreeNode, state session.State) {
 	nav, ok := target.GetReference().(*NavigationNode)
 	if !ok {
@@ -204,10 +163,6 @@ func (a *App) selectSessionNode(target *tview.TreeNode, state session.State) {
 	a.onNavigationSelected(nav, state.IssueID)
 }
 
-// fetchTeamChildren loads the projects, states, and cycles a team node needs
-// before one of its descendants can be selected. The three run together: they
-// are independent, and serially they put three round trips in front of the
-// first issue list on every restore.
 func fetchTeamChildren(ctx context.Context, fetchers teamChildFetchers, teamID string) teamChildren {
 	var (
 		projects    []linearapi.Project
@@ -241,7 +196,6 @@ func fetchTeamChildren(ctx context.Context, fetchers teamChildFetchers, teamID s
 	return teamChildren{projects: projects, states: states, cycles: cycles, loaded: true}
 }
 
-// contain reports whether the fetched children still hold the saved node.
 func (c teamChildren) contain(nav session.NavSelection) bool {
 	switch nav.Kind {
 	case session.NavProject:
@@ -266,7 +220,6 @@ func (c teamChildren) contain(nav session.NavSelection) bool {
 	return false
 }
 
-// isKnownNavKind reports whether this build can reopen a saved kind.
 func isKnownNavKind(kind session.NavKind) bool {
 	switch kind {
 	case session.NavAll, session.NavTeam, session.NavProject, session.NavStatus,
@@ -277,8 +230,6 @@ func isKnownNavKind(kind session.NavKind) bool {
 	}
 }
 
-// navKindNeedsTeamChildren reports whether a saved kind lives under a team's
-// lazily built children rather than on the team node itself.
 func navKindNeedsTeamChildren(kind session.NavKind) bool {
 	switch kind {
 	case session.NavProject, session.NavStatus, session.NavCycle:
@@ -288,8 +239,6 @@ func navKindNeedsTeamChildren(kind session.NavKind) bool {
 	}
 }
 
-// navMatchesSelection reports whether a tree node is the one a saved
-// selection points at.
 func navMatchesSelection(nav *NavigationNode, selection session.NavSelection) bool {
 	switch selection.Kind {
 	case session.NavProject:
@@ -303,10 +252,6 @@ func navMatchesSelection(nav *NavigationNode, selection session.NavSelection) bo
 	}
 }
 
-// findTeamDescendant returns the first node under a team matching the
-// predicate. Status and cycle nodes are grandchildren: the groups holding
-// them are not selectable and carry no id of their own, so a search of the
-// team's direct children alone would never reach them.
 func findTeamDescendant(teamNode *tview.TreeNode, match func(*NavigationNode) bool) *tview.TreeNode {
 	for _, child := range teamNode.GetChildren() {
 		if nav, ok := child.GetReference().(*NavigationNode); ok && match(nav) {
@@ -321,8 +266,6 @@ func findTeamDescendant(teamNode *tview.TreeNode, match func(*NavigationNode) bo
 	return nil
 }
 
-// findFavoriteTreeNode returns the tree node built from a favorite, recursing
-// into favorite folders.
 func (a *App) findFavoriteTreeNode(favoriteID string) *tview.TreeNode {
 	if a.favoritesGroup == nil {
 		return nil
@@ -330,7 +273,6 @@ func (a *App) findFavoriteTreeNode(favoriteID string) *tview.TreeNode {
 	return findFavoriteNode(a.favoritesGroup, favoriteID)
 }
 
-// findFavoriteNode walks a favorites subtree for a node carrying the id.
 func findFavoriteNode(parent *tview.TreeNode, favoriteID string) *tview.TreeNode {
 	for _, child := range parent.GetChildren() {
 		if nav, ok := child.GetReference().(*NavigationNode); ok && nav.FavoriteID == favoriteID && !nav.IsFolder {
@@ -343,8 +285,6 @@ func findFavoriteNode(parent *tview.TreeNode, favoriteID string) *tview.TreeNode
 	return nil
 }
 
-// hasFavoriteNode reports whether the favorites still hold a displayable node
-// with the id, folders excluded: a folder opens no list.
 func hasFavoriteNode(nodes []*NavigationNode, favoriteID string) bool {
 	for _, node := range nodes {
 		if node.FavoriteID == favoriteID && !node.IsFolder {
@@ -357,7 +297,6 @@ func hasFavoriteNode(nodes []*NavigationNode, favoriteID string) bool {
 	return false
 }
 
-// findTeamByID returns the team with the id, or nil when it is gone.
 func findTeamByID(teams []linearapi.Team, teamID string) *linearapi.Team {
 	if teamID == "" {
 		return nil
