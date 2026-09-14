@@ -215,6 +215,7 @@ jobs:
             $after = [Net.ServicePointManager]::SecurityProtocol
             [pscustomobject]@{
               ErrorAction = "$ErrorActionPreference"
+              Progress = "$ProgressPreference"
               StrictMode = $(try { $null = $undefinedAfterInstall; 'off' } catch { 'on' })
               KeptProtocols = $(if ([int]$before -eq 0) { [int]$after -eq 0 } else { ($after -band $before) -eq $before })
               AllowsTls12 = [int]$after -eq 0 -or ($after -band [Net.SecurityProtocolType]::Tls12) -ne 0
@@ -222,6 +223,7 @@ jobs:
           }
           $report | Format-List | Out-String | Write-Host
           if ($report.ErrorAction -ne 'Continue') { throw "the install left ErrorActionPreference at $($report.ErrorAction)" }
+          if ($report.Progress -ne 'Continue') { throw "the install left ProgressPreference at $($report.Progress)" }
           if ($report.StrictMode -ne 'off') { throw 'the install left StrictMode on in the session' }
           if (-not $report.KeptProtocols) { throw 'the install narrowed the security protocols the session allowed' }
           if (-not $report.AllowsTls12) { throw 'the install left TLS 1.2 disallowed' }
