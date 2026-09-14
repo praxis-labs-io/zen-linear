@@ -11,9 +11,8 @@ type version struct {
 }
 
 func parseVersion(tag string) (version, bool) {
-	tag = strings.TrimSpace(tag)
 	tag = strings.TrimPrefix(tag, "v")
-	if tag == "" {
+	if tag == "" || strings.IndexFunc(tag, outsideSemver) >= 0 {
 		return version{}, false
 	}
 
@@ -58,4 +57,15 @@ func isNewer(current, latest string) bool {
 	}
 
 	return running.pre && !published.pre
+}
+
+// A tag is printed to the terminal, so anything semver does not allow could carry an escape sequence.
+func outsideSemver(r rune) bool {
+	switch {
+	case r >= '0' && r <= '9', r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+		return false
+	case r == '.', r == '-', r == '+':
+		return false
+	}
+	return true
 }
