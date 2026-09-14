@@ -111,6 +111,7 @@ func TestCheckReportsNothingToShowOnAFailure(t *testing.T) {
 		{name: "a malformed body", status: http.StatusOK, body: "not json at all"},
 		{name: "no tag in the payload", status: http.StatusOK, body: `{}`},
 		{name: "a tag that will not rank", status: http.StatusOK, body: tagBody("nightly")},
+		{name: "a tag carrying an escape", status: http.StatusOK, body: tagBody("v9.9.9-\x1b[2J")},
 	}
 
 	for _, tt := range tests {
@@ -282,6 +283,14 @@ func TestACacheStampedInTheFutureIsNotFresh(t *testing.T) {
 	file := cacheFile{Version: cacheVersion, CheckedAt: now.Add(time.Hour), LatestTag: "v0.4.0"}
 	if file.fresh(now, DefaultTTL) {
 		t.Error("a record stamped in the future reported fresh")
+	}
+}
+
+func TestACachedTagThatWillNotRankIsNotFresh(t *testing.T) {
+	now := time.Now()
+	file := cacheFile{Version: cacheVersion, CheckedAt: now, LatestTag: "v9.9.9-\x1b[2J"}
+	if file.fresh(now, DefaultTTL) {
+		t.Error("a record naming a tag that will not parse reported fresh")
 	}
 }
 

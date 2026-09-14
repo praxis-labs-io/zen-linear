@@ -11,7 +11,6 @@ func TestParseVersion(t *testing.T) {
 	}{
 		{name: "a plain tag", tag: "v0.3.0", want: version{nums: [3]int{0, 3, 0}}, ok: true},
 		{name: "without the v", tag: "0.3.0", want: version{nums: [3]int{0, 3, 0}}, ok: true},
-		{name: "surrounded by space", tag: "  v1.2.3  ", want: version{nums: [3]int{1, 2, 3}}, ok: true},
 		{name: "a pre-release", tag: "v0.2.1-rc.1", want: version{nums: [3]int{0, 2, 1}, pre: true}, ok: true},
 		{name: "build metadata carrying a dash", tag: "v1.0.0+build-7", want: version{nums: [3]int{1, 0, 0}}, ok: true},
 		{name: "double digits", tag: "v0.10.2", want: version{nums: [3]int{0, 10, 2}}, ok: true},
@@ -22,6 +21,9 @@ func TestParseVersion(t *testing.T) {
 		{name: "negative", tag: "v0.-1.0", ok: false},
 		{name: "empty", tag: "", ok: false},
 		{name: "the v alone", tag: "v", ok: false},
+		{name: "surrounded by space", tag: "  v1.2.3  ", ok: false},
+		{name: "an escape in the pre-release", tag: "v1.2.3-\x1b]0;title\a", ok: false},
+		{name: "a newline after the tag", tag: "v1.2.3\n", ok: false},
 	}
 
 	for _, tt := range tests {

@@ -22,7 +22,7 @@ type cacheFile struct {
 }
 
 func (f cacheFile) fresh(now time.Time, ttl time.Duration) bool {
-	if f.LatestTag == "" || f.CheckedAt.IsZero() {
+	if _, ok := parseVersion(f.LatestTag); !ok || f.CheckedAt.IsZero() {
 		return false
 	}
 	if f.CheckedAt.After(now) {
