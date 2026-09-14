@@ -73,7 +73,7 @@ Put that in `~/.zshrc` or `~/.bashrc` to keep it.
 On Windows, if the installer says the directory is not on PATH:
 
 ```powershell
-[Environment]::SetEnvironmentVariable('Path', "$env:PATH;$env:LOCALAPPDATA\Programs\zen-linear", 'User')
+[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ";$env:LOCALAPPDATA\Programs\zen-linear", 'User')
 ```
 
 Then open a new terminal. Neither installer edits PATH on your behalf.

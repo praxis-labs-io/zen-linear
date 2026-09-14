@@ -11,6 +11,7 @@
 # A function because `irm | iex` runs in the caller's session, and its preferences must not outlive the install.
 function Install-ZenLinear {
 	$ErrorActionPreference = 'Stop'
+	$ProgressPreference = 'SilentlyContinue'
 	Set-StrictMode -Version Latest
 
 	$repo = 'praxis-labs-io/zen-linear'
@@ -20,10 +21,11 @@ function Install-ZenLinear {
 		Join-Path $env:LOCALAPPDATA 'Programs\zen-linear'
 	}
 
-	$arch = switch ($env:PROCESSOR_ARCHITECTURE) {
+	$nativeArch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+	$arch = switch ($nativeArch) {
 		'AMD64' { 'amd64' }
 		'ARM64' { 'arm64' }
-		default { $env:PROCESSOR_ARCHITECTURE }
+		default { $nativeArch }
 	}
 	if ($arch -notin @('amd64', 'arm64')) {
 		throw "No release binary for windows/$arch. Install it with Go instead:
@@ -42,14 +44,15 @@ function Install-ZenLinear {
 			$latest = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" `
 				-Headers @{ 'User-Agent' = 'zen-linear-installer' } -UseBasicParsing
 		} catch {
+			$lookupError = $_
 			$code = $null
-			if ($_.Exception.PSObject.Properties['Response'] -and $_.Exception.Response) {
-				$code = [int]$_.Exception.Response.StatusCode
+			if ($lookupError.Exception.PSObject.Properties['Response'] -and $lookupError.Exception.Response) {
+				$code = [int]$lookupError.Exception.Response.StatusCode
 			}
 			switch ($code) {
 				404 { throw 'There is no published release to install yet.' }
 				403 { throw 'The GitHub API refused the lookup, most likely a rate limit. Retry, or set VERSION=vX.Y.Z.' }
-				default { throw "Could not reach the GitHub API to look up the latest release. $($_.Exception.Message)" }
+				default { throw "Could not reach the GitHub API to look up the latest release. $($lookupError.Exception.Message)" }
 			}
 		}
 		$tag = if ($latest.PSObject.Properties['tag_name']) { $latest.tag_name } else { $null }
@@ -123,7 +126,7 @@ function Install-ZenLinear {
 	if ($installDir -notin $paths) {
 		Write-Host ''
 		Write-Host "$installDir is not on your PATH. Add it:"
-		Write-Host "    [Environment]::SetEnvironmentVariable('Path', `"`$env:PATH;$installDir`", 'User')"
+		Write-Host "    [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + `";$installDir`", 'User')"
 		Write-Host 'Then open a new terminal.'
 	}
 
