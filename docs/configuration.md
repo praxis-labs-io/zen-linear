@@ -17,6 +17,24 @@ three does change, the list and the issue you were on come back after the
 reload. A new page size applies to the next fetch rather than reloading the
 list under you.
 
+## The settings modal
+
+`Settings` in the palette opens the form. Its fields are grouped into five
+sections, listed down the left: Appearance, Startup, Agents, Network and
+Logging. One section is shown at a time, and the panel is sized to the tallest
+of them, so moving between them does not resize it under you.
+
+That list is a pane rather than a tab stop. While it holds the keyboard, `j`/`k`
+or the up and down arrows move through the sections, and `⏎`, `l` or `→` cross
+into the fields. Save and Cancel sit under the sections as two more stops in the
+same column, so stepping past the last section reaches them and `⏎` presses the
+one the cursor is on. Tab steps through the open section's fields. `⌃⏎` saves
+from anywhere in the form, and Esc goes back to the section list before it
+closes anything.
+
+A panel too narrow for that column names the open section on one line instead,
+and puts Save and Cancel back in a row across the form.
+
 ## A config file
 
 ```json
