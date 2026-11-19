@@ -3,17 +3,47 @@
 A terminal client for Linear, for people who work their issues from a keyboard
 and would rather not leave the terminal to do it.
 
-zen-linear began as a fork of
-[linear-tui](https://github.com/roeyazroel/linear-tui) by
-[@roeyazroel](https://github.com/roeyazroel), and it owes that project a great
-deal. The fork started from Roey's Linear API client, his OAuth and PKCE flow,
-his three-pane shell, the `:` command palette, vim movement, and the agent
-runner. The git history here reaches back to his first commit in January 2026.
+[Install](#install) · [Docs](docs/guide.md) · [Releases](https://github.com/praxis-labs-io/zen-linear/releases)
+
+![Moving through the issue list, zooming the details pane, running a palette command, and writing a comment](docs/images/demo.gif)
 
 It is an unofficial third-party client built on Linear's public API, and it is
 not affiliated with Linear.
 
-![Moving through the issue list, zooming the details pane, running a palette command, and writing a comment](docs/images/demo.gif)
+## Install
+
+macOS and Linux, on arm64 or amd64:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.sh | sh
+```
+
+Windows, on arm64 or amd64:
+
+```powershell
+irm https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.ps1 | iex
+```
+
+Both check the download against the checksums the release publishes. On any
+other platform:
+
+```sh
+go install github.com/praxis-labs-io/zen-linear/cmd/zen-linear@latest
+```
+
+Or from a clone, which is what you want if you intend to change anything:
+
+```sh
+git clone https://github.com/praxis-labs-io/zen-linear.git
+cd zen-linear
+make install
+```
+
+`install.sh` and `make install` both put the binary in `~/.local/bin`;
+`install.ps1` puts it in `%LOCALAPPDATA%\Programs\zen-linear`. `INSTALL_DIR`
+moves either. Homebrew is not supported.
+[docs/install.md](docs/install.md) has the requirements, the PATH setup and how
+to upgrade.
 
 ## What zen-linear does
 
@@ -51,41 +81,6 @@ object, so projects, cycles and milestones are navigation scopes and issue
 fields. There is no inbox, no bulk action, no reaction on a comment, no
 attachment upload, no offline mode, and no Homebrew tap. Archive is the only
 way to retire an issue.
-
-## Install
-
-macOS and Linux, on arm64 or amd64:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.sh | sh
-```
-
-Windows, on arm64 or amd64:
-
-```powershell
-irm https://raw.githubusercontent.com/praxis-labs-io/zen-linear/main/install.ps1 | iex
-```
-
-Both check the download against the checksums the release publishes. On any
-other platform:
-
-```sh
-go install github.com/praxis-labs-io/zen-linear/cmd/zen-linear@latest
-```
-
-Or from a clone, which is what you want if you intend to change anything:
-
-```sh
-git clone https://github.com/praxis-labs-io/zen-linear.git
-cd zen-linear
-make install
-```
-
-`install.sh` and `make install` both put the binary in `~/.local/bin`;
-`install.ps1` puts it in `%LOCALAPPDATA%\Programs\zen-linear`. `INSTALL_DIR`
-moves either. Homebrew is not supported.
-[docs/install.md](docs/install.md) has the requirements, the PATH setup and how
-to upgrade.
 
 ## A first run
 
@@ -141,7 +136,20 @@ inside the thread.
 - [Agents](docs/agents.md): handing an issue to a terminal coding agent
 - [Contributing](docs/CONTRIBUTING.md): building, testing and the conventions
 
+## Contributing
+
+Building, testing and the conventions are in
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md). Report vulnerabilities privately
+through the repository's Security tab.
+
 ## Acknowledgments
+
+zen-linear began as a fork of
+[linear-tui](https://github.com/roeyazroel/linear-tui) by
+[@roeyazroel](https://github.com/roeyazroel), and it owes that project a great
+deal. The fork started from Roey's Linear API client, his OAuth and PKCE flow,
+his three-pane shell, the `:` command palette, vim movement, and the agent
+runner. The git history here reaches back to his first commit in January 2026.
 
 Rendered by [tview](https://github.com/rivo/tview) and
 [glamour](https://github.com/charmbracelet/glamour). The `rose_pine_moon`
@@ -150,3 +158,5 @@ theme follows [Rose Pine](https://rosepinetheme.com).
 ## License
 
 MIT, held jointly by Drew White and Roey Azroel. See [LICENSE](LICENSE).
+
+Part of the [Zen family](https://github.com/praxis-labs-io) from Praxis Labs.
