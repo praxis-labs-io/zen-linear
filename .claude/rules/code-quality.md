@@ -24,7 +24,7 @@ Hard conventions for this repo. The stack is Go 1.24, tview/tcell, shurcooL/grap
 
 - Never leave `TODO`, `FIXME`, `HACK`, `XXX`, `TEMP`, or `REMOVEME` in code. A marker is a sign the thing should be fixed, so fix it now.
 - Never add an inline `//nolint` to silence a lint violation. The violation is the signal to fix the code. The scoped exclusions in `.golangci.yml` are config, not a precedent for inline suppression.
-- Genuinely out-of-scope work gets a Linear ticket in the right bucket, never a comment in the code.
+- If the fix is large, flag it and ask before expanding scope.
 
 ## Go specifics
 
