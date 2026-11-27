@@ -30,6 +30,7 @@ const (
 	ThemeHighContrast     = "high_contrast"
 	ThemeColorBlind       = "color_blind"
 	ThemeRosePineMoon     = "rose_pine_moon"
+	ThemeZenInk           = "zen_ink"
 	DefaultTheme          = ThemeTerminal
 	DensityComfortable    = "comfortable"
 	DensityCompact        = "compact"

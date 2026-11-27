@@ -177,9 +177,9 @@ dotfiles repo; the other two are rewritten on quit.
 
 ## Themes
 
-Five, and the default is `terminal`, which takes its hues from your terminal's
+Six, and the default is `terminal`, which takes its hues from your terminal's
 own ANSI palette and its shades from the background and foreground it reports
 at launch. It matches whatever you already run without being configured.
 
-`rose_pine_moon` keeps the background transparent. `linear`, `high_contrast`
-and `color_blind` pin their colors. See [configuration.md](configuration.md).
+`rose_pine_moon` keeps the background transparent. `linear`, `high_contrast`,
+`color_blind` and `zen_ink` pin their colors. See [configuration.md](configuration.md).

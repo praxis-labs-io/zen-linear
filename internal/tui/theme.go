@@ -198,6 +198,47 @@ var RosePineMoonTheme = Theme{
 	StatusCanceled:   rosePineLove,
 }
 
+var (
+	zenInkBackground  = tcell.NewRGBColor(10, 13, 20)
+	zenInkSurface     = tcell.NewRGBColor(22, 27, 38)
+	zenInkSelection   = tcell.NewRGBColor(28, 37, 54)
+	zenInkForeground  = tcell.NewRGBColor(220, 227, 238)
+	zenInkMuted       = tcell.NewRGBColor(74, 84, 104)
+	zenInkSubtle      = tcell.NewRGBColor(195, 204, 218)
+	zenInkCobalt      = tcell.NewRGBColor(110, 155, 255)
+	zenInkMint        = tcell.NewRGBColor(110, 230, 184)
+	zenInkAmber       = tcell.NewRGBColor(235, 193, 122)
+	zenInkCoral       = tcell.NewRGBColor(242, 112, 122)
+	zenInkViolet      = tcell.NewRGBColor(181, 140, 255)
+	zenInkCyan        = tcell.NewRGBColor(92, 200, 224)
+	zenInkBrightWhite = tcell.NewRGBColor(241, 245, 251)
+)
+
+// StatusCanceled is coral rather than muted because the error tag is drawn from it.
+var ZenInkTheme = Theme{
+	Background:    zenInkBackground,
+	Foreground:    zenInkForeground,
+	Border:        zenInkMuted,
+	BorderFocus:   zenInkCobalt,
+	SelectionText: zenInkBrightWhite,
+	SelectionBg:   zenInkSelection,
+	HeaderBg:      zenInkSurface,
+	HeaderText:    zenInkSubtle,
+	SecondaryText: zenInkMuted,
+	Accent:        zenInkCobalt,
+	InputBg:       zenInkSurface,
+	AssigneeText:  zenInkCyan,
+
+	Success: zenInkMint,
+
+	StatusTriage:     zenInkCyan,
+	StatusTodo:       zenInkSubtle,
+	StatusInProgress: zenInkAmber,
+	StatusReview:     zenInkViolet,
+	StatusDone:       zenInkCobalt,
+	StatusCanceled:   zenInkCoral,
+}
+
 type ThemeTags struct {
 	Foreground    string
 	SecondaryText string
@@ -217,6 +258,7 @@ var ThemeRegistry = map[string]Theme{
 	config.ThemeHighContrast: HighContrastTheme,
 	config.ThemeColorBlind:   ColorBlindTheme,
 	config.ThemeRosePineMoon: RosePineMoonTheme,
+	config.ThemeZenInk:       ZenInkTheme,
 }
 
 // ResolveTheme returns the registered theme for name, or the terminal-derived theme.
