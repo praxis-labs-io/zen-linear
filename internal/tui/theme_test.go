@@ -103,7 +103,7 @@ func TestRosePineMoonStaysInItsPalette(t *testing.T) {
 
 func TestZenInkPinsItsColorsToItsPalette(t *testing.T) {
 	palette := map[tcell.Color]bool{
-		zenInkBackground: true, zenInkSurface: true, zenInkSelection: true,
+		zenInkBackground: true, zenInkSurface: true, zenInkOverlay: true, zenInkSelection: true,
 		zenInkForeground: true, zenInkMuted: true, zenInkSubtle: true,
 		zenInkCobalt: true, zenInkMint: true, zenInkAmber: true,
 		zenInkCoral: true, zenInkViolet: true, zenInkCyan: true,
@@ -125,6 +125,17 @@ func TestZenInkPinsItsColorsToItsPalette(t *testing.T) {
 	} {
 		if !palette[color] {
 			t.Errorf("ZenInkTheme.%s is %s, which is not a pinned Zen Ink color", name, colorTag(color))
+		}
+	}
+}
+
+func TestFormControlsStandOffTheModalPanel(t *testing.T) {
+	for name, theme := range ThemeRegistry {
+		if theme.ModalBackground() == tcell.ColorDefault {
+			continue
+		}
+		if theme.InputBg == theme.ModalBackground() {
+			t.Errorf("%s: InputBg is the modal background %s, so unfocused buttons and checkboxes have no fill", name, colorTag(theme.InputBg))
 		}
 	}
 }

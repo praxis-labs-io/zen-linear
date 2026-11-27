@@ -201,6 +201,7 @@ var RosePineMoonTheme = Theme{
 var (
 	zenInkBackground  = tcell.NewRGBColor(10, 13, 20)
 	zenInkSurface     = tcell.NewRGBColor(22, 27, 38)
+	zenInkOverlay     = tcell.NewRGBColor(34, 41, 58)
 	zenInkSelection   = tcell.NewRGBColor(28, 37, 54)
 	zenInkForeground  = tcell.NewRGBColor(220, 227, 238)
 	zenInkMuted       = tcell.NewRGBColor(74, 84, 104)
@@ -226,7 +227,7 @@ var ZenInkTheme = Theme{
 	HeaderText:    zenInkSubtle,
 	SecondaryText: zenInkSubtle,
 	Accent:        zenInkMint,
-	InputBg:       zenInkSurface,
+	InputBg:       zenInkOverlay,
 	AssigneeText:  zenInkCyan,
 
 	Success: zenInkMint,
