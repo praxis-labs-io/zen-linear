@@ -68,7 +68,7 @@ Every key is optional. What is missing takes its default.
 
 | Key | Default | Takes |
 | --- | --- | --- |
-| `theme` | `terminal` | `terminal`, `rose_pine_moon`, `linear`, `high_contrast`, `color_blind` |
+| `theme` | `terminal` | `terminal`, `rose_pine_moon`, `linear`, `high_contrast`, `color_blind`, `zen_ink` |
 | `density` | `comfortable` | `comfortable`, `compact` |
 | `rounded_borders` | `false` | a boolean |
 | `images` | `auto` | `auto`, `off` |
@@ -76,7 +76,7 @@ Every key is optional. What is missing takes its default.
 `terminal` takes its hues from the terminal's ANSI palette and its shades from
 the background and foreground the terminal reports at launch, so it matches
 whatever you already run. `rose_pine_moon` keeps the terminal's background
-transparent. The other three pin their colors.
+transparent. The other four pin their colors.
 
 `images` draws the PNGs in an issue's description in place instead of listing
 their names and links. It needs a terminal that speaks the Kitty

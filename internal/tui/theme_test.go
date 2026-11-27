@@ -16,6 +16,7 @@ func TestResolveThemeKnownNames(t *testing.T) {
 		{config.ThemeHighContrast, HighContrastTheme},
 		{config.ThemeColorBlind, ColorBlindTheme},
 		{config.ThemeRosePineMoon, RosePineMoonTheme},
+		{config.ThemeZenInk, ZenInkTheme},
 	}
 
 	for _, tt := range tests {
@@ -81,21 +82,51 @@ func TestRosePineMoonStaysInItsPalette(t *testing.T) {
 		rosePineHighlightHigh: true,
 	}
 
-	theme := RosePineMoonTheme
-	for name, color := range map[string]tcell.Color{
+	for name, color := range themeColorFields(RosePineMoonTheme) {
+		if !palette[color] {
+			t.Errorf("RosePineMoonTheme.%s is %s, which is not in the Rosé Pine Moon palette", name, colorTag(color))
+		}
+	}
+}
+
+func TestZenInkPinsItsColorsToItsPalette(t *testing.T) {
+	palette := map[tcell.Color]bool{
+		zenInkBackground: true, zenInkSurface: true, zenInkOverlay: true, zenInkSelection: true,
+		zenInkForeground: true, zenInkMuted: true, zenInkSubtle: true,
+		zenInkCobalt: true, zenInkMint: true, zenInkAmber: true,
+		zenInkCoral: true, zenInkViolet: true, zenInkCyan: true,
+		zenInkBrightWhite: true,
+	}
+
+	for name, color := range themeColorFields(ZenInkTheme) {
+		if !palette[color] {
+			t.Errorf("ZenInkTheme.%s is %s, which is not a pinned Zen Ink color", name, colorTag(color))
+		}
+	}
+}
+
+func TestFormControlsStandOffTheModalPanel(t *testing.T) {
+	for name, theme := range ThemeRegistry {
+		if theme.ModalBackground() == tcell.ColorDefault {
+			continue
+		}
+		if theme.InputBg == theme.ModalBackground() {
+			t.Errorf("%s: InputBg is the modal background %s, so unfocused buttons and checkboxes have no fill", name, colorTag(theme.InputBg))
+		}
+	}
+}
+
+func themeColorFields(theme Theme) map[string]tcell.Color {
+	return map[string]tcell.Color{
 		"Background": theme.Background, "Foreground": theme.Foreground,
 		"Border": theme.Border, "BorderFocus": theme.BorderFocus,
 		"SelectionText": theme.SelectionText, "SelectionBg": theme.SelectionBg,
 		"HeaderBg": theme.HeaderBg, "HeaderText": theme.HeaderText,
 		"SecondaryText": theme.SecondaryText, "Accent": theme.Accent,
-		"InputBg": theme.InputBg, "InverseText": theme.InverseText,
-		"AssigneeText": theme.AssigneeText, "Success": theme.Success,
-		"StatusTriage": theme.StatusTriage, "StatusTodo": theme.StatusTodo,
-		"StatusInProgress": theme.StatusInProgress, "StatusReview": theme.StatusReview,
+		"InputBg": theme.InputBg, "InverseText": theme.InverseTextColor(),
+		"AssigneeText": theme.AssigneeTextColor(), "Success": theme.SuccessColor(),
+		"StatusTriage": theme.StatusTriageColor(), "StatusTodo": theme.StatusTodo,
+		"StatusInProgress": theme.StatusInProgress, "StatusReview": theme.StatusReviewColor(),
 		"StatusDone": theme.StatusDone, "StatusCanceled": theme.StatusCanceled,
-	} {
-		if !palette[color] {
-			t.Errorf("RosePineMoonTheme.%s is %s, which is not in the Rosé Pine Moon palette", name, colorTag(color))
-		}
 	}
 }

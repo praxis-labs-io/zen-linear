@@ -106,7 +106,7 @@ func TestLoadSettingsPreservesEmptyLogFile(t *testing.T) {
 }
 
 func TestConfigFromSettingsAcceptsAllThemes(t *testing.T) {
-	for _, theme := range []string{ThemeLinear, ThemeHighContrast, ThemeColorBlind, ThemeRosePineMoon} {
+	for _, theme := range []string{ThemeLinear, ThemeHighContrast, ThemeColorBlind, ThemeRosePineMoon, ThemeZenInk} {
 		t.Run(theme, func(t *testing.T) {
 			settings := DefaultSettings()
 			settings.Theme = theme

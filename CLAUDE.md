@@ -300,7 +300,7 @@ refits on a resize alone.
 
 ### Theme system
 
-The five themes and what they take from the terminal are in [docs/configuration.md](docs/configuration.md). What follows is what the code has to keep true.
+The six themes and what they take from the terminal are in [docs/configuration.md](docs/configuration.md). What follows is what the code has to keep true.
 
 Themes are structs in `internal/tui/theme.go` registered in `ThemeRegistry`. Optional fields (`InverseText`, `StatusReview`, `StatusTriage`, `AssigneeText`, `Success`) have fallback methods so legacy themes need no changes.
 
