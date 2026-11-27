@@ -67,7 +67,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.15.0
 
       # A workflow the schema rejects does not fail a job, it produces a run
       # with no jobs in it, which reads as a failure with nothing inside rather

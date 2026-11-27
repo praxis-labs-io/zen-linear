@@ -38,7 +38,7 @@ Run them directly, never through a pipe that swallows the exit code.
 `make lint | tail` reports success on failure, and that let broken commits
 through repeatedly.
 
-CI pins golangci-lint to **v2.12.2** in `.github/workflows/ci.yml`, matching
+CI pins golangci-lint to **v2.15.0** in `.github/workflows/ci.yml`, matching
 what brew currently ships. Keep the pin current with the local version or CI
 and local runs stop agreeing.
 

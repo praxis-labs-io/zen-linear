@@ -39,7 +39,7 @@ Run checks directly, never through a pipe that swallows exit codes (`make lint |
 
 ### Lint version pin
 
-CI pins golangci-lint **v2.12.2** (`.github/workflows/ci.yml`), matching what brew currently ships. `make lint` needs no `GOTOOLCHAIN` override and reports what CI reports.
+CI pins golangci-lint **v2.15.0** (`.github/workflows/ci.yml`), matching what brew currently ships. `make lint` needs no `GOTOOLCHAIN` override and reports what CI reports.
 
 Keep the pin current with the local version. The old v2.8.0 pin drifted four versions behind, which meant local runs and CI disagreed and v2.8.0 panicked under newer Go toolchains.
 
