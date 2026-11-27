@@ -33,7 +33,9 @@ type Theme struct {
 	StatusInProgress tcell.Color
 	StatusReview     tcell.Color
 	StatusDone       tcell.Color
-	StatusCanceled   tcell.Color
+
+	// StatusCanceled is also the error tag's color, so it has to read as an error.
+	StatusCanceled tcell.Color
 }
 
 // ModalBackground is transparent for a transparent theme and HeaderBg otherwise.
@@ -215,7 +217,6 @@ var (
 	zenInkBrightWhite = tcell.NewRGBColor(241, 245, 251)
 )
 
-// StatusCanceled is coral rather than muted because the error tag is drawn from it.
 var ZenInkTheme = Theme{
 	Background:    zenInkBackground,
 	Foreground:    zenInkForeground,
